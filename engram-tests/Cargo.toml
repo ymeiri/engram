@@ -1,0 +1,38 @@
+[package]
+name = "engram-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Integration tests for engram"
+publish = false
+
+[dependencies]
+engram-core.workspace = true
+engram-store.workspace = true
+engram-embed.workspace = true
+engram-index.workspace = true
+engram-mcp.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Testing
+rstest.workspace = true
+insta.workspace = true
+tempfile.workspace = true
+
+# HTTP client for multi-session tests
+reqwest.workspace = true
+futures.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true

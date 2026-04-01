@@ -1,0 +1,49 @@
+[package]
+name = "engram-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command-line interface for engram"
+
+[[bin]]
+name = "engram"
+path = "src/main.rs"
+
+[dependencies]
+engram-core.workspace = true
+engram-store.workspace = true
+engram-embed.workspace = true
+engram-index.workspace = true
+engram-mcp.workspace = true
+
+# CLI
+clap.workspace = true
+
+# HTTP client for daemon proxy
+reqwest.workspace = true
+
+# Async
+tokio.workspace = true
+
+# System utilities for daemon management
+dirs = "5"
+nix = { version = "0.29", features = ["signal", "process"] }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# Time
+time.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tempfile.workspace = true

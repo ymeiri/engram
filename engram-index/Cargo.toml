@@ -1,0 +1,36 @@
+[package]
+name = "engram-index"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Document indexing, chunking, and ingestion for engram"
+
+[dependencies]
+engram-core.workspace = true
+engram-store.workspace = true
+engram-embed.workspace = true
+
+# Async
+tokio.workspace = true
+futures.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Utilities
+dirs = "6"
+time.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+insta.workspace = true
+tempfile.workspace = true

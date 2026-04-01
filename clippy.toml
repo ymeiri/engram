@@ -1,0 +1,11 @@
+# Clippy configuration
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# MSRV for lint suggestions
+msrv = "1.80"
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 25
+
+# Allow certain patterns
+too-many-arguments-threshold = 8

@@ -1,0 +1,39 @@
+[package]
+name = "engram-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "SurrealDB storage adapter for engram"
+
+[dependencies]
+engram-core.workspace = true
+
+# Database
+surrealdb.workspace = true
+
+# Directories
+dirs = "6"
+
+# Async
+tokio.workspace = true
+async-trait.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+# Time
+time.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+insta.workspace = true
+tempfile.workspace = true

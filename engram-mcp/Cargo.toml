@@ -1,0 +1,43 @@
+[package]
+name = "engram-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "MCP server implementation for engram"
+
+[dependencies]
+engram-core.workspace = true
+engram-store.workspace = true
+engram-embed.workspace = true
+engram-index.workspace = true
+
+# MCP Protocol
+rmcp.workspace = true
+
+# HTTP server for daemon mode
+axum.workspace = true
+tower.workspace = true
+
+# Async
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+
+# Time
+time.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
