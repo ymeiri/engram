@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- MCP setup guide for Claude Code, Cursor, and Windsurf (`docs/MCP_SETUP.md`)
+
+## [0.1.0] - 2026-04-01
+
+### Added
 
 #### Layer 1: Entity Knowledge
 - Entity types: repo, tool, concept, deployment, topic, workflow, person, team, service
@@ -79,6 +84,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SurrealDB datetime deserialization using custom `SurrealDateTime` enum
 - Raw SurQL queries to avoid SDK serialization issues with complex types
 
-## [0.1.0] - TBD
-
-Initial release with all 6 layers complete.

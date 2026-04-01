@@ -53,7 +53,7 @@ Add to your Claude Code config (`~/.claude.json`):
 }
 ```
 
-For Cursor or Windsurf, add the same entry to your MCP configuration.
+For Cursor or Windsurf, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
 
 ### 4. Verify it works
 
