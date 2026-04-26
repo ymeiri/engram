@@ -14,10 +14,10 @@ use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, MemoryService,
-    MigrationInventoryOptions, MigrationReviewApplyOptions, OrientInput,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
-    SearchService, SessionService, ToolIntelService, WorkService,
+    CoordinationService, DigestInventoryOptions, DigestService, DocumentService, EntityService,
+    KnowledgeService, MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions,
+    OrientInput, RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions,
+    RepositoryService, SearchService, SessionService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -6968,6 +6968,54 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: init, compile, status, page",
+            request.action
+        )),
+    }
+}
+
+// =============================================================================
+// Digest Source Tool
+// =============================================================================
+
+/// Request for digest source inventory.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DigestRequest {
+    /// Action to perform: inventory
+    #[schemars(description = "Action: inventory")]
+    pub action: String,
+
+    /// Root directory to scan, such as ~/notes
+    #[schemars(description = "Root directory to scan")]
+    pub root_path: Option<String>,
+
+    /// Maximum candidate digest files to return
+    pub limit: Option<usize>,
+
+    /// Include files normally treated as operational artifacts
+    pub include_operational: Option<bool>,
+}
+
+/// Inventory digest-like source files without reading contents or writing memory.
+pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<String, String> {
+    debug!("digest: action={}", request.action);
+
+    match request.action.to_lowercase().as_str() {
+        "inventory" => {
+            let root_path = required(&request.root_path, "root_path", "inventory")?;
+            let mut options = DigestInventoryOptions::new(Path::new(&root_path));
+            options.limit = request.limit;
+            options.include_operational = request.include_operational.unwrap_or(false);
+            let inventory = DigestService::new()
+                .inventory(options)
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "inventory": inventory
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: inventory",
             request.action
         )),
     }

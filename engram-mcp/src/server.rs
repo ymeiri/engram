@@ -24,6 +24,7 @@ pub use crate::tools::{
     CoordRequestNew,
     CoordStatsRequest,
     // Layer 3: Document tools
+    DigestRequest,
     DocsRequestNew,
     // Layer 1: Entity tools
     EntityObserveRequestNew,
@@ -406,6 +407,17 @@ impl EngramServer {
         to_call_result(tools::vault_new(&self.state, params.0).await)
     }
 
+    /// Inventory digest-like source files without reading contents or writing memory.
+    #[tool(
+        description = "Inventory digest-like source files under a root path without reading contents or writing memory. Use for scheduled daily email/Slack/AI/SWE/notes digests before review-gated extraction."
+    )]
+    pub async fn digest(
+        &self,
+        params: Parameters<DigestRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::digest_new(&self.state, params.0).await)
+    }
+
     /// Return a Memory OS orientation context packet for the current prompt.
     #[tool(
         description = "Return an orientation context packet for the current prompt. Includes a memory cursor, relevant active decisions/rules/preferences/limitations, review-needed memory, recent knowledge commits, recommended actions, and ambiguities. Provide project when known; cwd alone is treated as partial context."
@@ -569,6 +581,7 @@ impl ServerHandler for EngramServer {
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
                  - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply)\n\
                  - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
+                 - digest: Inventory digest source files without reading contents or writing memory (actions: inventory)\n\
                  - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply)\n\n\
                  **Unified Search:**\n\
                  - search: Search across ALL layers with a single query (entities, aliases, observations, sessions, documents, tool usages)"

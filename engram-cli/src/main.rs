@@ -17,10 +17,10 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, MemoryService,
-    MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
-    MigrationReviewApplyOptions, MigrationReviewExport, RepositoryMigrationInventory,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    CoordinationService, DigestInventory, DigestInventoryOptions, DigestService, DocumentService,
+    EntityService, KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
+    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
     RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
     SearchService, SessionService, ToolIntelService, WorkService,
 };
@@ -201,6 +201,12 @@ enum Commands {
 
         #[command(subcommand)]
         command: VaultCommands,
+    },
+
+    /// Inventory scheduled digest source files without reading contents
+    Digest {
+        #[command(subcommand)]
+        command: DigestCommands,
     },
 
     /// Manage repository topology and local checkout mapping
@@ -1355,6 +1361,27 @@ enum VaultCommands {
 }
 
 #[derive(Subcommand)]
+enum DigestCommands {
+    /// Inventory digest-like source files without reading contents or writing memory
+    Inventory {
+        /// Root directory to scan, such as ~/notes
+        root_path: String,
+
+        /// Maximum candidate digest files to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Include files normally treated as operational artifacts
+        #[arg(long)]
+        include_operational: bool,
+
+        /// Print inventory as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum RepoCommands {
     /// Detect the Git checkout at or above cwd and register it
     Detect {
@@ -1646,6 +1673,63 @@ fn print_memory_cursor(cursor: &MemoryCursor) {
         println!("  Latest commit: {}", commit_id);
     } else {
         println!("  Latest commit: none");
+    }
+}
+
+fn print_digest_inventory(inventory: &DigestInventory) {
+    println!("Digest source inventory");
+    println!("  Root:                {}", inventory.root_path);
+    println!("  Files scanned:       {}", inventory.files_scanned);
+    println!("  Total candidates:    {}", inventory.total_candidates);
+    println!("  Returned candidates: {}", inventory.returned_candidates);
+    println!("  Truncated:           {}", inventory.truncated);
+    println!("  Excluded files:      {}", inventory.excluded_count);
+
+    if !inventory.by_source_kind.is_empty() {
+        println!("By source kind:");
+        for (kind, count) in &inventory.by_source_kind {
+            println!("  - {}: {}", kind, count);
+        }
+    }
+    if !inventory.by_format.is_empty() {
+        println!("By format:");
+        for (format, count) in &inventory.by_format {
+            println!("  - {}: {}", format, count);
+        }
+    }
+
+    if inventory.candidates.is_empty() {
+        println!("Candidates: none");
+    } else {
+        println!("Candidates:");
+        for candidate in &inventory.candidates {
+            let bucket = candidate
+                .bucket
+                .as_deref()
+                .map(|bucket| format!(" bucket={bucket}"))
+                .unwrap_or_default();
+            let date = candidate
+                .date_hint
+                .as_deref()
+                .map(|date| format!(" date={date}"))
+                .unwrap_or_default();
+            println!(
+                "  - {} [{}; {}; {}{}{}]",
+                candidate.relative_path,
+                candidate.source_kind,
+                candidate.format,
+                candidate.proposed_action,
+                bucket,
+                date
+            );
+        }
+    }
+
+    if !inventory.exclusions.is_empty() {
+        println!("Exclusions:");
+        for exclusion in &inventory.exclusions {
+            println!("  - {} ({})", exclusion.relative_path, exclusion.reason);
+        }
     }
 }
 
@@ -4165,6 +4249,29 @@ async fn main() -> Result<()> {
                 }
             }
         }
+
+        // =========================================================================
+        // Digest Source Commands
+        // =========================================================================
+        Commands::Digest { command } => match command {
+            DigestCommands::Inventory {
+                root_path,
+                limit,
+                include_operational,
+                json,
+            } => {
+                let mut options = DigestInventoryOptions::new(std::path::PathBuf::from(root_path));
+                options.limit = limit;
+                options.include_operational = include_operational;
+                let inventory = DigestService::new().inventory(options)?;
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&inventory)?);
+                } else {
+                    print_digest_inventory(&inventory);
+                }
+            }
+        },
 
         // =========================================================================
         // Repository Topology Commands

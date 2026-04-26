@@ -28,6 +28,7 @@
 
 pub mod chunker;
 pub mod coordination;
+pub mod digest;
 pub mod entity;
 pub mod error;
 pub mod knowledge;
@@ -46,6 +47,11 @@ pub mod work;
 
 pub use chunker::ChunkerConfig;
 pub use coordination::{ConflictCheckResult, CoordinationService};
+pub use digest::{
+    DigestExcludedPath, DigestFileFormat, DigestInventory, DigestInventoryOptions,
+    DigestProposedAction, DigestSensitivity, DigestService, DigestSourceCandidate,
+    DigestSourceKind,
+};
 pub use entity::EntityService;
 pub use error::{IndexError, IndexResult};
 pub use knowledge::{
