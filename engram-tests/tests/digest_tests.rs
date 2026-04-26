@@ -35,6 +35,9 @@ async fn test_mcp_digest_inventory_classifies_candidates_and_exclusions() {
             review_path: None,
             limit: None,
             include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: None,
+            max_candidate_chars: None,
         },
     )
     .await
@@ -71,6 +74,9 @@ async fn test_mcp_digest_inventory_requires_root_path() {
             review_path: None,
             limit: None,
             include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: None,
+            max_candidate_chars: None,
         },
     )
     .await
@@ -99,6 +105,9 @@ async fn test_mcp_digest_review_export_writes_batch() {
             review_path: None,
             limit: None,
             include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: None,
+            max_candidate_chars: None,
         },
     )
     .await
@@ -141,6 +150,9 @@ async fn test_mcp_digest_review_apply_parses_reviewed_batch() {
             review_path: None,
             limit: None,
             include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: None,
+            max_candidate_chars: None,
         },
     )
     .await
@@ -173,6 +185,9 @@ async fn test_mcp_digest_review_apply_parses_reviewed_batch() {
             review_path: Some(output.path().display().to_string()),
             limit: None,
             include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: None,
+            max_candidate_chars: None,
         },
     )
     .await
@@ -186,4 +201,101 @@ async fn test_mcp_digest_review_apply_parses_reviewed_batch() {
     );
     let serialized = serde_json::to_string(&json).unwrap();
     assert!(!serialized.contains("private slack"));
+}
+
+#[tokio::test]
+async fn test_mcp_digest_extraction_plan_reads_only_accepted_sources() {
+    let dir = tempdir().expect("tempdir should be created");
+    let review = tempdir().expect("review tempdir should be created");
+    let output = tempdir().expect("output tempdir should be created");
+    fs::create_dir_all(dir.path().join("slack-digest/morning")).unwrap();
+    fs::create_dir_all(dir.path().join("notes-digest")).unwrap();
+    fs::write(
+        dir.path().join("slack-digest/morning/2026-04-26.md"),
+        "accepted source body with enough detail for candidate memory extraction",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("notes-digest/digest-2026-04-26.md"),
+        "source only body should not be copied into extraction output",
+    )
+    .unwrap();
+
+    let export_response = tools::digest_new(
+        &ToolState::new(),
+        DigestRequest {
+            action: "review_export".to_string(),
+            root_path: Some(dir.path().display().to_string()),
+            output_path: Some(review.path().display().to_string()),
+            review_path: None,
+            limit: None,
+            include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: None,
+            max_candidate_chars: None,
+        },
+    )
+    .await
+    .expect("digest review export should work");
+    let export_json = parse_json(&export_response);
+    let candidate_paths = export_json["export"]["files_written"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|path| path.as_str())
+        .filter(|path| path.starts_with("candidates/"))
+        .collect::<Vec<_>>();
+    for candidate_path in candidate_paths {
+        if candidate_path.contains("slack") {
+            set_review_decision(review.path(), candidate_path, "accept");
+        } else {
+            set_review_decision(review.path(), candidate_path, "source_only");
+        }
+    }
+
+    let plan_response = tools::digest_new(
+        &ToolState::new(),
+        DigestRequest {
+            action: "extraction_plan".to_string(),
+            root_path: None,
+            output_path: Some(output.path().display().to_string()),
+            review_path: Some(review.path().display().to_string()),
+            limit: None,
+            include_operational: None,
+            max_source_bytes: None,
+            max_candidates_per_source: Some(2),
+            max_candidate_chars: Some(500),
+        },
+    )
+    .await
+    .expect("digest extraction plan should work");
+    let json = parse_json(&plan_response);
+
+    assert_eq!(json["plan"]["accepted_sources"], 1);
+    assert_eq!(json["plan"]["source_only_sources"], 1);
+    assert_eq!(json["plan"]["sources_read"], 1);
+    assert_eq!(json["plan"]["candidates"].as_array().unwrap().len(), 1);
+    let output_text = fs::read_to_string(
+        output.path().join(
+            json["plan"]["candidates"][0]["review_path"]
+                .as_str()
+                .unwrap(),
+        ),
+    )
+    .unwrap();
+    assert!(output_text.contains("accepted source body"));
+    assert!(!output_text.contains("source only body"));
+}
+
+fn set_review_decision(root: &std::path::Path, candidate_path: &str, decision: &str) {
+    let path = root.join(candidate_path);
+    let contents = fs::read_to_string(&path).unwrap();
+    fs::write(
+        path,
+        contents.replace(
+            "decision: pending # accept | reject | quarantine | source_only",
+            &format!("decision: {decision} # accept | reject | quarantine | source_only"),
+        ),
+    )
+    .unwrap();
 }

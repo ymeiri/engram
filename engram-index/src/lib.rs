@@ -48,7 +48,8 @@ pub mod work;
 pub use chunker::ChunkerConfig;
 pub use coordination::{ConflictCheckResult, CoordinationService};
 pub use digest::{
-    DigestExcludedPath, DigestFileFormat, DigestInventory, DigestInventoryOptions,
+    DigestExcludedPath, DigestExtractionCandidateSummary, DigestExtractionOptions,
+    DigestExtractionPlan, DigestFileFormat, DigestInventory, DigestInventoryOptions,
     DigestProposedAction, DigestReviewApply, DigestReviewDecision, DigestReviewExport,
     DigestReviewedSource, DigestSensitivity, DigestService, DigestSourceCandidate,
     DigestSourceKind,

@@ -14,10 +14,11 @@ use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_index::{
-    CoordinationService, DigestInventoryOptions, DigestService, DocumentService, EntityService,
-    KnowledgeService, MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions,
-    OrientInput, RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions,
-    RepositoryService, SearchService, SessionService, ToolIntelService, WorkService,
+    CoordinationService, DigestExtractionOptions, DigestInventoryOptions, DigestService,
+    DocumentService, EntityService, KnowledgeService, MemoryService, MigrationInventoryOptions,
+    MigrationReviewApplyOptions, OrientInput, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchService, SessionService,
+    ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -6977,11 +6978,11 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
 // Digest Source Tool
 // =============================================================================
 
-/// Request for digest source inventory and review batches.
+/// Request for digest source inventory, review batches, and extraction plans.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DigestRequest {
-    /// Action to perform: inventory, review_export, review_apply
-    #[schemars(description = "Action: inventory, review_export, review_apply")]
+    /// Action to perform: inventory, review_export, review_apply, extraction_plan
+    #[schemars(description = "Action: inventory, review_export, review_apply, extraction_plan")]
     pub action: String,
 
     /// Root directory to scan, such as ~/notes
@@ -6999,9 +7000,18 @@ pub struct DigestRequest {
 
     /// Include files normally treated as operational artifacts
     pub include_operational: Option<bool>,
+
+    /// Maximum bytes to read from any accepted source for extraction_plan
+    pub max_source_bytes: Option<usize>,
+
+    /// Maximum candidate memory excerpts per accepted source for extraction_plan
+    pub max_candidates_per_source: Option<usize>,
+
+    /// Maximum characters copied into each extraction candidate for extraction_plan
+    pub max_candidate_chars: Option<usize>,
 }
 
-/// Inventory digest-like source files and process metadata-only review batches.
+/// Inventory digest-like source files and process review-gated digest batches.
 pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<String, String> {
     debug!("digest: action={}", request.action);
 
@@ -7050,8 +7060,35 @@ pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<St
             }))
             .map_err(|e| e.to_string())
         }
+        "extraction_plan" => {
+            let review_path = required(&request.review_path, "review_path", "extraction_plan")?;
+            let output_path = required(&request.output_path, "output_path", "extraction_plan")?;
+            let defaults = DigestExtractionOptions::default();
+            let plan = DigestService::new()
+                .plan_extraction(
+                    Path::new(&review_path),
+                    Path::new(&output_path),
+                    DigestExtractionOptions {
+                        max_source_bytes: request
+                            .max_source_bytes
+                            .unwrap_or(defaults.max_source_bytes),
+                        max_candidates_per_source: request
+                            .max_candidates_per_source
+                            .unwrap_or(defaults.max_candidates_per_source),
+                        max_candidate_chars: request
+                            .max_candidate_chars
+                            .unwrap_or(defaults.max_candidate_chars),
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan
+            }))
+            .map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply",
+            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply, extraction_plan",
             request.action
         )),
     }

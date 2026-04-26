@@ -17,11 +17,11 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DigestInventory, DigestInventoryOptions, DigestReviewApply,
-    DigestReviewExport, DigestService, DocumentService, EntityService, KnowledgeService,
-    MemoryService, MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
-    MigrationReviewApplyOptions, MigrationReviewExport, RepositoryMigrationInventory,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    CoordinationService, DigestExtractionOptions, DigestExtractionPlan, DigestInventory,
+    DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService, DocumentService,
+    EntityService, KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
+    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
     RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
     SearchService, SessionService, ToolIntelService, WorkService,
 };
@@ -1411,6 +1411,31 @@ enum DigestCommands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Build review-gated candidate memory excerpts from accepted digest sources
+    ExtractionPlan {
+        /// Review batch directory containing accepted digest source decisions
+        review_path: String,
+
+        /// Output directory for generated extraction review files
+        output_path: String,
+
+        /// Maximum bytes to read from any accepted source
+        #[arg(long)]
+        max_source_bytes: Option<usize>,
+
+        /// Maximum candidate memory excerpts per accepted source
+        #[arg(long)]
+        max_candidates_per_source: Option<usize>,
+
+        /// Maximum characters copied into each generated candidate excerpt
+        #[arg(long)]
+        max_candidate_chars: Option<usize>,
+
+        /// Print extraction plan as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1849,6 +1874,54 @@ fn print_digest_review_apply(apply: &DigestReviewApply) {
     if !apply.warnings.is_empty() {
         println!("Warnings:");
         for warning in &apply.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_digest_extraction_plan(plan: &DigestExtractionPlan) {
+    println!("Digest extraction plan");
+    println!("  Review path:            {}", plan.review_path);
+    println!("  Output path:            {}", plan.output_path);
+    println!("  Review files scanned:   {}", plan.review_files_scanned);
+    println!("  Accepted sources:       {}", plan.accepted_sources);
+    println!("  Source-only sources:    {}", plan.source_only_sources);
+    println!("  Sources read:           {}", plan.sources_read);
+    println!("  Candidate memories:     {}", plan.candidate_count());
+    println!("  Files written:          {}", plan.files_written.len());
+    println!("  Files skipped:          {}", plan.files_skipped.len());
+
+    if !plan.candidates.is_empty() {
+        println!("Candidate memories:");
+        for candidate in &plan.candidates {
+            println!(
+                "  - {} [{}; {} chars]",
+                candidate.title, candidate.source_kind, candidate.content_chars
+            );
+        }
+    }
+
+    if !plan.sources_skipped.is_empty() {
+        println!("Skipped sources:");
+        for skipped in &plan.sources_skipped {
+            println!("  - {}", skipped);
+        }
+    }
+    if !plan.files_written.is_empty() {
+        println!("Written files:");
+        for path in &plan.files_written {
+            println!("  - {}", path);
+        }
+    }
+    if !plan.files_skipped.is_empty() {
+        println!("Skipped output files:");
+        for path in &plan.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+    if !plan.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &plan.warnings {
             println!("  - {}", warning);
         }
     }
@@ -4419,6 +4492,33 @@ async fn main() -> Result<()> {
                     println!("{}", serde_json::to_string_pretty(&apply)?);
                 } else {
                     print_digest_review_apply(&apply);
+                }
+            }
+            DigestCommands::ExtractionPlan {
+                review_path,
+                output_path,
+                max_source_bytes,
+                max_candidates_per_source,
+                max_candidate_chars,
+                json,
+            } => {
+                let defaults = DigestExtractionOptions::default();
+                let plan = DigestService::new().plan_extraction(
+                    std::path::PathBuf::from(review_path),
+                    std::path::PathBuf::from(output_path),
+                    DigestExtractionOptions {
+                        max_source_bytes: max_source_bytes.unwrap_or(defaults.max_source_bytes),
+                        max_candidates_per_source: max_candidates_per_source
+                            .unwrap_or(defaults.max_candidates_per_source),
+                        max_candidate_chars: max_candidate_chars
+                            .unwrap_or(defaults.max_candidate_chars),
+                    },
+                )?;
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&plan)?);
+                } else {
+                    print_digest_extraction_plan(&plan);
                 }
             }
         },
