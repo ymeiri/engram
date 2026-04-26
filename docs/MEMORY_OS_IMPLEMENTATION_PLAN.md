@@ -2806,7 +2806,45 @@ Questions:
   3. Should old mentions of "Debug with AI backend" map to co-gen-backend?
 ```
 
-### 22.4 Vault Bootstrap
+### 22.4 Digest Source Migration
+
+Scheduled daily digests under `~/notes` are high-value but sensitive migration
+sources. They should not be bulk-imported directly into active memory.
+
+Digest migration steps:
+
+```text
+1. Inventory digest-like files by path and metadata only.
+2. Export a generated digest source review batch.
+3. Review each source as accept, source_only, quarantine, or reject.
+4. Read only accepted sources into generated candidate-memory review pages.
+5. Review each candidate memory as accept, quarantine, or reject.
+6. Apply accepted candidates into Memory OS with writer provenance and source evidence.
+7. Create a knowledge commit for written digest-derived memories.
+8. Skip duplicates using stable digest extraction candidate tags.
+```
+
+Current command shape:
+
+```bash
+engram digest review-export ~/notes /tmp/engram-digest-review
+engram digest extraction-plan /tmp/engram-digest-review /tmp/engram-digest-extraction
+engram memory digest-extraction-apply /tmp/engram-digest-extraction
+engram memory digest-extraction-apply /tmp/engram-digest-extraction --write
+```
+
+Safety rules:
+
+```text
+- Inventory and source-review export do not read digest contents.
+- source_only, quarantine, reject, and pending source decisions are not read.
+- Extraction creates review pages only; it does not write active memory.
+- Apply defaults to dry-run.
+- Accepted candidate pages must include memory_kind, scope_type, scope_name when required, and source evidence.
+- Applied memories are marked active because the candidate itself passed human review.
+```
+
+### 22.5 Vault Bootstrap
 
 Bootstrap steps:
 

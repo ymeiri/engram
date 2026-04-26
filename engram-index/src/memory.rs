@@ -3,6 +3,10 @@
 //! Provides the first service layer over source-grounded memory items and
 //! knowledge commits. MCP and CLI surfaces should delegate to this layer.
 
+use crate::digest::{
+    apply_digest_extraction_review_batch, build_digest_extraction_commit,
+    DigestExtractionReviewApply, DigestExtractionReviewApplyOptions,
+};
 use crate::error::{IndexError, IndexResult};
 use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
@@ -21,6 +25,7 @@ use engram_core::memory::{
 use engram_core::repository::{MonorepoComponent, ProjectRepositoryLink, RepositoryContext};
 use engram_store::{Db, MemoryRepo, RepositoryRepo};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::Path;
 use time::OffsetDateTime;
 use tracing::info;
@@ -333,6 +338,34 @@ impl MemoryService {
             .await
     }
 
+    /// Apply a reviewed digest extraction batch. Dry-run mode reports planned writes only.
+    pub async fn apply_digest_extraction_review(
+        &self,
+        root: impl AsRef<Path>,
+        options: DigestExtractionReviewApplyOptions,
+    ) -> IndexResult<DigestExtractionReviewApply> {
+        let existing_candidate_tags = self.existing_digest_extraction_candidate_tags().await?;
+        let mut report = apply_digest_extraction_review_batch(
+            root.as_ref(),
+            options.clone(),
+            existing_candidate_tags,
+        )?;
+
+        if !options.dry_run {
+            for item in report.planned_items.clone() {
+                let item = self.capture_memory(item).await?;
+                report.written_items.push(item);
+            }
+            if options.create_commit && !report.written_items.is_empty() {
+                let commit = build_digest_extraction_commit(&options.writer, &report.written_items);
+                self.save_commit(commit.clone()).await?;
+                report.commit = Some(commit);
+            }
+        }
+
+        Ok(report)
+    }
+
     /// Create a cursor for the current point in time.
     pub async fn current_cursor(&self) -> IndexResult<MemoryCursor> {
         let latest_commit_id = self
@@ -383,6 +416,15 @@ impl MemoryService {
             items,
             commits,
         })
+    }
+
+    async fn existing_digest_extraction_candidate_tags(&self) -> IndexResult<HashSet<String>> {
+        let items = self.repo.list_memory_items(None, None).await?;
+        Ok(items
+            .into_iter()
+            .flat_map(|item| item.tags.into_iter())
+            .filter(|tag| tag.starts_with("digest-extraction-candidate:"))
+            .collect())
     }
 
     /// Build the first-version orientation context packet.
@@ -991,6 +1033,7 @@ fn validate_knowledge_commit(commit: &KnowledgeCommit) -> IndexResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::digest::{DigestExtractionOptions, DigestInventoryOptions, DigestService};
     use engram_core::memory::{
         ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChangeType, MemoryKind, MemoryScope,
         ModelIdentity,
@@ -1132,6 +1175,77 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(err, IndexError::InvalidState(_)));
+    }
+
+    #[tokio::test]
+    async fn apply_digest_extraction_review_writes_once_and_commits() {
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let review = tempdir().unwrap();
+        let output = tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("slack-digest/morning")).unwrap();
+        std::fs::write(
+            dir.path().join("slack-digest/morning/2026-04-26.md"),
+            "accepted digest source with enough specific detail for a persisted memory item",
+        )
+        .unwrap();
+
+        let export = DigestService::new()
+            .export_review_batch(review.path(), DigestInventoryOptions::new(dir.path()))
+            .unwrap();
+        edit_digest_review_decision(
+            review.path(),
+            &export.files_written,
+            "slack-digest",
+            "accept",
+            &[
+                ("memory_kind", "project_fact"),
+                ("scope_type", "project"),
+                ("scope_name", "\"Engram\""),
+                ("title", "\"Persisted digest fact\""),
+            ],
+        );
+        let plan = DigestService::new()
+            .plan_extraction(
+                review.path(),
+                output.path(),
+                DigestExtractionOptions::default(),
+            )
+            .unwrap();
+        edit_digest_extraction_decision(output.path(), &plan.candidates[0].review_path, "accept");
+
+        let apply = service
+            .apply_digest_extraction_review(
+                output.path(),
+                DigestExtractionReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(apply.accepted_count, 1);
+        assert_eq!(apply.written_count(), 1);
+        assert!(apply.commit.is_some());
+        assert_eq!(service.list_active_memory(None).await.unwrap().len(), 1);
+        assert_eq!(service.list_commits(None).await.unwrap().len(), 1);
+
+        let second = service
+            .apply_digest_extraction_review(
+                output.path(),
+                DigestExtractionReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.duplicate_count, 1);
+        assert_eq!(second.written_count(), 0);
+        assert_eq!(service.list_active_memory(None).await.unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -1462,5 +1576,55 @@ mod tests {
             packet.active_decisions[0].title,
             "Explicit project decision"
         );
+    }
+
+    fn edit_digest_review_decision(
+        root: &Path,
+        files_written: &[String],
+        source_fragment: &str,
+        decision: &str,
+        fields: &[(&str, &str)],
+    ) {
+        let candidate_path = files_written
+            .iter()
+            .filter(|path| path.starts_with("candidates/"))
+            .find(|path| {
+                std::fs::read_to_string(root.join(path))
+                    .is_ok_and(|contents| contents.contains(source_fragment))
+            })
+            .expect("candidate review page for source should exist");
+        let path = root.join(candidate_path);
+        let mut contents = std::fs::read_to_string(&path).unwrap();
+        contents = contents.replace(
+            "decision: pending # accept | reject | quarantine | source_only",
+            &format!("decision: {decision} # accept | reject | quarantine | source_only"),
+        );
+        for (key, value) in fields {
+            contents = replace_review_field(&contents, key, value);
+        }
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn edit_digest_extraction_decision(root: &Path, candidate_path: &str, decision: &str) {
+        let path = root.join(candidate_path);
+        let contents = std::fs::read_to_string(&path).unwrap().replace(
+            "decision: pending # accept | reject | quarantine",
+            &format!("decision: {decision} # accept | reject | quarantine"),
+        );
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn replace_review_field(contents: &str, key: &str, value: &str) -> String {
+        contents
+            .lines()
+            .map(|line| {
+                if line.starts_with(&format!("{key}:")) {
+                    format!("{key}: {value}")
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

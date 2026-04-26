@@ -6,8 +6,13 @@
 //! read digest contents or promote facts into active memory.
 
 use crate::error::{IndexError, IndexResult};
+use engram_core::id::Id;
+use engram_core::memory::{
+    ClaimOrigin, EvidenceKind, EvidenceRef, KnowledgeCommit, MemoryChange, MemoryChangeType,
+    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, WriterProvenance,
+};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use time::OffsetDateTime;
@@ -303,6 +308,72 @@ pub struct DigestExtractionCandidateSummary {
     pub scope_name: Option<String>,
     /// Number of characters copied into the generated candidate page.
     pub content_chars: usize,
+}
+
+/// Options for applying reviewed digest extraction candidates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DigestExtractionReviewApplyOptions {
+    /// When true, parse and report the batch without writing memory records.
+    pub dry_run: bool,
+    /// Writer/importer provenance to attach to accepted memory records.
+    pub writer: WriterProvenance,
+    /// Create a knowledge commit for written records.
+    pub create_commit: bool,
+}
+
+/// Result of applying, or dry-running, a digest extraction review batch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DigestExtractionReviewApply {
+    /// Extraction review batch root path.
+    pub root: String,
+    /// Whether this run avoided writes.
+    pub dry_run: bool,
+    /// Candidate memory review files scanned.
+    pub files_scanned: usize,
+    /// Generated candidate files skipped with a reason.
+    pub files_skipped: Vec<String>,
+    /// Candidate files whose decision stayed pending or empty.
+    pub files_with_no_decision: Vec<String>,
+    /// Candidate files whose decision value was not recognized.
+    pub files_with_invalid_decision: Vec<String>,
+    /// Candidate files whose reviewed memory record could not be parsed safely.
+    pub files_with_parse_errors: Vec<String>,
+    /// Accepted candidates planned for Memory OS import.
+    pub accepted_count: usize,
+    /// Candidates explicitly quarantined by review.
+    pub quarantined_count: usize,
+    /// Candidates explicitly rejected by review.
+    pub rejected_count: usize,
+    /// Accepted candidates skipped because their candidate review path was already imported.
+    pub duplicate_count: usize,
+    /// Items that would be written, or were written in non-dry-run mode.
+    pub planned_items: Vec<MemoryItem>,
+    /// Items written in non-dry-run mode.
+    pub written_items: Vec<MemoryItem>,
+    /// Knowledge commit created in non-dry-run mode.
+    pub commit: Option<KnowledgeCommit>,
+    /// Non-fatal warnings surfaced during parsing/apply.
+    pub warnings: Vec<String>,
+}
+
+impl DigestExtractionReviewApply {
+    /// Number of planned accepted memory records.
+    #[must_use]
+    pub fn planned_count(&self) -> usize {
+        self.planned_items.len()
+    }
+
+    /// Number of written memory records.
+    #[must_use]
+    pub fn written_count(&self) -> usize {
+        self.written_items.len()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DigestExtractionCandidateRecord {
+    summary: DigestExtractionCandidateSummary,
+    source_candidate: DigestSourceCandidate,
 }
 
 /// Candidate digest file that can later become review-gated source evidence.
@@ -676,6 +747,98 @@ fn plan_digest_extraction(
     plan.sources_skipped.sort();
     plan.warnings.sort();
     Ok(plan)
+}
+
+/// Parse a reviewed digest extraction batch. The caller owns persistence.
+pub fn apply_digest_extraction_review_batch(
+    root: &Path,
+    options: DigestExtractionReviewApplyOptions,
+    existing_candidate_tags: HashSet<String>,
+) -> IndexResult<DigestExtractionReviewApply> {
+    if !root.exists() {
+        return Err(IndexError::FileNotFound(root.display().to_string()));
+    }
+    if !root.is_dir() {
+        return Err(IndexError::InvalidState(format!(
+            "digest extraction review batch root is not a directory: {}",
+            root.display()
+        )));
+    }
+
+    let mut report = DigestExtractionReviewApply {
+        root: root.display().to_string(),
+        dry_run: options.dry_run,
+        files_scanned: 0,
+        files_skipped: Vec::new(),
+        files_with_no_decision: Vec::new(),
+        files_with_invalid_decision: Vec::new(),
+        files_with_parse_errors: Vec::new(),
+        accepted_count: 0,
+        quarantined_count: 0,
+        rejected_count: 0,
+        duplicate_count: 0,
+        planned_items: Vec::new(),
+        written_items: Vec::new(),
+        commit: None,
+        warnings: Vec::new(),
+    };
+
+    let mut seen_candidate_tags = existing_candidate_tags;
+    for path in collect_digest_review_files(root)? {
+        report.files_scanned += 1;
+        let relative_path = relative_path(root, &path);
+        let contents = fs::read_to_string(&path)?;
+        let Some(parsed) =
+            parse_digest_extraction_candidate(&contents, &relative_path, &mut report)
+        else {
+            continue;
+        };
+
+        apply_parsed_digest_extraction_candidate(
+            parsed,
+            &options,
+            &mut seen_candidate_tags,
+            &mut report,
+            &relative_path,
+        );
+    }
+
+    report.files_skipped.sort();
+    report.files_with_no_decision.sort();
+    report.files_with_invalid_decision.sort();
+    report.files_with_parse_errors.sort();
+    report.warnings.sort();
+    Ok(report)
+}
+
+/// Build the knowledge commit for written digest extraction memory items.
+#[must_use]
+pub fn build_digest_extraction_commit(
+    writer: &WriterProvenance,
+    written_items: &[MemoryItem],
+) -> KnowledgeCommit {
+    let suffix = if written_items.len() == 1 { "" } else { "s" };
+    let mut commit = KnowledgeCommit::new(
+        writer.clone(),
+        format!(
+            "Apply reviewed digest extraction batch ({} item{})",
+            written_items.len(),
+            suffix
+        ),
+    );
+
+    for item in written_items {
+        commit = commit.with_change(
+            MemoryChange::new(
+                MemoryChangeType::Added,
+                &item.title,
+                "Imported a reviewed digest-derived memory item into Memory OS.",
+            )
+            .with_item(item.id),
+        );
+    }
+
+    commit
 }
 
 fn digest_review_index(inventory: &DigestInventory) -> String {
@@ -1117,6 +1280,18 @@ fn digest_extraction_candidate_page(
     output.push_str("\n## Safety\n\n");
     output.push_str("- This is a candidate memory excerpt, not active memory.\n");
     output.push_str("- A future apply step must preserve source evidence and writer provenance.\n");
+
+    output.push_str("\n## Machine Record\n\n");
+    output.push_str("```json\n");
+    let record = DigestExtractionCandidateRecord {
+        summary: summary.clone(),
+        source_candidate: source.candidate.clone(),
+    };
+    output.push_str(
+        &serde_json::to_string_pretty(&record)
+            .expect("digest extraction candidate JSON serialization should succeed"),
+    );
+    output.push_str("\n```\n");
     output
 }
 
@@ -1319,6 +1494,412 @@ fn parse_digest_review_decision(value: &str) -> Option<DigestReviewDecision> {
         "quarantine" => Some(DigestReviewDecision::Quarantine),
         "reject" => Some(DigestReviewDecision::Reject),
         _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DigestExtractionReviewDecision {
+    Accept,
+    Quarantine,
+    Reject,
+}
+
+struct ParsedDigestExtractionCandidate {
+    decision: DigestExtractionReviewDecision,
+    title: String,
+    content: String,
+    memory_kind: Option<String>,
+    scope_type: Option<String>,
+    scope_name: Option<String>,
+    source_review_path: Option<String>,
+    source_relative_path: Option<String>,
+    absolute_path: Option<String>,
+    source_kind: Option<String>,
+    notes: Option<String>,
+}
+
+fn parse_digest_extraction_candidate(
+    contents: &str,
+    relative_path: &str,
+    report: &mut DigestExtractionReviewApply,
+) -> Option<ParsedDigestExtractionCandidate> {
+    if !contents.contains(DIGEST_EXTRACTION_MARKER) {
+        report.files_skipped.push(relative_path.to_string());
+        report.warnings.push(format!(
+            "{relative_path}: skipped non-generated digest extraction file"
+        ));
+        return None;
+    }
+
+    let fields = review_decision_fields(contents);
+    let decision_value = fields
+        .get("decision")
+        .and_then(|value| optional_value(value));
+    let Some(decision_value) = decision_value else {
+        report
+            .files_with_no_decision
+            .push(relative_path.to_string());
+        return None;
+    };
+    if decision_value.eq_ignore_ascii_case("pending") {
+        report
+            .files_with_no_decision
+            .push(relative_path.to_string());
+        return None;
+    }
+    let Some(decision) = parse_digest_extraction_review_decision(&decision_value) else {
+        report
+            .files_with_invalid_decision
+            .push(relative_path.to_string());
+        report.warnings.push(format!(
+            "{relative_path}: invalid digest extraction review decision `{decision_value}`"
+        ));
+        return None;
+    };
+
+    let Some(content) = markdown_section(contents, "## Candidate Content") else {
+        report
+            .files_with_parse_errors
+            .push(relative_path.to_string());
+        report.warnings.push(format!(
+            "{relative_path}: missing candidate content section"
+        ));
+        return None;
+    };
+    if content.trim().is_empty() {
+        report
+            .files_with_parse_errors
+            .push(relative_path.to_string());
+        report
+            .warnings
+            .push(format!("{relative_path}: candidate content is empty"));
+        return None;
+    }
+
+    let record = match parse_digest_extraction_candidate_record(contents, relative_path, report) {
+        Ok(record) => record,
+        Err(()) => return None,
+    };
+    let evidence = record.as_ref().map(|record| {
+        (
+            Some(record.summary.source_review_path.clone()),
+            Some(record.summary.source_relative_path.clone()),
+            Some(record.source_candidate.absolute_path.clone()),
+            Some(record.summary.source_kind.to_string()),
+        )
+    });
+    let (record_review, record_source, record_absolute, record_kind) =
+        evidence.unwrap_or((None, None, None, None));
+
+    Some(ParsedDigestExtractionCandidate {
+        decision,
+        title: fields
+            .get("title")
+            .and_then(|value| optional_value(value))
+            .or_else(|| candidate_memory_heading(contents))
+            .unwrap_or_else(|| "Digest candidate memory".to_string()),
+        content,
+        memory_kind: fields
+            .get("memory_kind")
+            .and_then(|value| optional_value(value)),
+        scope_type: fields
+            .get("scope_type")
+            .and_then(|value| optional_value(value)),
+        scope_name: fields
+            .get("scope_name")
+            .and_then(|value| optional_value(value)),
+        source_review_path: record_review
+            .or_else(|| source_evidence_value(contents, "Source review")),
+        source_relative_path: record_source
+            .or_else(|| source_evidence_value(contents, "Source path")),
+        absolute_path: record_absolute.or_else(|| source_evidence_value(contents, "Absolute path")),
+        source_kind: record_kind.or_else(|| source_evidence_value(contents, "Source kind")),
+        notes: fields.get("notes").and_then(|value| optional_value(value)),
+    })
+}
+
+fn parse_digest_extraction_candidate_record(
+    contents: &str,
+    relative_path: &str,
+    report: &mut DigestExtractionReviewApply,
+) -> Result<Option<DigestExtractionCandidateRecord>, ()> {
+    let Some(candidate_json) = digest_machine_record_json(contents) else {
+        return Ok(None);
+    };
+
+    match serde_json::from_str::<DigestExtractionCandidateRecord>(candidate_json) {
+        Ok(record) => Ok(Some(record)),
+        Err(error) => {
+            report
+                .files_with_parse_errors
+                .push(relative_path.to_string());
+            report.warnings.push(format!(
+                "{relative_path}: invalid digest extraction machine record: {error}"
+            ));
+            Err(())
+        }
+    }
+}
+
+fn parse_digest_extraction_review_decision(value: &str) -> Option<DigestExtractionReviewDecision> {
+    match value.trim().to_lowercase().as_str() {
+        "accept" => Some(DigestExtractionReviewDecision::Accept),
+        "quarantine" => Some(DigestExtractionReviewDecision::Quarantine),
+        "reject" => Some(DigestExtractionReviewDecision::Reject),
+        _ => None,
+    }
+}
+
+fn apply_parsed_digest_extraction_candidate(
+    parsed: ParsedDigestExtractionCandidate,
+    options: &DigestExtractionReviewApplyOptions,
+    seen_candidate_tags: &mut HashSet<String>,
+    report: &mut DigestExtractionReviewApply,
+    relative_path: &str,
+) {
+    match parsed.decision {
+        DigestExtractionReviewDecision::Accept => {
+            let candidate_tag = digest_extraction_candidate_tag(&parsed, relative_path);
+            let item = match memory_item_from_digest_extraction(
+                parsed,
+                options,
+                relative_path,
+                &candidate_tag,
+            ) {
+                Ok(item) => item,
+                Err(error) => {
+                    report
+                        .files_with_parse_errors
+                        .push(relative_path.to_string());
+                    report.warnings.push(format!("{relative_path}: {error}"));
+                    return;
+                }
+            };
+
+            if !seen_candidate_tags.insert(candidate_tag.clone()) {
+                report.duplicate_count += 1;
+                report.warnings.push(format!(
+                    "{relative_path}: candidate review was already imported; skipped duplicate"
+                ));
+                return;
+            }
+
+            report.accepted_count += 1;
+            report.planned_items.push(item);
+        }
+        DigestExtractionReviewDecision::Quarantine => {
+            report.quarantined_count += 1;
+        }
+        DigestExtractionReviewDecision::Reject => {
+            report.rejected_count += 1;
+        }
+    }
+}
+
+fn memory_item_from_digest_extraction(
+    parsed: ParsedDigestExtractionCandidate,
+    options: &DigestExtractionReviewApplyOptions,
+    relative_path: &str,
+    candidate_tag: &str,
+) -> Result<MemoryItem, String> {
+    let memory_kind = parsed
+        .memory_kind
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(MemoryKind::parse)
+        .ok_or_else(|| "accepted candidate is missing memory_kind".to_string())?;
+    let scope_type = parsed
+        .scope_type
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "accepted candidate is missing scope_type".to_string())?;
+    let scope = digest_scope_from_review(scope_type, parsed.scope_name.as_deref())?;
+    let title = parsed.title.trim();
+    if title.is_empty() {
+        return Err("accepted candidate is missing title".to_string());
+    }
+    let content = parsed.content.trim();
+    if content.is_empty() {
+        return Err("accepted candidate content is empty".to_string());
+    }
+
+    let source_target = parsed
+        .absolute_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .or(parsed.source_relative_path.as_deref())
+        .ok_or_else(|| "accepted candidate is missing source evidence path".to_string())?;
+    let source_label = parsed
+        .source_relative_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(source_target);
+    let source_kind = parsed.source_kind.as_deref().unwrap_or("unknown");
+    let source_evidence = EvidenceRef::new(EvidenceKind::File, source_target)
+        .with_summary(format!(
+            "Reviewed digest source: {source_label} ({source_kind})"
+        ))
+        .with_excerpt(content.chars().take(500).collect::<String>());
+    let mut review_summary =
+        "Accepted from a generated Engram digest extraction review batch.".to_string();
+    if let Some(notes) = parsed
+        .notes
+        .as_ref()
+        .filter(|notes| !notes.trim().is_empty())
+    {
+        review_summary.push_str(" Reviewer notes: ");
+        review_summary.push_str(notes.trim());
+    }
+    let review_evidence =
+        EvidenceRef::new(EvidenceKind::ManualReview, relative_path).with_summary(review_summary);
+
+    let mut item = MemoryItem::new(
+        memory_kind,
+        title,
+        content,
+        scope,
+        ClaimOrigin::Imported,
+        options.writer.clone(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(source_evidence)
+    .with_evidence(review_evidence)
+    .with_tag("digest")
+    .with_tag("digest-reviewed")
+    .with_tag("digest-extraction")
+    .with_tag(candidate_tag);
+
+    if let Some(source_relative_path) = parsed
+        .source_relative_path
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        item = item.with_tag(format!("digest-source:{source_relative_path}"));
+    }
+    if let Some(source_review_path) = parsed
+        .source_review_path
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        item = item.with_tag(format!("digest-source-review:{source_review_path}"));
+    }
+    if source_kind != "unknown" {
+        item = item.with_tag(format!("digest-source-kind:{source_kind}"));
+    }
+
+    Ok(item)
+}
+
+fn digest_scope_from_review(
+    scope_type: &str,
+    scope_name: Option<&str>,
+) -> Result<MemoryScope, String> {
+    let scope_name = scope_name.map(str::trim).filter(|value| !value.is_empty());
+    match scope_type.trim().to_lowercase().replace('-', "_").as_str() {
+        "global" => Ok(MemoryScope::Global),
+        "user" => Ok(MemoryScope::User),
+        "project" => Ok(MemoryScope::project(required_scope_name(
+            scope_name,
+            "project",
+        )?)),
+        "task" => Ok(MemoryScope::task(required_scope_name(scope_name, "task")?)),
+        "entity" => Ok(MemoryScope::entity(required_scope_name(scope_name, "entity")?)),
+        "repository" | "repo" => {
+            let name = required_scope_name(scope_name, "repository")?;
+            if looks_like_remote_url(name) {
+                Ok(MemoryScope::repository(Some(name.to_string()), None))
+            } else {
+                Ok(MemoryScope::repository(None, Some(name.to_string())))
+            }
+        }
+        "session" => {
+            let name = required_scope_name(scope_name, "session")?;
+            let session_id = Id::parse(name).map_err(|error| {
+                format!("accepted candidate has invalid session scope id `{name}`: {error}")
+            })?;
+            Ok(MemoryScope::Session { session_id })
+        }
+        "custom" => Ok(MemoryScope::Custom {
+            name: required_scope_name(scope_name, "custom")?.to_string(),
+        }),
+        other => Err(format!(
+            "accepted candidate has unknown scope_type `{other}`; expected global, user, project, task, entity, repository, session, or custom"
+        )),
+    }
+}
+
+fn required_scope_name<'a>(
+    scope_name: Option<&'a str>,
+    scope_type: &str,
+) -> Result<&'a str, String> {
+    scope_name
+        .ok_or_else(|| format!("accepted candidate with {scope_type} scope is missing scope_name"))
+}
+
+fn looks_like_remote_url(value: &str) -> bool {
+    value.starts_with("http://")
+        || value.starts_with("https://")
+        || value.starts_with("ssh://")
+        || value.starts_with("git@")
+}
+
+fn digest_extraction_candidate_tag(
+    parsed: &ParsedDigestExtractionCandidate,
+    relative_path: &str,
+) -> String {
+    let source = parsed
+        .source_review_path
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("unknown-source-review");
+    format!("digest-extraction-candidate:{source}:{relative_path}")
+}
+
+fn markdown_section(contents: &str, heading: &str) -> Option<String> {
+    let heading_start = contents.find(heading)?;
+    let after_heading = &contents[heading_start + heading.len()..];
+    let section = after_heading.strip_prefix('\n').unwrap_or(after_heading);
+    let end = section
+        .find("\n## ")
+        .or_else(|| section.find("\n# "))
+        .unwrap_or(section.len());
+    Some(section[..end].trim().to_string())
+}
+
+fn candidate_memory_heading(contents: &str) -> Option<String> {
+    contents.lines().find_map(|line| {
+        line.trim()
+            .strip_prefix("# Candidate Memory:")
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn source_evidence_value(contents: &str, label: &str) -> Option<String> {
+    markdown_section(contents, "## Source Evidence")
+        .and_then(|section| bullet_value(&section, label))
+}
+
+fn bullet_value(contents: &str, label: &str) -> Option<String> {
+    let prefix = format!("- {label}:");
+    contents.lines().find_map(|line| {
+        let line = line.trim();
+        let value = line.strip_prefix(&prefix)?;
+        clean_markdown_value(value)
+    })
+}
+
+fn clean_markdown_value(value: &str) -> Option<String> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix('`')
+        .and_then(|rest| rest.strip_suffix('`'))
+        .unwrap_or(value)
+        .trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("null") {
+        None
+    } else {
+        Some(value.to_string())
     }
 }
 
@@ -2286,6 +2867,109 @@ mod tests {
     }
 
     #[test]
+    fn extraction_review_apply_builds_active_memory_items_after_accept() {
+        let dir = tempdir().unwrap();
+        let review = tempdir().unwrap();
+        let output = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("slack-digest/morning")).unwrap();
+        fs::write(
+            dir.path().join("slack-digest/morning/2026-04-26.md"),
+            "accepted digest source with enough specific detail for a reviewed memory candidate",
+        )
+        .unwrap();
+
+        let export = DigestService::new()
+            .export_review_batch(review.path(), DigestInventoryOptions::new(dir.path()))
+            .unwrap();
+        edit_review_decision_by_source(
+            review.path(),
+            &export,
+            "slack-digest",
+            "accept",
+            &[
+                ("memory_kind", "project_fact"),
+                ("scope_type", "project"),
+                ("scope_name", "\"Engram\""),
+                ("title", "\"Reviewed digest fact\""),
+            ],
+        );
+
+        let plan = DigestService::new()
+            .plan_extraction(
+                review.path(),
+                output.path(),
+                DigestExtractionOptions::default(),
+            )
+            .unwrap();
+        edit_extraction_decision(output.path(), &plan, 0, "accept", &[]);
+
+        let apply = apply_digest_extraction_review_batch(
+            output.path(),
+            DigestExtractionReviewApplyOptions {
+                dry_run: true,
+                writer: test_writer(),
+                create_commit: true,
+            },
+            HashSet::new(),
+        )
+        .unwrap();
+
+        assert_eq!(apply.files_scanned, 1);
+        assert_eq!(apply.accepted_count, 1);
+        assert_eq!(apply.planned_count(), 1);
+        assert_eq!(apply.written_count(), 0);
+        let item = &apply.planned_items[0];
+        assert_eq!(item.status, MemoryStatus::Active);
+        assert_eq!(item.origin, ClaimOrigin::Imported);
+        assert_eq!(item.kind, MemoryKind::ProjectFact);
+        assert!(matches!(item.scope, MemoryScope::Project { .. }));
+        assert!(item
+            .tags
+            .iter()
+            .any(|tag| tag.starts_with("digest-extraction-candidate:")));
+        assert!(item
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ManualReview));
+        assert!(item.content.contains("accepted digest source"));
+    }
+
+    #[test]
+    fn extraction_review_apply_rejects_accept_without_kind_or_scope() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("candidates")).unwrap();
+        fs::write(
+            dir.path().join("candidates/0001-candidate-missing.md"),
+            format!(
+                "---\ngenerated_by: \"engram-memory-os\"\npage_type: \"digest_extraction_candidate\"\n---\n\n{DIGEST_EXTRACTION_MARKER}\n\n# Candidate Memory: Missing metadata\n\n## Candidate Content\n\nReviewed content with enough detail to pass the length threshold.\n\n## Review Decision\n\n```yaml\ndecision: accept\nmemory_kind: null\nscope_type: null\nscope_name: null\ntitle: \"Missing metadata\"\nnotes: null\n```\n"
+            ),
+        )
+        .unwrap();
+
+        let apply = apply_digest_extraction_review_batch(
+            dir.path(),
+            DigestExtractionReviewApplyOptions {
+                dry_run: true,
+                writer: test_writer(),
+                create_commit: true,
+            },
+            HashSet::new(),
+        )
+        .unwrap();
+
+        assert_eq!(apply.accepted_count, 0);
+        assert_eq!(apply.planned_count(), 0);
+        assert_eq!(
+            apply.files_with_parse_errors,
+            vec!["candidates/0001-candidate-missing.md"]
+        );
+        assert!(apply
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("missing memory_kind")));
+    }
+
+    #[test]
     fn review_export_rejects_missing_root_without_creating_output() {
         let dir = tempdir().unwrap();
         let output = dir.path().join("review-output");
@@ -2389,5 +3073,32 @@ mod tests {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    fn edit_extraction_decision(
+        root: &Path,
+        plan: &DigestExtractionPlan,
+        candidate_index: usize,
+        decision: &str,
+        fields: &[(&str, &str)],
+    ) {
+        let candidate_path = &plan.candidates[candidate_index].review_path;
+        let path = root.join(candidate_path);
+        let mut contents = fs::read_to_string(&path).unwrap();
+        contents = contents.replace(
+            "decision: pending # accept | reject | quarantine",
+            &format!("decision: {decision} # accept | reject | quarantine"),
+        );
+        for (key, value) in fields {
+            contents = replace_review_field(&contents, key, value);
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    fn test_writer() -> WriterProvenance {
+        WriterProvenance::agent(
+            engram_core::memory::Harness::Codex,
+            engram_core::memory::ModelIdentity::new("openai", "gpt-5.5"),
+        )
     }
 }

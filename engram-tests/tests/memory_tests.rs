@@ -66,6 +66,7 @@ fn request(action: &str) -> MemoryRequestNew {
         timestamp: None,
         vault_path: None,
         migration_review_path: None,
+        digest_extraction_path: None,
         dry_run: None,
         create_commit: None,
         include_entity_observations: None,
@@ -391,6 +392,26 @@ async fn test_mcp_memory_migration_review_apply_empty_batch_dry_run() {
     let response = tools::memory_new(&state, apply)
         .await
         .expect("migration_review_apply should work");
+    let json = parse_json(&response);
+
+    assert_eq!(json["apply"]["dry_run"], true);
+    assert_eq!(json["apply"]["files_scanned"], 0);
+    assert_eq!(json["apply"]["planned_items"].as_array().unwrap().len(), 0);
+    assert_eq!(json["apply"]["written_items"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn test_mcp_memory_digest_extraction_apply_empty_batch_dry_run() {
+    let state = setup_tool_state().await;
+    let dir = tempdir().expect("tempdir should be created");
+
+    let mut apply = with_writer(request("digest_extraction_apply"));
+    apply.digest_extraction_path = Some(dir.path().display().to_string());
+    apply.dry_run = Some(true);
+
+    let response = tools::memory_new(&state, apply)
+        .await
+        .expect("digest_extraction_apply should work");
     let json = parse_json(&response);
 
     assert_eq!(json["apply"]["dry_run"], true);

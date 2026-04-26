@@ -17,7 +17,8 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DigestExtractionOptions, DigestExtractionPlan, DigestInventory,
+    CoordinationService, DigestExtractionOptions, DigestExtractionPlan,
+    DigestExtractionReviewApply, DigestExtractionReviewApplyOptions, DigestInventory,
     DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService, DocumentService,
     EntityService, KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
     MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
@@ -1313,6 +1314,36 @@ enum MemoryCommands {
         #[arg(long, default_value = "migration-review-apply")]
         model: String,
     },
+
+    /// Apply accepted items from a generated digest extraction review batch
+    DigestExtractionApply {
+        /// Extraction review batch directory containing index.md and candidates/
+        path: String,
+
+        /// Actually write accepted memory records; omitted means dry-run
+        #[arg(long)]
+        write: bool,
+
+        /// Print the full apply report as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Do not create a knowledge commit when writing accepted records
+        #[arg(long)]
+        no_commit: bool,
+
+        /// Writer harness/interface recorded on imported records
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on imported records
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on imported records
+        #[arg(long, default_value = "digest-extraction-apply")]
+        model: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2079,6 +2110,56 @@ fn print_migration_review_apply(apply: &MigrationReviewApply) {
     if !apply.files_with_conflicts.is_empty() {
         println!("Files with conflicting decisions:");
         for path in &apply.files_with_conflicts {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_skipped.is_empty() {
+        println!("Skipped files:");
+        for path in &apply.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &apply.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_digest_extraction_review_apply(apply: &DigestExtractionReviewApply) {
+    if apply.dry_run {
+        println!("Digest extraction review apply dry-run");
+    } else {
+        println!("Digest extraction review applied");
+    }
+    println!("  Root:                  {}", apply.root);
+    println!("  Files scanned:         {}", apply.files_scanned);
+    println!("  Planned items:         {}", apply.planned_count());
+    println!("  Written items:         {}", apply.written_count());
+    println!("  Accepted:              {}", apply.accepted_count);
+    println!("  Quarantined:           {}", apply.quarantined_count);
+    println!("  Rejected:              {}", apply.rejected_count);
+    println!("  Duplicates skipped:    {}", apply.duplicate_count);
+    if let Some(commit) = &apply.commit {
+        println!("  Knowledge commit:      {}", commit.id);
+    }
+
+    if !apply.files_with_no_decision.is_empty() {
+        println!("Files with no review decision:");
+        for path in &apply.files_with_no_decision {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_with_invalid_decision.is_empty() {
+        println!("Files with invalid review decision:");
+        for path in &apply.files_with_invalid_decision {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_with_parse_errors.is_empty() {
+        println!("Files with parse errors:");
+        for path in &apply.files_with_parse_errors {
             println!("  - {}", path);
         }
     }
@@ -4338,6 +4419,36 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&apply)?);
                     } else {
                         print_migration_review_apply(&apply);
+                    }
+                }
+                MemoryCommands::DigestExtractionApply {
+                    path,
+                    write,
+                    json,
+                    no_commit,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let apply = service
+                        .apply_digest_extraction_review(
+                            std::path::Path::new(&path),
+                            DigestExtractionReviewApplyOptions {
+                                dry_run: !write,
+                                writer: cli_migration_writer(
+                                    &writer_harness,
+                                    &model_provider,
+                                    &model,
+                                ),
+                                create_commit: !no_commit,
+                            },
+                        )
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&apply)?);
+                    } else {
+                        print_digest_extraction_review_apply(&apply);
                     }
                 }
             }

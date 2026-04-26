@@ -49,10 +49,10 @@ pub use chunker::ChunkerConfig;
 pub use coordination::{ConflictCheckResult, CoordinationService};
 pub use digest::{
     DigestExcludedPath, DigestExtractionCandidateSummary, DigestExtractionOptions,
-    DigestExtractionPlan, DigestFileFormat, DigestInventory, DigestInventoryOptions,
-    DigestProposedAction, DigestReviewApply, DigestReviewDecision, DigestReviewExport,
-    DigestReviewedSource, DigestSensitivity, DigestService, DigestSourceCandidate,
-    DigestSourceKind,
+    DigestExtractionPlan, DigestExtractionReviewApply, DigestExtractionReviewApplyOptions,
+    DigestFileFormat, DigestInventory, DigestInventoryOptions, DigestProposedAction,
+    DigestReviewApply, DigestReviewDecision, DigestReviewExport, DigestReviewedSource,
+    DigestSensitivity, DigestService, DigestSourceCandidate, DigestSourceKind,
 };
 pub use entity::EntityService;
 pub use error::{IndexError, IndexResult};

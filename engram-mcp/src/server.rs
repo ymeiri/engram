@@ -387,7 +387,7 @@ impl EngramServer {
 
     /// Manage Memory OS items and knowledge commits.
     #[tool(
-        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply. Requires writer provenance for add, commit, and migration_review_apply: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
+        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply. Requires writer provenance for add, commit, migration_review_apply, and digest_extraction_apply: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
     )]
     pub async fn memory(
         &self,
@@ -579,7 +579,7 @@ impl ServerHandler for EngramServer {
                  - work_stats: Get work statistics\n\n\
                  **Memory OS:**\n\
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
-                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply)\n\
+                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply)\n\
                  - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
                  - digest: Inventory digest source files, export metadata-only review batches, parse review decisions, or build review-gated extraction plans (actions: inventory, review_export, review_apply, extraction_plan)\n\
                  - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply)\n\n\

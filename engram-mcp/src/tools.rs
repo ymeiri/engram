@@ -14,11 +14,11 @@ use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_index::{
-    CoordinationService, DigestExtractionOptions, DigestInventoryOptions, DigestService,
-    DocumentService, EntityService, KnowledgeService, MemoryService, MigrationInventoryOptions,
-    MigrationReviewApplyOptions, OrientInput, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchService, SessionService,
-    ToolIntelService, WorkService,
+    CoordinationService, DigestExtractionOptions, DigestExtractionReviewApplyOptions,
+    DigestInventoryOptions, DigestService, DocumentService, EntityService, KnowledgeService,
+    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, OrientInput,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
+    SearchService, SessionService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7101,9 +7101,9 @@ pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<St
 /// Consolidated request for Memory OS operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryRequestNew {
-    /// Action to perform: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply
+    /// Action to perform: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply
     #[schemars(
-        description = "Action: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply"
+        description = "Action: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply"
     )]
     pub action: String,
 
@@ -7217,9 +7217,11 @@ pub struct MemoryRequestNew {
     pub vault_path: Option<String>,
     /// Migration review output path (required for migration_review_export)
     pub migration_review_path: Option<String>,
-    /// Dry-run mode for migration_review_apply; defaults to true
+    /// Digest extraction review path (required for digest_extraction_apply)
+    pub digest_extraction_path: Option<String>,
+    /// Dry-run mode for migration_review_apply or digest_extraction_apply; defaults to true
     pub dry_run: Option<bool>,
-    /// Create a knowledge commit when migration_review_apply writes records
+    /// Create a knowledge commit when an apply action writes records
     pub create_commit: Option<bool>,
 
     /// Include entity observations in migration_inventory
@@ -7495,8 +7497,32 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             }))
             .map_err(|e| e.to_string())
         }
+        "digest_extraction_apply" => {
+            let extraction_path = required(
+                &request.digest_extraction_path,
+                "digest_extraction_path",
+                "digest_extraction_apply",
+            )?;
+            let writer = parse_writer(&request)?;
+            let apply = service
+                .apply_digest_extraction_review(
+                    std::path::Path::new(&extraction_path),
+                    DigestExtractionReviewApplyOptions {
+                        dry_run: request.dry_run.unwrap_or(true),
+                        writer,
+                        create_commit: request.create_commit.unwrap_or(true),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply",
+            "Unknown action: '{}'. Valid actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply",
             request.action
         )),
     }
