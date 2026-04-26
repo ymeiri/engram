@@ -35,9 +35,9 @@ pub use config::{StorageBackend, StoreConfig};
 pub use error::{StoreError, StoreResult};
 pub use repos::{
     AliasSearchResult, ArchivedObservation, CoordinationRepo, CoordinationStats, DocumentRepo,
-    EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, ObservationSearchResult,
-    ProjectObservationSearchResult, SessionRepo, TaskObservationSearchResult, ToolIntelStats,
-    ToolRepo, WorkRepo, WorkStats,
+    EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, MemoryRepo,
+    ObservationSearchResult, ProjectObservationSearchResult, RepositoryRepo, SessionRepo,
+    TaskObservationSearchResult, ToolIntelStats, ToolRepo, WorkRepo, WorkStats,
 };
 
 use surrealdb::engine::any::Any;
@@ -115,6 +115,14 @@ pub async fn init_schema(db: &Db) -> StoreResult<()> {
     // Initialize work schema (Layer 7)
     let work_repo = WorkRepo::new(db.clone());
     work_repo.init_schema().await?;
+
+    // Initialize Memory OS schema
+    let memory_repo = MemoryRepo::new(db.clone());
+    memory_repo.init_schema().await?;
+
+    // Initialize repository topology schema
+    let repository_repo = RepositoryRepo::new(db.clone());
+    repository_repo.init_schema().await?;
 
     info!("All schemas initialized");
     Ok(())

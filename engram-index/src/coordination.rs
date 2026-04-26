@@ -60,7 +60,7 @@ impl CoordinationService {
     ) -> IndexResult<ActiveSession> {
         info!("Registering session {} for coordination", session_id);
 
-        let session = ActiveSession::new(session_id.clone(), agent, project, goal);
+        let session = ActiveSession::new(*session_id, agent, project, goal);
         self.repo.register(&session).await?;
 
         Ok(session)
@@ -80,8 +80,8 @@ impl CoordinationService {
             session_id, components
         );
 
-        let session = ActiveSession::new(session_id.clone(), agent, project, goal)
-            .with_components(components);
+        let session =
+            ActiveSession::new(*session_id, agent, project, goal).with_components(components);
         self.repo.register(&session).await?;
 
         Ok(session)

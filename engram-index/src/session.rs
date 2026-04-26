@@ -172,7 +172,7 @@ impl SessionService {
             )));
         }
 
-        let mut event = Event::new(session_id.clone(), event_type, "agent", content);
+        let mut event = Event::new(*session_id, event_type, "agent", content);
         if let Some(ctx) = context {
             event = event.with_context(ctx);
         }

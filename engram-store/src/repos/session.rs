@@ -512,7 +512,7 @@ impl SessionRepo {
 
     fn parse_record_id(&self, id_str: &str) -> StoreResult<Id> {
         // SurrealDB returns IDs as "table:uuid"
-        let id_part = id_str.split(':').last().unwrap_or(id_str);
+        let id_part = id_str.split(':').next_back().unwrap_or(id_str);
         Id::parse(id_part).map_err(|e| StoreError::Deserialization(format!("Invalid ID: {}", e)))
     }
 

@@ -217,7 +217,7 @@ impl ToolRepo {
         let records: Vec<ToolUsageRecord> = result.take(0)?;
 
         if let Some(record) = records.into_iter().next() {
-            Ok(Some(self.record_to_usage(id.clone(), record)?))
+            Ok(Some(self.record_to_usage(*id, record)?))
         } else {
             Ok(None)
         }
@@ -554,7 +554,7 @@ impl ToolRepo {
             .map_err(|e| StoreError::Deserialization(format!("Invalid session ID: {}", e)))?;
 
         let outcome =
-            ToolOutcome::from_str(&record.outcome).map_err(|e| StoreError::Deserialization(e))?;
+            ToolOutcome::from_str(&record.outcome).map_err(StoreError::Deserialization)?;
 
         let switched_to = record
             .switched_to

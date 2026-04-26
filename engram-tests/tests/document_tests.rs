@@ -139,16 +139,11 @@ async fn test_save_and_get_chunks() {
     repo.save_source(&source).await.unwrap();
 
     // Create chunks with embeddings
-    let chunk1 = DocChunk::new(
-        source.id.clone(),
-        "# Guide",
-        1,
-        "This is the main guide content.",
-    )
-    .with_lines(1, 10);
+    let chunk1 =
+        DocChunk::new(source.id, "# Guide", 1, "This is the main guide content.").with_lines(1, 10);
 
     let chunk2 = DocChunk::new(
-        source.id.clone(),
+        source.id,
         "# Guide > ## Installation",
         2,
         "Run cargo install to get started.",
@@ -186,7 +181,7 @@ async fn test_replace_chunks() {
     repo.save_source(&source).await.unwrap();
 
     // Save initial chunks
-    let chunk1 = DocChunk::new(source.id.clone(), "# Old", 1, "Old content");
+    let chunk1 = DocChunk::new(source.id, "# Old", 1, "Old content");
     repo.save_chunks(&source.id, vec![(chunk1, vec![0.1, 0.2, 0.3])])
         .await
         .unwrap();
@@ -197,13 +192,8 @@ async fn test_replace_chunks() {
     assert_eq!(initial[0].heading_path, "# Old");
 
     // Replace with new chunks
-    let chunk2 = DocChunk::new(source.id.clone(), "# New", 1, "New content");
-    let chunk3 = DocChunk::new(
-        source.id.clone(),
-        "# New > ## Section",
-        2,
-        "Section content",
-    );
+    let chunk2 = DocChunk::new(source.id, "# New", 1, "New content");
+    let chunk3 = DocChunk::new(source.id, "# New > ## Section", 2, "Section content");
     repo.save_chunks(
         &source.id,
         vec![(chunk2, vec![0.2, 0.3, 0.4]), (chunk3, vec![0.3, 0.4, 0.5])],
@@ -224,7 +214,7 @@ async fn test_delete_source_deletes_chunks() {
     let source = DocSource::local_file("/docs/cascade.md");
     repo.save_source(&source).await.unwrap();
 
-    let chunk = DocChunk::new(source.id.clone(), "# Test", 1, "Content");
+    let chunk = DocChunk::new(source.id, "# Test", 1, "Content");
     repo.save_chunks(&source.id, vec![(chunk, vec![0.1, 0.2, 0.3])])
         .await
         .unwrap();
@@ -254,14 +244,9 @@ async fn test_vector_similarity_search() {
     repo.save_source(&source).await.unwrap();
 
     // Create chunks with distinct embeddings
-    let chunk_rust = DocChunk::new(source.id.clone(), "# Rust", 1, "Rust programming language");
-    let chunk_python = DocChunk::new(
-        source.id.clone(),
-        "# Python",
-        1,
-        "Python programming language",
-    );
-    let chunk_go = DocChunk::new(source.id.clone(), "# Go", 1, "Go programming language");
+    let chunk_rust = DocChunk::new(source.id, "# Rust", 1, "Rust programming language");
+    let chunk_python = DocChunk::new(source.id, "# Python", 1, "Python programming language");
+    let chunk_go = DocChunk::new(source.id, "# Go", 1, "Go programming language");
 
     // Embeddings: rust is similar to query, python is medium, go is different
     let rust_embedding = vec![0.9, 0.8, 0.7, 0.6, 0.5];
@@ -300,13 +285,8 @@ async fn test_search_with_threshold() {
     let source = DocSource::local_file("/docs/threshold.md");
     repo.save_source(&source).await.unwrap();
 
-    let chunk1 = DocChunk::new(source.id.clone(), "# Similar", 1, "Very similar content");
-    let chunk2 = DocChunk::new(
-        source.id.clone(),
-        "# Different",
-        1,
-        "Very different content",
-    );
+    let chunk1 = DocChunk::new(source.id, "# Similar", 1, "Very similar content");
+    let chunk2 = DocChunk::new(source.id, "# Different", 1, "Very different content");
 
     // chunk1 embedding is similar to query, chunk2 is orthogonal
     repo.save_chunks(
@@ -343,10 +323,10 @@ async fn test_search_with_limit() {
     let mut chunks = Vec::new();
     for i in 0..10 {
         let chunk = DocChunk::new(
-            source.id.clone(),
-            &format!("# Section {}", i),
+            source.id,
+            format!("# Section {}", i),
             1,
-            &format!("Content {}", i),
+            format!("Content {}", i),
         );
         let embedding = vec![0.1 * i as f32, 0.2, 0.3, 0.4, 0.5];
         chunks.push((chunk, embedding));
@@ -394,9 +374,9 @@ async fn test_document_stats() {
     repo.save_source(&source1).await.unwrap();
     repo.save_source(&source2).await.unwrap();
 
-    let chunk1 = DocChunk::new(source1.id.clone(), "# A", 1, "Content A");
-    let chunk2 = DocChunk::new(source1.id.clone(), "# B", 1, "Content B");
-    let chunk3 = DocChunk::new(source2.id.clone(), "# C", 1, "Content C");
+    let chunk1 = DocChunk::new(source1.id, "# A", 1, "Content A");
+    let chunk2 = DocChunk::new(source1.id, "# B", 1, "Content B");
+    let chunk3 = DocChunk::new(source2.id, "# C", 1, "Content C");
 
     repo.save_chunks(
         &source1.id,
@@ -432,7 +412,7 @@ async fn test_special_characters_in_path() {
         let source = DocSource::local_file(path);
         repo.save_source(&source)
             .await
-            .expect(&format!("Failed with path: {}", path));
+            .unwrap_or_else(|_| panic!("Failed with path: {}", path));
 
         let found = repo.find_source_by_path(path).await.unwrap();
         assert!(found.is_some(), "Should find source with path: {}", path);
@@ -447,7 +427,7 @@ async fn test_long_content_chunk() {
     repo.save_source(&source).await.unwrap();
 
     let long_content = "A".repeat(10000);
-    let chunk = DocChunk::new(source.id.clone(), "# Long", 1, &long_content);
+    let chunk = DocChunk::new(source.id, "# Long", 1, &long_content);
 
     repo.save_chunks(&source.id, vec![(chunk, vec![0.1, 0.2, 0.3])])
         .await
@@ -464,11 +444,11 @@ async fn test_hierarchical_chunks() {
     let source = DocSource::local_file("/docs/hierarchy.md");
     repo.save_source(&source).await.unwrap();
 
-    let parent = DocChunk::new(source.id.clone(), "# Main", 1, "Main content");
-    let parent_id = parent.id.clone();
+    let parent = DocChunk::new(source.id, "# Main", 1, "Main content");
+    let parent_id = parent.id;
 
-    let child = DocChunk::new(source.id.clone(), "# Main > ## Sub", 2, "Sub content")
-        .with_parent(parent_id.clone());
+    let child =
+        DocChunk::new(source.id, "# Main > ## Sub", 2, "Sub content").with_parent(parent_id);
 
     repo.save_chunks(
         &source.id,

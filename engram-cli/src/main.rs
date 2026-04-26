@@ -9,11 +9,20 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use engram_core::entity::{EntityType, RelationType};
 use engram_core::knowledge::DocType;
+use engram_core::memory::{
+    Harness, MemoryCursor, MemoryItem, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
+};
+use engram_core::repository::{ProjectRepositoryRole, RepositoryContext};
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
+use engram_core::Id;
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, SearchService,
-    SessionService, ToolIntelService, WorkService,
+    CoordinationService, DocumentService, EntityService, KnowledgeService, MemoryService,
+    MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
+    MigrationReviewApplyOptions, MigrationReviewExport, RepositoryMigrationInventory,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
+    SearchService, SessionService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -164,6 +173,34 @@ enum Commands {
     Work {
         #[command(subcommand)]
         command: WorkCommands,
+    },
+
+    /// Manage Memory OS records and vault projections
+    Memory {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: MemoryCommands,
+    },
+
+    /// Manage repository topology and local checkout mapping
+    Repo {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: RepoCommands,
     },
 }
 
@@ -1077,6 +1114,810 @@ enum WorkObserveCommands {
     },
 }
 
+/// Repository-project relationship role for CLI.
+#[derive(Debug, Clone, ValueEnum)]
+enum RepoRoleArg {
+    Primary,
+    Dependency,
+    Produces,
+    Related,
+}
+
+impl From<RepoRoleArg> for ProjectRepositoryRole {
+    fn from(arg: RepoRoleArg) -> Self {
+        match arg {
+            RepoRoleArg::Primary => ProjectRepositoryRole::Primary,
+            RepoRoleArg::Dependency => ProjectRepositoryRole::Dependency,
+            RepoRoleArg::Produces => ProjectRepositoryRole::Produces,
+            RepoRoleArg::Related => ProjectRepositoryRole::Related,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum MemoryStatusArg {
+    Active,
+    NeedsReview,
+    Superseded,
+    Archived,
+    Rejected,
+}
+
+impl From<MemoryStatusArg> for MemoryStatus {
+    fn from(arg: MemoryStatusArg) -> Self {
+        match arg {
+            MemoryStatusArg::Active => MemoryStatus::Active,
+            MemoryStatusArg::NeedsReview => MemoryStatus::NeedsReview,
+            MemoryStatusArg::Superseded => MemoryStatus::Superseded,
+            MemoryStatusArg::Archived => MemoryStatus::Archived,
+            MemoryStatusArg::Rejected => MemoryStatus::Rejected,
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum MemoryCommands {
+    /// List Memory OS records
+    List {
+        /// Optional lifecycle status filter
+        #[arg(long)]
+        status: Option<MemoryStatusArg>,
+
+        /// Maximum memory items to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print records as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Get a Memory OS record by ID
+    Get {
+        /// Memory item ID
+        id: String,
+
+        /// Print record as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List Memory OS records needing review
+    Review {
+        /// Maximum memory items to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print records as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Print a Memory OS cursor for later changes_since calls
+    Cursor {
+        /// Print cursor as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Export Memory OS records into a generated Markdown vault
+    ExportVault {
+        /// Vault root path to write
+        path: String,
+    },
+
+    /// Inventory existing Engram data for future Memory OS migration without writing records
+    MigrationInventory {
+        /// Restrict inventory to a project name where source data supports project scoping
+        #[arg(long)]
+        project_filter: Option<String>,
+
+        /// Maximum candidates to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print the full inventory as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Exclude Layer 1 entity observations
+        #[arg(long)]
+        no_entity_observations: bool,
+
+        /// Exclude Layer 2 session history
+        #[arg(long)]
+        no_session_history: bool,
+
+        /// Exclude Layer 7 work observations
+        #[arg(long)]
+        no_work_observations: bool,
+    },
+
+    /// Export a generated Markdown review batch for migration candidates
+    MigrationReviewExport {
+        /// Output directory for generated review files
+        path: String,
+
+        /// Restrict inventory to a project name where source data supports project scoping
+        #[arg(long)]
+        project_filter: Option<String>,
+
+        /// Maximum candidates to include in the review batch
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print the full export result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Exclude Layer 1 entity observations
+        #[arg(long)]
+        no_entity_observations: bool,
+
+        /// Exclude Layer 2 session history
+        #[arg(long)]
+        no_session_history: bool,
+
+        /// Exclude Layer 7 work observations
+        #[arg(long)]
+        no_work_observations: bool,
+    },
+
+    /// Apply accepted items from a generated migration review batch
+    MigrationReviewApply {
+        /// Review batch directory containing index.md and candidates/
+        path: String,
+
+        /// Actually write accepted memory records; omitted means dry-run
+        #[arg(long)]
+        write: bool,
+
+        /// Print the full apply report as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Do not create a knowledge commit when writing accepted records
+        #[arg(long)]
+        no_commit: bool,
+
+        /// Writer harness/interface recorded on migrated records
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on migrated records
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on migrated records
+        #[arg(long, default_value = "migration-review-apply")]
+        model: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum RepoCommands {
+    /// Detect the Git checkout at or above cwd and register it
+    Detect {
+        /// Current working directory, defaults to the process cwd
+        cwd: Option<String>,
+    },
+
+    /// Resolve repository context for a cwd
+    Context {
+        /// Current working directory, defaults to the process cwd
+        cwd: Option<String>,
+    },
+
+    /// Register or update a canonical repository
+    Register {
+        /// Repository name
+        name: String,
+
+        /// Canonical remote URL
+        #[arg(long)]
+        remote: Option<String>,
+
+        /// Default branch
+        #[arg(long)]
+        default_branch: Option<String>,
+
+        /// Description
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+
+    /// List known repositories
+    List {
+        /// Maximum number of repositories
+        #[arg(short, long)]
+        limit: Option<usize>,
+    },
+
+    /// Add or update a monorepo component
+    ComponentAdd {
+        /// Repository name
+        #[arg(long)]
+        repo: Option<String>,
+
+        /// Repository ID
+        #[arg(long)]
+        repo_id: Option<String>,
+
+        /// Component name
+        name: String,
+
+        /// Repository-relative component path
+        path: String,
+
+        /// Component kind, such as service, app, package, or crate
+        #[arg(long)]
+        kind: Option<String>,
+
+        /// Description
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+
+    /// Link a project to a repository or monorepo component
+    LinkProject {
+        /// Project name
+        project: String,
+
+        /// Repository name
+        #[arg(long)]
+        repo: Option<String>,
+
+        /// Repository ID
+        #[arg(long)]
+        repo_id: Option<String>,
+
+        /// Relationship role
+        #[arg(long, value_enum, default_value = "related")]
+        role: RepoRoleArg,
+
+        /// Optional repository-relative component path
+        #[arg(long)]
+        component_path: Option<String>,
+    },
+
+    /// Inventory legacy Engram data for repository topology references without writing records
+    MigrationInventory {
+        /// Restrict inventory to a project name where source data supports project scoping
+        #[arg(long)]
+        project_filter: Option<String>,
+
+        /// Maximum candidates to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print the full inventory as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Exclude Layer 1 entity descriptions and observations
+        #[arg(long)]
+        no_entity_observations: bool,
+
+        /// Exclude Layer 2 session history
+        #[arg(long)]
+        no_session_history: bool,
+
+        /// Exclude Layer 7 work records
+        #[arg(long)]
+        no_work_records: bool,
+    },
+
+    /// Export a generated Markdown review batch for repository topology migration
+    MigrationReviewExport {
+        /// Output directory for generated review files
+        path: String,
+
+        /// Restrict inventory to a project name where source data supports project scoping
+        #[arg(long)]
+        project_filter: Option<String>,
+
+        /// Maximum candidates to include in the review batch
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print the full export result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Exclude Layer 1 entity descriptions and observations
+        #[arg(long)]
+        no_entity_observations: bool,
+
+        /// Exclude Layer 2 session history
+        #[arg(long)]
+        no_session_history: bool,
+
+        /// Exclude Layer 7 work records
+        #[arg(long)]
+        no_work_records: bool,
+    },
+
+    /// Apply accepted topology records from a generated repository migration review batch
+    MigrationReviewApply {
+        /// Review batch directory containing index.md and candidates/
+        path: String,
+
+        /// Actually write accepted repository topology records; omitted means dry-run
+        #[arg(long)]
+        write: bool,
+
+        /// Print the full apply report as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Do not create a knowledge commit when writing accepted topology records
+        #[arg(long)]
+        no_commit: bool,
+
+        /// Writer harness/interface recorded on migration audit commits
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on migration audit commits
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on migration audit commits
+        #[arg(long, default_value = "repository-migration-review-apply")]
+        model: String,
+    },
+}
+
+fn scoped_store_config(project: Option<&str>, data_dir: Option<&str>) -> Result<StoreConfig> {
+    if let Some(data_dir) = data_dir {
+        return Ok(StoreConfig::rocksdb(data_dir));
+    }
+
+    if let Some(project) = project {
+        let base = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".engram")
+            .join("projects")
+            .join(project)
+            .join("data");
+        std::fs::create_dir_all(&base)?;
+        return Ok(StoreConfig::rocksdb(base));
+    }
+
+    Ok(StoreConfig::rocksdb(StoreConfig::default_data_dir()))
+}
+
+fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
+    cwd.map(std::path::PathBuf::from)
+        .map(Ok)
+        .unwrap_or_else(std::env::current_dir)
+        .map_err(Into::into)
+}
+
+fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
+    repo_id
+        .map(Id::parse)
+        .transpose()
+        .map_err(|e| anyhow::anyhow!("Invalid repository ID: {}", e))
+}
+
+fn print_repository_context(context: &RepositoryContext) {
+    println!("Repository:");
+    println!("  ID:   {}", context.repository.id);
+    println!("  Name: {}", context.repository.name);
+    if let Some(remote_url) = &context.repository.remote_url {
+        println!("  Remote: {}", remote_url);
+    }
+    println!("  Provider: {}", context.repository.provider);
+    if let Some(default_branch) = &context.repository.default_branch {
+        println!("  Default branch: {}", default_branch);
+    }
+
+    if let Some(checkout) = &context.checkout {
+        println!("Checkout:");
+        println!("  Path: {}", checkout.local_path);
+        if let Some(branch) = &checkout.current_branch {
+            println!("  Branch: {}", branch);
+        }
+        if let Some(head_sha) = &checkout.head_sha {
+            println!("  HEAD: {}", head_sha);
+        }
+        if let Some(is_dirty) = checkout.is_dirty {
+            println!("  Dirty: {}", is_dirty);
+        }
+    }
+
+    println!("Components:");
+    if context.matching_components.is_empty() {
+        println!("  none");
+    } else {
+        for component in &context.matching_components {
+            let kind = component.kind.as_deref().unwrap_or("unknown");
+            println!("  {} ({}, {})", component.name, component.path, kind);
+        }
+    }
+
+    println!("Linked projects:");
+    if context.linked_projects.is_empty() {
+        println!("  none");
+    } else {
+        for link in &context.linked_projects {
+            let component = link
+                .component_path
+                .as_deref()
+                .map(|path| format!(" component={path}"))
+                .unwrap_or_default();
+            println!("  {} ({}){}", link.project_name, link.role, component);
+        }
+    }
+}
+
+fn print_memory_items(title: &str, items: &[MemoryItem]) {
+    println!("{} ({})", title, items.len());
+    if items.is_empty() {
+        println!("  none");
+        return;
+    }
+
+    for item in items {
+        println!("  {} [{}; {}]", item.title, item.kind, item.status);
+        println!("    ID:      {}", item.id);
+        println!("    Scope:   {}", memory_scope_label(&item.scope));
+        println!("    Origin:  {:?}", item.origin);
+        println!(
+            "    Writer:  {} / {}",
+            item.writer.harness, item.writer.model.model
+        );
+        if !item.tags.is_empty() {
+            println!("    Tags:    {}", item.tags.join(", "));
+        }
+        println!("    Content: {}", item.content.replace('\n', " "));
+    }
+}
+
+fn print_memory_item(item: &MemoryItem) {
+    print_memory_items("Memory item", std::slice::from_ref(item));
+}
+
+fn print_memory_cursor(cursor: &MemoryCursor) {
+    println!("Memory cursor");
+    println!("  Timestamp: {}", cursor.timestamp);
+    if let Some(commit_id) = cursor.commit_id {
+        println!("  Latest commit: {}", commit_id);
+    } else {
+        println!("  Latest commit: none");
+    }
+}
+
+fn memory_scope_label(scope: &MemoryScope) -> String {
+    match scope {
+        MemoryScope::Global => "global".to_string(),
+        MemoryScope::User => "user".to_string(),
+        MemoryScope::Project { project_name, .. } => format!("project:{project_name}"),
+        MemoryScope::Task {
+            project_name,
+            task_name,
+            ..
+        } => {
+            let project = project_name.as_deref().unwrap_or("(unknown-project)");
+            format!("task:{project}/{task_name}")
+        }
+        MemoryScope::Entity { entity_name, .. } => format!("entity:{entity_name}"),
+        MemoryScope::Repository {
+            remote_url,
+            local_path,
+            ..
+        } => format!(
+            "repository:{}",
+            remote_url
+                .as_deref()
+                .or(local_path.as_deref())
+                .unwrap_or("(unknown)")
+        ),
+        MemoryScope::Session { session_id } => format!("session:{session_id}"),
+        MemoryScope::Custom { name } => format!("custom:{name}"),
+    }
+}
+
+fn print_migration_inventory(inventory: &MigrationInventory) {
+    println!("Migration inventory dry-run");
+    if let Some(project_filter) = &inventory.project_filter {
+        println!("  Project filter:       {}", project_filter);
+    }
+    println!("  Sources scanned:      {}", inventory.sources_scanned);
+    println!("  Total candidates:     {}", inventory.total_candidates);
+    println!("  Returned candidates:  {}", inventory.returned_candidates);
+    println!("  Truncated:            {}", inventory.truncated);
+
+    println!("By disposition:");
+    if inventory.by_disposition.is_empty() {
+        println!("  none");
+    } else {
+        for (disposition, count) in &inventory.by_disposition {
+            println!("  {}: {}", disposition, count);
+        }
+    }
+
+    println!("By source:");
+    if inventory.by_source_kind.is_empty() {
+        println!("  none");
+    } else {
+        for (source, count) in &inventory.by_source_kind {
+            println!("  {}: {}", source, count);
+        }
+    }
+
+    if !inventory.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &inventory.warnings {
+            println!("  - {}", warning);
+        }
+    }
+
+    if !inventory.candidates.is_empty() {
+        println!("Candidates:");
+        for candidate in &inventory.candidates {
+            println!(
+                "  - [{}] {} -> {} ({:.2})",
+                candidate.disposition,
+                candidate.source_kind,
+                candidate.proposed_kind,
+                candidate.confidence
+            );
+            println!("    Title: {}", candidate.title);
+            println!("    Source: {}", candidate.source_label);
+            if let Some(key) = &candidate.source_key {
+                println!("    Key: {}", key);
+            }
+            if !candidate.reasons.is_empty() {
+                println!("    Reason: {}", candidate.reasons.join("; "));
+            }
+        }
+    }
+}
+
+fn print_migration_review_export(export: &MigrationReviewExport) {
+    println!("Migration review batch exported");
+    println!("  Root:                {}", export.root);
+    println!("  Files written:       {}", export.file_count());
+    println!("  Files skipped:       {}", export.files_skipped.len());
+    println!(
+        "  Sources scanned:     {}",
+        export.inventory.sources_scanned
+    );
+    println!(
+        "  Total candidates:    {}",
+        export.inventory.total_candidates
+    );
+    println!(
+        "  Returned candidates: {}",
+        export.inventory.returned_candidates
+    );
+    println!("  Truncated:           {}", export.inventory.truncated);
+
+    if !export.files_skipped.is_empty() {
+        println!("Skipped non-generated files:");
+        for path in &export.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+
+    if !export.inventory.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &export.inventory.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_migration_review_apply(apply: &MigrationReviewApply) {
+    if apply.dry_run {
+        println!("Migration review apply dry-run");
+    } else {
+        println!("Migration review applied");
+    }
+    println!("  Root:                  {}", apply.root);
+    println!("  Files scanned:         {}", apply.files_scanned);
+    println!("  Planned items:         {}", apply.planned_count());
+    println!("  Written items:         {}", apply.written_count());
+    println!("  Accepted:              {}", apply.accepted_count);
+    println!(
+        "  Accepted with edits:   {}",
+        apply.accepted_with_edits_count
+    );
+    println!("  Quarantined:           {}", apply.quarantined_count);
+    println!("  Rejected:              {}", apply.rejected_count);
+    println!("  Duplicates skipped:    {}", apply.duplicate_count);
+    if let Some(commit) = &apply.commit {
+        println!("  Knowledge commit:      {}", commit.id);
+    }
+
+    if !apply.files_with_no_decision.is_empty() {
+        println!("Files with no review decision:");
+        for path in &apply.files_with_no_decision {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_with_conflicts.is_empty() {
+        println!("Files with conflicting decisions:");
+        for path in &apply.files_with_conflicts {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_skipped.is_empty() {
+        println!("Skipped files:");
+        for path in &apply.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &apply.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_repository_migration_inventory(inventory: &RepositoryMigrationInventory) {
+    println!("Repository migration inventory dry-run");
+    if let Some(project_filter) = &inventory.project_filter {
+        println!("  Project filter:       {}", project_filter);
+    }
+    println!("  Sources scanned:      {}", inventory.sources_scanned);
+    println!("  Total candidates:     {}", inventory.total_candidates);
+    println!("  Returned candidates:  {}", inventory.returned_candidates);
+    println!("  Truncated:            {}", inventory.truncated);
+
+    println!("By reference kind:");
+    if inventory.by_reference_kind.is_empty() {
+        println!("  none");
+    } else {
+        for (kind, count) in &inventory.by_reference_kind {
+            println!("  {}: {}", kind, count);
+        }
+    }
+
+    println!("By disposition:");
+    if inventory.by_disposition.is_empty() {
+        println!("  none");
+    } else {
+        for (disposition, count) in &inventory.by_disposition {
+            println!("  {}: {}", disposition, count);
+        }
+    }
+
+    if !inventory.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &inventory.warnings {
+            println!("  - {}", warning);
+        }
+    }
+
+    if !inventory.candidates.is_empty() {
+        println!("Candidates:");
+        for candidate in &inventory.candidates {
+            println!(
+                "  - [{}] {} ({:.2})",
+                candidate.disposition, candidate.reference_kind, candidate.confidence
+            );
+            if let Some(name) = &candidate.repository_name {
+                println!("    Repository: {}", name);
+            }
+            if let Some(remote) = &candidate.normalized_remote {
+                println!("    Remote: {}", remote);
+            }
+            if let Some(path) = &candidate.local_path {
+                println!("    Local path: {}", path);
+            }
+            if let Some(project) = &candidate.project_name {
+                println!("    Project: {}", project);
+            }
+            if let Some(component_path) = &candidate.component_path {
+                println!("    Possible component: {}", component_path);
+            }
+            println!("    Evidence records: {}", candidate.evidence.len());
+        }
+    }
+}
+
+fn print_repository_migration_review_export(export: &RepositoryMigrationReviewExport) {
+    println!("Repository migration review batch exported");
+    println!("  Root:                {}", export.root);
+    println!("  Files written:       {}", export.file_count());
+    println!("  Files skipped:       {}", export.files_skipped.len());
+    println!(
+        "  Sources scanned:     {}",
+        export.inventory.sources_scanned
+    );
+    println!(
+        "  Total candidates:    {}",
+        export.inventory.total_candidates
+    );
+    println!(
+        "  Returned candidates: {}",
+        export.inventory.returned_candidates
+    );
+    println!("  Truncated:           {}", export.inventory.truncated);
+
+    if !export.files_skipped.is_empty() {
+        println!("Skipped non-generated files:");
+        for path in &export.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+
+    if !export.inventory.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &export.inventory.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_repository_migration_review_apply(apply: &RepositoryMigrationReviewApply) {
+    if apply.dry_run {
+        println!("Repository migration review apply dry-run");
+    } else {
+        println!("Repository migration review applied");
+    }
+    println!("  Root:                  {}", apply.root);
+    println!("  Files scanned:         {}", apply.files_scanned);
+    println!("  Planned records:       {}", apply.planned_count());
+    println!("  Written records:       {}", apply.written_count());
+    println!("  Accepted:              {}", apply.accepted_count);
+    println!(
+        "  Accepted with edits:   {}",
+        apply.accepted_with_edits_count
+    );
+    println!("  Quarantined:           {}", apply.quarantined_count);
+    println!("  Rejected:              {}", apply.rejected_count);
+    println!("  Already existed:       {}", apply.existing_record_count);
+    if let Some(commit) = &apply.commit {
+        println!("  Knowledge commit:      {}", commit.id);
+    }
+
+    if !apply.files_with_no_decision.is_empty() {
+        println!("Files with no review decision:");
+        for path in &apply.files_with_no_decision {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_with_conflicts.is_empty() {
+        println!("Files with conflicting decisions:");
+        for path in &apply.files_with_conflicts {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_skipped.is_empty() {
+        println!("Skipped files:");
+        for path in &apply.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &apply.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn cli_migration_writer(
+    writer_harness: &str,
+    model_provider: &str,
+    model: &str,
+) -> WriterProvenance {
+    WriterProvenance {
+        harness: Harness::parse(writer_harness),
+        harness_version: None,
+        model: ModelIdentity::new(model_provider, model),
+        surface: Some("cli".to_string()),
+        actor: "importer".to_string(),
+        session_id: None,
+        written_at: OffsetDateTime::now_utc(),
+    }
+}
+
 fn setup_logging(verbose: bool) {
     let filter = if verbose {
         EnvFilter::new("debug")
@@ -1191,6 +2032,14 @@ async fn main() -> Result<()> {
                 let work_service = WorkService::with_defaults(db.clone())?;
                 work_service.init().await?;
 
+                // Create Memory OS service
+                let memory_service = MemoryService::new(db.clone());
+                memory_service.init_schema().await?;
+
+                // Create repository topology service
+                let repository_service = RepositoryService::new(db.clone());
+                repository_service.init_schema().await?;
+
                 // Create unified search service
                 let search_service = SearchService::with_defaults(db)?;
 
@@ -1203,6 +2052,8 @@ async fn main() -> Result<()> {
                 server.init_coordination(coordination_service).await;
                 server.init_knowledge(knowledge_service).await;
                 server.init_work(work_service).await;
+                server.init_memory(memory_service).await;
+                server.init_repository(repository_service).await;
                 server.init_search(search_service).await;
 
                 let listen_port = port.unwrap_or(daemon::DEFAULT_DAEMON_PORT);
@@ -1245,8 +2096,8 @@ async fn main() -> Result<()> {
                             println!("Daemon status: {}", status);
                             println!("  Port: {}", info.port);
                             println!("  PID:  {}", info.pid);
-                            if config.project.is_some() {
-                                println!("  Project: {}", config.project.as_ref().unwrap());
+                            if let Some(project) = &config.project {
+                                println!("  Project: {}", project);
                             }
                         }
                         Err(_) => {
@@ -1668,7 +2519,7 @@ async fn main() -> Result<()> {
                 }
 
                 EntityCommands::List { entity_type } => {
-                    let type_filter = entity_type.map(|t| EntityType::from(t));
+                    let type_filter = entity_type.map(EntityType::from);
                     let entities = service.list_entities(type_filter.as_ref()).await?;
 
                     if entities.is_empty() {
@@ -1875,7 +2726,6 @@ async fn main() -> Result<()> {
                             .first()
                             .ok_or_else(|| anyhow::anyhow!("No active session found"))?
                             .id
-                            .clone()
                     };
 
                     service.end_session(&id, summary.as_deref()).await?;
@@ -1990,7 +2840,6 @@ async fn main() -> Result<()> {
                             .first()
                             .ok_or_else(|| anyhow::anyhow!("No active session found. Start one with 'engram session start'"))?
                             .id
-                            .clone()
                     };
 
                     let event = service
@@ -2980,6 +3829,410 @@ async fn main() -> Result<()> {
                         stats.project_observation_count
                     );
                     println!("  Task Observations:    {}", stats.task_observation_count);
+                }
+            }
+        }
+
+        // =========================================================================
+        // Memory OS Commands
+        // =========================================================================
+        Commands::Memory {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = MemoryService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                MemoryCommands::List {
+                    status,
+                    limit,
+                    json,
+                } => {
+                    let items = service.list_memory(status.map(Into::into), limit).await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&items)?);
+                    } else {
+                        print_memory_items("Memory items", &items);
+                    }
+                }
+                MemoryCommands::Get { id, json } => {
+                    let id = Id::parse(&id)
+                        .map_err(|e| anyhow::anyhow!("Invalid memory item ID: {}", e))?;
+                    let item = service
+                        .get_memory(&id)
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("Memory item not found: {}", id))?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&item)?);
+                    } else {
+                        print_memory_item(&item);
+                    }
+                }
+                MemoryCommands::Review { limit, json } => {
+                    let items = service.list_memory_needing_review(limit).await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&items)?);
+                    } else {
+                        print_memory_items("Memory items needing review", &items);
+                    }
+                }
+                MemoryCommands::Cursor { json } => {
+                    let cursor = service.current_cursor().await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&cursor)?);
+                    } else {
+                        print_memory_cursor(&cursor);
+                    }
+                }
+                MemoryCommands::ExportVault { path } => {
+                    let export = service.export_vault(std::path::Path::new(&path)).await?;
+
+                    println!("✓ Memory vault exported");
+                    println!("  Root:                 {}", export.root);
+                    println!("  Files written:        {}", export.file_count());
+                    println!("  Files skipped:        {}", export.files_skipped.len());
+                    println!("  Memory items:         {}", export.memory_item_count);
+                    println!("  Knowledge commits:    {}", export.knowledge_commit_count);
+                    println!("  Repositories:         {}", export.repository_count);
+                    println!("  Projects:             {}", export.project_count);
+                    if !export.files_skipped.is_empty() {
+                        println!("Skipped non-generated files:");
+                        for path in export.files_skipped {
+                            println!("  - {}", path);
+                        }
+                    }
+                }
+                MemoryCommands::MigrationInventory {
+                    project_filter,
+                    limit,
+                    json,
+                    no_entity_observations,
+                    no_session_history,
+                    no_work_observations,
+                } => {
+                    if no_entity_observations && no_session_history && no_work_observations {
+                        return Err(anyhow::anyhow!(
+                            "At least one migration inventory source layer must be included"
+                        ));
+                    }
+                    let inventory = service
+                        .migration_inventory(MigrationInventoryOptions {
+                            project_filter,
+                            limit,
+                            include_entity_observations: !no_entity_observations,
+                            include_session_history: !no_session_history,
+                            include_work_observations: !no_work_observations,
+                        })
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&inventory)?);
+                    } else {
+                        print_migration_inventory(&inventory);
+                    }
+                }
+                MemoryCommands::MigrationReviewExport {
+                    path,
+                    project_filter,
+                    limit,
+                    json,
+                    no_entity_observations,
+                    no_session_history,
+                    no_work_observations,
+                } => {
+                    if no_entity_observations && no_session_history && no_work_observations {
+                        return Err(anyhow::anyhow!(
+                            "At least one migration review source layer must be included"
+                        ));
+                    }
+                    let export = service
+                        .export_migration_review(
+                            std::path::Path::new(&path),
+                            MigrationInventoryOptions {
+                                project_filter,
+                                limit,
+                                include_entity_observations: !no_entity_observations,
+                                include_session_history: !no_session_history,
+                                include_work_observations: !no_work_observations,
+                            },
+                        )
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&export)?);
+                    } else {
+                        print_migration_review_export(&export);
+                    }
+                }
+                MemoryCommands::MigrationReviewApply {
+                    path,
+                    write,
+                    json,
+                    no_commit,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let apply = service
+                        .apply_migration_review(
+                            std::path::Path::new(&path),
+                            MigrationReviewApplyOptions {
+                                dry_run: !write,
+                                writer: cli_migration_writer(
+                                    &writer_harness,
+                                    &model_provider,
+                                    &model,
+                                ),
+                                create_commit: !no_commit,
+                            },
+                        )
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&apply)?);
+                    } else {
+                        print_migration_review_apply(&apply);
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // Repository Topology Commands
+        // =========================================================================
+        Commands::Repo {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = RepositoryService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                RepoCommands::Detect { cwd } => {
+                    let cwd = cwd_or_current(cwd)?;
+                    let detection = service.detect_repository(&cwd).await?;
+
+                    println!("✓ Repository detected and registered");
+                    println!("Detected root: {}", detection.detected_root);
+                    print_repository_context(&detection.context);
+                    if !detection.warnings.is_empty() {
+                        println!("Warnings:");
+                        for warning in detection.warnings {
+                            println!("  - {}", warning);
+                        }
+                    }
+                }
+
+                RepoCommands::Context { cwd } => {
+                    let cwd = cwd_or_current(cwd)?;
+                    match service.resolve_cwd(&cwd).await? {
+                        Some(context) => print_repository_context(&context),
+                        None => {
+                            println!("No registered repository context matched {}", cwd.display());
+                        }
+                    }
+                }
+
+                RepoCommands::Register {
+                    name,
+                    remote,
+                    default_branch,
+                    description,
+                } => {
+                    let repository = service
+                        .register_repository(
+                            &name,
+                            remote.as_deref(),
+                            default_branch.as_deref(),
+                            description.as_deref(),
+                        )
+                        .await?;
+
+                    println!("✓ Repository registered:");
+                    println!("  ID:   {}", repository.id);
+                    println!("  Name: {}", repository.name);
+                    if let Some(remote_url) = repository.remote_url {
+                        println!("  Remote: {}", remote_url);
+                    }
+                    println!("  Provider: {}", repository.provider);
+                    if let Some(default_branch) = repository.default_branch {
+                        println!("  Default branch: {}", default_branch);
+                    }
+                }
+
+                RepoCommands::List { limit } => {
+                    let repositories = service.list_repositories(limit).await?;
+                    if repositories.is_empty() {
+                        println!("No repositories registered.");
+                    } else {
+                        println!("Repositories ({}):\n", repositories.len());
+                        for repository in repositories {
+                            println!("  {} ({})", repository.name, repository.id);
+                            if let Some(remote_url) = repository.remote_url {
+                                println!("    Remote: {}", remote_url);
+                            }
+                            println!("    Provider: {}", repository.provider);
+                        }
+                    }
+                }
+
+                RepoCommands::ComponentAdd {
+                    repo,
+                    repo_id,
+                    name,
+                    path,
+                    kind,
+                    description,
+                } => {
+                    let repo_id = parse_optional_repo_id(repo_id.as_deref())?;
+                    let component = service
+                        .register_component(
+                            repo_id.as_ref(),
+                            repo.as_deref(),
+                            &name,
+                            &path,
+                            kind.as_deref(),
+                            description.as_deref(),
+                        )
+                        .await?;
+
+                    println!("✓ Component registered:");
+                    println!("  ID:   {}", component.id);
+                    println!("  Name: {}", component.name);
+                    println!("  Path: {}", component.path);
+                    if let Some(kind) = component.kind {
+                        println!("  Kind: {}", kind);
+                    }
+                }
+
+                RepoCommands::LinkProject {
+                    project,
+                    repo,
+                    repo_id,
+                    role,
+                    component_path,
+                } => {
+                    let repo_id = parse_optional_repo_id(repo_id.as_deref())?;
+                    let link = service
+                        .link_project(
+                            &project,
+                            repo_id.as_ref(),
+                            repo.as_deref(),
+                            role.into(),
+                            component_path.as_deref(),
+                        )
+                        .await?;
+
+                    println!("✓ Project linked to repository:");
+                    println!("  Project: {}", link.project_name);
+                    println!("  Repository ID: {}", link.repository_id);
+                    println!("  Role: {}", link.role);
+                    if let Some(component_path) = link.component_path {
+                        println!("  Component path: {}", component_path);
+                    }
+                }
+                RepoCommands::MigrationInventory {
+                    project_filter,
+                    limit,
+                    json,
+                    no_entity_observations,
+                    no_session_history,
+                    no_work_records,
+                } => {
+                    if no_entity_observations && no_session_history && no_work_records {
+                        return Err(anyhow::anyhow!(
+                            "At least one repository migration inventory source layer must be included"
+                        ));
+                    }
+                    let inventory = service
+                        .migration_inventory(RepositoryMigrationOptions {
+                            project_filter,
+                            limit,
+                            include_entity_observations: !no_entity_observations,
+                            include_session_history: !no_session_history,
+                            include_work_records: !no_work_records,
+                        })
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&inventory)?);
+                    } else {
+                        print_repository_migration_inventory(&inventory);
+                    }
+                }
+                RepoCommands::MigrationReviewExport {
+                    path,
+                    project_filter,
+                    limit,
+                    json,
+                    no_entity_observations,
+                    no_session_history,
+                    no_work_records,
+                } => {
+                    if no_entity_observations && no_session_history && no_work_records {
+                        return Err(anyhow::anyhow!(
+                            "At least one repository migration review source layer must be included"
+                        ));
+                    }
+                    let export = service
+                        .export_migration_review(
+                            std::path::Path::new(&path),
+                            RepositoryMigrationOptions {
+                                project_filter,
+                                limit,
+                                include_entity_observations: !no_entity_observations,
+                                include_session_history: !no_session_history,
+                                include_work_records: !no_work_records,
+                            },
+                        )
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&export)?);
+                    } else {
+                        print_repository_migration_review_export(&export);
+                    }
+                }
+                RepoCommands::MigrationReviewApply {
+                    path,
+                    write,
+                    json,
+                    no_commit,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let apply = service
+                        .apply_migration_review(
+                            std::path::Path::new(&path),
+                            RepositoryMigrationReviewApplyOptions {
+                                dry_run: !write,
+                                writer: Some(cli_migration_writer(
+                                    &writer_harness,
+                                    &model_provider,
+                                    &model,
+                                )),
+                                create_commit: !no_commit,
+                            },
+                        )
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&apply)?);
+                    } else {
+                        print_repository_migration_review_apply(&apply);
+                    }
                 }
             }
         }

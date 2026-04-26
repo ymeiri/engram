@@ -16,6 +16,8 @@
 //! - [`coordination`] - Session coordination (Layer 5): parallel awareness
 //! - [`knowledge`] - Document intelligence (Layer 6): canonical resolver
 //! - [`work`] - Work management (Layer 7): projects, tasks, PRs
+//! - [`memory`] - Memory OS ontology: provenance, scope, lifecycle, commits
+//! - [`repository`] - Git repository topology and local checkout mapping
 //! - [`id`] - ID types and generation
 //! - [`error`] - Error types
 
@@ -25,6 +27,8 @@ pub mod entity;
 pub mod error;
 pub mod id;
 pub mod knowledge;
+pub mod memory;
+pub mod repository;
 pub mod search;
 pub mod session;
 pub mod tool;

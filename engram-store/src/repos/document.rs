@@ -89,8 +89,6 @@ impl DocSourceRecord {
 }
 
 /// DocChunk record from SurrealDB (for deserialization).
-
-/// DocChunk record from SurrealDB (for deserialization).
 /// SurrealDB v2 returns Thing objects for IDs, so we use string fields.
 #[derive(Debug, Clone, Deserialize)]
 struct DocChunkRecord {
@@ -181,7 +179,7 @@ impl DocumentRepo {
 
         // SurrealDB v2: Use raw query to avoid SDK ID serialization conflicts
         let source_type_str = serde_json::to_string(&source.source_type)
-            .map_err(|e| StoreError::Serialization(e))?
+            .map_err(StoreError::Serialization)?
             .trim_matches('"')
             .to_string();
 
@@ -531,7 +529,7 @@ mod tests {
     #[test]
     fn test_doc_chunk_creation() {
         let source_id = Id::new();
-        let chunk = DocChunk::new(source_id.clone(), "# Test > ## Section", 2, "Test content");
+        let chunk = DocChunk::new(source_id, "# Test > ## Section", 2, "Test content");
 
         assert_eq!(chunk.heading_level, 2);
         assert_eq!(chunk.heading_path, "# Test > ## Section");

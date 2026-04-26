@@ -426,7 +426,7 @@ impl WorkRepo {
         let records: Vec<ProjectRecord> = result.take(0)?;
 
         if let Some(record) = records.into_iter().next() {
-            Ok(Some(self.record_to_project(id.clone(), record)?))
+            Ok(Some(self.record_to_project(*id, record)?))
         } else {
             Ok(None)
         }
@@ -612,7 +612,7 @@ impl WorkRepo {
         let records: Vec<TaskRecord> = result.take(0)?;
 
         if let Some(record) = records.into_iter().next() {
-            Ok(Some(self.record_to_task(id.clone(), record)?))
+            Ok(Some(self.record_to_task(*id, record)?))
         } else {
             Ok(None)
         }
@@ -831,7 +831,7 @@ impl WorkRepo {
         let records: Vec<PrRecord> = result.take(0)?;
 
         if let Some(record) = records.into_iter().next() {
-            Ok(Some(self.record_to_pr(id.clone(), record)?))
+            Ok(Some(self.record_to_pr(*id, record)?))
         } else {
             Ok(None)
         }
@@ -1121,7 +1121,7 @@ impl WorkRepo {
 
         let mut result = self
             .db
-            .query(&format!(
+            .query(format!(
                 r#"SELECT entity_id, relation FROM work_task_entity WHERE task_id = "{}""#,
                 task_id
             ))

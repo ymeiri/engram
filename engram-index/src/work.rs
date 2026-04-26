@@ -901,7 +901,7 @@ impl WorkService {
             None
         };
 
-        let mut final_ctx = WorkContext::new(session_id.clone()).with_project(project.id);
+        let mut final_ctx = WorkContext::new(*session_id).with_project(project.id);
         if let Some(tid) = task_id {
             final_ctx = final_ctx.with_task(tid);
         }

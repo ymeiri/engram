@@ -140,7 +140,7 @@ async fn test_all_event_types() {
         let event = service
             .log_event(&session.id, event_type.clone(), content, None, None)
             .await
-            .expect(&format!("Failed to log {:?}", event_type));
+            .unwrap_or_else(|_| panic!("Failed to log {:?}", event_type));
 
         assert_eq!(event.event_type, event_type);
     }
@@ -545,7 +545,7 @@ async fn test_many_events_in_session() {
                 None,
             )
             .await
-            .expect(&format!("Failed to log event {}", i));
+            .unwrap_or_else(|_| panic!("Failed to log event {}", i));
     }
 
     let (_, events) = service.get_session_with_events(&session.id).await.unwrap();

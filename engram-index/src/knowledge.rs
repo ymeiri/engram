@@ -112,7 +112,7 @@ impl KnowledgeService {
                 .args(["init"])
                 .current_dir(repo_path)
                 .output()
-                .map_err(|e| IndexError::Io(e))?;
+                .map_err(IndexError::Io)?;
 
             // Create initial .gitignore
             let gitignore_path = repo_path.join(".gitignore");
@@ -310,7 +310,7 @@ impl KnowledgeService {
                 .map(|m| {
                     m.modified()
                         .ok()
-                        .map(|t| OffsetDateTime::from(t))
+                        .map(OffsetDateTime::from)
                         .unwrap_or_else(OffsetDateTime::now_utc)
                 })
                 .unwrap_or_else(|_| OffsetDateTime::now_utc());

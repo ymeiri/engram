@@ -19,21 +19,12 @@ pub const DEFAULT_DAEMON_PORT: u16 = 8765;
 const PORT_RANGE: std::ops::Range<u16> = 8765..8775;
 
 /// Configuration for daemon management.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DaemonConfig {
     /// Project name (None for global daemon).
     pub project: Option<String>,
     /// Port to use (None for auto-select).
     pub port: Option<u16>,
-}
-
-impl Default for DaemonConfig {
-    fn default() -> Self {
-        Self {
-            project: None,
-            port: None,
-        }
-    }
 }
 
 impl DaemonConfig {
@@ -111,7 +102,7 @@ pub async fn ensure_daemon_running(config: &DaemonConfig) -> Result<u16> {
     }
 
     // Find an available port
-    let port = config.port.unwrap_or_else(|| find_available_port());
+    let port = config.port.unwrap_or_else(find_available_port);
     info!("Starting daemon on port {}", port);
 
     // Spawn the daemon

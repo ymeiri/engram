@@ -5,12 +5,19 @@
 use engram_core::document::DocSearchResult;
 use engram_core::entity::{EntityType, RelationType};
 use engram_core::knowledge::DocType;
+use engram_core::memory::{
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChange, MemoryChangeType, MemoryCursor,
+    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
+};
+use engram_core::repository::ProjectRepositoryRole;
 use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, SearchService,
-    SessionService, ToolIntelService, WorkService,
+    CoordinationService, DocumentService, EntityService, KnowledgeService, MemoryService,
+    MigrationInventoryOptions, MigrationReviewApplyOptions, OrientInput,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
+    SearchService, SessionService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -35,6 +42,10 @@ pub struct ToolState {
     pub knowledge_service: Arc<RwLock<Option<KnowledgeService>>>,
     /// The work service for project/task management (Layer 7).
     pub work_service: Arc<RwLock<Option<WorkService>>>,
+    /// The Memory OS service.
+    pub memory_service: Arc<RwLock<Option<MemoryService>>>,
+    /// The repository topology service.
+    pub repository_service: Arc<RwLock<Option<RepositoryService>>>,
     /// The unified search service (cross-layer search).
     pub search_service: Arc<RwLock<Option<SearchService>>>,
 }
@@ -50,6 +61,8 @@ impl ToolState {
             coordination_service: Arc::new(RwLock::new(None)),
             knowledge_service: Arc::new(RwLock::new(None)),
             work_service: Arc::new(RwLock::new(None)),
+            memory_service: Arc::new(RwLock::new(None)),
+            repository_service: Arc::new(RwLock::new(None)),
             search_service: Arc::new(RwLock::new(None)),
         }
     }
@@ -93,6 +106,18 @@ impl ToolState {
     /// Initialize with a work service.
     pub async fn init_work(&self, service: WorkService) {
         let mut guard = self.work_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a Memory OS service.
+    pub async fn init_memory(&self, service: MemoryService) {
+        let mut guard = self.memory_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a repository topology service.
+    pub async fn init_repository(&self, service: RepositoryService) {
+        let mut guard = self.repository_service.write().await;
         *guard = Some(service);
     }
 
@@ -4532,7 +4557,7 @@ pub async fn work_observe_list(
             observations
                 .into_iter()
                 .filter(|o| {
-                    o.key.as_ref().map_or(false, |k| {
+                    o.key.as_ref().is_some_and(|k| {
                         if pattern.ends_with('*') {
                             k.starts_with(&pattern[..pattern.len() - 1])
                         } else {
@@ -4567,7 +4592,7 @@ pub async fn work_observe_list(
             observations
                 .into_iter()
                 .filter(|o| {
-                    o.key.as_ref().map_or(false, |k| {
+                    o.key.as_ref().is_some_and(|k| {
                         if pattern.ends_with('*') {
                             k.starts_with(&pattern[..pattern.len() - 1])
                         } else {
@@ -5412,7 +5437,7 @@ pub async fn work_observe(
                     observations
                         .into_iter()
                         .filter(|o| {
-                            o.key.as_ref().map_or(false, |k| {
+                            o.key.as_ref().is_some_and(|k| {
                                 if pattern.ends_with('*') {
                                     k.starts_with(&pattern[..pattern.len() - 1])
                                 } else {
@@ -5446,7 +5471,7 @@ pub async fn work_observe(
                     observations
                         .into_iter()
                         .filter(|o| {
-                            o.key.as_ref().map_or(false, |k| {
+                            o.key.as_ref().is_some_and(|k| {
                                 if pattern.ends_with('*') {
                                     k.starts_with(&pattern[..pattern.len() - 1])
                                 } else {
@@ -6490,6 +6515,980 @@ pub async fn coord_new(state: &ToolState, request: CoordRequestNew) -> Result<St
             request.action
         )),
     }
+}
+
+// =============================================================================
+// Repository Topology Tool
+// =============================================================================
+
+/// Consolidated request for repository topology operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RepoRequest {
+    /// Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply
+    #[schemars(
+        description = "Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply"
+    )]
+    pub action: String,
+
+    /// Current working directory for detect/context
+    pub cwd: Option<String>,
+
+    /// Repository ID, when targeting a known repository
+    pub repository_id: Option<String>,
+    /// Repository name
+    pub repository_name: Option<String>,
+    /// Repository remote URL
+    pub remote_url: Option<String>,
+    /// Repository default branch
+    pub default_branch: Option<String>,
+    /// Optional description
+    pub description: Option<String>,
+
+    /// Component name for component_add
+    pub component_name: Option<String>,
+    /// Repository-relative component path for component_add
+    pub component_path: Option<String>,
+    /// Component kind for component_add, such as service, app, package, or crate
+    pub component_kind: Option<String>,
+
+    /// Project name for link_project
+    pub project_name: Option<String>,
+    /// Relationship role: primary, dependency, produces, related
+    pub role: Option<String>,
+
+    /// Maximum results for list
+    pub limit: Option<usize>,
+    /// Migration review output path (required for migration_review_export)
+    pub migration_review_path: Option<String>,
+    /// Dry-run mode for migration_review_apply; defaults to true
+    pub dry_run: Option<bool>,
+    /// Create a knowledge commit when migration_review_apply writes records
+    pub create_commit: Option<bool>,
+    /// Writer harness/interface for migration audit commits
+    pub writer_harness: Option<String>,
+    /// Writer harness version
+    pub writer_harness_version: Option<String>,
+    /// Model provider for migration audit commits
+    pub model_provider: Option<String>,
+    /// Model name for migration audit commits
+    pub model: Option<String>,
+    /// Model version or alias
+    pub model_version: Option<String>,
+    /// Surface/interface label
+    pub surface: Option<String>,
+    /// Actor label, e.g. agent, user, importer
+    pub actor: Option<String>,
+    /// Session ID associated with the writer
+    pub writer_session_id: Option<String>,
+    /// Include entity descriptions and observations in migration_inventory
+    pub include_entity_observations: Option<bool>,
+    /// Include session history in migration_inventory
+    pub include_session_history: Option<bool>,
+    /// Include work records in migration_inventory
+    pub include_work_records: Option<bool>,
+}
+
+/// Manage repository topology.
+pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String, String> {
+    debug!("repo: action={}", request.action);
+
+    let service_guard = state.repository_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Repository service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "detect" => {
+            let cwd = required(&request.cwd, "cwd", "detect")?;
+            let detection = service
+                .detect_repository(Path::new(&cwd))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "detection": detection
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "context" => {
+            let cwd = required(&request.cwd, "cwd", "context")?;
+            let context = service
+                .resolve_cwd(Path::new(&cwd))
+                .await
+                .map_err(|e| e.to_string())?;
+            let matched = context.is_some();
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "context": context,
+                "matched": matched
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "register" => {
+            let name = required(&request.repository_name, "repository_name", "register")?;
+            let repository = service
+                .register_repository(
+                    &name,
+                    request.remote_url.as_deref(),
+                    request.default_branch.as_deref(),
+                    request.description.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "repository": repository
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "list" => {
+            let repositories = service
+                .list_repositories(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": repositories.len(),
+                "repositories": repositories
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "component_add" | "add_component" => {
+            let repository_id = request
+                .repository_id
+                .as_deref()
+                .map(|id| parse_id(id, "repository ID"))
+                .transpose()?;
+            let component_name =
+                required(&request.component_name, "component_name", "component_add")?;
+            let component_path =
+                required(&request.component_path, "component_path", "component_add")?;
+
+            let component = service
+                .register_component(
+                    repository_id.as_ref(),
+                    request.repository_name.as_deref(),
+                    &component_name,
+                    &component_path,
+                    request.component_kind.as_deref(),
+                    request.description.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "component": component
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "link_project" | "project_link" => {
+            let repository_id = request
+                .repository_id
+                .as_deref()
+                .map(|id| parse_id(id, "repository ID"))
+                .transpose()?;
+            let project_name = required(&request.project_name, "project_name", "link_project")?;
+            let role = request
+                .role
+                .as_deref()
+                .map(parse_project_repository_role)
+                .transpose()?
+                .unwrap_or(ProjectRepositoryRole::Related);
+
+            let link = service
+                .link_project(
+                    &project_name,
+                    repository_id.as_ref(),
+                    request.repository_name.as_deref(),
+                    role,
+                    request.component_path.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "link": link
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_inventory" => {
+            let inventory = service
+                .migration_inventory(repository_migration_options(&request))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "inventory": inventory
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_export" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_export",
+            )?;
+            let export = service
+                .export_migration_review(
+                    Path::new(&review_path),
+                    repository_migration_options(&request),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_apply" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_apply",
+            )?;
+            let dry_run = request.dry_run.unwrap_or(true);
+            let create_commit = request.create_commit.unwrap_or(true);
+            let writer = if !dry_run && create_commit {
+                Some(parse_repo_writer(&request)?)
+            } else {
+                None
+            };
+            let apply = service
+                .apply_migration_review(
+                    Path::new(&review_path),
+                    RepositoryMigrationReviewApplyOptions {
+                        dry_run,
+                        writer,
+                        create_commit,
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply",
+            request.action
+        )),
+    }
+}
+
+fn repository_migration_options(request: &RepoRequest) -> RepositoryMigrationOptions {
+    let mut options = RepositoryMigrationOptions::all();
+    options.project_filter = request.project_name.clone();
+    options.limit = request.limit;
+    if let Some(include) = request.include_entity_observations {
+        options.include_entity_observations = include;
+    }
+    if let Some(include) = request.include_session_history {
+        options.include_session_history = include;
+    }
+    if let Some(include) = request.include_work_records {
+        options.include_work_records = include;
+    }
+    options
+}
+
+fn parse_repo_writer(request: &RepoRequest) -> Result<WriterProvenance, String> {
+    let harness = Harness::parse(&required(
+        &request.writer_harness,
+        "writer_harness",
+        &request.action,
+    )?);
+    let model_provider = required(&request.model_provider, "model_provider", &request.action)?;
+    let model_name = required(&request.model, "model", &request.action)?;
+
+    let mut model = ModelIdentity::new(model_provider, model_name);
+    if let Some(version) = &request.model_version {
+        model = model.with_version(version);
+    }
+
+    let mut writer = WriterProvenance::agent(harness, model);
+    if let Some(actor) = &request.actor {
+        writer.actor = actor.clone();
+    }
+    if let Some(surface) = &request.surface {
+        writer = writer.with_surface(surface);
+    }
+    if let Some(version) = &request.writer_harness_version {
+        writer = writer.with_harness_version(version);
+    }
+    if let Some(session_id) = &request.writer_session_id {
+        writer = writer.with_session(parse_id(session_id, "writer session ID")?);
+    }
+
+    Ok(writer)
+}
+
+fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, String> {
+    match value.to_lowercase().as_str() {
+        "primary" => Ok(ProjectRepositoryRole::Primary),
+        "dependency" | "depends_on" => Ok(ProjectRepositoryRole::Dependency),
+        "produces" | "output" => Ok(ProjectRepositoryRole::Produces),
+        "related" => Ok(ProjectRepositoryRole::Related),
+        _ => Err(format!(
+            "Unknown repository project role: '{}'. Valid: primary, dependency, produces, related",
+            value
+        )),
+    }
+}
+
+// =============================================================================
+// Orientation Tool
+// =============================================================================
+
+/// Request an orientation context packet for the current user prompt.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct OrientRequest {
+    /// Current working directory, when known
+    pub cwd: Option<String>,
+    /// Current user prompt or task request
+    pub prompt: Option<String>,
+    /// Explicit project name, when known
+    pub project: Option<String>,
+    /// Agent/harness name
+    pub agent: Option<String>,
+    /// Include recent knowledge commits
+    pub include_recent_commits: Option<bool>,
+    /// Maximum memory items per grouped bucket
+    pub limit: Option<usize>,
+}
+
+/// Build an orientation context packet.
+pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String, String> {
+    debug!(
+        "orient: project={:?}, cwd={:?}",
+        request.project, request.cwd
+    );
+
+    let service_guard = state.memory_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Memory service not initialized".to_string())?;
+
+    let packet = service
+        .orient(OrientInput {
+            cwd: request.cwd,
+            prompt: request.prompt,
+            project: request.project,
+            agent: request.agent,
+            include_recent_commits: request.include_recent_commits.unwrap_or(true),
+            limit: request.limit,
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_string_pretty(&packet).map_err(|e| e.to_string())
+}
+
+// =============================================================================
+// Memory OS Tool
+// =============================================================================
+
+/// Consolidated request for Memory OS operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryRequestNew {
+    /// Action to perform: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply
+    #[schemars(
+        description = "Action: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply"
+    )]
+    pub action: String,
+
+    /// Memory item ID (for get)
+    #[schemars(description = "Memory item ID (for get)")]
+    pub id: Option<String>,
+
+    /// Memory kind (for add): preference, rule, decision, limitation, project_fact, repository_fact, task_fact, user_fact, session_insight, handoff
+    #[schemars(description = "Memory kind (for add)")]
+    pub kind: Option<String>,
+
+    /// Short title (for add)
+    #[schemars(description = "Short title (for add)")]
+    pub title: Option<String>,
+
+    /// Markdown-safe content (for add)
+    #[schemars(description = "Markdown-safe content (for add)")]
+    pub content: Option<String>,
+
+    /// Claim origin (for add): user_stated, user_corrected, agent_observed, agent_inferred, tool_result, imported, migrated, generated_summary
+    #[schemars(description = "Claim origin (required for add)")]
+    pub origin: Option<String>,
+
+    /// Optional lifecycle status override: active, needs_review, superseded, archived, rejected
+    #[schemars(description = "Optional lifecycle status override")]
+    pub status: Option<String>,
+
+    /// Optional confidence override, clamped to 0.0-1.0
+    #[schemars(description = "Optional confidence override, 0.0-1.0")]
+    pub confidence: Option<f32>,
+
+    /// Tags for filtering
+    #[schemars(description = "Tags for filtering")]
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    /// Scope type (for add): global, user, project, task, entity, repository, session, custom
+    #[schemars(description = "Scope type (required for add)")]
+    pub scope_type: Option<String>,
+
+    /// Project ID for project/task scope
+    pub project_id: Option<String>,
+    /// Project name for project/task scope
+    pub project_name: Option<String>,
+    /// Task ID for task scope
+    pub task_id: Option<String>,
+    /// Task name for task scope
+    pub task_name: Option<String>,
+    /// Entity ID for entity scope
+    pub entity_id: Option<String>,
+    /// Entity name for entity scope
+    pub entity_name: Option<String>,
+    /// Repository ID for repository scope
+    pub repository_id: Option<String>,
+    /// Repository remote URL for repository scope
+    pub remote_url: Option<String>,
+    /// Local checkout path for repository scope
+    pub local_path: Option<String>,
+    /// Session ID for session scope
+    pub scope_session_id: Option<String>,
+    /// Custom scope name
+    pub scope_name: Option<String>,
+
+    /// Writer harness/interface: claude_code, codex, chatgpt, cursor, or custom
+    #[schemars(description = "Writer harness/interface (required for add and commit)")]
+    pub writer_harness: Option<String>,
+    /// Writer harness version
+    pub writer_harness_version: Option<String>,
+    /// Model provider, e.g. openai or anthropic
+    #[schemars(description = "Model provider (required for add and commit)")]
+    pub model_provider: Option<String>,
+    /// Model name
+    #[schemars(description = "Model name (required for add and commit)")]
+    pub model: Option<String>,
+    /// Model version or alias
+    pub model_version: Option<String>,
+    /// Surface/interface label
+    pub surface: Option<String>,
+    /// Actor label, e.g. agent, user, importer
+    pub actor: Option<String>,
+    /// Session ID associated with the writer
+    pub writer_session_id: Option<String>,
+
+    /// Evidence backing the memory item
+    #[serde(default)]
+    pub evidence: Vec<MemoryEvidenceRequest>,
+
+    /// Status filter for list
+    #[schemars(description = "Status filter for list")]
+    pub status_filter: Option<String>,
+
+    /// Maximum results for list/review/changes_since
+    pub limit: Option<usize>,
+
+    /// Knowledge commit message (for commit)
+    pub message: Option<String>,
+    /// Parent commit ID (for commit)
+    pub parent_id: Option<String>,
+    /// Session ID that produced the commit (for commit)
+    pub session_id: Option<String>,
+    /// Memory changes to include in a commit
+    #[serde(default)]
+    pub changes: Vec<MemoryChangeRequest>,
+
+    /// Cursor commit ID (for changes_since)
+    pub commit_id: Option<String>,
+    /// Cursor timestamp in RFC3339 format (required for changes_since)
+    pub timestamp: Option<String>,
+
+    /// Markdown vault root path (required for export_vault)
+    pub vault_path: Option<String>,
+    /// Migration review output path (required for migration_review_export)
+    pub migration_review_path: Option<String>,
+    /// Dry-run mode for migration_review_apply; defaults to true
+    pub dry_run: Option<bool>,
+    /// Create a knowledge commit when migration_review_apply writes records
+    pub create_commit: Option<bool>,
+
+    /// Include entity observations in migration_inventory
+    pub include_entity_observations: Option<bool>,
+    /// Include session history in migration_inventory
+    pub include_session_history: Option<bool>,
+    /// Include work observations in migration_inventory
+    pub include_work_observations: Option<bool>,
+}
+
+/// Evidence request for Memory OS items.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryEvidenceRequest {
+    /// Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review
+    pub kind: String,
+    /// Stable evidence target: ID, path, URL, or commit SHA
+    pub target: String,
+    /// Optional summary
+    pub summary: Option<String>,
+    /// Optional excerpt or selector
+    pub excerpt: Option<String>,
+}
+
+/// Knowledge commit change request.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryChangeRequest {
+    /// Change type: added, updated, superseded, archived, rejected, linked, unlinked
+    pub change_type: String,
+    /// Changed memory item ID
+    pub item_id: Option<String>,
+    /// Human-readable title
+    pub title: String,
+    /// Short change summary
+    pub summary: String,
+    /// Content hash before the change
+    pub before_hash: Option<String>,
+    /// Content hash after the change
+    pub after_hash: Option<String>,
+}
+
+/// Consolidated Memory OS handler.
+pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<String, String> {
+    debug!("memory: action={}", request.action);
+
+    let service_guard = state.memory_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Memory service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "add" => {
+            let kind = MemoryKind::parse(&required(&request.kind, "kind", "add")?);
+            let title = required(&request.title, "title", "add")?;
+            let content = required(&request.content, "content", "add")?;
+            let origin = parse_claim_origin(&required(&request.origin, "origin", "add")?)?;
+            let scope = parse_memory_scope(&request)?;
+            let writer = parse_writer(&request)?;
+
+            let mut item = MemoryItem::new(kind, title, content, scope, origin, writer);
+            for evidence in request.evidence {
+                item = item.with_evidence(parse_evidence(evidence)?);
+            }
+            if let Some(confidence) = request.confidence {
+                item = item.with_confidence(confidence);
+            }
+            if let Some(status) = &request.status {
+                item = item.with_status(parse_memory_status(status)?);
+            }
+            for tag in request.tags {
+                item = item.with_tag(tag);
+            }
+
+            let item = service
+                .capture_memory(item)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "get" => {
+            let id = parse_id(&required(&request.id, "id", "get")?, "memory item ID")?;
+            let item = service
+                .get_memory(&id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Memory item not found: {id}"))?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "list" => {
+            let status = request
+                .status_filter
+                .as_deref()
+                .map(parse_memory_status)
+                .transpose()?;
+            let items = service
+                .list_memory(status, request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": items.len(),
+                "items": items
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "review" => {
+            let items = service
+                .list_memory_needing_review(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": items.len(),
+                "items": items
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "commit" => {
+            let writer = parse_writer(&request)?;
+            let message = required(&request.message, "message", "commit")?;
+            let session_id = request
+                .session_id
+                .as_deref()
+                .map(|id| parse_id(id, "session ID"))
+                .transpose()?;
+            let parent_id = request
+                .parent_id
+                .as_deref()
+                .map(|id| parse_id(id, "parent commit ID"))
+                .transpose()?;
+            let changes = request
+                .changes
+                .into_iter()
+                .map(parse_memory_change)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let commit = service
+                .commit_changes(writer, message, changes, session_id, parent_id)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "commit": commit
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "cursor" => {
+            let cursor = service.current_cursor().await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "cursor": cursor
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "changes_since" => {
+            let timestamp = parse_rfc3339(&required(&request.timestamp, "timestamp", "changes_since")?)?;
+            let commit_id = request
+                .commit_id
+                .as_deref()
+                .map(|id| parse_id(id, "commit ID"))
+                .transpose()?;
+            let cursor = MemoryCursor {
+                commit_id,
+                timestamp,
+            };
+
+            let changes = service
+                .changes_since(cursor, request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "since": changes.since,
+                "next_cursor": changes.next_cursor,
+                "item_count": changes.items.len(),
+                "commit_count": changes.commits.len(),
+                "items": changes.items,
+                "commits": changes.commits
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "export_vault" => {
+            let vault_path = required(&request.vault_path, "vault_path", "export_vault")?;
+            let export = service
+                .export_vault(std::path::Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_inventory" => {
+            let mut options = MigrationInventoryOptions::all();
+            options.project_filter = request.project_name.clone();
+            options.limit = request.limit;
+            if let Some(include) = request.include_entity_observations {
+                options.include_entity_observations = include;
+            }
+            if let Some(include) = request.include_session_history {
+                options.include_session_history = include;
+            }
+            if let Some(include) = request.include_work_observations {
+                options.include_work_observations = include;
+            }
+
+            let inventory = service
+                .migration_inventory(options)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "inventory": inventory
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_export" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_export",
+            )?;
+            let mut options = MigrationInventoryOptions::all();
+            options.project_filter = request.project_name.clone();
+            options.limit = request.limit;
+            if let Some(include) = request.include_entity_observations {
+                options.include_entity_observations = include;
+            }
+            if let Some(include) = request.include_session_history {
+                options.include_session_history = include;
+            }
+            if let Some(include) = request.include_work_observations {
+                options.include_work_observations = include;
+            }
+
+            let export = service
+                .export_migration_review(std::path::Path::new(&review_path), options)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_apply" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_apply",
+            )?;
+            let writer = parse_writer(&request)?;
+            let apply = service
+                .apply_migration_review(
+                    std::path::Path::new(&review_path),
+                    MigrationReviewApplyOptions {
+                        dry_run: request.dry_run.unwrap_or(true),
+                        writer,
+                        create_commit: request.create_commit.unwrap_or(true),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply",
+            request.action
+        )),
+    }
+}
+
+fn required(value: &Option<String>, field: &str, action: &str) -> Result<String, String> {
+    value
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| format!("{field} required for {action}"))
+}
+
+fn parse_id(value: &str, label: &str) -> Result<engram_core::id::Id, String> {
+    engram_core::id::Id::parse(value).map_err(|e| format!("Invalid {label}: {e}"))
+}
+
+fn parse_optional_id(
+    value: &Option<String>,
+    label: &str,
+) -> Result<Option<engram_core::id::Id>, String> {
+    value.as_deref().map(|id| parse_id(id, label)).transpose()
+}
+
+fn parse_rfc3339(value: &str) -> Result<time::OffsetDateTime, String> {
+    time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .map_err(|e| format!("Invalid RFC3339 timestamp: {e}"))
+}
+
+fn parse_writer(request: &MemoryRequestNew) -> Result<WriterProvenance, String> {
+    let harness = Harness::parse(&required(
+        &request.writer_harness,
+        "writer_harness",
+        &request.action,
+    )?);
+    let model_provider = required(&request.model_provider, "model_provider", &request.action)?;
+    let model_name = required(&request.model, "model", &request.action)?;
+
+    let mut model = ModelIdentity::new(model_provider, model_name);
+    if let Some(version) = &request.model_version {
+        model = model.with_version(version);
+    }
+
+    let mut writer = WriterProvenance::agent(harness, model);
+    if let Some(actor) = &request.actor {
+        writer.actor = actor.clone();
+    }
+    if let Some(surface) = &request.surface {
+        writer = writer.with_surface(surface);
+    }
+    if let Some(version) = &request.writer_harness_version {
+        writer = writer.with_harness_version(version);
+    }
+    if let Some(session_id) = &request.writer_session_id {
+        writer = writer.with_session(parse_id(session_id, "writer session ID")?);
+    }
+
+    Ok(writer)
+}
+
+fn parse_memory_scope(request: &MemoryRequestNew) -> Result<MemoryScope, String> {
+    let scope_type = required(&request.scope_type, "scope_type", "add")?;
+    match scope_type.to_lowercase().as_str() {
+        "global" => Ok(MemoryScope::Global),
+        "user" => Ok(MemoryScope::User),
+        "project" => Ok(MemoryScope::Project {
+            project_id: parse_optional_id(&request.project_id, "project ID")?,
+            project_name: required(&request.project_name, "project_name", "project scope")?,
+        }),
+        "task" => Ok(MemoryScope::Task {
+            project_id: parse_optional_id(&request.project_id, "project ID")?,
+            project_name: request.project_name.clone(),
+            task_id: parse_optional_id(&request.task_id, "task ID")?,
+            task_name: required(&request.task_name, "task_name", "task scope")?,
+        }),
+        "entity" => Ok(MemoryScope::Entity {
+            entity_id: parse_optional_id(&request.entity_id, "entity ID")?,
+            entity_name: required(&request.entity_name, "entity_name", "entity scope")?,
+        }),
+        "repository" => {
+            if request.remote_url.is_none() && request.local_path.is_none() {
+                return Err(
+                    "remote_url or local_path required for repository scope".to_string(),
+                );
+            }
+            Ok(MemoryScope::Repository {
+                repository_id: parse_optional_id(&request.repository_id, "repository ID")?,
+                remote_url: request.remote_url.clone(),
+                local_path: request.local_path.clone(),
+            })
+        }
+        "session" => Ok(MemoryScope::Session {
+            session_id: parse_id(
+                &required(&request.scope_session_id, "scope_session_id", "session scope")?,
+                "scope session ID",
+            )?,
+        }),
+        "custom" => Ok(MemoryScope::Custom {
+            name: required(&request.scope_name, "scope_name", "custom scope")?,
+        }),
+        _ => Err(format!(
+            "Unknown scope_type: '{}'. Valid: global, user, project, task, entity, repository, session, custom",
+            scope_type
+        )),
+    }
+}
+
+fn parse_memory_status(value: &str) -> Result<MemoryStatus, String> {
+    match value.to_lowercase().as_str() {
+        "active" => Ok(MemoryStatus::Active),
+        "needs_review" | "needsreview" => Ok(MemoryStatus::NeedsReview),
+        "superseded" => Ok(MemoryStatus::Superseded),
+        "archived" => Ok(MemoryStatus::Archived),
+        "rejected" => Ok(MemoryStatus::Rejected),
+        _ => Err(format!(
+            "Unknown memory status: '{}'. Valid: active, needs_review, superseded, archived, rejected",
+            value
+        )),
+    }
+}
+
+fn parse_claim_origin(value: &str) -> Result<ClaimOrigin, String> {
+    match value.to_lowercase().as_str() {
+        "user_stated" => Ok(ClaimOrigin::UserStated),
+        "user_corrected" => Ok(ClaimOrigin::UserCorrected),
+        "agent_observed" => Ok(ClaimOrigin::AgentObserved),
+        "agent_inferred" => Ok(ClaimOrigin::AgentInferred),
+        "tool_result" => Ok(ClaimOrigin::ToolResult),
+        "imported" => Ok(ClaimOrigin::Imported),
+        "migrated" => Ok(ClaimOrigin::Migrated),
+        "generated_summary" => Ok(ClaimOrigin::GeneratedSummary),
+        other if !other.is_empty() => Ok(ClaimOrigin::Custom(other.to_string())),
+        _ => Err("origin must not be empty".to_string()),
+    }
+}
+
+fn parse_evidence_kind(value: &str) -> EvidenceKind {
+    match value.to_lowercase().as_str() {
+        "session_event" => EvidenceKind::SessionEvent,
+        "tool_call" => EvidenceKind::ToolCall,
+        "file" => EvidenceKind::File,
+        "git_commit" => EvidenceKind::GitCommit,
+        "url" => EvidenceKind::Url,
+        "document" => EvidenceKind::Document,
+        "observation" => EvidenceKind::Observation,
+        "manual_review" => EvidenceKind::ManualReview,
+        other => EvidenceKind::Custom(other.to_string()),
+    }
+}
+
+fn parse_evidence(request: MemoryEvidenceRequest) -> Result<EvidenceRef, String> {
+    if request.target.trim().is_empty() {
+        return Err("evidence target must not be empty".to_string());
+    }
+
+    let mut evidence = EvidenceRef::new(parse_evidence_kind(&request.kind), request.target);
+    if let Some(summary) = request.summary {
+        evidence = evidence.with_summary(summary);
+    }
+    if let Some(excerpt) = request.excerpt {
+        evidence = evidence.with_excerpt(excerpt);
+    }
+    Ok(evidence)
+}
+
+fn parse_memory_change_type(value: &str) -> Result<MemoryChangeType, String> {
+    match value.to_lowercase().as_str() {
+        "added" => Ok(MemoryChangeType::Added),
+        "updated" => Ok(MemoryChangeType::Updated),
+        "superseded" => Ok(MemoryChangeType::Superseded),
+        "archived" => Ok(MemoryChangeType::Archived),
+        "rejected" => Ok(MemoryChangeType::Rejected),
+        "linked" => Ok(MemoryChangeType::Linked),
+        "unlinked" => Ok(MemoryChangeType::Unlinked),
+        _ => Err(format!(
+            "Unknown memory change type: '{}'. Valid: added, updated, superseded, archived, rejected, linked, unlinked",
+            value
+        )),
+    }
+}
+
+fn parse_memory_change(request: MemoryChangeRequest) -> Result<MemoryChange, String> {
+    if request.title.trim().is_empty() {
+        return Err("change title must not be empty".to_string());
+    }
+    if request.summary.trim().is_empty() {
+        return Err("change summary must not be empty".to_string());
+    }
+
+    let mut change = MemoryChange::new(
+        parse_memory_change_type(&request.change_type)?,
+        request.title,
+        request.summary,
+    );
+    if let Some(item_id) = request.item_id {
+        change = change.with_item(parse_id(&item_id, "memory item ID")?);
+    }
+    if request.before_hash.is_some() || request.after_hash.is_some() {
+        change = change.with_hashes(request.before_hash, request.after_hash);
+    }
+    Ok(change)
 }
 
 // =============================================================================

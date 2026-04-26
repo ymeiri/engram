@@ -4,8 +4,8 @@
 
 use crate::tools::{self, ToolState};
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, SearchService,
-    SessionService, ToolIntelService, WorkService,
+    CoordinationService, DocumentService, EntityService, KnowledgeService, MemoryService,
+    RepositoryService, SearchService, SessionService, ToolIntelService, WorkService,
 };
 use rmcp::{
     handler::server::{tool::ToolRouter, wrapper::Parameters},
@@ -32,6 +32,12 @@ pub use crate::tools::{
     // Layer 6: Knowledge management tools
     KnowledgeRequestNew,
     KnowledgeStatsRequest,
+    // Memory OS tools
+    MemoryChangeRequest,
+    MemoryEvidenceRequest,
+    MemoryRequestNew,
+    OrientRequest,
+    RepoRequest,
     // Unified search
     SearchRequest,
     // Layer 2: Session tools
@@ -100,6 +106,16 @@ impl EngramServer {
     /// Initialize the server with a work service.
     pub async fn init_work(&self, service: WorkService) {
         self.state.init_work(service).await;
+    }
+
+    /// Initialize the server with a Memory OS service.
+    pub async fn init_memory(&self, service: MemoryService) {
+        self.state.init_memory(service).await;
+    }
+
+    /// Initialize the server with a repository topology service.
+    pub async fn init_repository(&self, service: RepositoryService) {
+        self.state.init_repository(service).await;
     }
 
     /// Initialize the server with a search service.
@@ -364,6 +380,40 @@ impl EngramServer {
     }
 
     // =========================================================================
+    // Memory OS Tool
+    // =========================================================================
+
+    /// Manage Memory OS items and knowledge commits.
+    #[tool(
+        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply. Requires writer provenance for add, commit, and migration_review_apply: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
+    )]
+    pub async fn memory(
+        &self,
+        params: Parameters<MemoryRequestNew>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::memory_new(&self.state, params.0).await)
+    }
+
+    /// Return a Memory OS orientation context packet for the current prompt.
+    #[tool(
+        description = "Return an orientation context packet for the current prompt. Includes a memory cursor, relevant active decisions/rules/preferences/limitations, review-needed memory, recent knowledge commits, recommended actions, and ambiguities. Provide project when known; cwd alone is treated as partial context."
+    )]
+    pub async fn orient(
+        &self,
+        params: Parameters<OrientRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::orient(&self.state, params.0).await)
+    }
+
+    /// Manage repository topology and local checkout mapping.
+    #[tool(
+        description = "Manage repository topology: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply. Use detect with cwd to register a Git checkout; use migration_inventory before migrating legacy repo/path mentions. migration_review_apply defaults to dry-run unless dry_run=false, and write mode requires writer_harness, model_provider, and model unless create_commit=false."
+    )]
+    pub async fn repo(&self, params: Parameters<RepoRequest>) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::repo_new(&self.state, params.0).await)
+    }
+
+    // =========================================================================
     // Unified Search Tool
     // =========================================================================
 
@@ -503,6 +553,10 @@ impl ServerHandler for EngramServer {
                  - work_leave: Leave work context\n\
                  - work_context: Get work context (session-based or direct lookup)\n\
                  - work_stats: Get work statistics\n\n\
+                 **Memory OS:**\n\
+                 - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
+                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply)\n\
+                 - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply)\n\n\
                  **Unified Search:**\n\
                  - search: Search across ALL layers with a single query (entities, aliases, observations, sessions, documents, tool usages)"
                     .into(),

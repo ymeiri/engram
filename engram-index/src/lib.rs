@@ -31,12 +31,16 @@ pub mod coordination;
 pub mod entity;
 pub mod error;
 pub mod knowledge;
+pub mod memory;
+pub mod migration;
 pub mod parser;
 pub mod pipeline;
+pub mod repository;
 pub mod search;
 pub mod service;
 pub mod session;
 pub mod tool_intel;
+pub mod vault;
 pub mod version;
 pub mod work;
 
@@ -48,11 +52,27 @@ pub use knowledge::{
     DuplicateGroup, KnowledgeConfig, KnowledgeService, KnowledgeStats, ScanResult, VersionChain,
     VersionedFile,
 };
+pub use memory::{
+    MemoryChanges, MemoryService, OrientInput, OrientationPacket, OrientationResolution,
+};
+pub use migration::{
+    MigrationCandidate, MigrationDisposition, MigrationInventory, MigrationInventoryOptions,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport, MigrationService,
+    MigrationSourceKind,
+};
 pub use parser::{parse_content, parse_file, ParsedDocument, Section};
 pub use pipeline::{IndexedChunk, IndexedDocument, Pipeline, PipelineConfig};
+pub use repository::{
+    RepositoryDetection, RepositoryMigrationCandidate, RepositoryMigrationDisposition,
+    RepositoryMigrationEvidence, RepositoryMigrationInventory, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
+    RepositoryMigrationReviewExport, RepositoryMigrationSourceKind, RepositoryReferenceKind,
+    RepositoryService,
+};
 pub use search::{SearchService, SearchStats};
 pub use service::{DocumentService, DocumentStats};
 pub use session::SessionService;
 pub use tool_intel::{ToolIntelService, ToolUsageInfo};
+pub use vault::{MemoryVaultExport, RepositoryVaultSnapshot};
 pub use version::{VersionDetector, VersionInfo, VersionSource};
 pub use work::{FullWorkContext, GraduateFrom, WorkService};

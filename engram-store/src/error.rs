@@ -7,7 +7,7 @@ use thiserror::Error;
 pub enum StoreError {
     /// Database error.
     #[error("database error: {0}")]
-    Database(#[from] surrealdb::Error),
+    Database(#[source] Box<surrealdb::Error>),
 
     /// Entity not found.
     #[error("not found: {0}")]
@@ -24,6 +24,12 @@ pub enum StoreError {
     /// Core domain error.
     #[error("domain error: {0}")]
     Domain(#[from] engram_core::Error),
+}
+
+impl From<surrealdb::Error> for StoreError {
+    fn from(value: surrealdb::Error) -> Self {
+        Self::Database(Box::new(value))
+    }
 }
 
 /// Store result type.
