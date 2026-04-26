@@ -17,10 +17,11 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DigestInventory, DigestInventoryOptions, DigestService, DocumentService,
-    EntityService, KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
-    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
-    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    CoordinationService, DigestInventory, DigestInventoryOptions, DigestReviewExport,
+    DigestService, DocumentService, EntityService, KnowledgeService, MemoryService,
+    MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
+    MigrationReviewApplyOptions, MigrationReviewExport, RepositoryMigrationInventory,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApply,
     RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
     SearchService, SessionService, ToolIntelService, WorkService,
 };
@@ -1379,6 +1380,27 @@ enum DigestCommands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Export metadata-only digest review files without reading contents
+    ReviewExport {
+        /// Root directory to scan, such as ~/notes
+        root_path: String,
+
+        /// Output directory for generated review files
+        output_path: String,
+
+        /// Maximum candidate digest files to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Include files normally treated as operational artifacts
+        #[arg(long)]
+        include_operational: bool,
+
+        /// Print export result as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1729,6 +1751,43 @@ fn print_digest_inventory(inventory: &DigestInventory) {
         println!("Exclusions:");
         for exclusion in &inventory.exclusions {
             println!("  - {} ({})", exclusion.relative_path, exclusion.reason);
+        }
+    }
+}
+
+fn print_digest_review_export(export: &DigestReviewExport) {
+    println!("Digest review batch export");
+    println!("  Output path:         {}", export.output_path);
+    println!("  Files written:       {}", export.files_written.len());
+    println!("  Files skipped:       {}", export.files_skipped.len());
+    println!(
+        "  Total candidates:    {}",
+        export.inventory.total_candidates
+    );
+    println!(
+        "  Returned candidates: {}",
+        export.inventory.returned_candidates
+    );
+    println!("  Excluded files:      {}", export.inventory.excluded_count);
+
+    if !export.files_written.is_empty() {
+        println!("Written files:");
+        for path in &export.files_written {
+            println!("  - {}", path);
+        }
+    }
+
+    if !export.files_skipped.is_empty() {
+        println!("Skipped user-owned files:");
+        for path in &export.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+
+    if !export.inventory.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &export.inventory.warnings {
+            println!("  - {}", warning);
         }
     }
 }
@@ -4269,6 +4328,25 @@ async fn main() -> Result<()> {
                     println!("{}", serde_json::to_string_pretty(&inventory)?);
                 } else {
                     print_digest_inventory(&inventory);
+                }
+            }
+            DigestCommands::ReviewExport {
+                root_path,
+                output_path,
+                limit,
+                include_operational,
+                json,
+            } => {
+                let mut options = DigestInventoryOptions::new(std::path::PathBuf::from(root_path));
+                options.limit = limit;
+                options.include_operational = include_operational;
+                let export = DigestService::new()
+                    .export_review_batch(std::path::PathBuf::from(output_path), options)?;
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&export)?);
+                } else {
+                    print_digest_review_export(&export);
                 }
             }
         },

@@ -31,6 +31,7 @@ async fn test_mcp_digest_inventory_classifies_candidates_and_exclusions() {
         DigestRequest {
             action: "inventory".to_string(),
             root_path: Some(dir.path().display().to_string()),
+            output_path: None,
             limit: None,
             include_operational: None,
         },
@@ -65,6 +66,7 @@ async fn test_mcp_digest_inventory_requires_root_path() {
         DigestRequest {
             action: "inventory".to_string(),
             root_path: None,
+            output_path: None,
             limit: None,
             include_operational: None,
         },
@@ -73,4 +75,45 @@ async fn test_mcp_digest_inventory_requires_root_path() {
     .unwrap_err();
 
     assert!(err.contains("root_path required for inventory"));
+}
+
+#[tokio::test]
+async fn test_mcp_digest_review_export_writes_batch() {
+    let dir = tempdir().expect("tempdir should be created");
+    let output = tempdir().expect("output tempdir should be created");
+    fs::create_dir_all(dir.path().join("slack-digest/morning")).unwrap();
+    fs::write(
+        dir.path().join("slack-digest/morning/2026-04-26.md"),
+        "private slack",
+    )
+    .unwrap();
+
+    let response = tools::digest_new(
+        &ToolState::new(),
+        DigestRequest {
+            action: "review_export".to_string(),
+            root_path: Some(dir.path().display().to_string()),
+            output_path: Some(output.path().display().to_string()),
+            limit: None,
+            include_operational: None,
+        },
+    )
+    .await
+    .expect("digest review export should work");
+    let json = parse_json(&response);
+
+    assert_eq!(json["export"]["inventory"]["total_candidates"], 1);
+    assert!(json["export"]["files_written"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|path| path.as_str() == Some("index.md")));
+    assert!(json["export"]["files_written"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|path| path
+            .as_str()
+            .is_some_and(|path| path.starts_with("candidates/"))));
+    assert!(output.path().join("index.md").exists());
 }

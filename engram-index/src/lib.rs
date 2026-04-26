@@ -49,8 +49,8 @@ pub use chunker::ChunkerConfig;
 pub use coordination::{ConflictCheckResult, CoordinationService};
 pub use digest::{
     DigestExcludedPath, DigestFileFormat, DigestInventory, DigestInventoryOptions,
-    DigestProposedAction, DigestSensitivity, DigestService, DigestSourceCandidate,
-    DigestSourceKind,
+    DigestProposedAction, DigestReviewExport, DigestSensitivity, DigestService,
+    DigestSourceCandidate, DigestSourceKind,
 };
 pub use entity::EntityService;
 pub use error::{IndexError, IndexResult};

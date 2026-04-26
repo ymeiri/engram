@@ -6977,16 +6977,19 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
 // Digest Source Tool
 // =============================================================================
 
-/// Request for digest source inventory.
+/// Request for digest source inventory and review exports.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DigestRequest {
-    /// Action to perform: inventory
-    #[schemars(description = "Action: inventory")]
+    /// Action to perform: inventory, review_export
+    #[schemars(description = "Action: inventory, review_export")]
     pub action: String,
 
     /// Root directory to scan, such as ~/notes
     #[schemars(description = "Root directory to scan")]
     pub root_path: Option<String>,
+
+    /// Review export output directory (required for review_export)
+    pub output_path: Option<String>,
 
     /// Maximum candidate digest files to return
     pub limit: Option<usize>,
@@ -6995,7 +6998,7 @@ pub struct DigestRequest {
     pub include_operational: Option<bool>,
 }
 
-/// Inventory digest-like source files without reading contents or writing memory.
+/// Inventory digest-like source files and export metadata-only review batches.
 pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<String, String> {
     debug!("digest: action={}", request.action);
 
@@ -7014,8 +7017,23 @@ pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<St
             }))
             .map_err(|e| e.to_string())
         }
+        "review_export" => {
+            let root_path = required(&request.root_path, "root_path", "review_export")?;
+            let output_path = required(&request.output_path, "output_path", "review_export")?;
+            let mut options = DigestInventoryOptions::new(Path::new(&root_path));
+            options.limit = request.limit;
+            options.include_operational = request.include_operational.unwrap_or(false);
+            let export = DigestService::new()
+                .export_review_batch(Path::new(&output_path), options)
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: inventory",
+            "Unknown action: '{}'. Valid actions: inventory, review_export",
             request.action
         )),
     }
