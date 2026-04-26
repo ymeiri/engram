@@ -73,6 +73,8 @@ pub use search::{SearchService, SearchStats};
 pub use service::{DocumentService, DocumentStats};
 pub use session::SessionService;
 pub use tool_intel::{ToolIntelService, ToolUsageInfo};
-pub use vault::{MemoryVaultExport, RepositoryVaultSnapshot};
+pub use vault::{
+    MemoryVaultExport, MemoryVaultInit, MemoryVaultPage, MemoryVaultStatus, RepositoryVaultSnapshot,
+};
 pub use version::{VersionDetector, VersionInfo, VersionSource};
 pub use work::{FullWorkContext, GraduateFrom, WorkService};

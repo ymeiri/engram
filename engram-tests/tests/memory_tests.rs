@@ -3,6 +3,7 @@
 use engram_index::MemoryService;
 use engram_mcp::tools::{
     self, MemoryChangeRequest, MemoryEvidenceRequest, MemoryRequestNew, OrientRequest, ToolState,
+    VaultRequest,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
@@ -83,6 +84,14 @@ fn with_writer(mut req: MemoryRequestNew) -> MemoryRequestNew {
 
 fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+fn vault_request(action: &str, path: &str) -> VaultRequest {
+    VaultRequest {
+        action: action.to_string(),
+        vault_path: Some(path.to_string()),
+        page: None,
+    }
 }
 
 #[tokio::test]
@@ -269,6 +278,61 @@ async fn test_mcp_memory_export_vault() {
         .expect("memory index should be written");
     assert!(index.contains("generated_by: \"engram-memory-os\""));
     assert!(index.contains("Export memory vault"));
+}
+
+#[tokio::test]
+async fn test_mcp_vault_init_compile_status_page() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.kind = Some("decision".to_string());
+    add.title = Some("Use dedicated vault tool".to_string());
+    add.content = Some("Vault operations should have their own MCP surface.".to_string());
+    add.origin = Some("user_stated".to_string());
+    add.scope_type = Some("project".to_string());
+    add.project_name = Some("engram".to_string());
+    tools::memory_new(&state, add)
+        .await
+        .expect("add should work");
+
+    let dir = tempdir().expect("tempdir should be created");
+    let root = dir.path().display().to_string();
+
+    let init_response = tools::vault_new(&state, vault_request("init", &root))
+        .await
+        .expect("vault init should work");
+    let init_json = parse_json(&init_response);
+    assert_eq!(init_json["init"]["root"], root);
+    assert!(dir.path().join("memory/items").is_dir());
+
+    let compile_response = tools::vault_new(&state, vault_request("compile", &root))
+        .await
+        .expect("vault compile should work");
+    let compile_json = parse_json(&compile_response);
+    assert_eq!(compile_json["export"]["memory_item_count"], 1);
+
+    let status_response = tools::vault_new(&state, vault_request("status", &root))
+        .await
+        .expect("vault status should work");
+    let status_json = parse_json(&status_response);
+    assert_eq!(status_json["status"]["initialized"], true);
+    assert_eq!(
+        status_json["status"]["generated_file_count"],
+        status_json["status"]["expected_generated_file_count"]
+    );
+
+    let mut page = vault_request("page", &root);
+    page.page = Some("memory/index".to_string());
+    let page_response = tools::vault_new(&state, page)
+        .await
+        .expect("vault page should work");
+    let page_json = parse_json(&page_response);
+    assert_eq!(page_json["found"], true);
+    assert_eq!(page_json["page"]["relative_path"], "memory/index.md");
+    assert!(page_json["page"]["contents"]
+        .as_str()
+        .unwrap()
+        .contains("Use dedicated vault tool"));
 }
 
 #[tokio::test]

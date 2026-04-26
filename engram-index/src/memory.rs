@@ -8,7 +8,11 @@ use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, MigrationService,
 };
-use crate::vault::{write_memory_vault, MemoryVaultExport, RepositoryVaultSnapshot};
+use crate::vault::{
+    init_memory_vault, inspect_memory_vault, read_memory_vault_page, write_memory_vault,
+    MemoryVaultExport, MemoryVaultInit, MemoryVaultPage, MemoryVaultStatus,
+    RepositoryVaultSnapshot,
+};
 use engram_core::id::Id;
 use engram_core::memory::{
     KnowledgeCommit, MemoryChange, MemoryCursor, MemoryItem, MemoryKind, MemoryScope, MemoryStatus,
@@ -275,6 +279,28 @@ impl MemoryService {
         let commits = self.list_commits(None).await?;
         let repositories = self.repository_vault_snapshots().await?;
         write_memory_vault(root.as_ref(), &items, &commits, &repositories)
+    }
+
+    /// Create the Memory OS vault directory skeleton.
+    pub async fn init_vault(&self, root: impl AsRef<Path>) -> IndexResult<MemoryVaultInit> {
+        init_memory_vault(root.as_ref())
+    }
+
+    /// Inspect the current vault state without writing files.
+    pub async fn vault_status(&self, root: impl AsRef<Path>) -> IndexResult<MemoryVaultStatus> {
+        let items = self.list_memory(None, None).await?;
+        let commits = self.list_commits(None).await?;
+        let repositories = self.repository_vault_snapshots().await?;
+        inspect_memory_vault(root.as_ref(), &items, &commits, &repositories)
+    }
+
+    /// Read a generated or user-authored page from the vault.
+    pub async fn vault_page(
+        &self,
+        root: impl AsRef<Path>,
+        page: &str,
+    ) -> IndexResult<Option<MemoryVaultPage>> {
+        read_memory_vault_page(root.as_ref(), page)
     }
 
     /// Build a non-destructive inventory of existing Engram data for future migration.

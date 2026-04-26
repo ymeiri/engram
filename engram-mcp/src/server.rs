@@ -46,6 +46,7 @@ pub use crate::tools::{
     // Layer 4: Tool intelligence tools
     ToolIntelStatsRequest,
     ToolRequestNew,
+    VaultRequest,
     // Layer 7: Work management tools
     WorkContextRequestNew,
     WorkJoinRequest,
@@ -394,6 +395,17 @@ impl EngramServer {
         to_call_result(tools::memory_new(&self.state, params.0).await)
     }
 
+    /// Manage the generated Memory OS Markdown vault.
+    #[tool(
+        description = "Manage the generated Memory OS Markdown vault: init, compile, status, page. Compile writes only Engram-generated files and skips existing user-owned files without the generated marker."
+    )]
+    pub async fn vault(
+        &self,
+        params: Parameters<VaultRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::vault_new(&self.state, params.0).await)
+    }
+
     /// Return a Memory OS orientation context packet for the current prompt.
     #[tool(
         description = "Return an orientation context packet for the current prompt. Includes a memory cursor, relevant active decisions/rules/preferences/limitations, review-needed memory, recent knowledge commits, recommended actions, and ambiguities. Provide project when known; cwd alone is treated as partial context."
@@ -556,6 +568,7 @@ impl ServerHandler for EngramServer {
                  **Memory OS:**\n\
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
                  - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply)\n\
+                 - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
                  - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply)\n\n\
                  **Unified Search:**\n\
                  - search: Search across ALL layers with a single query (entities, aliases, observations, sessions, documents, tool usages)"

@@ -6887,6 +6887,93 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
 }
 
 // =============================================================================
+// Memory OS Vault Tool
+// =============================================================================
+
+/// Request for dedicated Memory OS vault operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct VaultRequest {
+    /// Action to perform: init, compile, status, page
+    #[schemars(description = "Action: init, compile, status, page")]
+    pub action: String,
+
+    /// Vault root path.
+    #[schemars(description = "Vault root path")]
+    pub vault_path: Option<String>,
+
+    /// Page path relative to the vault root. If no extension is supplied, .md is used.
+    #[schemars(description = "Vault page path relative to the vault root")]
+    pub page: Option<String>,
+}
+
+/// Manage the generated Memory OS Markdown vault.
+pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<String, String> {
+    debug!("vault: action={}", request.action);
+
+    let service_guard = state.memory_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Memory service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "init" => {
+            let vault_path = required(&request.vault_path, "vault_path", "init")?;
+            let init = service
+                .init_vault(Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "init": init
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "compile" => {
+            let vault_path = required(&request.vault_path, "vault_path", "compile")?;
+            let export = service
+                .export_vault(Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "status" => {
+            let vault_path = required(&request.vault_path, "vault_path", "status")?;
+            let status = service
+                .vault_status(Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "page" => {
+            let vault_path = required(&request.vault_path, "vault_path", "page")?;
+            let page = required(&request.page, "page", "page")?;
+            let page = service
+                .vault_page(Path::new(&vault_path), &page)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "found": page.is_some(),
+                "page": page
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: init, compile, status, page",
+            request.action
+        )),
+    }
+}
+
+// =============================================================================
 // Memory OS Tool
 // =============================================================================
 

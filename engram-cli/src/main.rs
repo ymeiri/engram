@@ -189,6 +189,20 @@ enum Commands {
         command: MemoryCommands,
     },
 
+    /// Manage the generated Memory OS Markdown vault
+    Vault {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: VaultCommands,
+    },
+
     /// Manage repository topology and local checkout mapping
     Repo {
         /// Use a project-specific Engram data store
@@ -1291,6 +1305,52 @@ enum MemoryCommands {
         /// Model/tool label recorded on migrated records
         #[arg(long, default_value = "migration-review-apply")]
         model: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum VaultCommands {
+    /// Create the generated vault directory skeleton
+    Init {
+        /// Vault root path
+        path: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Compile Memory OS records into generated Markdown pages
+    Compile {
+        /// Vault root path
+        path: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Inspect a vault without writing files
+    Status {
+        /// Vault root path
+        path: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Print a page from the vault
+    Page {
+        /// Vault root path
+        path: String,
+
+        /// Page path relative to the vault root
+        page: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -4000,6 +4060,107 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&apply)?);
                     } else {
                         print_migration_review_apply(&apply);
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // Memory OS Vault Commands
+        // =========================================================================
+        Commands::Vault {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = MemoryService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                VaultCommands::Init { path, json } => {
+                    let init = service.init_vault(std::path::Path::new(&path)).await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&init)?);
+                    } else {
+                        println!("✓ Memory vault initialized");
+                        println!("  Root: {}", init.root);
+                        println!("  Directories created: {}", init.directories_created.len());
+                        println!(
+                            "  Directories existing: {}",
+                            init.directories_existing.len()
+                        );
+                        if !init.directories_created.is_empty() {
+                            println!("Created:");
+                            for path in init.directories_created {
+                                println!("  - {}", path);
+                            }
+                        }
+                    }
+                }
+                VaultCommands::Compile { path, json } => {
+                    let export = service.export_vault(std::path::Path::new(&path)).await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&export)?);
+                    } else {
+                        println!("✓ Memory vault compiled");
+                        println!("  Root:                 {}", export.root);
+                        println!("  Files written:        {}", export.file_count());
+                        println!("  Files skipped:        {}", export.files_skipped.len());
+                        println!("  Memory items:         {}", export.memory_item_count);
+                        println!("  Knowledge commits:    {}", export.knowledge_commit_count);
+                        println!("  Repositories:         {}", export.repository_count);
+                        println!("  Projects:             {}", export.project_count);
+                        if !export.files_skipped.is_empty() {
+                            println!("Skipped non-generated files:");
+                            for path in export.files_skipped {
+                                println!("  - {}", path);
+                            }
+                        }
+                    }
+                }
+                VaultCommands::Status { path, json } => {
+                    let status = service.vault_status(std::path::Path::new(&path)).await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&status)?);
+                    } else {
+                        println!("Memory vault status");
+                        println!("  Root:              {}", status.root);
+                        println!("  Exists:            {}", status.exists);
+                        println!("  Initialized:       {}", status.initialized);
+                        println!("  Total files:       {}", status.total_file_count);
+                        println!("  Generated files:   {}", status.generated_file_count);
+                        println!("  User files:        {}", status.user_file_count);
+                        println!(
+                            "  Expected generated files: {}",
+                            status.expected_generated_file_count
+                        );
+                        println!("  Memory items:      {}", status.memory_item_count);
+                        println!("  Knowledge commits: {}", status.knowledge_commit_count);
+                        println!("  Repositories:      {}", status.repository_count);
+                        println!("  Projects:          {}", status.project_count);
+                        if !status.missing_directories.is_empty() {
+                            println!("Missing directories:");
+                            for path in status.missing_directories {
+                                println!("  - {}", path);
+                            }
+                        }
+                    }
+                }
+                VaultCommands::Page { path, page, json } => {
+                    let page = service
+                        .vault_page(std::path::Path::new(&path), &page)
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("Vault page not found"))?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&page)?);
+                    } else {
+                        print!("{}", page.contents);
                     }
                 }
             }

@@ -5,7 +5,7 @@
 //! treats the vault as a generated projection: existing files without the Engram
 //! generated marker are skipped instead of overwritten.
 
-use crate::error::IndexResult;
+use crate::error::{IndexError, IndexResult};
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, KnowledgeCommit, MemoryChangeType, MemoryItem, MemoryScope,
 };
@@ -15,11 +15,19 @@ use engram_core::repository::{
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use time::OffsetDateTime;
 
 const GENERATED_BY: &str = "engram-memory-os";
 const GENERATED_MARKER: &str = "<!-- engram:generated:file memory-vault-v1 -->";
+const VAULT_DIRECTORIES: &[&str] = &[
+    "99_System",
+    "memory",
+    "memory/items",
+    "memory/commits",
+    "projects",
+    "repositories",
+];
 
 /// Summary of a vault export operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +54,61 @@ impl MemoryVaultExport {
     pub fn file_count(&self) -> usize {
         self.files_written.len()
     }
+}
+
+/// Summary of a vault initialization operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryVaultInit {
+    /// Vault root path.
+    pub root: String,
+    /// Directories created, relative to root.
+    pub directories_created: Vec<String>,
+    /// Directories already present, relative to root.
+    pub directories_existing: Vec<String>,
+}
+
+/// Read-only status for a generated Memory OS vault.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryVaultStatus {
+    /// Vault root path.
+    pub root: String,
+    /// Whether the root path exists.
+    pub exists: bool,
+    /// Whether the expected directory skeleton exists.
+    pub initialized: bool,
+    /// Missing expected directories, relative to root.
+    pub missing_directories: Vec<String>,
+    /// Number of files under the vault root.
+    pub total_file_count: usize,
+    /// Number of files containing the Engram generated marker.
+    pub generated_file_count: usize,
+    /// Number of files not marked as Engram generated files.
+    pub user_file_count: usize,
+    /// Memory items currently eligible for compilation.
+    pub memory_item_count: usize,
+    /// Knowledge commits currently eligible for compilation.
+    pub knowledge_commit_count: usize,
+    /// Repositories currently eligible for compilation.
+    pub repository_count: usize,
+    /// Projects currently eligible for compilation.
+    pub project_count: usize,
+    /// Files expected from compiling the current store snapshot.
+    pub expected_generated_file_count: usize,
+}
+
+/// A vault page read from disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryVaultPage {
+    /// Vault root path.
+    pub root: String,
+    /// Page path relative to root.
+    pub relative_path: String,
+    /// Absolute page path.
+    pub absolute_path: String,
+    /// Whether the page contains the Engram generated marker.
+    pub generated: bool,
+    /// Page contents.
+    pub contents: String,
 }
 
 /// Repository topology data included in the vault export.
@@ -174,6 +237,105 @@ pub(crate) fn write_memory_vault(
     export.files_written.sort();
     export.files_skipped.sort();
     Ok(export)
+}
+
+/// Create the Memory OS vault directory skeleton.
+pub(crate) fn init_memory_vault(root: &Path) -> IndexResult<MemoryVaultInit> {
+    fs::create_dir_all(root)?;
+
+    let mut init = MemoryVaultInit {
+        root: root.display().to_string(),
+        directories_created: Vec::new(),
+        directories_existing: Vec::new(),
+    };
+
+    for directory in VAULT_DIRECTORIES {
+        let path = root.join(directory);
+        if path.is_dir() {
+            init.directories_existing.push((*directory).to_string());
+        } else {
+            fs::create_dir_all(&path)?;
+            init.directories_created.push((*directory).to_string());
+        }
+    }
+
+    Ok(init)
+}
+
+/// Inspect the current vault state without writing any files.
+pub(crate) fn inspect_memory_vault(
+    root: &Path,
+    items: &[MemoryItem],
+    commits: &[KnowledgeCommit],
+    repositories: &[RepositoryVaultSnapshot],
+) -> IndexResult<MemoryVaultStatus> {
+    let exists = root.exists();
+    let mut missing_directories = Vec::new();
+    for directory in VAULT_DIRECTORIES {
+        if !root.join(directory).is_dir() {
+            missing_directories.push((*directory).to_string());
+        }
+    }
+
+    let (total_file_count, generated_file_count, user_file_count) = if exists {
+        count_vault_files(root)?
+    } else {
+        (0, 0, 0)
+    };
+    let project_count = project_names(items, repositories).len();
+    let expected_generated_file_count = expected_vault_file_count(
+        items.len(),
+        commits.len(),
+        repositories.len(),
+        project_count,
+    );
+
+    Ok(MemoryVaultStatus {
+        root: root.display().to_string(),
+        exists,
+        initialized: exists && missing_directories.is_empty(),
+        missing_directories,
+        total_file_count,
+        generated_file_count,
+        user_file_count,
+        memory_item_count: items.len(),
+        knowledge_commit_count: commits.len(),
+        repository_count: repositories.len(),
+        project_count,
+        expected_generated_file_count,
+    })
+}
+
+/// Read a page from the vault. The page path must stay inside the vault root.
+pub(crate) fn read_memory_vault_page(
+    root: &Path,
+    page: &str,
+) -> IndexResult<Option<MemoryVaultPage>> {
+    let mut relative_path = normalize_vault_relative_path(page)?;
+    if relative_path.extension().is_none() {
+        relative_path.set_extension("md");
+    }
+
+    let path = root.join(&relative_path);
+    if !path.exists() {
+        return Ok(None);
+    }
+    if !path.is_file() {
+        return Err(IndexError::InvalidState(format!(
+            "vault page is not a file: {}",
+            path.display()
+        )));
+    }
+
+    let contents = fs::read_to_string(&path)?;
+    let generated = contents.contains(GENERATED_MARKER);
+    Ok(Some(MemoryVaultPage {
+        root: root.display().to_string(),
+        relative_path: path_to_markdown(&relative_path),
+        absolute_path: path.display().to_string(),
+        generated,
+        contents,
+    }))
 }
 
 fn vault_index(
@@ -719,6 +881,79 @@ fn write_generated_file(
     Ok(())
 }
 
+fn expected_vault_file_count(
+    memory_item_count: usize,
+    knowledge_commit_count: usize,
+    repository_count: usize,
+    project_count: usize,
+) -> usize {
+    let system_index = 1;
+    let memory_index = 1;
+    let repository_index = 1;
+    system_index
+        + memory_index
+        + memory_item_count
+        + knowledge_commit_count
+        + repository_index
+        + repository_count
+        + project_count
+}
+
+fn count_vault_files(root: &Path) -> IndexResult<(usize, usize, usize)> {
+    fn visit(path: &Path, total: &mut usize, generated: &mut usize) -> IndexResult<()> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            let path = entry.path();
+            if file_type.is_dir() {
+                visit(&path, total, generated)?;
+            } else if file_type.is_file() {
+                *total += 1;
+                let contents = fs::read(&path)?;
+                if String::from_utf8_lossy(&contents).contains(GENERATED_MARKER) {
+                    *generated += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    let mut total = 0;
+    let mut generated = 0;
+    visit(root, &mut total, &mut generated)?;
+    Ok((total, generated, total.saturating_sub(generated)))
+}
+
+fn normalize_vault_relative_path(value: &str) -> IndexResult<PathBuf> {
+    let trimmed = value.trim().trim_start_matches('/');
+    if trimmed.is_empty() {
+        return Err(IndexError::InvalidState(
+            "vault page path must not be empty".to_string(),
+        ));
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in Path::new(trimmed).components() {
+        match component {
+            Component::Normal(part) => normalized.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(IndexError::InvalidState(
+                    "vault page path must be relative and stay inside the vault".to_string(),
+                ));
+            }
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        Err(IndexError::InvalidState(
+            "vault page path must not be empty".to_string(),
+        ))
+    } else {
+        Ok(normalized)
+    }
+}
+
 fn item_relative_path(item: &MemoryItem) -> PathBuf {
     Path::new("memory")
         .join("items")
@@ -892,5 +1127,61 @@ mod tests {
             .contains(&"memory/index.md".to_string()));
         let index = fs::read_to_string(index_path).unwrap();
         assert_eq!(index, "# User owned\n");
+    }
+
+    #[test]
+    fn init_and_status_report_vault_skeleton() {
+        let dir = tempdir().unwrap();
+        let init = init_memory_vault(dir.path()).unwrap();
+
+        assert_eq!(init.root, dir.path().display().to_string());
+        assert!(init
+            .directories_created
+            .contains(&"memory/items".to_string()));
+        assert!(dir.path().join("repositories").is_dir());
+
+        let status = inspect_memory_vault(dir.path(), &[], &[], &[]).unwrap();
+        assert!(status.exists);
+        assert!(status.initialized);
+        assert_eq!(status.generated_file_count, 0);
+        assert_eq!(status.user_file_count, 0);
+        assert_eq!(status.expected_generated_file_count, 3);
+    }
+
+    #[test]
+    fn status_counts_generated_and_user_files() {
+        let dir = tempdir().unwrap();
+        init_memory_vault(dir.path()).unwrap();
+        let item = memory_item("Status counts generated files");
+        write_memory_vault(dir.path(), std::slice::from_ref(&item), &[], &[]).unwrap();
+        fs::write(dir.path().join("notes.md"), "# User note\n").unwrap();
+
+        let status = inspect_memory_vault(dir.path(), &[item], &[], &[]).unwrap();
+
+        assert!(status.initialized);
+        assert_eq!(status.user_file_count, 1);
+        assert_eq!(status.memory_item_count, 1);
+        assert_eq!(
+            status.generated_file_count,
+            status.expected_generated_file_count
+        );
+    }
+
+    #[test]
+    fn read_memory_vault_page_reads_relative_page_and_rejects_escape() {
+        let dir = tempdir().unwrap();
+        let item = memory_item("Read vault page");
+        write_memory_vault(dir.path(), std::slice::from_ref(&item), &[], &[]).unwrap();
+
+        let page = read_memory_vault_page(dir.path(), "memory/index")
+            .unwrap()
+            .unwrap();
+        assert_eq!(page.relative_path, "memory/index.md");
+        assert!(page.generated);
+        assert!(page.contents.contains("Read vault page"));
+
+        let err = read_memory_vault_page(dir.path(), "../outside")
+            .expect_err("parent directory traversal should be rejected");
+        assert!(err.to_string().contains("stay inside the vault"));
     }
 }
