@@ -17,9 +17,9 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DigestInventory, DigestInventoryOptions, DigestReviewExport,
-    DigestService, DocumentService, EntityService, KnowledgeService, MemoryService,
-    MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
+    CoordinationService, DigestInventory, DigestInventoryOptions, DigestReviewApply,
+    DigestReviewExport, DigestService, DocumentService, EntityService, KnowledgeService,
+    MemoryService, MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, RepositoryMigrationInventory,
     RepositoryMigrationOptions, RepositoryMigrationReviewApply,
     RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
@@ -1401,6 +1401,16 @@ enum DigestCommands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Parse human decisions from a generated digest review batch
+    ReviewApply {
+        /// Review batch directory containing index.md and candidates/
+        path: String,
+
+        /// Print apply report as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1787,6 +1797,58 @@ fn print_digest_review_export(export: &DigestReviewExport) {
     if !export.inventory.warnings.is_empty() {
         println!("Warnings:");
         for warning in &export.inventory.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_digest_review_apply(apply: &DigestReviewApply) {
+    println!("Digest review apply");
+    println!("  Root:                  {}", apply.root);
+    println!("  Files scanned:         {}", apply.files_scanned);
+    println!("  Planned sources:       {}", apply.planned_count());
+    println!("  Accepted:              {}", apply.accepted_count);
+    println!("  Source-only:           {}", apply.source_only_count);
+    println!("  Quarantined:           {}", apply.quarantined_count);
+    println!("  Rejected:              {}", apply.rejected_count);
+
+    if !apply.planned_sources.is_empty() {
+        println!("Planned sources:");
+        for source in &apply.planned_sources {
+            println!(
+                "  - {} [{}; {}]",
+                source.candidate.relative_path, source.decision, source.candidate.source_kind
+            );
+        }
+    }
+
+    if !apply.files_with_no_decision.is_empty() {
+        println!("Files with no review decision:");
+        for path in &apply.files_with_no_decision {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_with_invalid_decision.is_empty() {
+        println!("Files with invalid review decisions:");
+        for path in &apply.files_with_invalid_decision {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_with_parse_errors.is_empty() {
+        println!("Files with parse errors:");
+        for path in &apply.files_with_parse_errors {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.files_skipped.is_empty() {
+        println!("Skipped files:");
+        for path in &apply.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &apply.warnings {
             println!("  - {}", warning);
         }
     }
@@ -4347,6 +4409,16 @@ async fn main() -> Result<()> {
                     println!("{}", serde_json::to_string_pretty(&export)?);
                 } else {
                     print_digest_review_export(&export);
+                }
+            }
+            DigestCommands::ReviewApply { path, json } => {
+                let apply =
+                    DigestService::new().apply_review_batch(std::path::PathBuf::from(path))?;
+
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&apply)?);
+                } else {
+                    print_digest_review_apply(&apply);
                 }
             }
         },

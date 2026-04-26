@@ -6977,11 +6977,11 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
 // Digest Source Tool
 // =============================================================================
 
-/// Request for digest source inventory and review exports.
+/// Request for digest source inventory and review batches.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DigestRequest {
-    /// Action to perform: inventory, review_export
-    #[schemars(description = "Action: inventory, review_export")]
+    /// Action to perform: inventory, review_export, review_apply
+    #[schemars(description = "Action: inventory, review_export, review_apply")]
     pub action: String,
 
     /// Root directory to scan, such as ~/notes
@@ -6991,6 +6991,9 @@ pub struct DigestRequest {
     /// Review export output directory (required for review_export)
     pub output_path: Option<String>,
 
+    /// Review batch directory (required for review_apply)
+    pub review_path: Option<String>,
+
     /// Maximum candidate digest files to return
     pub limit: Option<usize>,
 
@@ -6998,7 +7001,7 @@ pub struct DigestRequest {
     pub include_operational: Option<bool>,
 }
 
-/// Inventory digest-like source files and export metadata-only review batches.
+/// Inventory digest-like source files and process metadata-only review batches.
 pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<String, String> {
     debug!("digest: action={}", request.action);
 
@@ -7032,8 +7035,23 @@ pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<St
             }))
             .map_err(|e| e.to_string())
         }
+        "review_apply" => {
+            let review_path = request
+                .review_path
+                .as_ref()
+                .or(request.output_path.as_ref())
+                .ok_or_else(|| "review_path required for review_apply".to_string())?;
+            let apply = DigestService::new()
+                .apply_review_batch(Path::new(review_path))
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: inventory, review_export",
+            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply",
             request.action
         )),
     }
