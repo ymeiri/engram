@@ -399,7 +399,7 @@ impl RepositoryService {
 
         let project_filter = options.project_filter.as_deref();
         let project_for_filter = if let Some(project_name) = project_filter {
-            let project = self.work_repo.get_project_by_name(project_name).await?;
+            let project = self.resolve_project_filter(project_name).await?;
             if project.is_none() {
                 warnings.push(format!(
                     "Project filter '{}' did not match a Layer 7 project; work scans returned no project-scoped records.",
@@ -411,7 +411,9 @@ impl RepositoryService {
             None
         };
 
-        if options.include_work_records {
+        if options.include_work_records
+            && (project_filter.is_none() || project_for_filter.is_some())
+        {
             sources_scanned += self
                 .inventory_repository_work_records(
                     project_for_filter.as_ref(),
@@ -1170,6 +1172,19 @@ impl RepositoryService {
         Ok(scanned)
     }
 
+    async fn resolve_project_filter(&self, project_name: &str) -> IndexResult<Option<Project>> {
+        if let Some(project) = self.work_repo.get_project_by_name(project_name).await? {
+            return Ok(Some(project));
+        }
+
+        Ok(self
+            .work_repo
+            .list_projects(None)
+            .await?
+            .into_iter()
+            .find(|project| project.name.eq_ignore_ascii_case(project_name)))
+    }
+
     async fn inventory_repository_entity_records(
         &self,
         project_for_filter: Option<&Project>,
@@ -1696,6 +1711,9 @@ fn append_repository_candidates(
     }
 
     for local_path in extract_local_paths(text) {
+        if is_sensitive_local_path_reference(&local_path) {
+            continue;
+        }
         let mut evidence = source.clone();
         evidence.excerpt = excerpt_around(text, &local_path);
         candidates.push(candidate_from_local_path(
@@ -2107,6 +2125,24 @@ fn path_exists_or_has_known_home_prefix(path: &str) -> bool {
         || path.starts_with("/home/")
         || path.starts_with("/workspace/")
         || path.starts_with("/workspaces/")
+}
+
+fn is_sensitive_local_path_reference(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    lower.contains("/.mcp-credentials/")
+        || lower.contains("/.aws/")
+        || lower.contains("/.ssh/")
+        || lower.contains("/.config/gcloud/")
+        || lower.contains("/credentials")
+        || lower.contains("/credential")
+        || lower.contains("/secrets")
+        || lower.contains("/secret")
+        || lower.ends_with("credentials.json")
+        || lower.ends_with("credential.json")
+        || lower.ends_with("secrets.json")
+        || lower.ends_with("secret.json")
+        || lower.ends_with(".pem")
+        || lower.ends_with(".key")
 }
 
 fn repository_name_from_path(path: &str) -> Option<String> {
@@ -2910,6 +2946,89 @@ mod tests {
             .candidates
             .iter()
             .any(|candidate| candidate.project_name.as_deref() == Some("Debug with AI")));
+    }
+
+    #[tokio::test]
+    async fn repository_migration_project_filter_is_case_insensitive_and_never_broadens_on_miss() {
+        let (service, work_repo, _entity_repo, _session_repo) = setup_workspace().await;
+        let engram = Project::new("engram")
+            .with_description("Canonical repo is https://github.com/ymeiri/engram.git.");
+        let other = Project::new("other-project")
+            .with_description("Canonical repo is https://github.com/acme/other.git.");
+        work_repo.create_project(&engram).await.unwrap();
+        work_repo.create_project(&other).await.unwrap();
+
+        let inventory = service
+            .migration_inventory(RepositoryMigrationOptions {
+                project_filter: Some("Engram".to_string()),
+                include_entity_observations: false,
+                include_session_history: false,
+                include_work_records: true,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(inventory.sources_scanned, 1);
+        assert_eq!(inventory.total_candidates, 1);
+        assert_eq!(
+            inventory.candidates[0].normalized_remote.as_deref(),
+            Some("github.com/ymeiri/engram")
+        );
+        assert!(inventory
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("did not match")));
+
+        let missing = service
+            .migration_inventory(RepositoryMigrationOptions {
+                project_filter: Some("missing-project".to_string()),
+                include_entity_observations: false,
+                include_session_history: false,
+                include_work_records: true,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(missing.sources_scanned, 0);
+        assert_eq!(missing.total_candidates, 0);
+        assert!(missing
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("did not match")));
+    }
+
+    #[tokio::test]
+    async fn repository_migration_skips_sensitive_local_path_references() {
+        let (service, work_repo, _entity_repo, _session_repo) = setup_workspace().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        work_repo
+            .add_project_observation(
+                &ProjectObservation::new(
+                    project.id,
+                    "Local auth file is /Users/yuval.meiri/.mcp-credentials/google-credentials.json.",
+                )
+                .with_key("config.google-auth"),
+            )
+            .await
+            .unwrap();
+
+        let inventory = service
+            .migration_inventory(RepositoryMigrationOptions {
+                project_filter: Some("engram".to_string()),
+                include_entity_observations: false,
+                include_session_history: false,
+                include_work_records: true,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(inventory.sources_scanned, 1);
+        assert_eq!(inventory.total_candidates, 0);
+        assert!(inventory.candidates.is_empty());
     }
 
     #[tokio::test]

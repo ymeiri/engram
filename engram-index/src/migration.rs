@@ -290,7 +290,7 @@ impl MigrationService {
 
         let project_filter = options.project_filter.as_deref();
         let project_for_filter = if let Some(project_name) = project_filter {
-            let project = self.work_repo.get_project_by_name(project_name).await?;
+            let project = self.resolve_project_filter(project_name).await?;
             if project.is_none() {
                 warnings.push(format!(
                     "Project filter '{}' did not match a Layer 7 project; work and linked-entity scans returned no project-scoped records.",
@@ -302,7 +302,9 @@ impl MigrationService {
             None
         };
 
-        if options.include_work_observations {
+        if options.include_work_observations
+            && (project_filter.is_none() || project_for_filter.is_some())
+        {
             sources_scanned += self
                 .inventory_work_observations(project_for_filter.as_ref(), &mut candidates, now)
                 .await?;
@@ -477,6 +479,19 @@ impl MigrationService {
             }
         }
         Ok(scanned)
+    }
+
+    async fn resolve_project_filter(&self, project_name: &str) -> IndexResult<Option<Project>> {
+        if let Some(project) = self.work_repo.get_project_by_name(project_name).await? {
+            return Ok(Some(project));
+        }
+
+        Ok(self
+            .work_repo
+            .list_projects(None)
+            .await?
+            .into_iter()
+            .find(|project| project.name.eq_ignore_ascii_case(project_name)))
     }
 
     async fn inventory_entity_observations(
@@ -1865,6 +1880,69 @@ mod tests {
                 |candidate| candidate.proposed_kind == MemoryKind::RepositoryFact
                     && candidate.disposition == MigrationDisposition::Quarantine
             ));
+    }
+
+    #[tokio::test]
+    async fn inventory_project_filter_is_case_insensitive_and_never_broadens_on_miss() {
+        let (service, _entity_repo, _session_repo, work_repo, _memory_repo) = setup_service().await;
+
+        let engram = Project::new("engram");
+        let other = Project::new("other-project");
+        work_repo.create_project(&engram).await.unwrap();
+        work_repo.create_project(&other).await.unwrap();
+        work_repo
+            .add_project_observation(
+                &ProjectObservation::new(engram.id, "Engram-specific migration fact")
+                    .with_key("design.case-filter"),
+            )
+            .await
+            .unwrap();
+        work_repo
+            .add_project_observation(
+                &ProjectObservation::new(other.id, "Other project fact").with_key("design.other"),
+            )
+            .await
+            .unwrap();
+
+        let inventory = service
+            .inventory(MigrationInventoryOptions {
+                project_filter: Some("Engram".to_string()),
+                include_entity_observations: false,
+                include_session_history: false,
+                include_work_observations: true,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(inventory.sources_scanned, 1);
+        assert_eq!(inventory.total_candidates, 1);
+        assert_eq!(
+            inventory.candidates[0].source_label,
+            "project:engram observation"
+        );
+        assert!(inventory
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("did not match")));
+
+        let missing = service
+            .inventory(MigrationInventoryOptions {
+                project_filter: Some("missing-project".to_string()),
+                include_entity_observations: false,
+                include_session_history: false,
+                include_work_observations: true,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(missing.sources_scanned, 0);
+        assert_eq!(missing.total_candidates, 0);
+        assert!(missing
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("did not match")));
     }
 
     #[tokio::test]
