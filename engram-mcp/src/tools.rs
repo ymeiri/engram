@@ -15,10 +15,11 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_index::{
     CoordinationService, DigestExtractionOptions, DigestExtractionReviewApplyOptions,
-    DigestInventoryOptions, DigestService, DocumentService, EntityService, KnowledgeService,
-    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, OrientInput,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
-    SearchService, SessionService, ToolIntelService, WorkService,
+    DigestInventoryOptions, DigestService, DigestSourceIndexOptions, DocumentService,
+    EntityService, KnowledgeService, MemoryService, MigrationInventoryOptions,
+    MigrationReviewApplyOptions, OrientInput, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchService, SessionService,
+    ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -6981,8 +6982,10 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
 /// Request for digest source inventory, review batches, and extraction plans.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DigestRequest {
-    /// Action to perform: inventory, review_export, review_apply, extraction_plan
-    #[schemars(description = "Action: inventory, review_export, review_apply, extraction_plan")]
+    /// Action to perform: inventory, review_export, review_apply, extraction_plan, source_index
+    #[schemars(
+        description = "Action: inventory, review_export, review_apply, extraction_plan, source_index"
+    )]
     pub action: String,
 
     /// Root directory to scan, such as ~/notes
@@ -7009,10 +7012,13 @@ pub struct DigestRequest {
 
     /// Maximum characters copied into each extraction candidate for extraction_plan
     pub max_candidate_chars: Option<usize>,
+
+    /// Actually index reviewed source_only digest documents for source_index; defaults to false
+    pub write: Option<bool>,
 }
 
 /// Inventory digest-like source files and process review-gated digest batches.
-pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<String, String> {
+pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<String, String> {
     debug!("digest: action={}", request.action);
 
     match request.action.to_lowercase().as_str() {
@@ -7087,8 +7093,49 @@ pub async fn digest_new(_state: &ToolState, request: DigestRequest) -> Result<St
             }))
             .map_err(|e| e.to_string())
         }
+        "source_index" => {
+            let review_path = required(&request.review_path, "review_path", "source_index")?;
+            let defaults = DigestSourceIndexOptions::default();
+            let plan = DigestService::new()
+                .plan_source_index(
+                    Path::new(&review_path),
+                    DigestSourceIndexOptions {
+                        max_source_bytes: request
+                            .max_source_bytes
+                            .unwrap_or(defaults.max_source_bytes),
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+
+            let write = request.write.unwrap_or(false);
+            let mut indexed_documents = 0usize;
+            if write {
+                let service_guard = state.doc_service.read().await;
+                let service = service_guard
+                    .as_ref()
+                    .ok_or_else(|| "Document service not initialized".to_string())?;
+                for document in &plan.documents {
+                    service
+                        .index_content(
+                            &document.document_path,
+                            Some(document.title.clone()),
+                            document.indexed_content.clone(),
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    indexed_documents += 1;
+                }
+            }
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan,
+                "dry_run": !write,
+                "indexed_documents": indexed_documents
+            }))
+            .map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply, extraction_plan",
+            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply, extraction_plan, source_index",
             request.action
         )),
     }

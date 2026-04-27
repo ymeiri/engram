@@ -24,6 +24,7 @@ const DIGEST_MACHINE_RECORD_FENCE: &str = "```json";
 const DEFAULT_EXTRACTION_MAX_SOURCE_BYTES: usize = 256 * 1024;
 const DEFAULT_EXTRACTION_MAX_CANDIDATES_PER_SOURCE: usize = 8;
 const DEFAULT_EXTRACTION_MAX_CANDIDATE_CHARS: usize = 1600;
+const DEFAULT_SOURCE_INDEX_MAX_SOURCE_BYTES: usize = 256 * 1024;
 const MIN_EXTRACTION_CANDIDATE_CHARS: usize = 40;
 
 /// Stateless service for digest source discovery.
@@ -77,6 +78,20 @@ impl DigestService {
         options: DigestExtractionOptions,
     ) -> IndexResult<DigestExtractionPlan> {
         plan_digest_extraction(review_path.as_ref(), output_path.as_ref(), options)
+    }
+
+    /// Build a review-gated source evidence indexing plan from source-only digest sources.
+    ///
+    /// Only sources explicitly marked `source_only` in a generated digest review
+    /// batch are read. The returned plan carries source metadata and prepared
+    /// document content for an explicit write step, but serialized reports omit
+    /// digest contents.
+    pub fn plan_source_index(
+        &self,
+        review_path: impl AsRef<Path>,
+        options: DigestSourceIndexOptions,
+    ) -> IndexResult<DigestSourceIndexPlan> {
+        plan_digest_source_index(review_path.as_ref(), options)
     }
 }
 
@@ -285,6 +300,72 @@ impl DigestExtractionPlan {
     pub fn candidate_count(&self) -> usize {
         self.candidates.len()
     }
+}
+
+/// Options for planning source-only digest evidence indexing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DigestSourceIndexOptions {
+    /// Maximum bytes allowed per source-only digest before it is skipped.
+    pub max_source_bytes: usize,
+}
+
+impl Default for DigestSourceIndexOptions {
+    fn default() -> Self {
+        Self {
+            max_source_bytes: DEFAULT_SOURCE_INDEX_MAX_SOURCE_BYTES,
+        }
+    }
+}
+
+/// Review-gated source-only digest evidence indexing plan.
+#[derive(Debug, Clone, Serialize)]
+pub struct DigestSourceIndexPlan {
+    /// Review batch root path used as input.
+    pub review_path: String,
+    /// Candidate review files scanned from the source review batch.
+    pub review_files_scanned: usize,
+    /// Sources accepted for extraction and intentionally not indexed by this plan.
+    pub accepted_sources: usize,
+    /// Sources marked source-only and eligible for evidence indexing.
+    pub source_only_sources: usize,
+    /// Source-only sources whose content was read into prepared document content.
+    pub sources_read: usize,
+    /// Sources skipped with a reason.
+    pub sources_skipped: Vec<String>,
+    /// Source-only documents prepared for explicit indexing.
+    pub documents: Vec<DigestSourceIndexDocument>,
+    /// Non-fatal warnings surfaced during planning.
+    pub warnings: Vec<String>,
+}
+
+impl DigestSourceIndexPlan {
+    /// Number of source-only documents prepared for indexing.
+    #[must_use]
+    pub fn document_count(&self) -> usize {
+        self.documents.len()
+    }
+}
+
+/// Prepared source-only digest document metadata.
+#[derive(Debug, Clone, Serialize)]
+pub struct DigestSourceIndexDocument {
+    /// Source review page path relative to the digest review batch root.
+    pub source_review_path: String,
+    /// Original digest source path relative to its inventory root.
+    pub source_relative_path: String,
+    /// Original digest source absolute path.
+    pub source_absolute_path: String,
+    /// Original digest source kind.
+    pub source_kind: DigestSourceKind,
+    /// Document title to store in Layer 3.
+    pub title: String,
+    /// Number of source text characters prepared for indexing.
+    pub content_chars: usize,
+    /// Document path or URL used as the Layer 3 source key.
+    pub document_path: String,
+    /// Markdown content prepared for Layer 3 indexing. Serialized reports omit this field.
+    #[serde(skip)]
+    pub indexed_content: String,
 }
 
 /// Metadata summary for a generated digest extraction candidate.
@@ -749,6 +830,44 @@ fn plan_digest_extraction(
     Ok(plan)
 }
 
+fn plan_digest_source_index(
+    review_path: &Path,
+    options: DigestSourceIndexOptions,
+) -> IndexResult<DigestSourceIndexPlan> {
+    let options = normalize_source_index_options(options);
+    let apply = apply_digest_review_batch(review_path)?;
+
+    let mut plan = DigestSourceIndexPlan {
+        review_path: review_path.display().to_string(),
+        review_files_scanned: apply.files_scanned,
+        accepted_sources: apply.accepted_count,
+        source_only_sources: apply.source_only_count,
+        sources_read: 0,
+        sources_skipped: Vec::new(),
+        documents: Vec::new(),
+        warnings: apply.warnings.clone(),
+    };
+
+    for source in apply.planned_sources {
+        match source.decision {
+            DigestReviewDecision::SourceOnly => {
+                collect_source_index_document(&source, &options, &mut plan);
+            }
+            DigestReviewDecision::Accept => {
+                plan.warnings.push(format!(
+                    "{}: accept decision is reserved for extraction; source was not indexed by source_only indexing",
+                    source.review_path
+                ));
+            }
+            DigestReviewDecision::Quarantine | DigestReviewDecision::Reject => {}
+        }
+    }
+
+    plan.sources_skipped.sort();
+    plan.warnings.sort();
+    Ok(plan)
+}
+
 /// Parse a reviewed digest extraction batch. The caller owns persistence.
 pub fn apply_digest_extraction_review_batch(
     root: &Path,
@@ -1046,6 +1165,87 @@ fn write_digest_review_file(
     Ok(())
 }
 
+fn collect_source_index_document(
+    source: &DigestReviewedSource,
+    options: &DigestSourceIndexOptions,
+    plan: &mut DigestSourceIndexPlan,
+) {
+    let source_path = Path::new(&source.candidate.absolute_path);
+    let source_label = format!(
+        "{} ({})",
+        source.candidate.relative_path, source.review_path
+    );
+    let metadata = match fs::metadata(source_path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            plan.sources_skipped.push(format!(
+                "{source_label}: source metadata unavailable: {error}"
+            ));
+            return;
+        }
+    };
+
+    if metadata.len() != source.candidate.size_bytes {
+        plan.sources_skipped.push(format!(
+            "{source_label}: source size changed from {} to {} bytes; re-run inventory/review",
+            source.candidate.size_bytes,
+            metadata.len()
+        ));
+        return;
+    }
+    let modified_at = metadata.modified().ok().map(OffsetDateTime::from);
+    if source.candidate.modified_at.is_some() && modified_at != source.candidate.modified_at {
+        plan.sources_skipped.push(format!(
+            "{source_label}: source modified timestamp changed; re-run inventory/review"
+        ));
+        return;
+    }
+
+    if metadata.len() as usize > options.max_source_bytes {
+        plan.sources_skipped.push(format!(
+            "{source_label}: source is {} bytes, above max_source_bytes={}",
+            metadata.len(),
+            options.max_source_bytes
+        ));
+        return;
+    }
+
+    let raw = match fs::read_to_string(source_path) {
+        Ok(raw) => raw,
+        Err(error) => {
+            plan.sources_skipped
+                .push(format!("{source_label}: source text unreadable: {error}"));
+            return;
+        }
+    };
+    let source_text = digest_source_to_text(&raw, source.candidate.format);
+    if source_text.trim().is_empty() {
+        plan.warnings.push(format!(
+            "{source_label}: no source text found after text normalization"
+        ));
+        return;
+    }
+    plan.sources_read += 1;
+
+    let title = source
+        .title
+        .as_ref()
+        .filter(|title| !title.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| format!("Digest source: {}", source.candidate.relative_path));
+    let indexed_content = digest_source_index_content(source, &title, &source_text);
+    plan.documents.push(DigestSourceIndexDocument {
+        source_review_path: source.review_path.clone(),
+        source_relative_path: source.candidate.relative_path.clone(),
+        source_absolute_path: source.candidate.absolute_path.clone(),
+        source_kind: source.candidate.source_kind,
+        title,
+        content_chars: source_text.chars().count(),
+        document_path: source.candidate.absolute_path.clone(),
+        indexed_content,
+    });
+}
+
 fn collect_extraction_pages_for_source(
     source: &DigestReviewedSource,
     options: &DigestExtractionOptions,
@@ -1316,6 +1516,41 @@ fn write_digest_extraction_file(
     fs::write(&path, contents)?;
     plan.files_written.push(path_to_markdown(&relative_path));
     Ok(())
+}
+
+fn digest_source_index_content(
+    source: &DigestReviewedSource,
+    title: &str,
+    source_text: &str,
+) -> String {
+    let mut output = String::new();
+    output.push_str(&format!("# {title}\n\n"));
+    output.push_str("## Source Metadata\n\n");
+    output.push_str(&format!("- Source review: `{}`\n", source.review_path));
+    output.push_str(&format!(
+        "- Source path: `{}`\n",
+        source.candidate.relative_path
+    ));
+    output.push_str(&format!(
+        "- Absolute path: `{}`\n",
+        source.candidate.absolute_path
+    ));
+    output.push_str(&format!(
+        "- Source kind: `{}`\n",
+        source.candidate.source_kind
+    ));
+    output.push_str(&format!("- Format: `{}`\n", source.candidate.format));
+    if let Some(date_hint) = &source.candidate.date_hint {
+        output.push_str(&format!("- Date hint: `{date_hint}`\n"));
+    }
+    if let Some(notes) = &source.notes {
+        output.push_str(&format!("- Reviewer notes: {}\n", notes));
+    }
+
+    output.push_str("\n## Digest Content\n\n");
+    output.push_str(source_text.trim());
+    output.push('\n');
+    output
 }
 
 fn extraction_frontmatter(page_type: &str, fields: Vec<(String, String)>) -> String {
@@ -1922,6 +2157,15 @@ fn normalize_extraction_options(mut options: DigestExtractionOptions) -> DigestE
     }
     if options.max_candidate_chars < MIN_EXTRACTION_CANDIDATE_CHARS {
         options.max_candidate_chars = DEFAULT_EXTRACTION_MAX_CANDIDATE_CHARS;
+    }
+    options
+}
+
+fn normalize_source_index_options(
+    mut options: DigestSourceIndexOptions,
+) -> DigestSourceIndexOptions {
+    if options.max_source_bytes == 0 {
+        options.max_source_bytes = DEFAULT_SOURCE_INDEX_MAX_SOURCE_BYTES;
     }
     options
 }
@@ -2864,6 +3108,57 @@ mod tests {
             "# Human extraction notes\n"
         );
         assert_eq!(plan.candidate_count(), 1);
+    }
+
+    #[test]
+    fn source_index_plan_reads_only_source_only_sources_without_serializing_contents() {
+        let dir = tempdir().unwrap();
+        let review = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("slack-digest/morning")).unwrap();
+        fs::create_dir_all(dir.path().join("notes-digest")).unwrap();
+        fs::write(
+            dir.path().join("slack-digest/morning/2026-04-26.md"),
+            "accepted source body should not be indexed by source_only indexing",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("notes-digest/digest-2026-04-26.md"),
+            "source only body should be prepared for document evidence indexing",
+        )
+        .unwrap();
+
+        let export = DigestService::new()
+            .export_review_batch(review.path(), DigestInventoryOptions::new(dir.path()))
+            .unwrap();
+        edit_review_decision_by_source(review.path(), &export, "slack-digest", "accept", &[]);
+        edit_review_decision_by_source(
+            review.path(),
+            &export,
+            "notes-digest",
+            "source_only",
+            &[("title", "\"Reviewed digest source\"")],
+        );
+
+        let plan = DigestService::new()
+            .plan_source_index(review.path(), DigestSourceIndexOptions::default())
+            .unwrap();
+
+        assert_eq!(plan.accepted_sources, 1);
+        assert_eq!(plan.source_only_sources, 1);
+        assert_eq!(plan.sources_read, 1);
+        assert_eq!(plan.document_count(), 1);
+        assert_eq!(plan.documents[0].title, "Reviewed digest source");
+        assert!(plan.documents[0]
+            .indexed_content
+            .contains("source only body should be prepared"));
+        assert!(plan
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("reserved for extraction")));
+
+        let serialized = serde_json::to_string(&plan).unwrap();
+        assert!(!serialized.contains("source only body should be prepared"));
+        assert!(!serialized.contains("accepted source body"));
     }
 
     #[test]

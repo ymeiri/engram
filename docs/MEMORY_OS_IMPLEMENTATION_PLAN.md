@@ -2828,6 +2828,8 @@ Current command shape:
 
 ```bash
 engram digest review-export ~/notes /tmp/engram-digest-review
+engram digest source-index /tmp/engram-digest-review
+engram digest source-index /tmp/engram-digest-review --write
 engram digest extraction-plan /tmp/engram-digest-review /tmp/engram-digest-extraction
 engram memory digest-extraction-apply /tmp/engram-digest-extraction
 engram memory digest-extraction-apply /tmp/engram-digest-extraction --write
@@ -2837,9 +2839,12 @@ Safety rules:
 
 ```text
 - Inventory and source-review export do not read digest contents.
-- source_only, quarantine, reject, and pending source decisions are not read.
+- Source indexing reads only `source_only` decisions and defaults to dry-run.
+- Extraction reads only `accept` decisions.
+- quarantine, reject, and pending source decisions are not read.
 - Extraction creates review pages only; it does not write active memory.
-- Apply defaults to dry-run.
+- Source indexing writes document evidence only; it does not write active memory.
+- Candidate memory apply defaults to dry-run.
 - Accepted candidate pages must include memory_kind, scope_type, scope_name when required, and source evidence.
 - Applied memories are marked active because the candidate itself passed human review.
 ```

@@ -19,8 +19,9 @@ use engram_core::Id;
 use engram_index::{
     CoordinationService, DigestExtractionOptions, DigestExtractionPlan,
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions, DigestInventory,
-    DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService, DocumentService,
-    EntityService, KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
+    DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService,
+    DigestSourceIndexOptions, DigestSourceIndexPlan, DocumentService, EntityService,
+    KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
     MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
     RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
     RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
@@ -1467,6 +1468,32 @@ enum DigestCommands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Plan or write source-only digest evidence into the document index
+    SourceIndex {
+        /// Review batch directory containing source_only digest source decisions
+        review_path: String,
+
+        /// Actually index source-only digest documents; omitted means dry-run
+        #[arg(long)]
+        write: bool,
+
+        /// Use a project-specific Engram data store when writing
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory when writing
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        /// Maximum bytes to read from any source-only digest
+        #[arg(long)]
+        max_source_bytes: Option<usize>,
+
+        /// Print source index plan/result as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1948,6 +1975,39 @@ fn print_digest_extraction_plan(plan: &DigestExtractionPlan) {
         println!("Skipped output files:");
         for path in &plan.files_skipped {
             println!("  - {}", path);
+        }
+    }
+    if !plan.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &plan.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_digest_source_index_plan(plan: &DigestSourceIndexPlan, indexed_documents: usize) {
+    println!("Digest source index plan");
+    println!("  Review path:            {}", plan.review_path);
+    println!("  Review files scanned:   {}", plan.review_files_scanned);
+    println!("  Accepted sources:       {}", plan.accepted_sources);
+    println!("  Source-only sources:    {}", plan.source_only_sources);
+    println!("  Sources read:           {}", plan.sources_read);
+    println!("  Documents planned:      {}", plan.document_count());
+    println!("  Documents indexed:      {}", indexed_documents);
+
+    if !plan.documents.is_empty() {
+        println!("Prepared documents:");
+        for document in &plan.documents {
+            println!(
+                "  - {} [{}; {} chars]",
+                document.title, document.source_kind, document.content_chars
+            );
+        }
+    }
+    if !plan.sources_skipped.is_empty() {
+        println!("Skipped sources:");
+        for skipped in &plan.sources_skipped {
+            println!("  - {}", skipped);
         }
     }
     if !plan.warnings.is_empty() {
@@ -4630,6 +4690,53 @@ async fn main() -> Result<()> {
                     println!("{}", serde_json::to_string_pretty(&plan)?);
                 } else {
                     print_digest_extraction_plan(&plan);
+                }
+            }
+            DigestCommands::SourceIndex {
+                review_path,
+                write,
+                project,
+                data_dir,
+                max_source_bytes,
+                json,
+            } => {
+                let defaults = DigestSourceIndexOptions::default();
+                let plan = DigestService::new().plan_source_index(
+                    std::path::PathBuf::from(&review_path),
+                    DigestSourceIndexOptions {
+                        max_source_bytes: max_source_bytes.unwrap_or(defaults.max_source_bytes),
+                    },
+                )?;
+
+                let mut indexed_documents = 0usize;
+                if write {
+                    let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+                    let db = connect_and_init(&config).await?;
+                    let service = DocumentService::with_defaults(db)?;
+                    service.init_schema().await?;
+                    for document in &plan.documents {
+                        service
+                            .index_content(
+                                &document.document_path,
+                                Some(document.title.clone()),
+                                document.indexed_content.clone(),
+                            )
+                            .await?;
+                        indexed_documents += 1;
+                    }
+                }
+
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "plan": plan,
+                            "dry_run": !write,
+                            "indexed_documents": indexed_documents
+                        }))?
+                    );
+                } else {
+                    print_digest_source_index_plan(&plan, indexed_documents);
                 }
             }
         },

@@ -52,7 +52,8 @@ pub use digest::{
     DigestExtractionPlan, DigestExtractionReviewApply, DigestExtractionReviewApplyOptions,
     DigestFileFormat, DigestInventory, DigestInventoryOptions, DigestProposedAction,
     DigestReviewApply, DigestReviewDecision, DigestReviewExport, DigestReviewedSource,
-    DigestSensitivity, DigestService, DigestSourceCandidate, DigestSourceKind,
+    DigestSensitivity, DigestService, DigestSourceCandidate, DigestSourceIndexDocument,
+    DigestSourceIndexOptions, DigestSourceIndexPlan, DigestSourceKind,
 };
 pub use entity::EntityService;
 pub use error::{IndexError, IndexResult};

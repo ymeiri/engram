@@ -8,7 +8,7 @@
 
 use crate::chunker::{chunk_document, ChunkerConfig};
 use crate::error::IndexResult;
-use crate::parser::{parse_file, ParsedDocument};
+use crate::parser::{parse_content, parse_file, ParsedDocument};
 use engram_core::document::{DocChunk, DocSource};
 use engram_embed::Embedder;
 use std::path::{Path, PathBuf};
@@ -98,6 +98,37 @@ impl Pipeline {
         debug!("Created {} chunks from {}", chunks.len(), path.display());
 
         // Generate embeddings
+        let indexed_chunks = self.embed_chunks(chunks)?;
+
+        Ok(IndexedDocument {
+            source,
+            parsed,
+            chunks: indexed_chunks,
+        })
+    }
+
+    /// Index markdown content supplied by the caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the content cannot be parsed or embedded.
+    pub fn index_content(
+        &self,
+        path_or_url: impl Into<String>,
+        content: impl Into<String>,
+        title: Option<String>,
+    ) -> IndexResult<IndexedDocument> {
+        let path_or_url = path_or_url.into();
+        info!("Indexing supplied document content: {}", path_or_url);
+
+        let mut parsed = parse_content(path_or_url.clone(), content.into())?;
+        if let Some(title) = title.filter(|title| !title.trim().is_empty()) {
+            parsed.title = title;
+        }
+
+        let source = DocSource::local_file(path_or_url.clone()).with_title(parsed.title.clone());
+        let chunks = chunk_document(&parsed, &source, &self.config.chunker);
+        debug!("Created {} chunks from {}", chunks.len(), path_or_url);
         let indexed_chunks = self.embed_chunks(chunks)?;
 
         Ok(IndexedDocument {

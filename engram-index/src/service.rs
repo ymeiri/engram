@@ -108,6 +108,63 @@ impl DocumentService {
         Ok(result)
     }
 
+    /// Index caller-supplied markdown content and store it in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if indexing or storage fails.
+    pub async fn index_content(
+        &self,
+        path_or_url: impl Into<String>,
+        title: Option<String>,
+        content: impl Into<String>,
+    ) -> IndexResult<IndexedDocument> {
+        let path_or_url = path_or_url.into();
+        info!("Indexing supplied content: {}", path_or_url);
+
+        if let Some(existing) = self.repo.find_source_by_path(&path_or_url).await? {
+            if !existing.needs_reindex() {
+                debug!("Source already indexed and fresh: {}", path_or_url);
+                let chunks = self.repo.get_chunks_for_source(&existing.id).await?;
+                let mut parsed = crate::parser::parse_content(path_or_url, content.into())?;
+                if let Some(title) = title.filter(|title| !title.trim().is_empty()) {
+                    parsed.title = title;
+                }
+                return Ok(IndexedDocument {
+                    source: existing,
+                    parsed,
+                    chunks: chunks
+                        .into_iter()
+                        .map(|chunk| crate::pipeline::IndexedChunk {
+                            chunk,
+                            embedding: Vec::new(),
+                        })
+                        .collect(),
+                });
+            }
+            debug!("Re-indexing stale source: {}", path_or_url);
+        }
+
+        let mut result = self.pipeline.index_content(path_or_url, content, title)?;
+        result.source.mark_indexed();
+        self.repo.save_source(&result.source).await?;
+
+        let chunks_with_embeddings: Vec<_> = result
+            .chunks
+            .iter()
+            .map(|ic| (ic.chunk.clone(), ic.embedding.clone()))
+            .collect();
+        self.repo
+            .save_chunks(&result.source.id, chunks_with_embeddings)
+            .await?;
+
+        info!(
+            "Indexed supplied content with {} chunks",
+            result.chunks.len()
+        );
+        Ok(result)
+    }
+
     /// Index a directory and store all documents.
     ///
     /// # Errors
