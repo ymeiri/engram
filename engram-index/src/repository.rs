@@ -779,9 +779,12 @@ impl RepositoryService {
                     .count()
             });
 
-        let Some(checkout) = checkout else {
+        let Some(mut checkout) = checkout else {
             return Ok(None);
         };
+        if refresh_checkout_git_state(&mut checkout)? {
+            self.repo.save_checkout(&checkout).await?;
+        }
         let Some(repository_id) = checkout.repository_id else {
             return Ok(None);
         };
@@ -2561,6 +2564,29 @@ fn run_git_optional(cwd: &Path, args: &[&str]) -> IndexResult<Option<String>> {
     }
 }
 
+pub(crate) fn refresh_checkout_git_state(checkout: &mut LocalCheckout) -> IndexResult<bool> {
+    let checkout_path = canonical_or_original(Path::new(&checkout.local_path));
+    let Some(git_root) = run_git_optional(&checkout_path, &["rev-parse", "--show-toplevel"])?
+    else {
+        return Ok(false);
+    };
+    let git_root_path = canonical_or_original(Path::new(git_root.trim()));
+    if git_root_path != checkout_path {
+        return Ok(false);
+    }
+
+    let current_branch = run_git_optional(&checkout_path, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let head_sha = run_git_optional(&checkout_path, &["rev-parse", "HEAD"])?;
+    let is_dirty = detect_dirty(&checkout_path)?;
+
+    if current_branch.is_none() && head_sha.is_none() && is_dirty.is_none() {
+        return Ok(false);
+    }
+
+    checkout.update_detected_state(current_branch, head_sha, is_dirty);
+    Ok(true)
+}
+
 fn detect_default_branch(cwd: &Path) -> IndexResult<Option<String>> {
     let Some(branch) = run_git_optional(
         cwd,
@@ -2685,6 +2711,22 @@ mod tests {
         );
     }
 
+    fn commit_all(cwd: &Path, message: &str) {
+        run_git(cwd, &["add", "."]);
+        run_git(
+            cwd,
+            &[
+                "-c",
+                "user.name=Engram Test",
+                "-c",
+                "user.email=engram-test@example.com",
+                "commit",
+                "-m",
+                message,
+            ],
+        );
+    }
+
     fn git_available() -> bool {
         Command::new("git")
             .arg("--version")
@@ -2776,6 +2818,46 @@ mod tests {
         assert_eq!(context.matching_components[0].name, "api");
         assert_eq!(context.linked_projects.len(), 1);
         assert_eq!(context.linked_projects[0].project_name, "Debug with AI");
+    }
+
+    #[tokio::test]
+    async fn resolve_cwd_refreshes_checkout_git_state() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        run_git(dir.path(), &["init"]);
+        run_git(
+            dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/acme/fresh.git",
+            ],
+        );
+        std::fs::write(dir.path().join("README.md"), "first\n").unwrap();
+        commit_all(dir.path(), "first");
+
+        let detection = service.detect_repository(dir.path()).await.unwrap();
+        let first_head = detection
+            .context
+            .checkout
+            .as_ref()
+            .and_then(|checkout| checkout.head_sha.clone())
+            .expect("detection should record initial HEAD");
+
+        std::fs::write(dir.path().join("README.md"), "second\n").unwrap();
+        commit_all(dir.path(), "second");
+        let second_head = run_git_required(dir.path(), &["rev-parse", "HEAD"]).unwrap();
+        assert_ne!(first_head, second_head);
+
+        let context = service.resolve_cwd(dir.path()).await.unwrap().unwrap();
+        let checkout = context.checkout.expect("context should include checkout");
+        assert_eq!(checkout.head_sha.as_deref(), Some(second_head.as_str()));
+        assert_eq!(checkout.is_dirty, Some(false));
+        assert!(checkout.last_seen_at >= detection.context.checkout.unwrap().last_seen_at);
     }
 
     #[tokio::test]

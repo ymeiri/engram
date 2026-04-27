@@ -21,11 +21,12 @@ use engram_index::{
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions, DigestInventory,
     DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService,
     DigestSourceIndexOptions, DigestSourceIndexPlan, DocumentService, EntityService,
-    KnowledgeService, MemoryService, MigrationInventory, MigrationInventoryOptions,
-    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
-    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
-    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport, RepositoryService,
-    SearchService, SessionService, ToolIntelService, WorkService,
+    KnowledgeService, MemoryChanges, MemoryService, MigrationInventory, MigrationInventoryOptions,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport, OrientInput,
+    OrientationPacket, RepositoryMigrationInventory, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
+    RepositoryMigrationReviewExport, RepositoryService, SearchService, SessionService,
+    ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -190,6 +191,45 @@ enum Commands {
 
         #[command(subcommand)]
         command: MemoryCommands,
+    },
+
+    /// Build a Memory OS orientation context packet for the current workspace
+    Orient {
+        /// Explicit Memory OS project/scope name
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Current working directory, defaults to the process cwd
+        #[arg(long)]
+        cwd: Option<String>,
+
+        /// Prompt or task that triggered orientation
+        #[arg(long)]
+        prompt: Option<String>,
+
+        /// Agent or harness name
+        #[arg(long)]
+        agent: Option<String>,
+
+        /// Include recent knowledge commits in the orientation packet
+        #[arg(long)]
+        include_recent_commits: bool,
+
+        /// Maximum memory items per grouped bucket
+        #[arg(long)]
+        limit: Option<usize>,
+
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        store_project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        /// Print the full orientation packet as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Manage the generated Memory OS Markdown vault
@@ -1223,6 +1263,25 @@ enum MemoryCommands {
         json: bool,
     },
 
+    /// List memory and knowledge commits written after a cursor
+    ChangesSince {
+        /// Cursor timestamp in RFC3339 format
+        #[arg(long)]
+        timestamp: String,
+
+        /// Cursor commit ID, when known
+        #[arg(long)]
+        commit_id: Option<String>,
+
+        /// Maximum memory items and commits to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print changes as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Export Memory OS records into a generated Markdown vault
     ExportVault {
         /// Vault root path to write
@@ -1703,6 +1762,21 @@ fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
         .map_err(|e| anyhow::anyhow!("Invalid repository ID: {}", e))
 }
 
+fn parse_rfc3339_timestamp(value: &str) -> Result<OffsetDateTime> {
+    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .map_err(|e| anyhow::anyhow!("Invalid RFC3339 timestamp: {}", e))
+}
+
+fn format_rfc3339_timestamp(value: OffsetDateTime) -> Result<String> {
+    value
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|e| anyhow::anyhow!("Invalid timestamp: {}", e))
+}
+
+fn print_orientation_packet(packet: &OrientationPacket) {
+    println!("{}", packet.context_pack);
+}
+
 fn print_repository_context(context: &RepositoryContext) {
     println!("Repository:");
     println!("  ID:   {}", context.repository.id);
@@ -1783,11 +1857,41 @@ fn print_memory_item(item: &MemoryItem) {
 
 fn print_memory_cursor(cursor: &MemoryCursor) {
     println!("Memory cursor");
-    println!("  Timestamp: {}", cursor.timestamp);
+    let timestamp =
+        format_rfc3339_timestamp(cursor.timestamp).unwrap_or_else(|_| cursor.timestamp.to_string());
+    println!("  Timestamp: {}", timestamp);
     if let Some(commit_id) = cursor.commit_id {
         println!("  Latest commit: {}", commit_id);
     } else {
         println!("  Latest commit: none");
+    }
+}
+
+fn print_memory_changes(changes: &MemoryChanges) {
+    println!("Memory changes");
+    let since_timestamp = format_rfc3339_timestamp(changes.since.timestamp)
+        .unwrap_or_else(|_| changes.since.timestamp.to_string());
+    let next_timestamp = format_rfc3339_timestamp(changes.next_cursor.timestamp)
+        .unwrap_or_else(|_| changes.next_cursor.timestamp.to_string());
+    println!("  Since timestamp: {}", since_timestamp);
+    if let Some(commit_id) = changes.since.commit_id {
+        println!("  Since commit:    {}", commit_id);
+    }
+    println!("  Next timestamp:  {}", next_timestamp);
+    if let Some(commit_id) = changes.next_cursor.commit_id {
+        println!("  Next commit:     {}", commit_id);
+    }
+    println!("  Memory items:    {}", changes.items.len());
+    println!("  Commits:         {}", changes.commits.len());
+
+    if !changes.items.is_empty() {
+        print_memory_items("Changed memory items", &changes.items);
+    }
+    if !changes.commits.is_empty() {
+        println!("Knowledge commits");
+        for commit in &changes.commits {
+            println!("  {} - {}", commit.id, commit.message);
+        }
     }
 }
 
@@ -4315,6 +4419,41 @@ async fn main() -> Result<()> {
         // =========================================================================
         // Memory OS Commands
         // =========================================================================
+        Commands::Orient {
+            project,
+            cwd,
+            prompt,
+            agent,
+            include_recent_commits,
+            limit,
+            store_project,
+            data_dir,
+            json,
+        } => {
+            let config = scoped_store_config(store_project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = MemoryService::new(db);
+            service.init_schema().await?;
+            let cwd = cwd_or_current(cwd)?.display().to_string();
+
+            let packet = service
+                .orient(OrientInput {
+                    cwd: Some(cwd),
+                    prompt,
+                    project,
+                    agent,
+                    include_recent_commits,
+                    limit,
+                })
+                .await?;
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&packet)?);
+            } else {
+                print_orientation_packet(&packet);
+            }
+        }
+
         Commands::Memory {
             project,
             data_dir,
@@ -4369,6 +4508,44 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&cursor)?);
                     } else {
                         print_memory_cursor(&cursor);
+                    }
+                }
+                MemoryCommands::ChangesSince {
+                    timestamp,
+                    commit_id,
+                    limit,
+                    json,
+                } => {
+                    let timestamp = parse_rfc3339_timestamp(&timestamp)?;
+                    let commit_id = commit_id
+                        .as_deref()
+                        .map(Id::parse)
+                        .transpose()
+                        .map_err(|e| anyhow::anyhow!("Invalid commit ID: {}", e))?;
+                    let changes = service
+                        .changes_since(
+                            MemoryCursor {
+                                commit_id,
+                                timestamp,
+                            },
+                            limit,
+                        )
+                        .await?;
+
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "since": changes.since,
+                                "next_cursor": changes.next_cursor,
+                                "item_count": changes.items.len(),
+                                "commit_count": changes.commits.len(),
+                                "items": changes.items,
+                                "commits": changes.commits
+                            }))?
+                        );
+                    } else {
+                        print_memory_changes(&changes);
                     }
                 }
                 MemoryCommands::ExportVault { path } => {

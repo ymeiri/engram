@@ -12,6 +12,7 @@ use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, MigrationService,
 };
+use crate::repository::refresh_checkout_git_state;
 use crate::vault::{
     init_memory_vault, inspect_memory_vault, read_memory_vault_page, write_memory_vault,
     MemoryVaultExport, MemoryVaultInit, MemoryVaultPage, MemoryVaultStatus,
@@ -545,9 +546,12 @@ impl MemoryService {
                     .count()
             });
 
-        let Some(checkout) = checkout else {
+        let Some(mut checkout) = checkout else {
             return Ok(None);
         };
+        if refresh_checkout_git_state(&mut checkout)? {
+            self.repository_repo.save_checkout(&checkout).await?;
+        }
         let Some(repository_id) = checkout.repository_id else {
             return Ok(None);
         };
@@ -1043,6 +1047,7 @@ mod tests {
         ProjectRepositoryRole,
     };
     use engram_store::RepositoryRepo;
+    use std::process::Command;
     use tempfile::tempdir;
 
     async fn setup_service() -> MemoryService {
@@ -1088,6 +1093,61 @@ mod tests {
             ClaimOrigin::UserStated,
             writer(),
         )
+    }
+
+    fn run_git(cwd: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(cwd)
+            .args(args)
+            .output()
+            .expect("git should run");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn git_stdout(cwd: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(cwd)
+            .args(args)
+            .output()
+            .expect("git should run");
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn commit_all(cwd: &Path, message: &str) {
+        run_git(cwd, &["add", "."]);
+        run_git(
+            cwd,
+            &[
+                "-c",
+                "user.name=Engram Test",
+                "-c",
+                "user.email=engram-test@example.com",
+                "commit",
+                "-m",
+                message,
+            ],
+        );
+    }
+
+    fn git_available() -> bool {
+        Command::new("git")
+            .arg("--version")
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
     }
 
     #[tokio::test]
@@ -1402,6 +1462,57 @@ mod tests {
         );
         assert!(!packet.resolution.requires_confirmation);
         assert_eq!(packet.active_decisions[0].title, "Use repo candidate");
+    }
+
+    #[tokio::test]
+    async fn orient_refreshes_repository_checkout_git_state() {
+        if !git_available() {
+            return;
+        }
+        let (service, repo) = setup_service_with_repository_repo().await;
+        let dir = tempdir().unwrap();
+        run_git(dir.path(), &["init"]);
+        std::fs::write(dir.path().join("README.md"), "current\n").unwrap();
+        commit_all(dir.path(), "current");
+        let current_head = git_stdout(dir.path(), &["rev-parse", "HEAD"]);
+
+        let repository = GitRepository::new("fresh-orient");
+        repo.save_repository(&repository).await.unwrap();
+        let mut checkout =
+            LocalCheckout::new(dir.path().display().to_string()).with_repository(repository.id);
+        checkout.update_detected_state(
+            Some("stale-branch".to_string()),
+            Some("stale-head".to_string()),
+            Some(true),
+        );
+        let stale_seen_at = checkout.last_seen_at;
+        repo.save_checkout(&checkout).await.unwrap();
+        repo.save_project_link(&ProjectRepositoryLink::new(
+            "Fresh Orient",
+            repository.id,
+            ProjectRepositoryRole::Primary,
+        ))
+        .await
+        .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                cwd: Some(dir.path().display().to_string()),
+                project: None,
+                include_recent_commits: false,
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        let checkout = packet
+            .repository_context
+            .as_ref()
+            .and_then(|context| context.checkout.as_ref())
+            .expect("orientation should include refreshed checkout");
+        assert_eq!(checkout.head_sha.as_deref(), Some(current_head.as_str()));
+        assert_eq!(checkout.is_dirty, Some(false));
+        assert!(checkout.last_seen_at >= stale_seen_at);
     }
 
     #[tokio::test]
