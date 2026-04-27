@@ -4741,6 +4741,7 @@ async fn main() -> Result<()> {
                     println!("  Memory items:         {}", export.memory_item_count);
                     println!("  Knowledge commits:    {}", export.knowledge_commit_count);
                     println!("  Repositories:         {}", export.repository_count);
+                    println!("  Entities:             {}", export.entity_count);
                     println!("  Projects:             {}", export.project_count);
                     if !export.files_skipped.is_empty() {
                         println!("Skipped non-generated files:");
@@ -4933,6 +4934,7 @@ async fn main() -> Result<()> {
                         println!("  Memory items:         {}", export.memory_item_count);
                         println!("  Knowledge commits:    {}", export.knowledge_commit_count);
                         println!("  Repositories:         {}", export.repository_count);
+                        println!("  Entities:             {}", export.entity_count);
                         println!("  Projects:             {}", export.project_count);
                         if !export.files_skipped.is_empty() {
                             println!("Skipped non-generated files:");
@@ -4962,6 +4964,7 @@ async fn main() -> Result<()> {
                         println!("  Memory items:      {}", status.memory_item_count);
                         println!("  Knowledge commits: {}", status.knowledge_commit_count);
                         println!("  Repositories:      {}", status.repository_count);
+                        println!("  Entities:          {}", status.entity_count);
                         println!("  Projects:          {}", status.project_count);
                         if !status.missing_directories.is_empty() {
                             println!("Missing directories:");

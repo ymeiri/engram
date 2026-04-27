@@ -25,6 +25,7 @@ const VAULT_DIRECTORIES: &[&str] = &[
     "memory",
     "memory/items",
     "memory/commits",
+    "entities",
     "projects",
     "repositories",
 ];
@@ -44,6 +45,8 @@ pub struct MemoryVaultExport {
     pub knowledge_commit_count: usize,
     /// Exported repository page count.
     pub repository_count: usize,
+    /// Exported entity page count.
+    pub entity_count: usize,
     /// Exported project page count.
     pub project_count: usize,
 }
@@ -90,6 +93,8 @@ pub struct MemoryVaultStatus {
     pub knowledge_commit_count: usize,
     /// Repositories currently eligible for compilation.
     pub repository_count: usize,
+    /// Entities currently eligible for compilation.
+    pub entity_count: usize,
     /// Projects currently eligible for compilation.
     pub project_count: usize,
     /// Files expected from compiling the current store snapshot.
@@ -140,6 +145,7 @@ pub(crate) fn write_memory_vault(
         memory_item_count: items.len(),
         knowledge_commit_count: commits.len(),
         repository_count: repositories.len(),
+        entity_count: 0,
         project_count: 0,
     };
 
@@ -171,7 +177,12 @@ pub(crate) fn write_memory_vault(
             })
     });
 
+    let entity_names = entity_names(&sorted_items);
+    let entity_paths = unique_named_paths(&entity_names, "entities");
+    export.entity_count = entity_names.len();
+
     let project_names = project_names(&sorted_items, &sorted_repositories);
+    let project_paths = unique_named_paths(&project_names, "projects");
     export.project_count = project_names.len();
 
     write_generated_file(
@@ -181,7 +192,10 @@ pub(crate) fn write_memory_vault(
             &sorted_items,
             &sorted_commits,
             &sorted_repositories,
+            &entity_names,
+            &entity_paths,
             &project_names,
+            &project_paths,
         ),
         &mut export,
     )?;
@@ -212,6 +226,24 @@ pub(crate) fn write_memory_vault(
 
     write_generated_file(
         root,
+        Path::new("entities").join("index.md"),
+        &entities_index(&entity_names, &entity_paths),
+        &mut export,
+    )?;
+    for entity_name in &entity_names {
+        let relative_path = entity_paths.get(entity_name).ok_or_else(|| {
+            IndexError::InvalidState(format!("missing vault path for entity: {entity_name}"))
+        })?;
+        write_generated_file(
+            root,
+            relative_path.clone(),
+            &entity_page(entity_name, &sorted_items),
+            &mut export,
+        )?;
+    }
+
+    write_generated_file(
+        root,
         Path::new("repositories").join("index.md"),
         &repositories_index(&sorted_repositories),
         &mut export,
@@ -225,11 +257,14 @@ pub(crate) fn write_memory_vault(
         )?;
     }
 
-    for project_name in project_names {
+    for project_name in &project_names {
+        let relative_path = project_paths.get(project_name).ok_or_else(|| {
+            IndexError::InvalidState(format!("missing vault path for project: {project_name}"))
+        })?;
         write_generated_file(
             root,
-            project_relative_path(&project_name),
-            &project_page(&project_name, &sorted_items, &sorted_repositories),
+            relative_path.clone(),
+            &project_page(project_name, &sorted_items, &sorted_repositories),
             &mut export,
         )?;
     }
@@ -282,11 +317,13 @@ pub(crate) fn inspect_memory_vault(
     } else {
         (0, 0, 0)
     };
+    let entity_count = entity_names(items).len();
     let project_count = project_names(items, repositories).len();
     let expected_generated_file_count = expected_vault_file_count(
         items.len(),
         commits.len(),
         repositories.len(),
+        entity_count,
         project_count,
     );
 
@@ -301,6 +338,7 @@ pub(crate) fn inspect_memory_vault(
         memory_item_count: items.len(),
         knowledge_commit_count: commits.len(),
         repository_count: repositories.len(),
+        entity_count,
         project_count,
         expected_generated_file_count,
     })
@@ -342,7 +380,10 @@ fn vault_index(
     items: &[MemoryItem],
     commits: &[KnowledgeCommit],
     repositories: &[RepositoryVaultSnapshot],
+    entity_names: &BTreeSet<String>,
+    entity_paths: &BTreeMap<String, PathBuf>,
     project_names: &BTreeSet<String>,
+    project_paths: &BTreeMap<String, PathBuf>,
 ) -> String {
     let mut output = frontmatter("vault_index", Vec::new());
     output.push_str("# Engram Memory Vault\n\n");
@@ -350,19 +391,35 @@ fn vault_index(
     output.push_str(&format!("- Memory items: {}\n", items.len()));
     output.push_str(&format!("- Knowledge commits: {}\n", commits.len()));
     output.push_str(&format!("- Repositories: {}\n", repositories.len()));
+    output.push_str(&format!("- Entities: {}\n", entity_names.len()));
     output.push_str(&format!("- Projects: {}\n\n", project_names.len()));
 
     output.push_str("## Entry Points\n\n");
     output.push_str("- [Memory](../memory/index.md)\n");
+    output.push_str("- [Entities](../entities/index.md)\n");
     output.push_str("- [Repositories](../repositories/index.md)\n");
+    if !entity_names.is_empty() {
+        output.push_str("- Entities\n");
+        for entity_name in entity_names {
+            if let Some(path) = entity_paths.get(entity_name) {
+                output.push_str(&format!(
+                    "  - [{}](../{})\n",
+                    escape_link_text(entity_name),
+                    path_to_markdown(path)
+                ));
+            }
+        }
+    }
     if !project_names.is_empty() {
         output.push_str("- Projects\n");
         for project_name in project_names {
-            output.push_str(&format!(
-                "  - [{}](../{})\n",
-                escape_link_text(project_name),
-                path_to_markdown(&project_relative_path(project_name))
-            ));
+            if let Some(path) = project_paths.get(project_name) {
+                output.push_str(&format!(
+                    "  - [{}](../{})\n",
+                    escape_link_text(project_name),
+                    path_to_markdown(path)
+                ));
+            }
         }
     }
     output
@@ -573,7 +630,7 @@ fn repositories_index(repositories: &[RepositoryVaultSnapshot]) -> String {
             output.push_str(&format!(
                 "- [{}]({})",
                 escape_link_text(&snapshot.repository.name),
-                path_to_markdown(&repository_relative_path(&snapshot.repository))
+                file_name(&repository_relative_path(&snapshot.repository))
             ));
             if let Some(remote_url) = &snapshot.repository.remote_url {
                 output.push_str(&format!(" - {}", remote_url));
@@ -581,6 +638,55 @@ fn repositories_index(repositories: &[RepositoryVaultSnapshot]) -> String {
             output.push('\n');
         }
     }
+    output
+}
+
+fn entities_index(
+    entity_names: &BTreeSet<String>,
+    entity_paths: &BTreeMap<String, PathBuf>,
+) -> String {
+    let mut output = frontmatter("entities_index", Vec::new());
+    output.push_str("# Entities\n\n");
+    if entity_names.is_empty() {
+        output.push_str("No entity-scoped memory items exported.\n");
+    } else {
+        for entity_name in entity_names {
+            if let Some(path) = entity_paths.get(entity_name) {
+                output.push_str(&format!(
+                    "- [{}]({})\n",
+                    escape_link_text(entity_name),
+                    path_to_markdown_without_prefix(path, "entities")
+                ));
+            }
+        }
+    }
+    output
+}
+
+fn entity_page(entity_name: &str, items: &[MemoryItem]) -> String {
+    let fields = vec![("entity_name".to_string(), yaml_string(entity_name))];
+    let mut output = frontmatter("entity", fields);
+    output.push_str(&format!("# Entity: {}\n\n", entity_name));
+
+    output.push_str("## Memory Items\n\n");
+    let entity_items: Vec<_> = items
+        .iter()
+        .filter(|item| memory_scope_entity_name(&item.scope) == Some(entity_name))
+        .collect();
+    if entity_items.is_empty() {
+        output.push_str("No entity-scoped memory items exported.\n");
+    } else {
+        for item in entity_items {
+            output.push_str(&format!(
+                "- [{}](../../{}) - {} - {}\n",
+                escape_link_text(&item.title),
+                path_to_markdown(&item_relative_path(item)),
+                item.kind,
+                item.status
+            ));
+        }
+    }
+
     output
 }
 
@@ -749,10 +855,27 @@ fn project_names(
     names
 }
 
+fn entity_names(items: &[MemoryItem]) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    for item in items {
+        if let Some(entity_name) = memory_scope_entity_name(&item.scope) {
+            names.insert(entity_name.to_string());
+        }
+    }
+    names
+}
+
 fn memory_scope_project_name(scope: &MemoryScope) -> Option<&str> {
     match scope {
         MemoryScope::Project { project_name, .. } => Some(project_name.as_str()),
         MemoryScope::Task { project_name, .. } => project_name.as_deref(),
+        _ => None,
+    }
+}
+
+fn memory_scope_entity_name(scope: &MemoryScope) -> Option<&str> {
+    match scope {
+        MemoryScope::Entity { entity_name, .. } => Some(entity_name.as_str()),
         _ => None,
     }
 }
@@ -885,15 +1008,19 @@ fn expected_vault_file_count(
     memory_item_count: usize,
     knowledge_commit_count: usize,
     repository_count: usize,
+    entity_count: usize,
     project_count: usize,
 ) -> usize {
     let system_index = 1;
     let memory_index = 1;
+    let entity_index = 1;
     let repository_index = 1;
     system_index
         + memory_index
         + memory_item_count
         + knowledge_commit_count
+        + entity_index
+        + entity_count
         + repository_index
         + repository_count
         + project_count
@@ -976,10 +1103,34 @@ fn repository_relative_path(repository: &GitRepository) -> PathBuf {
     ))
 }
 
-fn project_relative_path(project_name: &str) -> PathBuf {
-    Path::new("projects")
-        .join(slugify(project_name))
-        .join("index.md")
+fn unique_named_paths(names: &BTreeSet<String>, base_dir: &str) -> BTreeMap<String, PathBuf> {
+    let mut slug_groups: BTreeMap<String, Vec<&String>> = BTreeMap::new();
+    for name in names {
+        slug_groups.entry(slugify(name)).or_default().push(name);
+    }
+
+    let mut paths = BTreeMap::new();
+    for (slug, names_for_slug) in slug_groups {
+        let canonical_name = names_for_slug
+            .iter()
+            .copied()
+            .find(|name| name.as_str() == slug)
+            .or_else(|| names_for_slug.first().copied());
+
+        for name in names_for_slug {
+            let directory_name = if Some(name) == canonical_name {
+                slug.clone()
+            } else {
+                format!("{}-{}", slug, stable_suffix(name))
+            };
+            paths.insert(
+                name.clone(),
+                Path::new(base_dir).join(directory_name).join("index.md"),
+            );
+        }
+    }
+
+    paths
 }
 
 fn file_name(path: &Path) -> String {
@@ -994,6 +1145,12 @@ fn path_to_markdown(path: &Path) -> String {
         .map(|component| component.as_os_str().to_string_lossy())
         .collect::<Vec<_>>()
         .join("/")
+}
+
+fn path_to_markdown_without_prefix(path: &Path, prefix: &str) -> String {
+    path.strip_prefix(prefix)
+        .map(path_to_markdown)
+        .unwrap_or_else(|_| path_to_markdown(path))
 }
 
 fn slugify(value: &str) -> String {
@@ -1018,6 +1175,15 @@ fn slugify(value: &str) -> String {
     } else {
         slug
     }
+}
+
+fn stable_suffix(value: &str) -> String {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in value.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{:08x}", hash as u32)
 }
 
 fn yaml_string(value: &str) -> String {
@@ -1050,11 +1216,15 @@ mod tests {
     }
 
     fn memory_item(title: &str) -> MemoryItem {
+        memory_item_with_scope(title, MemoryScope::project("engram"))
+    }
+
+    fn memory_item_with_scope(title: &str, scope: MemoryScope) -> MemoryItem {
         MemoryItem::new(
             MemoryKind::Decision,
             title,
             "Use a deterministic Markdown projection for Memory OS.",
-            MemoryScope::project("engram"),
+            scope,
             ClaimOrigin::UserStated,
             writer(),
         )
@@ -1097,6 +1267,7 @@ mod tests {
         assert_eq!(export.memory_item_count, 1);
         assert_eq!(export.knowledge_commit_count, 1);
         assert_eq!(export.repository_count, 1);
+        assert_eq!(export.entity_count, 0);
         assert_eq!(export.project_count, 1);
         assert!(export.files_skipped.is_empty());
         assert!(export
@@ -1138,6 +1309,7 @@ mod tests {
         assert!(init
             .directories_created
             .contains(&"memory/items".to_string()));
+        assert!(dir.path().join("entities").is_dir());
         assert!(dir.path().join("repositories").is_dir());
 
         let status = inspect_memory_vault(dir.path(), &[], &[], &[]).unwrap();
@@ -1145,7 +1317,7 @@ mod tests {
         assert!(status.initialized);
         assert_eq!(status.generated_file_count, 0);
         assert_eq!(status.user_file_count, 0);
-        assert_eq!(status.expected_generated_file_count, 3);
+        assert_eq!(status.expected_generated_file_count, 4);
     }
 
     #[test]
@@ -1165,6 +1337,58 @@ mod tests {
             status.generated_file_count,
             status.expected_generated_file_count
         );
+    }
+
+    #[test]
+    fn write_memory_vault_uses_unique_project_paths_for_slug_collisions() {
+        let dir = tempdir().unwrap();
+        let items = vec![
+            memory_item_with_scope("Lowercase project", MemoryScope::project("engram")),
+            memory_item_with_scope("Titlecase project", MemoryScope::project("Engram")),
+        ];
+
+        let export = write_memory_vault(dir.path(), &items, &[], &[]).unwrap();
+
+        assert_eq!(export.project_count, 2);
+        let project_paths: BTreeSet<_> = export
+            .files_written
+            .iter()
+            .filter(|path| path.starts_with("projects/") && path.ends_with("/index.md"))
+            .collect();
+        assert_eq!(project_paths.len(), 2);
+        assert!(project_paths.contains(&"projects/engram/index.md".to_string()));
+
+        let status = inspect_memory_vault(dir.path(), &items, &[], &[]).unwrap();
+        assert_eq!(
+            status.generated_file_count,
+            status.expected_generated_file_count
+        );
+    }
+
+    #[test]
+    fn write_memory_vault_creates_entity_index_and_pages() {
+        let dir = tempdir().unwrap();
+        let item = memory_item_with_scope(
+            "Review all system operational rule",
+            MemoryScope::entity("review-all-system"),
+        );
+
+        let export = write_memory_vault(dir.path(), std::slice::from_ref(&item), &[], &[]).unwrap();
+
+        assert_eq!(export.entity_count, 1);
+        assert!(dir.path().join("entities/index.md").exists());
+        assert!(dir
+            .path()
+            .join("entities/review-all-system/index.md")
+            .exists());
+
+        let index = fs::read_to_string(dir.path().join("entities/index.md")).unwrap();
+        assert!(index.contains("[review-all-system](review-all-system/index.md)"));
+
+        let page =
+            fs::read_to_string(dir.path().join("entities/review-all-system/index.md")).unwrap();
+        assert!(page.contains("entity_name: \"review-all-system\""));
+        assert!(page.contains("Review all system operational rule"));
     }
 
     #[test]
