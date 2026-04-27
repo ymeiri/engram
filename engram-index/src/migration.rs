@@ -1911,8 +1911,20 @@ fn machine_record_json(contents: &str) -> Option<&str> {
     let fence_start = after_heading.find(MACHINE_RECORD_FENCE)?;
     let after_fence = &after_heading[fence_start + MACHINE_RECORD_FENCE.len()..];
     let json_start = after_fence.strip_prefix('\n').unwrap_or(after_fence);
-    let fence_end = json_start.find("```")?;
+    let fence_end = closing_fence_index(json_start)?;
     Some(json_start[..fence_end].trim())
+}
+
+fn closing_fence_index(block: &str) -> Option<usize> {
+    let mut offset = 0;
+    for line in block.split_inclusive('\n') {
+        let line_without_newline = line.trim_end_matches('\n').trim_end_matches('\r');
+        if line_without_newline.trim() == "```" {
+            return Some(offset);
+        }
+        offset += line.len();
+    }
+    None
 }
 
 fn first_markdown_heading(contents: &str) -> Option<String> {
@@ -2769,6 +2781,23 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn machine_record_json_ignores_inline_fences_inside_json_strings() {
+        let contents = r#"## Machine Record
+
+```json
+{
+  "content": "Replace ```code fences with XML tags"
+}
+```
+"#;
+
+        assert_eq!(
+            machine_record_json(contents).unwrap(),
+            "{\n  \"content\": \"Replace ```code fences with XML tags\"\n}"
         );
     }
 

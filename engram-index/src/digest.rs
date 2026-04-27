@@ -1690,7 +1690,7 @@ fn review_decision_yaml(contents: &str) -> Option<&str> {
     let fence_start = after_heading.find("```yaml")?;
     let after_fence = &after_heading[fence_start + "```yaml".len()..];
     let block = after_fence.strip_prefix('\n').unwrap_or(after_fence);
-    let fence_end = block.find("```")?;
+    let fence_end = closing_fence_index(block)?;
     Some(block[..fence_end].trim())
 }
 
@@ -2144,8 +2144,20 @@ fn digest_machine_record_json(contents: &str) -> Option<&str> {
     let fence_start = after_heading.find(DIGEST_MACHINE_RECORD_FENCE)?;
     let after_fence = &after_heading[fence_start + DIGEST_MACHINE_RECORD_FENCE.len()..];
     let json_start = after_fence.strip_prefix('\n').unwrap_or(after_fence);
-    let fence_end = json_start.find("```")?;
+    let fence_end = closing_fence_index(json_start)?;
     Some(json_start[..fence_end].trim())
+}
+
+fn closing_fence_index(block: &str) -> Option<usize> {
+    let mut offset = 0;
+    for line in block.split_inclusive('\n') {
+        let line_without_newline = line.trim_end_matches('\n').trim_end_matches('\r');
+        if line_without_newline.trim() == "```" {
+            return Some(offset);
+        }
+        offset += line.len();
+    }
+    None
 }
 
 fn normalize_extraction_options(mut options: DigestExtractionOptions) -> DigestExtractionOptions {
@@ -2716,6 +2728,34 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn fenced_block_parsers_ignore_inline_fences_inside_strings() {
+        let decision = r#"## Review Decision
+
+```yaml
+decision: accept
+notes: "Replace ```code fences with XML tags"
+```
+"#;
+        assert_eq!(
+            review_decision_yaml(decision).unwrap(),
+            "decision: accept\nnotes: \"Replace ```code fences with XML tags\""
+        );
+
+        let machine_record = r#"## Machine Record
+
+```json
+{
+  "content": "Replace ```code fences with XML tags"
+}
+```
+"#;
+        assert_eq!(
+            digest_machine_record_json(machine_record).unwrap(),
+            "{\n  \"content\": \"Replace ```code fences with XML tags\"\n}"
+        );
+    }
 
     #[test]
     fn inventory_classifies_digest_sources_without_reading_contents() {
