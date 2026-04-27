@@ -8,8 +8,9 @@ use crate::error::{IndexError, IndexResult};
 use engram_core::entity::{Entity, EntityType, Observation};
 use engram_core::id::Id;
 use engram_core::memory::{
-    ClaimOrigin, EvidenceKind, EvidenceRef, KnowledgeCommit, MemoryChange, MemoryChangeType,
-    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, WriterProvenance,
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange,
+    MemoryChangeType, MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity,
+    WriterProvenance,
 };
 use engram_core::session::{Event, EventType, Session};
 use engram_core::work::{Project, ProjectObservation, Task, TaskObservation};
@@ -221,6 +222,10 @@ pub struct MigrationReviewApply {
     pub files_with_no_decision: Vec<String>,
     /// Candidate files that selected multiple conflicting decisions.
     pub files_with_conflicts: Vec<String>,
+    /// Generated candidate files present under candidates/ but not linked from index.md.
+    pub files_not_in_index: Vec<String>,
+    /// Candidate files linked from index.md but missing on disk.
+    pub indexed_files_missing: Vec<String>,
     /// Accepted candidates using generated content.
     pub accepted_count: usize,
     /// Accepted candidates using edited title/content/kind.
@@ -258,6 +263,77 @@ impl MigrationReviewApply {
     #[must_use]
     pub fn written_count(&self) -> usize {
         self.written_items.len()
+    }
+}
+
+/// Parsed status for a generated migration review batch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationReviewStatus {
+    /// Review batch root path.
+    pub root: String,
+    /// Candidate review files scanned from the generated index.
+    pub files_scanned: usize,
+    /// Generated candidate files skipped with a reason.
+    pub files_skipped: Vec<String>,
+    /// Candidate files that had no selected decision checkbox.
+    pub files_with_no_decision: Vec<String>,
+    /// Candidate files that selected multiple conflicting decisions.
+    pub files_with_conflicts: Vec<String>,
+    /// Generated candidate files present under candidates/ but not linked from index.md.
+    pub files_not_in_index: Vec<String>,
+    /// Candidate files linked from index.md but missing on disk.
+    pub indexed_files_missing: Vec<String>,
+    /// Accepted candidates using generated content.
+    pub accepted_count: usize,
+    /// Accepted candidates using edited title/content/kind.
+    pub accepted_with_edits_count: usize,
+    /// Accepted candidate review files.
+    pub accepted_files: Vec<String>,
+    /// Candidates explicitly quarantined by review.
+    pub quarantined_count: usize,
+    /// Quarantined candidate review files.
+    pub quarantined_files: Vec<String>,
+    /// Candidates explicitly rejected by review.
+    pub rejected_count: usize,
+    /// Rejected candidate review files.
+    pub rejected_files: Vec<String>,
+    /// Accepted candidates skipped because their source was already migrated.
+    pub duplicate_count: usize,
+    /// Accepted memory records that would be written by apply.
+    pub planned_count: usize,
+    /// Whether the batch has no pending, conflicting, orphaned, or missing files.
+    pub ready_to_apply: bool,
+    /// Non-fatal warnings surfaced during parsing.
+    pub warnings: Vec<String>,
+}
+
+impl From<MigrationReviewApply> for MigrationReviewStatus {
+    fn from(apply: MigrationReviewApply) -> Self {
+        let planned_count = apply.planned_count();
+        let ready_to_apply = apply.files_with_no_decision.is_empty()
+            && apply.files_with_conflicts.is_empty()
+            && apply.files_not_in_index.is_empty()
+            && apply.indexed_files_missing.is_empty();
+        Self {
+            root: apply.root,
+            files_scanned: apply.files_scanned,
+            files_skipped: apply.files_skipped,
+            files_with_no_decision: apply.files_with_no_decision,
+            files_with_conflicts: apply.files_with_conflicts,
+            files_not_in_index: apply.files_not_in_index,
+            indexed_files_missing: apply.indexed_files_missing,
+            accepted_count: apply.accepted_count,
+            accepted_with_edits_count: apply.accepted_with_edits_count,
+            accepted_files: apply.accepted_files,
+            quarantined_count: apply.quarantined_count,
+            quarantined_files: apply.quarantined_files,
+            rejected_count: apply.rejected_count,
+            rejected_files: apply.rejected_files,
+            duplicate_count: apply.duplicate_count,
+            planned_count,
+            ready_to_apply,
+            warnings: apply.warnings,
+        }
     }
 }
 
@@ -378,6 +454,24 @@ impl MigrationService {
         write_review_batch(root.as_ref(), inventory)
     }
 
+    /// Parse a generated migration review batch and report readiness without writing records.
+    pub async fn review_batch_status(
+        &self,
+        root: impl AsRef<Path>,
+    ) -> IndexResult<MigrationReviewStatus> {
+        let apply = self
+            .apply_review_batch(
+                root,
+                MigrationReviewApplyOptions {
+                    dry_run: true,
+                    writer: review_status_writer(),
+                    create_commit: false,
+                },
+            )
+            .await?;
+        Ok(apply.into())
+    }
+
     /// Apply a reviewed migration batch. Dry-run mode parses and reports only.
     pub async fn apply_review_batch(
         &self,
@@ -392,6 +486,8 @@ impl MigrationService {
             files_skipped: Vec::new(),
             files_with_no_decision: Vec::new(),
             files_with_conflicts: Vec::new(),
+            files_not_in_index: Vec::new(),
+            indexed_files_missing: Vec::new(),
             accepted_count: 0,
             accepted_with_edits_count: 0,
             accepted_files: Vec::new(),
@@ -442,6 +538,8 @@ impl MigrationService {
         report.files_skipped.sort();
         report.files_with_no_decision.sort();
         report.files_with_conflicts.sort();
+        report.files_not_in_index.sort();
+        report.indexed_files_missing.sort();
         report.accepted_files.sort();
         report.quarantined_files.sort();
         report.rejected_files.sort();
@@ -736,6 +834,13 @@ fn build_migration_commit(
         );
     }
     commit
+}
+
+fn review_status_writer() -> WriterProvenance {
+    WriterProvenance::agent(
+        Harness::Other("engram".to_string()),
+        ModelIdentity::new("engram", "migration-review-status"),
+    )
 }
 
 fn normalize_options(mut options: MigrationInventoryOptions) -> MigrationInventoryOptions {
@@ -1652,6 +1757,7 @@ fn collect_candidate_review_files(
             }
             let relative_path = relative_markdown_path(root, &path);
             if !indexed_markdown_paths.contains(&relative_path) {
+                report.files_not_in_index.push(relative_path.clone());
                 report.files_skipped.push(relative_path.clone());
                 report.warnings.push(format!(
                     "{relative_path}: skipped candidate file not listed in generated index.md"
@@ -1667,6 +1773,7 @@ fn collect_candidate_review_files(
             files.push(path);
         } else {
             let relative_path = path_to_markdown(&relative_path);
+            report.indexed_files_missing.push(relative_path.clone());
             report.files_skipped.push(relative_path.clone());
             report.warnings.push(format!(
                 "{relative_path}: indexed candidate file is missing"
@@ -1693,6 +1800,7 @@ fn skip_candidate_files_without_generated_index(
             continue;
         }
         let relative_path = relative_markdown_path(root, &path);
+        report.files_not_in_index.push(relative_path.clone());
         report.files_skipped.push(relative_path.clone());
         report.warnings.push(format!(
             "{relative_path}: skipped candidate file because {reason}"
@@ -2436,6 +2544,10 @@ mod tests {
         assert!(apply
             .files_skipped
             .contains(&"candidates/9999-review-stale.md".to_string()));
+        assert_eq!(
+            apply.files_not_in_index,
+            vec!["candidates/9999-review-stale.md".to_string()]
+        );
         assert!(apply
             .warnings
             .iter()
@@ -2445,6 +2557,53 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn review_batch_status_reports_pending_conflicts_orphans_and_missing_files() {
+        let (service, _entity_repo, _session_repo, work_repo, _memory_repo) = setup_service().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        for (key, content) in [
+            ("rules.pending", "Pending review status fact."),
+            ("rules.conflict", "Conflicting review status fact."),
+            ("rules.missing", "Missing review status fact."),
+        ] {
+            work_repo
+                .add_project_observation(
+                    &ProjectObservation::new(project.id, content).with_key(key),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_review_batch(dir.path(), MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        let paths = candidate_paths(&export);
+        assert_eq!(paths.len(), 3);
+        mark_candidate_decision(dir.path(), &paths[1], "Accept for migration");
+        mark_candidate_decision(dir.path(), &paths[1], "Quarantine");
+        fs::remove_file(dir.path().join(&paths[2])).unwrap();
+        let orphan_path = dir.path().join("candidates/9999-review-orphan.md");
+        fs::copy(dir.path().join(&paths[0]), &orphan_path).unwrap();
+        mark_candidate_decision_at_path(&orphan_path, "Accept for migration");
+
+        let status = service.review_batch_status(dir.path()).await.unwrap();
+
+        assert!(!status.ready_to_apply);
+        assert_eq!(status.files_scanned, 2);
+        assert_eq!(status.files_with_no_decision, vec![paths[0].clone()]);
+        assert_eq!(status.files_with_conflicts, vec![paths[1].clone()]);
+        assert_eq!(status.indexed_files_missing, vec![paths[2].clone()]);
+        assert_eq!(
+            status.files_not_in_index,
+            vec!["candidates/9999-review-orphan.md".to_string()]
+        );
+        assert_eq!(status.planned_count, 0);
+        assert_eq!(status.accepted_count, 0);
     }
 
     #[tokio::test]
@@ -2507,6 +2666,44 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn review_batch_status_is_ready_when_all_indexed_files_are_decided() {
+        let (service, _entity_repo, _session_repo, work_repo, _memory_repo) = setup_service().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        for (key, content) in [
+            ("decisions.accept", "Accept this status fact."),
+            ("decisions.quarantine", "Quarantine this status fact."),
+            ("decisions.reject", "Reject this status fact."),
+        ] {
+            work_repo
+                .add_project_observation(
+                    &ProjectObservation::new(project.id, content).with_key(key),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_review_batch(dir.path(), MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        let paths = candidate_paths(&export);
+        mark_candidate_decision(dir.path(), &paths[0], "Accept for migration");
+        mark_candidate_decision(dir.path(), &paths[1], "Quarantine");
+        mark_candidate_decision(dir.path(), &paths[2], "Reject / skip");
+
+        let status = service.review_batch_status(dir.path()).await.unwrap();
+
+        assert!(status.ready_to_apply);
+        assert_eq!(status.planned_count, 1);
+        assert_eq!(status.accepted_files, vec![paths[0].clone()]);
+        assert_eq!(status.quarantined_files, vec![paths[1].clone()]);
+        assert_eq!(status.rejected_files, vec![paths[2].clone()]);
+        assert!(status.files_skipped.is_empty());
     }
 
     #[tokio::test]

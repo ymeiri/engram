@@ -387,7 +387,7 @@ impl EngramServer {
 
     /// Manage Memory OS items and knowledge commits.
     #[tool(
-        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply. Requires writer provenance for add, commit, migration_review_apply, and digest_extraction_apply: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
+        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply. Requires writer provenance for add, commit, migration_review_apply, and digest_extraction_apply: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
     )]
     pub async fn memory(
         &self,
@@ -431,7 +431,7 @@ impl EngramServer {
 
     /// Manage repository topology and local checkout mapping.
     #[tool(
-        description = "Manage repository topology: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply. Use detect with cwd to register a Git checkout; use migration_inventory before migrating legacy repo/path mentions. migration_review_apply defaults to dry-run unless dry_run=false, and write mode requires writer_harness, model_provider, and model unless create_commit=false."
+        description = "Manage repository topology: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply. Use detect with cwd to register a Git checkout; use migration_inventory before migrating legacy repo/path mentions. migration_review_status writes nothing. migration_review_apply defaults to dry-run unless dry_run=false, and write mode requires writer_harness, model_provider, and model unless create_commit=false."
     )]
     pub async fn repo(&self, params: Parameters<RepoRequest>) -> Result<CallToolResult, McpError> {
         to_call_result(tools::repo_new(&self.state, params.0).await)
@@ -579,10 +579,10 @@ impl ServerHandler for EngramServer {
                  - work_stats: Get work statistics\n\n\
                  **Memory OS:**\n\
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
-                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply)\n\
+                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply)\n\
                  - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
                  - digest: Inventory digest source files, export metadata-only review batches, parse review decisions, build review-gated extraction plans, or index reviewed source_only digests as document evidence (actions: inventory, review_export, review_apply, extraction_plan, source_index)\n\
-                 - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply)\n\n\
+                 - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply)\n\n\
                  **Unified Search:**\n\
                  - search: Search across ALL layers with a single query (entities, aliases, observations, sessions, documents, tool usages)"
                     .into(),

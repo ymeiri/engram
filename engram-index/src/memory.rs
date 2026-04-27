@@ -10,7 +10,7 @@ use crate::digest::{
 use crate::error::{IndexError, IndexResult};
 use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
-    MigrationReviewApplyOptions, MigrationReviewExport, MigrationService,
+    MigrationReviewApplyOptions, MigrationReviewExport, MigrationReviewStatus, MigrationService,
 };
 use crate::repository::refresh_checkout_git_state;
 use crate::vault::{
@@ -325,6 +325,16 @@ impl MemoryService {
     ) -> IndexResult<MigrationReviewExport> {
         self.migration_service
             .export_review_batch(root.as_ref(), options)
+            .await
+    }
+
+    /// Parse a generated migration review batch and report readiness without writing records.
+    pub async fn migration_review_status(
+        &self,
+        root: impl AsRef<Path>,
+    ) -> IndexResult<MigrationReviewStatus> {
+        self.migration_service
+            .review_batch_status(root.as_ref())
             .await
     }
 

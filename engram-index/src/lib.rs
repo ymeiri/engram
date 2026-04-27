@@ -66,8 +66,8 @@ pub use memory::{
 };
 pub use migration::{
     MigrationCandidate, MigrationDisposition, MigrationInventory, MigrationInventoryOptions,
-    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport, MigrationService,
-    MigrationSourceKind,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
+    MigrationReviewStatus, MigrationService, MigrationSourceKind,
 };
 pub use parser::{parse_content, parse_file, ParsedDocument, Section};
 pub use pipeline::{IndexedChunk, IndexedDocument, Pipeline, PipelineConfig};
@@ -75,8 +75,8 @@ pub use repository::{
     RepositoryDetection, RepositoryMigrationCandidate, RepositoryMigrationDisposition,
     RepositoryMigrationEvidence, RepositoryMigrationInventory, RepositoryMigrationOptions,
     RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
-    RepositoryMigrationReviewExport, RepositoryMigrationSourceKind, RepositoryReferenceKind,
-    RepositoryService,
+    RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus,
+    RepositoryMigrationSourceKind, RepositoryReferenceKind, RepositoryService,
 };
 pub use search::{SearchService, SearchStats};
 pub use service::{DocumentService, DocumentStats};

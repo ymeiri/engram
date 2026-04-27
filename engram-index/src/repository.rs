@@ -322,6 +322,10 @@ pub struct RepositoryMigrationReviewApply {
     pub files_with_no_decision: Vec<String>,
     /// Candidate files that selected multiple conflicting decisions.
     pub files_with_conflicts: Vec<String>,
+    /// Generated candidate files present under candidates/ but not linked from index.md.
+    pub files_not_in_index: Vec<String>,
+    /// Candidate files linked from index.md but missing on disk.
+    pub indexed_files_missing: Vec<String>,
     /// Accepted candidates using generated topology.
     pub accepted_count: usize,
     /// Accepted candidates using edited topology fields.
@@ -359,6 +363,77 @@ impl RepositoryMigrationReviewApply {
     #[must_use]
     pub fn written_count(&self) -> usize {
         self.written_records.len()
+    }
+}
+
+/// Parsed status for a generated repository topology migration review batch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryMigrationReviewStatus {
+    /// Review batch root path.
+    pub root: String,
+    /// Candidate review files scanned from the generated index.
+    pub files_scanned: usize,
+    /// Generated candidate files skipped with a reason.
+    pub files_skipped: Vec<String>,
+    /// Candidate files that had no selected decision checkbox.
+    pub files_with_no_decision: Vec<String>,
+    /// Candidate files that selected multiple conflicting decisions.
+    pub files_with_conflicts: Vec<String>,
+    /// Generated candidate files present under candidates/ but not linked from index.md.
+    pub files_not_in_index: Vec<String>,
+    /// Candidate files linked from index.md but missing on disk.
+    pub indexed_files_missing: Vec<String>,
+    /// Accepted candidates using generated topology.
+    pub accepted_count: usize,
+    /// Accepted candidates using edited topology fields.
+    pub accepted_with_edits_count: usize,
+    /// Accepted candidate review files.
+    pub accepted_files: Vec<String>,
+    /// Candidates explicitly quarantined by review.
+    pub quarantined_count: usize,
+    /// Quarantined candidate review files.
+    pub quarantined_files: Vec<String>,
+    /// Candidates explicitly rejected by review.
+    pub rejected_count: usize,
+    /// Rejected candidate review files.
+    pub rejected_files: Vec<String>,
+    /// Planned records that already existed before apply.
+    pub existing_record_count: usize,
+    /// Accepted topology records that would be written by apply.
+    pub planned_record_count: usize,
+    /// Whether the batch has no pending, conflicting, orphaned, or missing files.
+    pub ready_to_apply: bool,
+    /// Non-fatal warnings surfaced during parsing.
+    pub warnings: Vec<String>,
+}
+
+impl From<RepositoryMigrationReviewApply> for RepositoryMigrationReviewStatus {
+    fn from(apply: RepositoryMigrationReviewApply) -> Self {
+        let planned_record_count = apply.planned_count();
+        let ready_to_apply = apply.files_with_no_decision.is_empty()
+            && apply.files_with_conflicts.is_empty()
+            && apply.files_not_in_index.is_empty()
+            && apply.indexed_files_missing.is_empty();
+        Self {
+            root: apply.root,
+            files_scanned: apply.files_scanned,
+            files_skipped: apply.files_skipped,
+            files_with_no_decision: apply.files_with_no_decision,
+            files_with_conflicts: apply.files_with_conflicts,
+            files_not_in_index: apply.files_not_in_index,
+            indexed_files_missing: apply.indexed_files_missing,
+            accepted_count: apply.accepted_count,
+            accepted_with_edits_count: apply.accepted_with_edits_count,
+            accepted_files: apply.accepted_files,
+            quarantined_count: apply.quarantined_count,
+            quarantined_files: apply.quarantined_files,
+            rejected_count: apply.rejected_count,
+            rejected_files: apply.rejected_files,
+            existing_record_count: apply.existing_record_count,
+            planned_record_count,
+            ready_to_apply,
+            warnings: apply.warnings,
+        }
     }
 }
 
@@ -508,6 +583,24 @@ impl RepositoryService {
         write_repository_migration_review(root.as_ref(), inventory)
     }
 
+    /// Parse a generated repository migration review batch and report readiness without writes.
+    pub async fn migration_review_status(
+        &self,
+        root: impl AsRef<Path>,
+    ) -> IndexResult<RepositoryMigrationReviewStatus> {
+        let apply = self
+            .apply_migration_review(
+                root,
+                RepositoryMigrationReviewApplyOptions {
+                    dry_run: true,
+                    writer: None,
+                    create_commit: false,
+                },
+            )
+            .await?;
+        Ok(apply.into())
+    }
+
     /// Apply a reviewed repository topology migration batch.
     pub async fn apply_migration_review(
         &self,
@@ -522,6 +615,8 @@ impl RepositoryService {
             files_skipped: Vec::new(),
             files_with_no_decision: Vec::new(),
             files_with_conflicts: Vec::new(),
+            files_not_in_index: Vec::new(),
+            indexed_files_missing: Vec::new(),
             accepted_count: 0,
             accepted_with_edits_count: 0,
             accepted_files: Vec::new(),
@@ -565,6 +660,8 @@ impl RepositoryService {
         report.files_skipped.sort();
         report.files_with_no_decision.sort();
         report.files_with_conflicts.sort();
+        report.files_not_in_index.sort();
+        report.indexed_files_missing.sort();
         report.accepted_files.sort();
         report.quarantined_files.sort();
         report.rejected_files.sort();
@@ -1495,6 +1592,7 @@ fn collect_repository_candidate_review_files(
             }
             let relative_path = relative_repository_review_path(root, &path);
             if !indexed_markdown_paths.contains(&relative_path) {
+                report.files_not_in_index.push(relative_path.clone());
                 report.files_skipped.push(relative_path.clone());
                 report.warnings.push(format!(
                     "{relative_path}: skipped candidate file not listed in generated index.md"
@@ -1510,6 +1608,7 @@ fn collect_repository_candidate_review_files(
             files.push(path);
         } else {
             let relative_path = path_to_markdown(&relative_path);
+            report.indexed_files_missing.push(relative_path.clone());
             report.files_skipped.push(relative_path.clone());
             report.warnings.push(format!(
                 "{relative_path}: indexed candidate file is missing"
@@ -1536,6 +1635,7 @@ fn skip_repository_candidate_files_without_generated_index(
             continue;
         }
         let relative_path = relative_repository_review_path(root, &path);
+        report.files_not_in_index.push(relative_path.clone());
         report.files_skipped.push(relative_path.clone());
         report.warnings.push(format!(
             "{relative_path}: skipped candidate file because {reason}"
@@ -3343,11 +3443,61 @@ mod tests {
         assert!(apply
             .files_skipped
             .contains(&"candidates/9999-review-stale.md".to_string()));
+        assert_eq!(
+            apply.files_not_in_index,
+            vec!["candidates/9999-review-stale.md".to_string()]
+        );
         assert!(apply
             .warnings
             .iter()
             .any(|warning| warning.contains("not listed in generated index.md")));
         assert!(service.list_repositories(None).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn repository_migration_review_status_reports_pending_conflicts_orphans_and_missing() {
+        let (service, work_repo, _entity_repo, _session_repo) = setup_workspace().await;
+        for (name, remote) in [
+            ("repo-one", "https://github.com/acme/repo-one.git"),
+            ("repo-two", "https://github.com/acme/repo-two.git"),
+            ("repo-three", "https://github.com/acme/repo-three.git"),
+        ] {
+            work_repo
+                .create_project(
+                    &Project::new(name)
+                        .with_description(format!("Canonical repository is {remote}.")),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_migration_review(dir.path(), RepositoryMigrationOptions::all())
+            .await
+            .unwrap();
+        let paths = repository_candidate_paths(&export);
+        assert_eq!(paths.len(), 3);
+        check_repository_candidate(dir.path(), &paths[1], "Accept repository record");
+        check_repository_candidate(dir.path(), &paths[1], "Quarantine");
+        std::fs::remove_file(dir.path().join(&paths[2])).unwrap();
+        let orphan_path = dir.path().join("candidates/9999-review-orphan.md");
+        std::fs::copy(dir.path().join(&paths[0]), &orphan_path).unwrap();
+        check_repository_candidate_at_path(&orphan_path, "Accept repository record");
+
+        let status = service.migration_review_status(dir.path()).await.unwrap();
+
+        assert!(!status.ready_to_apply);
+        assert_eq!(status.files_scanned, 2);
+        assert_eq!(status.files_with_no_decision, vec![paths[0].clone()]);
+        assert_eq!(status.files_with_conflicts, vec![paths[1].clone()]);
+        assert_eq!(status.indexed_files_missing, vec![paths[2].clone()]);
+        assert_eq!(
+            status.files_not_in_index,
+            vec!["candidates/9999-review-orphan.md".to_string()]
+        );
+        assert_eq!(status.planned_record_count, 0);
+        assert_eq!(status.accepted_count, 0);
     }
 
     #[tokio::test]
@@ -3399,6 +3549,43 @@ mod tests {
         assert_eq!(apply.quarantined_files, vec![paths[1].clone()]);
         assert_eq!(apply.rejected_files, vec![paths[2].clone()]);
         assert_eq!(service.list_repositories(None).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn repository_migration_review_status_is_ready_when_all_indexed_files_are_decided() {
+        let (service, work_repo, _entity_repo, _session_repo) = setup_workspace().await;
+        for (name, remote) in [
+            ("repo-one", "https://github.com/acme/repo-one.git"),
+            ("repo-two", "https://github.com/acme/repo-two.git"),
+            ("repo-three", "https://github.com/acme/repo-three.git"),
+        ] {
+            work_repo
+                .create_project(
+                    &Project::new(name)
+                        .with_description(format!("Canonical repository is {remote}.")),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_migration_review(dir.path(), RepositoryMigrationOptions::all())
+            .await
+            .unwrap();
+        let paths = repository_candidate_paths(&export);
+        check_repository_candidate(dir.path(), &paths[0], "Accept repository record");
+        check_repository_candidate(dir.path(), &paths[1], "Quarantine");
+        check_repository_candidate(dir.path(), &paths[2], "Reject / skip");
+
+        let status = service.migration_review_status(dir.path()).await.unwrap();
+
+        assert!(status.ready_to_apply);
+        assert_eq!(status.planned_record_count, 1);
+        assert_eq!(status.accepted_files, vec![paths[0].clone()]);
+        assert_eq!(status.quarantined_files, vec![paths[1].clone()]);
+        assert_eq!(status.rejected_files, vec![paths[2].clone()]);
+        assert!(status.files_skipped.is_empty());
     }
 
     #[tokio::test]

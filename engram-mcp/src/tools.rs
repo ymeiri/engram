@@ -6526,9 +6526,9 @@ pub async fn coord_new(state: &ToolState, request: CoordRequestNew) -> Result<St
 /// Consolidated request for repository topology operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RepoRequest {
-    /// Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply
+    /// Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply
     #[schemars(
-        description = "Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply"
+        description = "Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply"
     )]
     pub action: String,
 
@@ -6743,6 +6743,22 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
             }))
             .map_err(|e| e.to_string())
         }
+        "migration_review_status" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_status",
+            )?;
+            let status = service
+                .migration_review_status(Path::new(&review_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status
+            }))
+            .map_err(|e| e.to_string())
+        }
         "migration_review_apply" => {
             let review_path = required(
                 &request.migration_review_path,
@@ -6774,7 +6790,7 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
             .map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_apply",
+            "Unknown action: '{}'. Valid actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply",
             request.action
         )),
     }
@@ -7148,9 +7164,9 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
 /// Consolidated request for Memory OS operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryRequestNew {
-    /// Action to perform: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply
+    /// Action to perform: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply
     #[schemars(
-        description = "Action: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply"
+        description = "Action: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply"
     )]
     pub action: String,
 
@@ -7520,6 +7536,22 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             }))
             .map_err(|e| e.to_string())
         }
+        "migration_review_status" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_status",
+            )?;
+            let status = service
+                .migration_review_status(std::path::Path::new(&review_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status
+            }))
+            .map_err(|e| e.to_string())
+        }
         "migration_review_apply" => {
             let review_path = required(
                 &request.migration_review_path,
@@ -7569,7 +7601,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_apply, digest_extraction_apply",
+            "Unknown action: '{}'. Valid actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply",
             request.action
         )),
     }

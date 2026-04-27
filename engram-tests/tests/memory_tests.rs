@@ -401,6 +401,24 @@ async fn test_mcp_memory_migration_review_apply_empty_batch_dry_run() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_migration_review_status_empty_batch() {
+    let state = setup_tool_state().await;
+    let dir = tempdir().expect("tempdir should be created");
+
+    let mut status = request("migration_review_status");
+    status.migration_review_path = Some(dir.path().display().to_string());
+
+    let response = tools::memory_new(&state, status)
+        .await
+        .expect("migration_review_status should work");
+    let json = parse_json(&response);
+
+    assert_eq!(json["status"]["files_scanned"], 0);
+    assert_eq!(json["status"]["planned_count"], 0);
+    assert_eq!(json["status"]["ready_to_apply"], true);
+}
+
+#[tokio::test]
 async fn test_mcp_memory_digest_extraction_apply_empty_batch_dry_run() {
     let state = setup_tool_state().await;
     let dir = tempdir().expect("tempdir should be created");

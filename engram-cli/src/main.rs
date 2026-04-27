@@ -22,10 +22,11 @@ use engram_index::{
     DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService,
     DigestSourceIndexOptions, DigestSourceIndexPlan, DocumentService, EntityService,
     KnowledgeService, MemoryChanges, MemoryService, MigrationInventory, MigrationInventoryOptions,
-    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport, OrientInput,
-    OrientationPacket, RepositoryMigrationInventory, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
-    RepositoryMigrationReviewExport, RepositoryService, SearchService, SessionService,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
+    MigrationReviewStatus, OrientInput, OrientationPacket, RepositoryMigrationInventory,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport,
+    RepositoryMigrationReviewStatus, RepositoryService, SearchService, SessionService,
     ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
@@ -1345,6 +1346,16 @@ enum MemoryCommands {
         no_work_observations: bool,
     },
 
+    /// Validate a generated migration review batch without planning or writing records
+    MigrationReviewStatus {
+        /// Review batch directory containing index.md and candidates/
+        path: String,
+
+        /// Print the full status report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Apply accepted items from a generated migration review batch
     MigrationReviewApply {
         /// Review batch directory containing index.md and candidates/
@@ -1696,6 +1707,16 @@ enum RepoCommands {
         /// Exclude Layer 7 work records
         #[arg(long)]
         no_work_records: bool,
+    },
+
+    /// Validate a generated repository migration review batch without writing records
+    MigrationReviewStatus {
+        /// Review batch directory containing index.md and candidates/
+        path: String,
+
+        /// Print the full status report as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Apply accepted topology records from a generated repository migration review batch
@@ -2261,6 +2282,41 @@ fn print_migration_review_export(export: &MigrationReviewExport) {
     }
 }
 
+fn print_migration_review_status(status: &MigrationReviewStatus) {
+    println!("Migration review batch status");
+    println!("  Root:                  {}", status.root);
+    println!("  Ready to apply:        {}", status.ready_to_apply);
+    println!("  Files scanned:         {}", status.files_scanned);
+    println!("  Planned items:         {}", status.planned_count);
+    println!("  Accepted:              {}", status.accepted_count);
+    println!(
+        "  Accepted with edits:   {}",
+        status.accepted_with_edits_count
+    );
+    println!("  Quarantined:           {}", status.quarantined_count);
+    println!("  Rejected:              {}", status.rejected_count);
+    println!("  Duplicates skipped:    {}", status.duplicate_count);
+
+    print_review_file_list(
+        "Files with no review decision",
+        &status.files_with_no_decision,
+    );
+    print_review_file_list(
+        "Files with conflicting decisions",
+        &status.files_with_conflicts,
+    );
+    print_review_file_list("Files not listed in index.md", &status.files_not_in_index);
+    print_review_file_list(
+        "Indexed files missing on disk",
+        &status.indexed_files_missing,
+    );
+    print_review_file_list("Accepted files", &status.accepted_files);
+    print_review_file_list("Quarantined files", &status.quarantined_files);
+    print_review_file_list("Rejected files", &status.rejected_files);
+    print_review_file_list("Skipped files", &status.files_skipped);
+    print_review_file_list("Warnings", &status.warnings);
+}
+
 fn print_migration_review_apply(apply: &MigrationReviewApply) {
     if apply.dry_run {
         println!("Migration review apply dry-run");
@@ -2295,6 +2351,11 @@ fn print_migration_review_apply(apply: &MigrationReviewApply) {
             println!("  - {}", path);
         }
     }
+    print_review_file_list("Files not listed in index.md", &apply.files_not_in_index);
+    print_review_file_list(
+        "Indexed files missing on disk",
+        &apply.indexed_files_missing,
+    );
     if !apply.accepted_files.is_empty() {
         println!("Accepted files:");
         for path in &apply.accepted_files {
@@ -2324,6 +2385,16 @@ fn print_migration_review_apply(apply: &MigrationReviewApply) {
         for warning in &apply.warnings {
             println!("  - {}", warning);
         }
+    }
+}
+
+fn print_review_file_list(title: &str, files: &[String]) {
+    if files.is_empty() {
+        return;
+    }
+    println!("{title}:");
+    for path in files {
+        println!("  - {}", path);
     }
 }
 
@@ -2491,6 +2562,41 @@ fn print_repository_migration_review_export(export: &RepositoryMigrationReviewEx
     }
 }
 
+fn print_repository_migration_review_status(status: &RepositoryMigrationReviewStatus) {
+    println!("Repository migration review batch status");
+    println!("  Root:                  {}", status.root);
+    println!("  Ready to apply:        {}", status.ready_to_apply);
+    println!("  Files scanned:         {}", status.files_scanned);
+    println!("  Planned records:       {}", status.planned_record_count);
+    println!("  Accepted:              {}", status.accepted_count);
+    println!(
+        "  Accepted with edits:   {}",
+        status.accepted_with_edits_count
+    );
+    println!("  Quarantined:           {}", status.quarantined_count);
+    println!("  Rejected:              {}", status.rejected_count);
+    println!("  Already existed:       {}", status.existing_record_count);
+
+    print_review_file_list(
+        "Files with no review decision",
+        &status.files_with_no_decision,
+    );
+    print_review_file_list(
+        "Files with conflicting decisions",
+        &status.files_with_conflicts,
+    );
+    print_review_file_list("Files not listed in index.md", &status.files_not_in_index);
+    print_review_file_list(
+        "Indexed files missing on disk",
+        &status.indexed_files_missing,
+    );
+    print_review_file_list("Accepted files", &status.accepted_files);
+    print_review_file_list("Quarantined files", &status.quarantined_files);
+    print_review_file_list("Rejected files", &status.rejected_files);
+    print_review_file_list("Skipped files", &status.files_skipped);
+    print_review_file_list("Warnings", &status.warnings);
+}
+
 fn print_repository_migration_review_apply(apply: &RepositoryMigrationReviewApply) {
     if apply.dry_run {
         println!("Repository migration review apply dry-run");
@@ -2525,6 +2631,11 @@ fn print_repository_migration_review_apply(apply: &RepositoryMigrationReviewAppl
             println!("  - {}", path);
         }
     }
+    print_review_file_list("Files not listed in index.md", &apply.files_not_in_index);
+    print_review_file_list(
+        "Indexed files missing on disk",
+        &apply.indexed_files_missing,
+    );
     if !apply.accepted_files.is_empty() {
         println!("Accepted files:");
         for path in &apply.accepted_files {
@@ -4700,6 +4811,17 @@ async fn main() -> Result<()> {
                         print_migration_review_export(&export);
                     }
                 }
+                MemoryCommands::MigrationReviewStatus { path, json } => {
+                    let status = service
+                        .migration_review_status(std::path::Path::new(&path))
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&status)?);
+                    } else {
+                        print_migration_review_status(&status);
+                    }
+                }
                 MemoryCommands::MigrationReviewApply {
                     path,
                     write,
@@ -5187,6 +5309,17 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&export)?);
                     } else {
                         print_repository_migration_review_export(&export);
+                    }
+                }
+                RepoCommands::MigrationReviewStatus { path, json } => {
+                    let status = service
+                        .migration_review_status(std::path::Path::new(&path))
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&status)?);
+                    } else {
+                        print_repository_migration_review_status(&status);
                     }
                 }
                 RepoCommands::MigrationReviewApply {
