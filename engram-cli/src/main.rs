@@ -2180,6 +2180,24 @@ fn print_migration_inventory(inventory: &MigrationInventory) {
         }
     }
 
+    println!("By memory kind:");
+    if inventory.by_memory_kind.is_empty() {
+        println!("  none");
+    } else {
+        for (kind, count) in &inventory.by_memory_kind {
+            println!("  {}: {}", kind, count);
+        }
+    }
+
+    println!("By confidence:");
+    if inventory.by_confidence.is_empty() {
+        println!("  none");
+    } else {
+        for (bucket, count) in &inventory.by_confidence {
+            println!("  {}: {}", bucket, count);
+        }
+    }
+
     if !inventory.warnings.is_empty() {
         println!("Warnings:");
         for warning in &inventory.warnings {
@@ -2277,6 +2295,24 @@ fn print_migration_review_apply(apply: &MigrationReviewApply) {
             println!("  - {}", path);
         }
     }
+    if !apply.accepted_files.is_empty() {
+        println!("Accepted files:");
+        for path in &apply.accepted_files {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.quarantined_files.is_empty() {
+        println!("Quarantined files:");
+        for path in &apply.quarantined_files {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.rejected_files.is_empty() {
+        println!("Rejected files:");
+        for path in &apply.rejected_files {
+            println!("  - {}", path);
+        }
+    }
     if !apply.files_skipped.is_empty() {
         println!("Skipped files:");
         for path in &apply.files_skipped {
@@ -2366,6 +2402,24 @@ fn print_repository_migration_inventory(inventory: &RepositoryMigrationInventory
     } else {
         for (disposition, count) in &inventory.by_disposition {
             println!("  {}: {}", disposition, count);
+        }
+    }
+
+    println!("By project:");
+    if inventory.by_project.is_empty() {
+        println!("  none");
+    } else {
+        for (project, count) in &inventory.by_project {
+            println!("  {}: {}", project, count);
+        }
+    }
+
+    println!("By confidence:");
+    if inventory.by_confidence.is_empty() {
+        println!("  none");
+    } else {
+        for (bucket, count) in &inventory.by_confidence {
+            println!("  {}: {}", bucket, count);
         }
     }
 
@@ -2468,6 +2522,24 @@ fn print_repository_migration_review_apply(apply: &RepositoryMigrationReviewAppl
     if !apply.files_with_conflicts.is_empty() {
         println!("Files with conflicting decisions:");
         for path in &apply.files_with_conflicts {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.accepted_files.is_empty() {
+        println!("Accepted files:");
+        for path in &apply.accepted_files {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.quarantined_files.is_empty() {
+        println!("Quarantined files:");
+        for path in &apply.quarantined_files {
+            println!("  - {}", path);
+        }
+    }
+    if !apply.rejected_files.is_empty() {
+        println!("Rejected files:");
+        for path in &apply.rejected_files {
             println!("  - {}", path);
         }
     }

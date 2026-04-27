@@ -222,6 +222,8 @@ pub struct RepositoryMigrationInventory {
     pub by_disposition: BTreeMap<String, usize>,
     /// Candidate counts by project name.
     pub by_project: BTreeMap<String, usize>,
+    /// Candidate counts by confidence bucket.
+    pub by_confidence: BTreeMap<String, usize>,
     /// Warnings about the dry run.
     pub warnings: Vec<String>,
     /// Candidate records.
@@ -324,10 +326,16 @@ pub struct RepositoryMigrationReviewApply {
     pub accepted_count: usize,
     /// Accepted candidates using edited topology fields.
     pub accepted_with_edits_count: usize,
+    /// Accepted candidate review files.
+    pub accepted_files: Vec<String>,
     /// Candidates explicitly quarantined by review.
     pub quarantined_count: usize,
+    /// Quarantined candidate review files.
+    pub quarantined_files: Vec<String>,
     /// Candidates explicitly rejected by review.
     pub rejected_count: usize,
+    /// Rejected candidate review files.
+    pub rejected_files: Vec<String>,
     /// Planned records that already existed before apply.
     pub existing_record_count: usize,
     /// Topology records that would be written, or were written in non-dry-run mode.
@@ -484,6 +492,7 @@ impl RepositoryService {
             by_reference_kind: count_repository_references(&candidates),
             by_disposition: count_repository_dispositions(&candidates),
             by_project: count_repository_projects(&candidates),
+            by_confidence: count_repository_confidence(&candidates),
             warnings,
             candidates,
         })
@@ -515,8 +524,11 @@ impl RepositoryService {
             files_with_conflicts: Vec::new(),
             accepted_count: 0,
             accepted_with_edits_count: 0,
+            accepted_files: Vec::new(),
             quarantined_count: 0,
+            quarantined_files: Vec::new(),
             rejected_count: 0,
+            rejected_files: Vec::new(),
             existing_record_count: 0,
             planned_records: Vec::new(),
             written_records: Vec::new(),
@@ -524,7 +536,7 @@ impl RepositoryService {
             warnings: Vec::new(),
         };
 
-        for path in collect_repository_candidate_review_files(root)? {
+        for path in collect_repository_candidate_review_files(root, &mut report)? {
             report.files_scanned += 1;
             let relative_path = relative_repository_review_path(root, &path);
             let contents = fs::read_to_string(&path)?;
@@ -553,6 +565,9 @@ impl RepositoryService {
         report.files_skipped.sort();
         report.files_with_no_decision.sort();
         report.files_with_conflicts.sort();
+        report.accepted_files.sort();
+        report.quarantined_files.sort();
+        report.rejected_files.sort();
         report.warnings.sort();
         Ok(report)
     }
@@ -822,6 +837,7 @@ impl RepositoryService {
                 } else {
                     report.accepted_with_edits_count += 1;
                 }
+                report.accepted_files.push(relative_path.to_string());
 
                 let candidate = apply_repository_edits(parsed);
                 let record = self
@@ -838,9 +854,11 @@ impl RepositoryService {
             }
             RepositoryReviewDecision::Quarantine => {
                 report.quarantined_count += 1;
+                report.quarantined_files.push(relative_path.to_string());
             }
             RepositoryReviewDecision::Reject => {
                 report.rejected_count += 1;
+                report.rejected_files.push(relative_path.to_string());
             }
         }
         Ok(())
@@ -1436,21 +1454,118 @@ fn apply_repository_edits(parsed: ParsedRepositoryReviewCandidate) -> Repository
     candidate
 }
 
-fn collect_repository_candidate_review_files(root: &Path) -> IndexResult<Vec<PathBuf>> {
-    let candidates_dir = root.join("candidates");
-    if !candidates_dir.exists() {
+fn collect_repository_candidate_review_files(
+    root: &Path,
+    report: &mut RepositoryMigrationReviewApply,
+) -> IndexResult<Vec<PathBuf>> {
+    let index_path = root.join("index.md");
+    if !index_path.exists() {
+        skip_repository_candidate_files_without_generated_index(
+            root,
+            report,
+            "missing generated index.md",
+        )?;
         return Ok(Vec::new());
     }
 
+    let index_contents = fs::read_to_string(&index_path)?;
+    if !index_contents.contains(REPOSITORY_REVIEW_GENERATED_MARKER) {
+        skip_repository_candidate_files_without_generated_index(
+            root,
+            report,
+            "index.md is not an Engram-generated review file",
+        )?;
+        return Ok(Vec::new());
+    }
+
+    let mut indexed_paths = indexed_repository_candidate_review_paths(&index_contents);
+    indexed_paths.sort();
+    indexed_paths.dedup();
+    let indexed_markdown_paths = indexed_paths
+        .iter()
+        .map(|path| path_to_markdown(path))
+        .collect::<HashSet<_>>();
+
+    let candidates_dir = root.join("candidates");
+    if candidates_dir.exists() {
+        for entry in fs::read_dir(&candidates_dir)? {
+            let path = entry?.path();
+            if !path.extension().is_some_and(|extension| extension == "md") {
+                continue;
+            }
+            let relative_path = relative_repository_review_path(root, &path);
+            if !indexed_markdown_paths.contains(&relative_path) {
+                report.files_skipped.push(relative_path.clone());
+                report.warnings.push(format!(
+                    "{relative_path}: skipped candidate file not listed in generated index.md"
+                ));
+            }
+        }
+    }
+
     let mut files = Vec::new();
-    for entry in fs::read_dir(candidates_dir)? {
-        let path = entry?.path();
-        if path.extension().is_some_and(|extension| extension == "md") {
+    for relative_path in indexed_paths {
+        let path = root.join(&relative_path);
+        if path.exists() {
             files.push(path);
+        } else {
+            let relative_path = path_to_markdown(&relative_path);
+            report.files_skipped.push(relative_path.clone());
+            report.warnings.push(format!(
+                "{relative_path}: indexed candidate file is missing"
+            ));
         }
     }
     files.sort();
     Ok(files)
+}
+
+fn skip_repository_candidate_files_without_generated_index(
+    root: &Path,
+    report: &mut RepositoryMigrationReviewApply,
+    reason: &str,
+) -> IndexResult<()> {
+    let candidates_dir = root.join("candidates");
+    if !candidates_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(candidates_dir)? {
+        let path = entry?.path();
+        if !path.extension().is_some_and(|extension| extension == "md") {
+            continue;
+        }
+        let relative_path = relative_repository_review_path(root, &path);
+        report.files_skipped.push(relative_path.clone());
+        report.warnings.push(format!(
+            "{relative_path}: skipped candidate file because {reason}"
+        ));
+    }
+    Ok(())
+}
+
+fn indexed_repository_candidate_review_paths(index_contents: &str) -> Vec<PathBuf> {
+    index_contents
+        .lines()
+        .filter_map(markdown_link_target)
+        .filter(|path| is_safe_repository_candidate_review_link(path))
+        .map(PathBuf::from)
+        .collect()
+}
+
+fn markdown_link_target(line: &str) -> Option<&str> {
+    let link_start = line.find("](")?;
+    let after_start = &line[link_start + 2..];
+    let link_end = after_start.find(')')?;
+    Some(&after_start[..link_end])
+}
+
+fn is_safe_repository_candidate_review_link(path: &str) -> bool {
+    path.starts_with("candidates/")
+        && path.ends_with(".md")
+        && !path.starts_with('/')
+        && !path.contains("..")
+        && !path.contains('\\')
 }
 
 fn parse_repository_review_candidate_page(
@@ -1954,6 +2069,28 @@ fn count_repository_projects(
     }))
 }
 
+fn count_repository_confidence(
+    candidates: &[RepositoryMigrationCandidate],
+) -> BTreeMap<String, usize> {
+    count_repository_by(
+        candidates
+            .iter()
+            .map(|candidate| repository_confidence_bucket(candidate.confidence).to_string()),
+    )
+}
+
+fn repository_confidence_bucket(confidence: f32) -> &'static str {
+    if confidence >= 0.85 {
+        "very_high"
+    } else if confidence >= 0.70 {
+        "high"
+    } else if confidence >= 0.50 {
+        "medium"
+    } else {
+        "low"
+    }
+}
+
 fn count_repository_by(values: impl Iterator<Item = String>) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for value in values {
@@ -2316,6 +2453,25 @@ fn repository_review_index_page(inventory: &RepositoryMigrationInventory) -> Str
     );
     append_repository_count_section(&mut output, "Disposition Counts", &inventory.by_disposition);
     append_repository_count_section(&mut output, "Project Counts", &inventory.by_project);
+    append_repository_count_section(&mut output, "Confidence Counts", &inventory.by_confidence);
+    append_repository_candidate_queue_section(
+        &mut output,
+        "Review Queue",
+        inventory,
+        RepositoryMigrationDisposition::Review,
+    );
+    append_repository_candidate_queue_section(
+        &mut output,
+        "Quarantine Queue",
+        inventory,
+        RepositoryMigrationDisposition::Quarantine,
+    );
+    append_repository_candidate_queue_section(
+        &mut output,
+        "Skip Queue",
+        inventory,
+        RepositoryMigrationDisposition::Skip,
+    );
 
     if !inventory.warnings.is_empty() {
         output.push_str("## Warnings\n\n");
@@ -2457,6 +2613,33 @@ fn append_repository_count_section(
         }
         output.push('\n');
     }
+}
+
+fn append_repository_candidate_queue_section(
+    output: &mut String,
+    title: &str,
+    inventory: &RepositoryMigrationInventory,
+    disposition: RepositoryMigrationDisposition,
+) {
+    output.push_str(&format!("## {}\n\n", title));
+    let mut found = false;
+    for (index, candidate) in inventory.candidates.iter().enumerate() {
+        if candidate.disposition != disposition {
+            continue;
+        }
+        found = true;
+        output.push_str(&format!(
+            "- [{}]({}) - {} - {:.2}\n",
+            escape_link_text(&repository_candidate_title(candidate)),
+            path_to_markdown(&repository_candidate_review_path(index, candidate)),
+            candidate.reference_kind,
+            candidate.confidence
+        ));
+    }
+    if !found {
+        output.push_str("No entries.\n");
+    }
+    output.push('\n');
 }
 
 fn repository_review_frontmatter(page_type: &str, fields: Vec<(String, String)>) -> String {
@@ -3055,6 +3238,10 @@ mod tests {
         let index = std::fs::read_to_string(dir.path().join("index.md")).unwrap();
         assert!(index.contains(REPOSITORY_REVIEW_GENERATED_MARKER));
         assert!(index.contains("Repository Migration Review Batch"));
+        assert!(index.contains("Confidence Counts"));
+        assert!(index.contains("Review Queue"));
+        assert!(index.contains("Quarantine Queue"));
+        assert!(index.contains("Skip Queue"));
 
         let candidate_path = export
             .files_written
@@ -3118,6 +3305,100 @@ mod tests {
         assert_eq!(apply.accepted_count, 1);
         assert!(apply.commit.is_none());
         assert!(service.list_repositories(None).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn repository_migration_review_apply_ignores_accepted_orphan_not_listed_in_index() {
+        let (service, work_repo, _entity_repo, _session_repo) = setup_workspace().await;
+        let project = Project::new("engram")
+            .with_description("Canonical repository is https://github.com/ymeiri/engram.git.");
+        work_repo.create_project(&project).await.unwrap();
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_migration_review(dir.path(), RepositoryMigrationOptions::all())
+            .await
+            .unwrap();
+        let indexed_candidate = first_repository_candidate_path(&export);
+        let orphan_path = dir.path().join("candidates/9999-review-stale.md");
+        std::fs::copy(dir.path().join(&indexed_candidate), &orphan_path).unwrap();
+        check_repository_candidate_at_path(&orphan_path, "Accept repository record");
+
+        let apply = service
+            .apply_migration_review(
+                dir.path(),
+                RepositoryMigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: Some(migration_writer()),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(apply.planned_count(), 0);
+        assert_eq!(apply.written_count(), 0);
+        assert_eq!(apply.accepted_count, 0);
+        assert_eq!(apply.files_with_no_decision, vec![indexed_candidate]);
+        assert!(apply
+            .files_skipped
+            .contains(&"candidates/9999-review-stale.md".to_string()));
+        assert!(apply
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not listed in generated index.md")));
+        assert!(service.list_repositories(None).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn repository_migration_review_apply_writes_only_accepted_mixed_decisions() {
+        let (service, work_repo, _entity_repo, _session_repo) = setup_workspace().await;
+        for (name, remote) in [
+            ("repo-one", "https://github.com/acme/repo-one.git"),
+            ("repo-two", "https://github.com/acme/repo-two.git"),
+            ("repo-three", "https://github.com/acme/repo-three.git"),
+        ] {
+            work_repo
+                .create_project(
+                    &Project::new(name)
+                        .with_description(format!("Canonical repository is {remote}.")),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_migration_review(dir.path(), RepositoryMigrationOptions::all())
+            .await
+            .unwrap();
+        let paths = repository_candidate_paths(&export);
+        assert_eq!(paths.len(), 3);
+        check_repository_candidate(dir.path(), &paths[0], "Accept repository record");
+        check_repository_candidate(dir.path(), &paths[1], "Quarantine");
+        check_repository_candidate(dir.path(), &paths[2], "Reject / skip");
+
+        let apply = service
+            .apply_migration_review(
+                dir.path(),
+                RepositoryMigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: Some(migration_writer()),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(apply.planned_count(), 1);
+        assert_eq!(apply.written_count(), 1);
+        assert_eq!(apply.accepted_count, 1);
+        assert_eq!(apply.quarantined_count, 1);
+        assert_eq!(apply.rejected_count, 1);
+        assert_eq!(apply.accepted_files, vec![paths[0].clone()]);
+        assert_eq!(apply.quarantined_files, vec![paths[1].clone()]);
+        assert_eq!(apply.rejected_files, vec![paths[2].clone()]);
+        assert_eq!(service.list_repositories(None).await.unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -3259,12 +3540,8 @@ mod tests {
         export: &RepositoryMigrationReviewExport,
         decision: &str,
     ) {
-        let candidate_path = export
-            .files_written
-            .iter()
-            .find(|path| path.starts_with("candidates/"))
-            .unwrap();
-        check_repository_candidate(root, candidate_path, decision);
+        let candidate_path = first_repository_candidate_path(export);
+        check_repository_candidate(root, &candidate_path, decision);
     }
 
     fn check_all_repository_candidates(
@@ -3272,18 +3549,35 @@ mod tests {
         export: &RepositoryMigrationReviewExport,
         decision: &str,
     ) {
-        for candidate_path in export
-            .files_written
-            .iter()
-            .filter(|path| path.starts_with("candidates/"))
-        {
-            check_repository_candidate(root, candidate_path, decision);
+        for candidate_path in repository_candidate_paths(export) {
+            check_repository_candidate(root, &candidate_path, decision);
         }
     }
 
+    fn first_repository_candidate_path(export: &RepositoryMigrationReviewExport) -> String {
+        repository_candidate_paths(export)
+            .into_iter()
+            .next()
+            .unwrap()
+    }
+
+    fn repository_candidate_paths(export: &RepositoryMigrationReviewExport) -> Vec<String> {
+        let mut paths = export
+            .files_written
+            .iter()
+            .filter(|path| path.starts_with("candidates/"))
+            .cloned()
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths
+    }
+
     fn check_repository_candidate(root: &Path, candidate_path: &str, decision: &str) {
-        let path = root.join(candidate_path);
-        let contents = std::fs::read_to_string(&path).unwrap();
+        check_repository_candidate_at_path(&root.join(candidate_path), decision);
+    }
+
+    fn check_repository_candidate_at_path(path: &Path, decision: &str) {
+        let contents = std::fs::read_to_string(path).unwrap();
         let checked = contents.replace(&format!("- [ ] {decision}"), &format!("- [x] {decision}"));
         std::fs::write(path, checked).unwrap();
     }

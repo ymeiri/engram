@@ -166,6 +166,8 @@ pub struct MigrationInventory {
     pub by_disposition: BTreeMap<String, usize>,
     /// Candidate counts by proposed Memory OS kind.
     pub by_memory_kind: BTreeMap<String, usize>,
+    /// Candidate counts by confidence bucket.
+    pub by_confidence: BTreeMap<String, usize>,
     /// Warnings about the dry run.
     pub warnings: Vec<String>,
     /// Candidate records.
@@ -223,10 +225,16 @@ pub struct MigrationReviewApply {
     pub accepted_count: usize,
     /// Accepted candidates using edited title/content/kind.
     pub accepted_with_edits_count: usize,
+    /// Accepted candidate review files.
+    pub accepted_files: Vec<String>,
     /// Candidates explicitly quarantined by review.
     pub quarantined_count: usize,
+    /// Quarantined candidate review files.
+    pub quarantined_files: Vec<String>,
     /// Candidates explicitly rejected by review.
     pub rejected_count: usize,
+    /// Rejected candidate review files.
+    pub rejected_files: Vec<String>,
     /// Accepted candidates skipped because their source was already migrated.
     pub duplicate_count: usize,
     /// Items that would be written, or were written in non-dry-run mode.
@@ -354,6 +362,7 @@ impl MigrationService {
             by_source_kind: count_by_source_kind(&candidates),
             by_disposition: count_by_disposition(&candidates),
             by_memory_kind: count_by_memory_kind(&candidates),
+            by_confidence: count_by_confidence(&candidates),
             warnings,
             candidates,
         })
@@ -385,8 +394,11 @@ impl MigrationService {
             files_with_conflicts: Vec::new(),
             accepted_count: 0,
             accepted_with_edits_count: 0,
+            accepted_files: Vec::new(),
             quarantined_count: 0,
+            quarantined_files: Vec::new(),
             rejected_count: 0,
+            rejected_files: Vec::new(),
             duplicate_count: 0,
             planned_items: Vec::new(),
             written_items: Vec::new(),
@@ -397,7 +409,7 @@ impl MigrationService {
         let existing_sources = self.existing_migration_source_tags().await?;
         let mut seen_sources = existing_sources;
 
-        for path in collect_candidate_review_files(root)? {
+        for path in collect_candidate_review_files(root, &mut report)? {
             report.files_scanned += 1;
             let relative_path = relative_markdown_path(root, &path);
             let contents = fs::read_to_string(&path)?;
@@ -430,6 +442,9 @@ impl MigrationService {
         report.files_skipped.sort();
         report.files_with_no_decision.sort();
         report.files_with_conflicts.sort();
+        report.accepted_files.sort();
+        report.quarantined_files.sort();
+        report.rejected_files.sort();
         report.warnings.sort();
         Ok(report)
     }
@@ -615,15 +630,18 @@ fn apply_parsed_review(
             } else {
                 report.accepted_with_edits_count += 1;
             }
+            report.accepted_files.push(relative_path.to_string());
 
             let item = memory_item_from_review(parsed, options, relative_path, source_tag);
             report.planned_items.push(item);
         }
         ReviewDecision::Quarantine => {
             report.quarantined_count += 1;
+            report.quarantined_files.push(relative_path.to_string());
         }
         ReviewDecision::Reject => {
             report.rejected_count += 1;
+            report.rejected_files.push(relative_path.to_string());
         }
     }
 }
@@ -1253,6 +1271,26 @@ fn count_by_memory_kind(candidates: &[MigrationCandidate]) -> BTreeMap<String, u
     )
 }
 
+fn count_by_confidence(candidates: &[MigrationCandidate]) -> BTreeMap<String, usize> {
+    count_by(
+        candidates
+            .iter()
+            .map(|candidate| confidence_bucket(candidate.confidence).to_string()),
+    )
+}
+
+fn confidence_bucket(confidence: f32) -> &'static str {
+    if confidence >= 0.85 {
+        "very_high"
+    } else if confidence >= 0.70 {
+        "high"
+    } else if confidence >= 0.50 {
+        "medium"
+    } else {
+        "low"
+    }
+}
+
 fn count_by(values: impl Iterator<Item = String>) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for value in values {
@@ -1348,6 +1386,25 @@ fn review_index_page(inventory: &MigrationInventory) -> String {
         &mut output,
         "Proposed Memory Kinds",
         &inventory.by_memory_kind,
+    );
+    append_count_section(&mut output, "Confidence Counts", &inventory.by_confidence);
+    append_candidate_queue_section(
+        &mut output,
+        "Review Queue",
+        inventory,
+        MigrationDisposition::Review,
+    );
+    append_candidate_queue_section(
+        &mut output,
+        "Quarantine Queue",
+        inventory,
+        MigrationDisposition::Quarantine,
+    );
+    append_candidate_queue_section(
+        &mut output,
+        "Skip Queue",
+        inventory,
+        MigrationDisposition::Skip,
     );
 
     if !inventory.warnings.is_empty() {
@@ -1481,6 +1538,33 @@ fn append_count_section(output: &mut String, title: &str, counts: &BTreeMap<Stri
     }
 }
 
+fn append_candidate_queue_section(
+    output: &mut String,
+    title: &str,
+    inventory: &MigrationInventory,
+    disposition: MigrationDisposition,
+) {
+    output.push_str(&format!("## {}\n\n", title));
+    let mut found = false;
+    for (index, candidate) in inventory.candidates.iter().enumerate() {
+        if candidate.disposition != disposition {
+            continue;
+        }
+        found = true;
+        output.push_str(&format!(
+            "- [{}]({}) - {} - {:.2}\n",
+            escape_link_text(&candidate.title),
+            path_to_markdown(&candidate_review_path(index, candidate)),
+            candidate.proposed_kind,
+            candidate.confidence
+        ));
+    }
+    if !found {
+        output.push_str("No entries.\n");
+    }
+    output.push('\n');
+}
+
 fn review_frontmatter(page_type: &str, fields: Vec<(String, String)>) -> String {
     let mut output = String::new();
     output.push_str("---\n");
@@ -1530,21 +1614,115 @@ fn candidate_review_path(index: usize, candidate: &MigrationCandidate) -> PathBu
     ))
 }
 
-fn collect_candidate_review_files(root: &Path) -> IndexResult<Vec<PathBuf>> {
-    let candidates_dir = root.join("candidates");
-    if !candidates_dir.exists() {
+fn collect_candidate_review_files(
+    root: &Path,
+    report: &mut MigrationReviewApply,
+) -> IndexResult<Vec<PathBuf>> {
+    let index_path = root.join("index.md");
+    if !index_path.exists() {
+        skip_candidate_files_without_generated_index(root, report, "missing generated index.md")?;
         return Ok(Vec::new());
     }
 
+    let index_contents = fs::read_to_string(&index_path)?;
+    if !index_contents.contains(REVIEW_GENERATED_MARKER) {
+        skip_candidate_files_without_generated_index(
+            root,
+            report,
+            "index.md is not an Engram-generated review file",
+        )?;
+        return Ok(Vec::new());
+    }
+
+    let mut indexed_paths = indexed_candidate_review_paths(&index_contents);
+    indexed_paths.sort();
+    indexed_paths.dedup();
+
+    let indexed_markdown_paths = indexed_paths
+        .iter()
+        .map(|path| path_to_markdown(path))
+        .collect::<HashSet<_>>();
+
+    let candidates_dir = root.join("candidates");
+    if candidates_dir.exists() {
+        for entry in fs::read_dir(&candidates_dir)? {
+            let path = entry?.path();
+            if !path.extension().is_some_and(|extension| extension == "md") {
+                continue;
+            }
+            let relative_path = relative_markdown_path(root, &path);
+            if !indexed_markdown_paths.contains(&relative_path) {
+                report.files_skipped.push(relative_path.clone());
+                report.warnings.push(format!(
+                    "{relative_path}: skipped candidate file not listed in generated index.md"
+                ));
+            }
+        }
+    }
+
     let mut files = Vec::new();
-    for entry in fs::read_dir(candidates_dir)? {
-        let path = entry?.path();
-        if path.extension().is_some_and(|extension| extension == "md") {
+    for relative_path in indexed_paths {
+        let path = root.join(&relative_path);
+        if path.exists() {
             files.push(path);
+        } else {
+            let relative_path = path_to_markdown(&relative_path);
+            report.files_skipped.push(relative_path.clone());
+            report.warnings.push(format!(
+                "{relative_path}: indexed candidate file is missing"
+            ));
         }
     }
     files.sort();
     Ok(files)
+}
+
+fn skip_candidate_files_without_generated_index(
+    root: &Path,
+    report: &mut MigrationReviewApply,
+    reason: &str,
+) -> IndexResult<()> {
+    let candidates_dir = root.join("candidates");
+    if !candidates_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(candidates_dir)? {
+        let path = entry?.path();
+        if !path.extension().is_some_and(|extension| extension == "md") {
+            continue;
+        }
+        let relative_path = relative_markdown_path(root, &path);
+        report.files_skipped.push(relative_path.clone());
+        report.warnings.push(format!(
+            "{relative_path}: skipped candidate file because {reason}"
+        ));
+    }
+    Ok(())
+}
+
+fn indexed_candidate_review_paths(index_contents: &str) -> Vec<PathBuf> {
+    index_contents
+        .lines()
+        .filter_map(markdown_link_target)
+        .filter(|path| is_safe_candidate_review_link(path))
+        .map(PathBuf::from)
+        .collect()
+}
+
+fn markdown_link_target(line: &str) -> Option<&str> {
+    let link_start = line.find("](")?;
+    let after_start = &line[link_start + 2..];
+    let link_end = after_start.find(')')?;
+    Some(&after_start[..link_end])
+}
+
+fn is_safe_candidate_review_link(path: &str) -> bool {
+    path.starts_with("candidates/")
+        && path.ends_with(".md")
+        && !path.starts_with('/')
+        && !path.contains("..")
+        && !path.contains('\\')
 }
 
 fn parse_review_candidate_page(
@@ -2136,6 +2314,10 @@ mod tests {
         let index = fs::read_to_string(dir.path().join("index.md")).unwrap();
         assert!(index.contains(REVIEW_GENERATED_MARKER));
         assert!(index.contains("Migration Review Batch"));
+        assert!(index.contains("Confidence Counts"));
+        assert!(index.contains("Review Queue"));
+        assert!(index.contains("Quarantine Queue"));
+        assert!(index.contains("Skip Queue"));
 
         let candidate_path = export
             .files_written
@@ -2213,6 +2395,121 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn apply_review_batch_ignores_accepted_orphan_not_listed_in_index() {
+        let (service, _entity_repo, _session_repo, work_repo, memory_repo) = setup_service().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        work_repo
+            .add_project_observation(
+                &ProjectObservation::new(project.id, "Only indexed review files are eligible.")
+                    .with_key("rules.indexed-only"),
+            )
+            .await
+            .unwrap();
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_review_batch(dir.path(), MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        let indexed_candidate = first_candidate_path(&export);
+        let orphan_path = dir.path().join("candidates/9999-review-stale.md");
+        fs::copy(dir.path().join(&indexed_candidate), &orphan_path).unwrap();
+        mark_candidate_decision_at_path(&orphan_path, "Accept for migration");
+
+        let apply = service
+            .apply_review_batch(
+                dir.path(),
+                MigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(apply.planned_count(), 0);
+        assert_eq!(apply.written_count(), 0);
+        assert_eq!(apply.accepted_count, 0);
+        assert_eq!(apply.files_with_no_decision, vec![indexed_candidate]);
+        assert!(apply
+            .files_skipped
+            .contains(&"candidates/9999-review-stale.md".to_string()));
+        assert!(apply
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not listed in generated index.md")));
+        assert!(memory_repo
+            .list_memory_items(None, None)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn apply_review_batch_writes_only_accepted_mixed_decisions() {
+        let (service, _entity_repo, _session_repo, work_repo, memory_repo) = setup_service().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        for (key, content) in [
+            ("decisions.accept", "Accept this reviewed migration fact."),
+            (
+                "decisions.quarantine",
+                "Quarantine this reviewed migration fact.",
+            ),
+            ("decisions.reject", "Reject this reviewed migration fact."),
+        ] {
+            work_repo
+                .add_project_observation(
+                    &ProjectObservation::new(project.id, content).with_key(key),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_review_batch(dir.path(), MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        let paths = candidate_paths(&export);
+        assert_eq!(paths.len(), 3);
+        mark_candidate_decision(dir.path(), &paths[0], "Accept for migration");
+        mark_candidate_decision(dir.path(), &paths[1], "Quarantine");
+        mark_candidate_decision(dir.path(), &paths[2], "Reject / skip");
+
+        let apply = service
+            .apply_review_batch(
+                dir.path(),
+                MigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(apply.planned_count(), 1);
+        assert_eq!(apply.written_count(), 1);
+        assert_eq!(apply.accepted_count, 1);
+        assert_eq!(apply.quarantined_count, 1);
+        assert_eq!(apply.rejected_count, 1);
+        assert_eq!(apply.accepted_files, vec![paths[0].clone()]);
+        assert_eq!(apply.quarantined_files, vec![paths[1].clone()]);
+        assert_eq!(apply.rejected_files, vec![paths[2].clone()]);
+        assert_eq!(
+            memory_repo
+                .list_memory_items(None, None)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn apply_review_batch_writes_once_and_creates_commit() {
         let (service, _entity_repo, _session_repo, work_repo, memory_repo) = setup_service().await;
         let project = Project::new("engram");
@@ -2279,13 +2576,31 @@ mod tests {
     }
 
     fn check_first_candidate(root: &Path, export: &MigrationReviewExport, decision: &str) {
-        let candidate_path = export
+        let candidate_path = first_candidate_path(export);
+        mark_candidate_decision(root, &candidate_path, decision);
+    }
+
+    fn first_candidate_path(export: &MigrationReviewExport) -> String {
+        candidate_paths(export).into_iter().next().unwrap()
+    }
+
+    fn candidate_paths(export: &MigrationReviewExport) -> Vec<String> {
+        let mut paths = export
             .files_written
             .iter()
-            .find(|path| path.starts_with("candidates/"))
-            .unwrap();
-        let path = root.join(candidate_path);
-        let contents = fs::read_to_string(&path).unwrap();
+            .filter(|path| path.starts_with("candidates/"))
+            .cloned()
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths
+    }
+
+    fn mark_candidate_decision(root: &Path, candidate_path: &str, decision: &str) {
+        mark_candidate_decision_at_path(&root.join(candidate_path), decision);
+    }
+
+    fn mark_candidate_decision_at_path(path: &Path, decision: &str) {
+        let contents = fs::read_to_string(path).unwrap();
         let checked = contents.replace(&format!("- [ ] {decision}"), &format!("- [x] {decision}"));
         fs::write(path, checked).unwrap();
     }
