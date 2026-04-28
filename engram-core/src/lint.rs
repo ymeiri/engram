@@ -24,6 +24,8 @@ pub enum LintRule {
     VaultPageMissingMarkerFrontmatter,
     /// Handoff content does not include next actions.
     HandoffMissingNextActions,
+    /// Agent-native obligation is still open.
+    UnresolvedAgentObligation,
 }
 
 impl std::fmt::Display for LintRule {
@@ -39,6 +41,7 @@ impl std::fmt::Display for LintRule {
                 write!(f, "vault_page_missing_marker_frontmatter")
             }
             Self::HandoffMissingNextActions => write!(f, "handoff_missing_next_actions"),
+            Self::UnresolvedAgentObligation => write!(f, "unresolved_agent_obligation"),
         }
     }
 }
@@ -82,6 +85,8 @@ pub struct LintFinding {
     pub item_id: Option<Id>,
     /// Related session, if applicable.
     pub session_id: Option<Id>,
+    /// Related agent obligation, if applicable.
+    pub obligation_id: Option<Id>,
     /// Related file path, if applicable.
     pub path: Option<String>,
     /// Safe action available.
@@ -109,6 +114,7 @@ impl LintFinding {
             message: message.into(),
             item_id: None,
             session_id: None,
+            obligation_id: None,
             path: None,
             safe_action: LintSafeAction::None,
             created_at: OffsetDateTime::now_utc(),
@@ -126,6 +132,13 @@ impl LintFinding {
     #[must_use]
     pub fn with_session(mut self, session_id: Id) -> Self {
         self.session_id = Some(session_id);
+        self
+    }
+
+    /// Attach an agent obligation ID.
+    #[must_use]
+    pub fn with_obligation(mut self, obligation_id: Id) -> Self {
+        self.obligation_id = Some(obligation_id);
         self
     }
 

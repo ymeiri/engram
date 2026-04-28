@@ -38,7 +38,7 @@ pub use repos::{
     DocumentDeletedOrphanSource, DocumentDetectedReference, DocumentOrphanChunkSample,
     DocumentOrphanDeleteResult, DocumentOrphanGroup, DocumentOrphanReport,
     DocumentRecoveryCandidateMatch, DocumentRecoveryClass, DocumentRecoverySummary, DocumentRepo,
-    EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, MemoryRepo,
+    EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, MemoryRepo, ObligationRepo,
     ObservationSearchResult, ProjectObservationSearchResult, RepositoryRepo, SessionRepo,
     TaskObservationSearchResult, ToolIntelStats, ToolRepo, WorkRepo, WorkStats,
 };
@@ -126,6 +126,10 @@ pub async fn init_schema(db: &Db) -> StoreResult<()> {
     // Initialize repository topology schema
     let repository_repo = RepositoryRepo::new(db.clone());
     repository_repo.init_schema().await?;
+
+    // Initialize agent obligation schema
+    let obligation_repo = ObligationRepo::new(db.clone());
+    obligation_repo.init_schema().await?;
 
     info!("All schemas initialized");
     Ok(())

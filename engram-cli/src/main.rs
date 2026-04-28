@@ -17,6 +17,10 @@ use engram_core::lint::{LintFinding, LintReport, LintSeverity};
 use engram_core::memory::{
     Harness, MemoryCursor, MemoryItem, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
 };
+use engram_core::obligation::{
+    AgentObligation, AgentObligationKind, AgentObligationResolution, AgentObligationResolutionKind,
+    AgentObligationStatus, AgentObligationTrigger,
+};
 use engram_core::repository::{ProjectRepositoryRole, RepositoryContext};
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
@@ -39,7 +43,8 @@ use engram_index::{
     GraphService, HandoffService, HarnessService, KnowledgeService, LintOptions, LintService,
     MemoryChanges, MemoryChangesSinceOptions, MemoryService, MigrationInventory,
     MigrationInventoryOptions, MigrationReviewApply, MigrationReviewApplyOptions,
-    MigrationReviewExport, MigrationReviewStatus, OrientInput, OrientationPacket, Pipeline,
+    MigrationReviewExport, MigrationReviewStatus, ObligationDetectOptions, ObligationDetection,
+    ObligationDoctorReport, ObligationService, OrientInput, OrientationPacket, Pipeline,
     PipelineConfig, RepositoryMigrationInventory, RepositoryMigrationOptions,
     RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
     RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus, RepositoryService,
@@ -566,6 +571,20 @@ enum Commands {
 
         #[command(subcommand)]
         command: HandoffCommands,
+    },
+
+    /// Manage agent-native session obligations
+    Obligations {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: ObligationCommands,
     },
 
     /// Manage the generated Memory OS Markdown vault
@@ -2166,6 +2185,165 @@ enum HandoffCommands {
 }
 
 #[derive(Subcommand)]
+enum ObligationCommands {
+    /// Detect obligations from prompt and git status. Dry-run unless --write is supplied.
+    Detect {
+        /// Current working directory, defaults to the process cwd
+        #[arg(long)]
+        cwd: Option<String>,
+
+        /// Prompt or task text used for source/design/tool-failure cues
+        #[arg(long)]
+        prompt: Option<String>,
+
+        /// Project scope for generated obligations
+        #[arg(long)]
+        scope_project: Option<String>,
+
+        /// Actually write detected obligations. Omitted means dry-run.
+        #[arg(long)]
+        write: bool,
+
+        /// Maximum candidate obligations
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Writer harness/interface recorded on generated obligations
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on generated obligations
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on generated obligations
+        #[arg(long, default_value = "obligation-detect")]
+        model: String,
+    },
+
+    /// Add an explicit obligation
+    Add {
+        /// Obligation kind
+        #[arg(long)]
+        kind: String,
+
+        /// Short title
+        #[arg(long)]
+        title: String,
+
+        /// Obligation details
+        #[arg(long)]
+        description: String,
+
+        /// Project scope
+        #[arg(long)]
+        scope_project: Option<String>,
+
+        /// Trigger kind
+        #[arg(long, default_value = "agent_decision")]
+        trigger_kind: String,
+
+        /// Trigger summary
+        #[arg(long)]
+        trigger_summary: String,
+
+        /// Optional trigger target
+        #[arg(long)]
+        trigger_target: Option<String>,
+
+        /// Expected resolution; may be repeated
+        #[arg(long = "required-resolution")]
+        required_resolutions: Vec<String>,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Writer harness/interface recorded on generated obligations
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on generated obligations
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on generated obligations
+        #[arg(long, default_value = "obligation-add")]
+        model: String,
+    },
+
+    /// List obligations
+    List {
+        /// Optional status filter: open, resolved, skipped
+        #[arg(long)]
+        status: Option<String>,
+
+        /// Maximum obligations to print
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Run obligation doctor checks
+    Doctor {
+        /// Maximum open obligations to inspect
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Resolve an obligation
+    Resolve {
+        /// Obligation ID
+        id: String,
+
+        /// Resolution kind
+        #[arg(long)]
+        resolution: String,
+
+        /// Resolution summary
+        #[arg(long)]
+        summary: String,
+
+        /// Actor resolving the obligation
+        #[arg(long, default_value = "agent")]
+        actor: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Skip an obligation with an explicit reason
+    Skip {
+        /// Obligation ID
+        id: String,
+
+        /// Skip reason
+        #[arg(long)]
+        reason: String,
+
+        /// Actor skipping the obligation
+        #[arg(long, default_value = "agent")]
+        actor: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum VaultCommands {
     /// Create the generated vault directory skeleton
     Init {
@@ -2599,6 +2777,67 @@ fn print_harness_install(report: &HarnessInstallReport) {
     }
 }
 
+fn print_obligation_detection(detection: &ObligationDetection) {
+    println!("Obligation detection");
+    println!("  Dry-run:           {}", detection.dry_run);
+    println!("  Candidates:        {}", detection.candidates.len());
+    println!("  Written:           {}", detection.written.len());
+    println!("  Skipped existing:  {}", detection.skipped_existing.len());
+    if !detection.candidates.is_empty() {
+        println!("Candidates:");
+        for obligation in &detection.candidates {
+            println!("  - [{}] {}", obligation.kind, obligation.title);
+            if let Some(target) = &obligation.trigger.target {
+                println!("    target: {target}");
+            }
+        }
+    }
+    if !detection.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &detection.warnings {
+            println!("  - {warning}");
+        }
+    }
+}
+
+fn print_obligation_list(obligations: &[AgentObligation]) {
+    println!("Obligations: {}", obligations.len());
+    for obligation in obligations {
+        print_obligation(obligation);
+    }
+}
+
+fn print_obligation(obligation: &AgentObligation) {
+    println!(
+        "- [{}] {} ({})",
+        obligation.status, obligation.title, obligation.kind
+    );
+    println!("  id: {}", obligation.id);
+    println!("  {}", obligation.description);
+    println!("  trigger: {}", obligation.trigger.summary);
+    if let Some(target) = &obligation.trigger.target {
+        println!("  target: {target}");
+    }
+    if !obligation.required_resolution.is_empty() {
+        let resolutions: Vec<_> = obligation
+            .required_resolution
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        println!("  required: {}", resolutions.join(", "));
+    }
+    if let Some(resolution) = &obligation.resolution {
+        println!("  resolution: {} - {}", resolution.kind, resolution.summary);
+    }
+}
+
+fn print_obligation_doctor(report: &ObligationDoctorReport) {
+    println!("Open obligations: {}", report.open.len());
+    for warning in &report.warnings {
+        println!("  - {warning}");
+    }
+}
+
 fn print_lint_report(report: &LintReport, dry_run: bool) {
     println!("Lint findings: {}", report.findings.len());
     if report.applied_safe_actions > 0 || dry_run {
@@ -2625,6 +2864,9 @@ fn print_lint_finding(finding: &LintFinding) {
     }
     if let Some(session_id) = finding.session_id {
         println!("  session: {session_id}");
+    }
+    if let Some(obligation_id) = finding.obligation_id {
+        println!("  obligation: {obligation_id}");
     }
     if let Some(path) = &finding.path {
         println!("  path: {path}");
@@ -5054,6 +5296,10 @@ async fn main() -> Result<()> {
                 let handoff_service = HandoffService::new(db.clone());
                 handoff_service.init_schema().await?;
 
+                // Create agent obligation service
+                let obligation_service = ObligationService::new(db.clone());
+                obligation_service.init_schema().await?;
+
                 // Create repository topology service
                 let repository_service = RepositoryService::new(db.clone());
                 repository_service.init_schema().await?;
@@ -5074,6 +5320,7 @@ async fn main() -> Result<()> {
                 server.init_lint(lint_service).await;
                 server.init_graph(graph_service).await;
                 server.init_handoff(handoff_service).await;
+                server.init_obligation(obligation_service).await;
                 server.init_repository(repository_service).await;
                 server.init_search(search_service).await;
 
@@ -7511,6 +7758,153 @@ async fn main() -> Result<()> {
                         if let Some(update) = result.update {
                             println!("\nWritten handoff: {}", update.item.id);
                         }
+                    }
+                }
+            }
+        }
+
+        Commands::Obligations {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = ObligationService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                ObligationCommands::Detect {
+                    cwd,
+                    prompt,
+                    scope_project,
+                    write,
+                    limit,
+                    json,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let cwd = cwd_or_current(cwd)?.display().to_string();
+                    let detection = service
+                        .detect(ObligationDetectOptions {
+                            cwd: Some(cwd),
+                            prompt,
+                            project: scope_project.or(project),
+                            writer: cli_agent_writer(&writer_harness, &model_provider, &model),
+                            write,
+                            limit,
+                        })
+                        .await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&detection)?);
+                    } else {
+                        print_obligation_detection(&detection);
+                    }
+                }
+                ObligationCommands::Add {
+                    kind,
+                    title,
+                    description,
+                    scope_project,
+                    trigger_kind,
+                    trigger_summary,
+                    trigger_target,
+                    required_resolutions,
+                    json,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let scope = scope_project
+                        .or(project)
+                        .map(MemoryScope::project)
+                        .unwrap_or(MemoryScope::Global);
+                    let mut trigger = AgentObligationTrigger::new(trigger_kind, trigger_summary);
+                    if let Some(target) = trigger_target {
+                        trigger = trigger.with_target(target);
+                    }
+                    let mut obligation = AgentObligation::new(
+                        AgentObligationKind::parse(&kind),
+                        title,
+                        description,
+                        scope,
+                        trigger,
+                        cli_agent_writer(&writer_harness, &model_provider, &model),
+                    );
+                    for resolution in required_resolutions {
+                        obligation = obligation.with_required_resolution(
+                            AgentObligationResolutionKind::parse(&resolution),
+                        );
+                    }
+                    let obligation = service.add(obligation).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&obligation)?);
+                    } else {
+                        print_obligation(&obligation);
+                    }
+                }
+                ObligationCommands::List {
+                    status,
+                    limit,
+                    json,
+                } => {
+                    let status = status
+                        .as_deref()
+                        .map(|value| {
+                            AgentObligationStatus::parse(value)
+                                .ok_or_else(|| anyhow::anyhow!("Invalid status: {}", value))
+                        })
+                        .transpose()?;
+                    let obligations = service.list(status, limit).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&obligations)?);
+                    } else {
+                        print_obligation_list(&obligations);
+                    }
+                }
+                ObligationCommands::Doctor { limit, json } => {
+                    let report = service.doctor(limit).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&report)?);
+                    } else {
+                        print_obligation_doctor(&report);
+                    }
+                }
+                ObligationCommands::Resolve {
+                    id,
+                    resolution,
+                    summary,
+                    actor,
+                    json,
+                } => {
+                    let id = Id::parse(&id)
+                        .map_err(|e| anyhow::anyhow!("Invalid obligation ID: {}", e))?;
+                    let resolution = AgentObligationResolution::new(
+                        AgentObligationResolutionKind::parse(&resolution),
+                        summary,
+                        actor,
+                    );
+                    let obligation = service.resolve(id, resolution).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&obligation)?);
+                    } else {
+                        print_obligation(&obligation);
+                    }
+                }
+                ObligationCommands::Skip {
+                    id,
+                    reason,
+                    actor,
+                    json,
+                } => {
+                    let id = Id::parse(&id)
+                        .map_err(|e| anyhow::anyhow!("Invalid obligation ID: {}", e))?;
+                    let obligation = service.skip(id, reason, actor).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&obligation)?);
+                    } else {
+                        print_obligation(&obligation);
                     }
                 }
             }

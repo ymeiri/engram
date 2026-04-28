@@ -240,6 +240,7 @@ fn lifecycle_triggers() -> Vec<HarnessLifecycleTrigger> {
         HarnessLifecycleTrigger::BeforeMajorDecisionChangesSince,
         HarnessLifecycleTrigger::AfterDiscoveryRecord,
         HarnessLifecycleTrigger::BeforeFinalChangesSince,
+        HarnessLifecycleTrigger::BeforeFinalObligations,
         HarnessLifecycleTrigger::SessionEndHandoff,
         HarnessLifecycleTrigger::CommitWorkflowConsultMemory,
     ]
@@ -247,7 +248,14 @@ fn lifecycle_triggers() -> Vec<HarnessLifecycleTrigger> {
 
 fn required_mcp_tools() -> Vec<String> {
     [
-        "orient", "memory", "harness", "lint", "graph", "handoff", "vault",
+        "orient",
+        "memory",
+        "harness",
+        "lint",
+        "graph",
+        "handoff",
+        "obligations",
+        "vault",
     ]
     .into_iter()
     .map(str::to_string)
@@ -529,6 +537,8 @@ Lifecycle contract:
 - Before major decisions, call `memory(action=changes_since)` with the orientation cursor.
 - After non-obvious discoveries, record source-grounded memory or a session event.
 - Before final response, call `changes_since`; if relevant updates appeared, account for them.
+- Before final response, call `obligations(action=detect)` and `obligations(action=doctor)`;
+  resolve open obligations or report explicit skip reasons.
 - At session end, compile a handoff and create a knowledge commit candidate.
 - In commit workflows, consult memory for relevant preferences, rules, and limitations first.
 
@@ -546,7 +556,9 @@ fn claude_resume_session_command() -> String {
 2. Read the returned context pack, ambiguities, and memory cursor.
 3. If a rolling handoff exists, inspect `handoff(action=get)`.
 4. Check `memory(action=changes_since)` during the session before major decisions.
-5. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
+5. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
+   obligations; close or explicitly skip open items before final response.
+6. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
 "#
     )
 }
@@ -558,6 +570,8 @@ fn claude_end_session_command() -> String {
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
+- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
 - Leave migration and digest promotions review-gated; do not auto-promote orphan data.
@@ -584,7 +598,7 @@ fn claude_stop_nudge_hook() -> String {
 set -euo pipefail
 
 printf '%s\n' \
-  'Engram: before final response, check changes_since, record non-obvious discoveries, and update handoff if needed.'
+  'Engram: before final response, check changes_since and obligations doctor; resolve or explicitly skip open obligations.'
 "#
     )
 }
@@ -601,6 +615,9 @@ Workflow:
 - Treat the returned memory cursor as the baseline for this turn.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
+  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
+  skip open obligations.
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
@@ -621,6 +638,8 @@ Steps:
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
+- Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
+  response.
 - Store compact, evidenced memory if the session discovered something future agents need.
 "#
     )
@@ -641,6 +660,9 @@ Follow this soft lifecycle contract:
 - Treat the returned memory cursor as the baseline for this turn.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
+  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
+  skip open obligations.
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
@@ -665,6 +687,8 @@ Steps:
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
+- Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
+  response.
 - Store compact, evidenced memory if the session discovered something future agents need.
 """
 "#
@@ -683,6 +707,8 @@ This command is invoked as `/engram:end-session`.
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
+- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
 - Leave migration and digest promotions review-gated; do not auto-promote orphan data.
@@ -704,6 +730,8 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Gemini CLI, Claude Code, Codex, and other harnesses
   can be distinguished.
+- Detect and close agent obligations before final response: document dispositions, failed tool
+  recovery, source/design reading, verification, handoff, and commit-preference checks.
 - Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
 - Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
 - Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
@@ -732,6 +760,9 @@ Workflow:
 - Treat the returned memory cursor as the baseline for this turn.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
+  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
+  skip open obligations.
 - Use writer provenance with `writer_harness=cursor` when writing durable memory.
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
@@ -757,6 +788,8 @@ Steps:
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
+- Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
+  response.
 - Store compact, evidenced memory if the session discovered something future agents need.
 - Use writer provenance with `writer_harness=cursor` for durable memory writes.
 "#
@@ -776,6 +809,8 @@ Use this skill when Cursor Agent is closing out a task or preparing a handoff.
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
+- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
 - Use writer provenance with `writer_harness=cursor`.
@@ -795,6 +830,9 @@ fn agents_snippet() -> String {
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Claude Code, Codex, and other harnesses can be
   distinguished.
+- Use `obligations(action=detect)` at task start and before final response. Resolve or explicitly
+  skip document, failed-tool, source/design reading, verification, handoff, and commit-preference
+  obligations before claiming the task is done.
 - Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
 - Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
 - Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
@@ -807,13 +845,15 @@ fn generic_policy_document() -> String {
         r#"{MARKER_MD}
 # Engram Generic Harness Policy
 
-Required MCP tools: orient, memory, harness, lint, graph, handoff, vault.
+Required MCP tools: orient, memory, harness, lint, graph, handoff, obligations, vault.
 
 Lifecycle:
 - task/session start: call `orient`
 - before major decisions: call `memory(action=changes_since)`
 - after non-obvious discoveries: record memory/session event
 - before final response: call `changes_since` and distill if needed
+- before final response: detect obligations, run obligations doctor, and close or explicitly skip
+  open obligations
 - session end/handoff: compile handoff and knowledge commit candidate
 - commit workflows: consult memory for relevant preferences/rules
 

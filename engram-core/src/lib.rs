@@ -19,6 +19,7 @@
 //! - [`memory`] - Memory OS ontology: provenance, scope, lifecycle, commits
 //! - [`repository`] - Git repository topology and local checkout mapping
 //! - [`harness`] - Agent harness policy and adapter contracts
+//! - [`obligation`] - Agent-native session obligations
 //! - [`lint`] - Memory health and migration-safety linting
 //! - [`graph`] - Memory OS graph traversal types
 //! - [`id`] - ID types and generation
@@ -34,6 +35,7 @@ pub mod id;
 pub mod knowledge;
 pub mod lint;
 pub mod memory;
+pub mod obligation;
 pub mod repository;
 pub mod search;
 pub mod session;

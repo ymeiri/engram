@@ -10,6 +10,10 @@ use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChange, MemoryChangeType, MemoryCursor,
     MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
 };
+use engram_core::obligation::{
+    AgentObligation, AgentObligationKind, AgentObligationResolution, AgentObligationResolutionKind,
+    AgentObligationStatus, AgentObligationTrigger,
+};
 use engram_core::repository::ProjectRepositoryRole;
 use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
@@ -24,9 +28,9 @@ use engram_index::{
     DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
     GraphService, HandoffService, HarnessService, KnowledgeService, LintOptions, LintService,
     MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
-    MigrationReviewApplyOptions, OrientInput, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchService, SessionService,
-    ToolIntelService, WorkService,
+    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService, OrientInput,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
+    SearchService, SessionService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -59,6 +63,8 @@ pub struct ToolState {
     pub graph_service: Arc<RwLock<Option<GraphService>>>,
     /// The rolling handoff service.
     pub handoff_service: Arc<RwLock<Option<HandoffService>>>,
+    /// The agent obligation service.
+    pub obligation_service: Arc<RwLock<Option<ObligationService>>>,
     /// The repository topology service.
     pub repository_service: Arc<RwLock<Option<RepositoryService>>>,
     /// The unified search service (cross-layer search).
@@ -80,6 +86,7 @@ impl ToolState {
             lint_service: Arc::new(RwLock::new(None)),
             graph_service: Arc::new(RwLock::new(None)),
             handoff_service: Arc::new(RwLock::new(None)),
+            obligation_service: Arc::new(RwLock::new(None)),
             repository_service: Arc::new(RwLock::new(None)),
             search_service: Arc::new(RwLock::new(None)),
         }
@@ -148,6 +155,12 @@ impl ToolState {
     /// Initialize with a rolling handoff service.
     pub async fn init_handoff(&self, service: HandoffService) {
         let mut guard = self.handoff_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with an agent obligation service.
+    pub async fn init_obligation(&self, service: ObligationService) {
+        let mut guard = self.obligation_service.write().await;
         *guard = Some(service);
     }
 
@@ -7270,6 +7283,221 @@ fn parse_handoff_writer(request: &HandoffRequest) -> Result<WriterProvenance, St
     if let Some(surface) = &request.surface {
         writer = writer.with_surface(surface);
     }
+    Ok(writer)
+}
+
+// =============================================================================
+// Agent Obligation Tool
+// =============================================================================
+
+/// Request for agent-native obligations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ObligationRequest {
+    /// Action: detect, add, get, list, open, resolve, skip, doctor
+    #[schemars(description = "Action: detect, add, get, list, open, resolve, skip, doctor")]
+    pub action: String,
+    /// Current working directory for detect.
+    pub cwd: Option<String>,
+    /// Prompt/task text for detect.
+    pub prompt: Option<String>,
+    /// Project scope.
+    pub project: Option<String>,
+    /// Maximum obligations to return or create.
+    pub limit: Option<usize>,
+    /// Write detected obligations. Defaults to false for detect.
+    pub write: Option<bool>,
+    /// Obligation ID.
+    pub id: Option<String>,
+    /// Obligation kind.
+    pub kind: Option<String>,
+    /// Obligation title.
+    pub title: Option<String>,
+    /// Obligation description.
+    pub description: Option<String>,
+    /// Status filter.
+    pub status: Option<String>,
+    /// Trigger kind.
+    pub trigger_kind: Option<String>,
+    /// Trigger target.
+    pub trigger_target: Option<String>,
+    /// Trigger summary.
+    pub trigger_summary: Option<String>,
+    /// Required resolution kinds.
+    #[serde(default)]
+    pub required_resolutions: Vec<String>,
+    /// Resolution kind for resolve.
+    pub resolution: Option<String>,
+    /// Resolution or skip summary.
+    pub summary: Option<String>,
+    /// Skip reason.
+    pub reason: Option<String>,
+    /// Evidence references.
+    #[serde(default)]
+    pub evidence: Vec<MemoryEvidenceRequest>,
+    /// Writer harness/interface.
+    pub writer_harness: Option<String>,
+    /// Model provider.
+    pub model_provider: Option<String>,
+    /// Model name.
+    pub model: Option<String>,
+    /// Surface/interface label.
+    pub surface: Option<String>,
+    /// Actor label.
+    pub actor: Option<String>,
+    /// Writer session ID.
+    pub writer_session_id: Option<String>,
+}
+
+/// Manage agent-native obligations.
+pub async fn obligations_new(
+    state: &ToolState,
+    request: ObligationRequest,
+) -> Result<String, String> {
+    debug!("obligations: action={}", request.action);
+
+    let service_guard = state.obligation_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Obligation service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "detect" => {
+            let writer = parse_obligation_writer(&request)?;
+            let detection = service
+                .detect(ObligationDetectOptions {
+                    cwd: request.cwd,
+                    prompt: request.prompt,
+                    project: request.project,
+                    writer,
+                    write: request.write.unwrap_or(false),
+                    limit: request.limit,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&detection).map_err(|e| e.to_string())
+        }
+        "add" => {
+            let writer = parse_obligation_writer(&request)?;
+            let scope = request
+                .project
+                .as_deref()
+                .map(MemoryScope::project)
+                .unwrap_or(MemoryScope::Global);
+            let mut trigger = AgentObligationTrigger::new(
+                request
+                    .trigger_kind
+                    .clone()
+                    .unwrap_or_else(|| "agent_decision".to_string()),
+                required(&request.trigger_summary, "trigger_summary", "add")?,
+            );
+            if let Some(target) = &request.trigger_target {
+                trigger = trigger.with_target(target);
+            }
+            let mut obligation = AgentObligation::new(
+                AgentObligationKind::parse(&required(&request.kind, "kind", "add")?),
+                required(&request.title, "title", "add")?,
+                required(&request.description, "description", "add")?,
+                scope,
+                trigger,
+                writer,
+            );
+            for resolution in &request.required_resolutions {
+                obligation = obligation
+                    .with_required_resolution(AgentObligationResolutionKind::parse(resolution));
+            }
+            for evidence in request.evidence {
+                obligation = obligation.with_evidence(parse_evidence(evidence)?);
+            }
+            let obligation = service.add(obligation).await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
+        }
+        "get" => {
+            let id = parse_id(&required(&request.id, "id", "get")?, "obligation ID")?;
+            let obligation = service.get(id).await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "found": obligation.is_some(),
+                "obligation": obligation
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "list" | "open" => {
+            let status = if request.action.to_lowercase() == "open" {
+                Some(AgentObligationStatus::Open)
+            } else {
+                request
+                    .status
+                    .as_deref()
+                    .map(|status| {
+                        AgentObligationStatus::parse(status)
+                            .ok_or_else(|| format!("Invalid status: {status}"))
+                    })
+                    .transpose()?
+            };
+            let obligations = service
+                .list(status, request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligations).map_err(|e| e.to_string())
+        }
+        "resolve" => {
+            let id = parse_id(&required(&request.id, "id", "resolve")?, "obligation ID")?;
+            let resolution = AgentObligationResolution::new(
+                AgentObligationResolutionKind::parse(&required(
+                    &request.resolution,
+                    "resolution",
+                    "resolve",
+                )?),
+                required(&request.summary, "summary", "resolve")?,
+                request.actor.as_deref().unwrap_or("agent"),
+            );
+            let obligation = service
+                .resolve(id, resolution)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
+        }
+        "skip" => {
+            let id = parse_id(&required(&request.id, "id", "skip")?, "obligation ID")?;
+            let obligation = service
+                .skip(
+                    id,
+                    required(&request.reason, "reason", "skip")?,
+                    request.actor.unwrap_or_else(|| "agent".to_string()),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
+        }
+        "doctor" => {
+            let report = service
+                .doctor(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: detect, add, get, list, open, resolve, skip, doctor",
+            request.action
+        )),
+    }
+}
+
+fn parse_obligation_writer(request: &ObligationRequest) -> Result<WriterProvenance, String> {
+    let session_id = request
+        .writer_session_id
+        .as_deref()
+        .map(|id| parse_id(id, "writer_session_id"))
+        .transpose()?;
+    let mut writer = WriterProvenance::agent(
+        Harness::parse(request.writer_harness.as_deref().unwrap_or("generic")),
+        ModelIdentity::new(
+            request.model_provider.as_deref().unwrap_or("unknown"),
+            request.model.as_deref().unwrap_or("unknown"),
+        ),
+    );
+    writer.surface = request.surface.clone();
+    writer.actor = request.actor.clone().unwrap_or_else(|| "agent".to_string());
+    writer.session_id = session_id;
     Ok(writer)
 }
 

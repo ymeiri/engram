@@ -5,8 +5,8 @@
 use crate::tools::{self, ToolState};
 use engram_index::{
     CoordinationService, DocumentService, EntityService, GraphService, HandoffService,
-    KnowledgeService, LintService, MemoryService, RepositoryService, SearchService, SessionService,
-    ToolIntelService, WorkService,
+    KnowledgeService, LintService, MemoryService, ObligationService, RepositoryService,
+    SearchService, SessionService, ToolIntelService, WorkService,
 };
 use rmcp::{
     handler::server::{tool::ToolRouter, wrapper::Parameters},
@@ -42,6 +42,7 @@ pub use crate::tools::{
     MemoryChangeRequest,
     MemoryEvidenceRequest,
     MemoryRequestNew,
+    ObligationRequest,
     OrientRequest,
     RepoRequest,
     // Unified search
@@ -133,6 +134,11 @@ impl EngramServer {
     /// Initialize the server with a rolling handoff service.
     pub async fn init_handoff(&self, service: HandoffService) {
         self.state.init_handoff(service).await;
+    }
+
+    /// Initialize the server with an agent obligation service.
+    pub async fn init_obligation(&self, service: ObligationService) {
+        self.state.init_obligation(service).await;
     }
 
     /// Initialize the server with a repository topology service.
@@ -457,6 +463,17 @@ impl EngramServer {
         to_call_result(tools::handoff_new(&self.state, params.0).await)
     }
 
+    /// Manage agent-native session obligations.
+    #[tool(
+        description = "Manage agent-native obligations: detect, add, get, list, open, resolve, skip, doctor. Use detect at task start and before final response to surface document dispositions, failed tool recovery, source/design reading, verification, handoff, and commit-preference obligations. detect is dry-run unless write=true."
+    )]
+    pub async fn obligations(
+        &self,
+        params: Parameters<ObligationRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::obligations_new(&self.state, params.0).await)
+    }
+
     /// Manage the generated Memory OS Markdown vault.
     #[tool(
         description = "Manage the generated Memory OS Markdown vault: init, compile, status, page. Compile writes only Engram-generated files and skips existing user-owned files without the generated marker."
@@ -644,6 +661,7 @@ impl ServerHandler for EngramServer {
                  - lint: Run Memory OS health checks and safe remediations (actions: run, list, apply_safe; write required for safe actions)\n\
                  - graph: Traverse derived memory graph (actions: around, path, subgraph, export)\n\
                  - handoff: Manage rolling handoffs (actions: get, update, compile; dry-run by default)\n\
+                 - obligations: Manage agent-native obligations (actions: detect, add, get, list, open, resolve, skip, doctor; detect dry-run by default)\n\
                  - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session)\n\
                  - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
                  - digest: Inventory digest source files, export metadata-only review batches, parse review decisions, build review-gated extraction plans, or index reviewed source_only digests as document evidence (actions: inventory, review_export, review_apply, extraction_plan, source_index)\n\

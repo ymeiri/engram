@@ -3,8 +3,9 @@
 use crate::error::IndexResult;
 use engram_core::lint::{LintFinding, LintReport, LintRule, LintSafeAction, LintSeverity};
 use engram_core::memory::{MemoryItem, MemoryKind, MemoryScope, MemoryStatus};
+use engram_core::obligation::AgentObligationStatus;
 use engram_core::session::SessionStatus;
-use engram_store::{Db, MemoryRepo, SessionRepo};
+use engram_store::{Db, MemoryRepo, ObligationRepo, SessionRepo};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -33,6 +34,7 @@ pub struct LintOptions {
 pub struct LintService {
     memory_repo: MemoryRepo,
     session_repo: SessionRepo,
+    obligation_repo: ObligationRepo,
 }
 
 impl LintService {
@@ -40,7 +42,8 @@ impl LintService {
     pub fn new(db: Db) -> Self {
         Self {
             memory_repo: MemoryRepo::new(db.clone()),
-            session_repo: SessionRepo::new(db),
+            session_repo: SessionRepo::new(db.clone()),
+            obligation_repo: ObligationRepo::new(db),
         }
     }
 
@@ -48,6 +51,7 @@ impl LintService {
     pub async fn init_schema(&self) -> IndexResult<()> {
         self.memory_repo.init_schema().await?;
         self.session_repo.init_schema().await?;
+        self.obligation_repo.init_schema().await?;
         Ok(())
     }
 
@@ -63,6 +67,7 @@ impl LintService {
         lint_superseded_active_items(&items, &mut findings);
         lint_handoffs_missing_next_actions(&items, &mut findings);
         self.lint_stale_active_sessions(&mut findings).await?;
+        self.lint_open_obligations(&mut findings).await?;
 
         if let Some(vault_path) = options.vault_path {
             lint_vault_pages(Path::new(&vault_path), &mut findings)?;
@@ -124,6 +129,29 @@ impl LintService {
                     "Session has been active for more than one day; consider ending or abandoning it.",
                 )
                 .with_session(session.id),
+            );
+        }
+        Ok(())
+    }
+
+    async fn lint_open_obligations(&self, findings: &mut Vec<LintFinding>) -> IndexResult<()> {
+        let obligations = self
+            .obligation_repo
+            .list_obligations(Some(AgentObligationStatus::Open), None)
+            .await?;
+        for obligation in obligations {
+            findings.push(
+                LintFinding::new(
+                    format!("unresolved-agent-obligation:{}", obligation.id),
+                    LintRule::UnresolvedAgentObligation,
+                    LintSeverity::Warning,
+                    "Agent obligation is still open",
+                    format!(
+                        "Open obligation '{}' ({}) should be resolved or explicitly skipped before final response.",
+                        obligation.title, obligation.kind
+                    ),
+                )
+                .with_obligation(obligation.id),
             );
         }
         Ok(())
@@ -352,6 +380,7 @@ mod tests {
         ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryKind, MemoryScope, ModelIdentity,
         WriterProvenance,
     };
+    use engram_core::obligation::{AgentObligation, AgentObligationKind, AgentObligationTrigger};
     use engram_store::{connect_and_init, StoreConfig};
 
     async fn service() -> LintService {
@@ -384,6 +413,31 @@ mod tests {
             .findings
             .iter()
             .any(|finding| finding.rule == LintRule::MissingEvidence));
+    }
+
+    #[tokio::test]
+    async fn lint_reports_open_agent_obligations() {
+        let service = service().await;
+        let obligation = AgentObligation::new(
+            AgentObligationKind::SourceReading,
+            "Read source before implementation",
+            "Source reading is required before making changes.",
+            MemoryScope::project("engram"),
+            AgentObligationTrigger::new("prompt", "implementation request"),
+            writer(),
+        );
+        service
+            .obligation_repo
+            .save_obligation(&obligation)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.rule == LintRule::UnresolvedAgentObligation
+                && finding.obligation_id == Some(obligation.id)
+        }));
     }
 
     #[tokio::test]

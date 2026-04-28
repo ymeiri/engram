@@ -61,6 +61,8 @@ pub enum HarnessLifecycleTrigger {
     AfterDiscoveryRecord,
     /// Before the final response, check for memory changes and distill if needed.
     BeforeFinalChangesSince,
+    /// Before the final response, detect and close open agent obligations.
+    BeforeFinalObligations,
     /// At session end, compile a handoff and knowledge commit candidate.
     SessionEndHandoff,
     /// Before commit messages, consult relevant preferences and rules.
@@ -76,6 +78,7 @@ impl std::fmt::Display for HarnessLifecycleTrigger {
             }
             Self::AfterDiscoveryRecord => write!(f, "after_discovery_record"),
             Self::BeforeFinalChangesSince => write!(f, "before_final_changes_since"),
+            Self::BeforeFinalObligations => write!(f, "before_final_obligations"),
             Self::SessionEndHandoff => write!(f, "session_end_handoff"),
             Self::CommitWorkflowConsultMemory => write!(f, "commit_workflow_consult_memory"),
         }

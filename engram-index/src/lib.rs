@@ -38,6 +38,7 @@ pub mod knowledge;
 pub mod lint;
 pub mod memory;
 pub mod migration;
+pub mod obligation;
 pub mod parser;
 pub mod pipeline;
 pub mod repository;
@@ -77,6 +78,10 @@ pub use migration::{
     MigrationCandidate, MigrationDisposition, MigrationInventory, MigrationInventoryOptions,
     MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
     MigrationReviewStatus, MigrationService, MigrationSourceKind,
+};
+pub use obligation::{
+    obligation_writer, ObligationDetectOptions, ObligationDetection, ObligationDoctorReport,
+    ObligationService,
 };
 pub use parser::{parse_content, parse_file, ParsedDocument, Section};
 pub use pipeline::{

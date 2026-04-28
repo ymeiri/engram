@@ -8,6 +8,7 @@ pub mod document;
 pub mod entity;
 pub mod knowledge;
 pub mod memory;
+pub mod obligation;
 pub mod repository;
 pub mod session;
 pub mod tool;
@@ -25,6 +26,7 @@ pub use entity::{
 };
 pub use knowledge::KnowledgeRepo;
 pub use memory::MemoryRepo;
+pub use obligation::ObligationRepo;
 pub use repository::RepositoryRepo;
 pub use session::SessionRepo;
 pub use tool::{ToolIntelStats, ToolRepo};

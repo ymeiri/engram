@@ -17,6 +17,7 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Orientation packet with repository/project resolution and deterministic relevance ordering.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
 - [x] Agent harness layer: MCP `harness`, CLI `engram harness`, Claude Code adapter rendering, Codex skill rendering, Gemini CLI custom command/context rendering, Cursor Agent skill rendering, dry-run install by default.
+- [x] Agent-native obligations layer: MCP `obligations`, CLI `engram obligations`, lifecycle detection for document disposition, source/design context reading, failed tool-call recovery, tests, handoffs, and commit preference checks.
 - [x] Lint/recalibration MVP: missing evidence, stale preference, duplicate entity candidate, orphan task/project scope, stale active session, superseded active item, vault marker/frontmatter, handoff missing next actions.
 - [x] Archive metadata and archive-aware retrieval; normal orientation uses active memory only.
 - [x] Derived graph traversal: MCP/CLI `graph around|path|subgraph|export`.
@@ -29,8 +30,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 
 Current MCP/CLI Memory OS surface:
 
-- MCP: `orient`, `memory`, `harness`, `lint`, `graph`, `handoff`, `vault`, `digest`, `repo`.
-- CLI: `engram orient`, `engram memory`, `engram harness`, `engram lint`, `engram graph`, `engram handoff`, `engram vault`, `engram digest`, `engram repo`.
+- MCP: `orient`, `memory`, `harness`, `obligations`, `lint`, `graph`, `handoff`, `vault`, `digest`, `repo`.
+- CLI: `engram orient`, `engram memory`, `engram harness`, `engram obligations`, `engram lint`, `engram graph`, `engram handoff`, `engram vault`, `engram digest`, `engram repo`.
 
 Migration safety rule:
 
