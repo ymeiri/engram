@@ -409,6 +409,16 @@ impl MigrationService {
                 .await?;
         }
 
+        let existing_sources = self.existing_migration_source_tags().await?;
+        let candidates_before_dedupe = candidates.len();
+        candidates.retain(|candidate| !existing_sources.contains(&migration_source_tag(candidate)));
+        let skipped_existing_sources = candidates_before_dedupe.saturating_sub(candidates.len());
+        if skipped_existing_sources > 0 {
+            warnings.push(format!(
+                "Skipped {skipped_existing_sources} candidates whose source was already migrated."
+            ));
+        }
+
         candidates.sort_by(|left, right| {
             disposition_rank(left.disposition)
                 .cmp(&disposition_rank(right.disposition))
@@ -2813,6 +2823,52 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn inventory_excludes_already_migrated_sources() {
+        let (service, _entity_repo, _session_repo, work_repo, _memory_repo) = setup_service().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        work_repo
+            .add_project_observation(
+                &ProjectObservation::new(project.id, "Advance after accepted migration writes.")
+                    .with_key("decisions.advance-after-write"),
+            )
+            .await
+            .unwrap();
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_review_batch(dir.path(), MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        check_first_candidate(dir.path(), &export, "Accept for migration");
+
+        service
+            .apply_review_batch(
+                dir.path(),
+                MigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        let inventory = service
+            .inventory(MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+
+        assert_eq!(inventory.sources_scanned, 1);
+        assert_eq!(inventory.total_candidates, 0);
+        assert_eq!(inventory.returned_candidates, 0);
+        assert!(inventory
+            .warnings
+            .iter()
+            .any(|warning| warning == "Skipped 1 candidates whose source was already migrated."));
     }
 
     #[test]
