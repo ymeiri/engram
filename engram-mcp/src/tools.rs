@@ -6970,8 +6970,8 @@ pub struct HarnessRequest {
     /// Action: status, doctor, render_policy, render_adapter, install
     #[schemars(description = "Action: status, doctor, render_policy, render_adapter, install")]
     pub action: String,
-    /// Harness name: claude_code, codex, gemini_cli, or generic
-    #[schemars(description = "Harness name: claude_code, codex, gemini_cli, or generic")]
+    /// Harness name: claude_code, codex, gemini_cli, cursor, or generic
+    #[schemars(description = "Harness name: claude_code, codex, gemini_cli, cursor, or generic")]
     pub harness: Option<String>,
     /// Install root. Defaults to the user's home directory.
     #[schemars(description = "Install root. Defaults to the user's home directory.")]

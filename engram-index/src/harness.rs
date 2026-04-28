@@ -259,6 +259,7 @@ fn adapters_for(harness: HarnessKind) -> Vec<HarnessAdapterSpec> {
         HarnessKind::ClaudeCode => claude_adapters(),
         HarnessKind::Codex => codex_adapters(),
         HarnessKind::GeminiCli => gemini_adapters(),
+        HarnessKind::Cursor => cursor_adapters(),
         HarnessKind::Generic => generic_adapters(),
     }
 }
@@ -378,6 +379,35 @@ fn gemini_adapters() -> Vec<HarnessAdapterSpec> {
             "Gemini CLI global context file for Memory OS lifecycle nudges.",
             true,
             gemini_global_context(),
+        ),
+    ]
+}
+
+fn cursor_adapters() -> Vec<HarnessAdapterSpec> {
+    vec![
+        adapter(
+            "cursor-memory-session-skill",
+            HarnessAdapterKind::CursorSkill,
+            ".cursor/skills/engram-memory-session/SKILL.md",
+            "Cursor Agent skill for the Memory OS lifecycle contract.",
+            true,
+            cursor_memory_session_skill(),
+        ),
+        adapter(
+            "cursor-resume-session-skill",
+            HarnessAdapterKind::CursorSkill,
+            ".cursor/skills/engram-resume-session/SKILL.md",
+            "Cursor Agent skill for project/session resumption from Engram.",
+            true,
+            cursor_resume_session_skill(),
+        ),
+        adapter(
+            "cursor-end-session-skill",
+            HarnessAdapterKind::CursorSkill,
+            ".cursor/skills/engram-end-session/SKILL.md",
+            "Cursor Agent skill for handoff compilation and memory commits.",
+            true,
+            cursor_end_session_skill(),
         ),
     ]
 }
@@ -686,6 +716,74 @@ Useful commands when installed:
     )
 }
 
+fn cursor_memory_session_skill() -> String {
+    format!(
+        r#"{MARKER_MD}
+---
+name: engram-memory-session
+description: Use when Cursor Agent is working in a repo or project with persistent Engram memory, especially at task start, before major decisions, before final responses, or when commit preferences may matter.
+---
+# Engram Memory Session
+
+Use this skill when Cursor Agent is working in a repository or project with persistent Engram memory.
+
+Workflow:
+- Start by calling the Engram MCP `orient` tool with project, cwd, prompt, and `agent=cursor`.
+- Treat the returned memory cursor as the baseline for this turn.
+- Before a major decision or final response, call `memory(action=changes_since)`.
+- Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- Use writer provenance with `writer_harness=cursor` when writing durable memory.
+- For commit messages, check memory for user/project commit preferences first.
+- If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
+
+This skill is advisory. Report skipped lifecycle steps as warnings; do not block coding work.
+"#
+    )
+}
+
+fn cursor_resume_session_skill() -> String {
+    format!(
+        r#"{MARKER_MD}
+---
+name: engram-resume-session
+description: Use when Cursor Agent resumes, continues, or loads prior project context from Engram memory and rolling handoffs.
+---
+# Engram Resume Session
+
+Use this skill when the user asks Cursor Agent to continue, resume, or load prior Engram context.
+
+Steps:
+- Call the Engram MCP `orient` tool before reading broad files.
+- Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
+- Use `handoff(action=get)` when available.
+- Poll `memory(action=changes_since)` before major decisions and final response.
+- Store compact, evidenced memory if the session discovered something future agents need.
+- Use writer provenance with `writer_harness=cursor` for durable memory writes.
+"#
+    )
+}
+
+fn cursor_end_session_skill() -> String {
+    format!(
+        r#"{MARKER_MD}
+---
+name: engram-end-session
+description: Use when Cursor Agent is closing out work, preparing a handoff, or recording durable Memory OS changes.
+---
+# Engram End Session
+
+Use this skill when Cursor Agent is closing out a task or preparing a handoff.
+
+Before ending:
+- Call `memory(action=changes_since)` from the latest cursor.
+- Update or compile `handoff` with completed work, open decisions, next actions, and risks.
+- If durable memory changed, prepare a `memory(action=commit)` candidate.
+- Use writer provenance with `writer_harness=cursor`.
+- Leave migration and digest promotions review-gated; do not auto-promote orphan data.
+"#
+    )
+}
+
 fn agents_snippet() -> String {
     format!(
         r#"{MARKER_MD}
@@ -759,6 +857,22 @@ mod tests {
     }
 
     #[test]
+    fn status_reports_missing_required_cursor_adapters() {
+        let root = tempfile::tempdir().unwrap();
+        let report = HarnessService::new()
+            .status(HarnessKind::Cursor, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(!report.ready);
+        assert_eq!(report.harness, HarnessKind::Cursor);
+        assert!(report
+            .adapters
+            .iter()
+            .filter(|check| check.required)
+            .all(|check| check.status == HarnessAdapterStatus::Missing));
+    }
+
+    #[test]
     fn dry_run_install_writes_nothing() {
         let root = tempfile::tempdir().unwrap();
         let report = HarnessService::new()
@@ -815,6 +929,28 @@ mod tests {
         let context_contents = fs::read_to_string(context).unwrap();
         assert!(context_contents.contains(MARKER_MD));
         assert!(context_contents.contains("agent=gemini_cli"));
+    }
+
+    #[test]
+    fn write_install_creates_cursor_adapters() {
+        let root = tempfile::tempdir().unwrap();
+        let report = HarnessService::new()
+            .install(HarnessKind::Cursor, Some(root.path()), true)
+            .unwrap();
+
+        assert!(!report.dry_run);
+        assert_eq!(report.written.len(), 3);
+
+        let skill = root
+            .path()
+            .join(".cursor/skills/engram-memory-session/SKILL.md");
+        assert!(skill.exists());
+
+        let contents = fs::read_to_string(skill).unwrap();
+        assert!(contents.contains(MARKER_MD));
+        assert!(contents.contains("name: engram-memory-session"));
+        assert!(contents.contains("agent=cursor"));
+        assert!(contents.contains("writer_harness=cursor"));
     }
 
     #[test]
@@ -926,5 +1062,17 @@ mod tests {
             ".gemini/commands/engram/memory-session.toml"
         );
         assert!(adapters[0].contents.contains("/engram:memory-session"));
+    }
+
+    #[test]
+    fn render_cursor_adapter_uses_cursor_skill_path() {
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::Cursor, Some("cursor-memory-session-skill"));
+        assert_eq!(adapters.len(), 1);
+        assert_eq!(
+            adapters[0].relative_path,
+            ".cursor/skills/engram-memory-session/SKILL.md"
+        );
+        assert!(adapters[0].contents.contains("writer_harness=cursor"));
     }
 }

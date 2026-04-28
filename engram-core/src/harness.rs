@@ -16,6 +16,8 @@ pub enum HarnessKind {
     Codex,
     /// Gemini CLI.
     GeminiCli,
+    /// Cursor Agent.
+    Cursor,
     /// Generic policy with no surface-specific files.
     #[default]
     Generic,
@@ -27,6 +29,7 @@ impl std::fmt::Display for HarnessKind {
             Self::ClaudeCode => write!(f, "claude_code"),
             Self::Codex => write!(f, "codex"),
             Self::GeminiCli => write!(f, "gemini_cli"),
+            Self::Cursor => write!(f, "cursor"),
             Self::Generic => write!(f, "generic"),
         }
     }
@@ -40,6 +43,7 @@ impl HarnessKind {
             "claude" | "claude_code" => Self::ClaudeCode,
             "codex" => Self::Codex,
             "gemini" | "gemini_cli" => Self::GeminiCli,
+            "cursor" | "cursor_agent" => Self::Cursor,
             _ => Self::Generic,
         }
     }
@@ -92,6 +96,8 @@ pub enum HarnessAdapterKind {
     GeminiCommand,
     /// Gemini CLI context file.
     GeminiContext,
+    /// Cursor Agent skill.
+    CursorSkill,
     /// Project instruction snippet.
     ProjectInstructions,
     /// Generic policy document.

@@ -418,7 +418,7 @@ impl EngramServer {
 
     /// Manage Memory OS agent harness policy and adapters.
     #[tool(
-        description = "Manage the Memory OS agent harness contract: status, doctor, render_policy, render_adapter, install. Supports claude_code, codex, gemini_cli, and generic. Installation is dry-run unless write=true; user-owned files without the Engram marker are skipped."
+        description = "Manage the Memory OS agent harness contract: status, doctor, render_policy, render_adapter, install. Supports claude_code, codex, gemini_cli, cursor, and generic. Installation is dry-run unless write=true; user-owned files without the Engram marker are skipped."
     )]
     pub async fn harness(
         &self,

@@ -1876,6 +1876,7 @@ enum HarnessKindArg {
     ClaudeCode,
     Codex,
     GeminiCli,
+    Cursor,
     Generic,
 }
 
@@ -1885,6 +1886,7 @@ impl From<HarnessKindArg> for HarnessKind {
             HarnessKindArg::ClaudeCode => Self::ClaudeCode,
             HarnessKindArg::Codex => Self::Codex,
             HarnessKindArg::GeminiCli => Self::GeminiCli,
+            HarnessKindArg::Cursor => Self::Cursor,
             HarnessKindArg::Generic => Self::Generic,
         }
     }
