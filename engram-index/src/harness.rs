@@ -177,21 +177,18 @@ impl HarnessService {
         for adapter in self.policy(harness).adapters {
             let path = root.join(&adapter.relative_path);
             let check = check_adapter(&root, &adapter)?;
-            let plan_message = install_plan_message(check.status, write);
-            let plan = HarnessInstallFile {
-                name: adapter.name.clone(),
-                path: path.display().to_string(),
-                written: false,
-                message: plan_message,
-            };
-            planned.push(plan.clone());
-
-            if !write {
-                continue;
-            }
-
             match check.status {
                 HarnessAdapterStatus::Missing | HarnessAdapterStatus::Drifted => {
+                    planned.push(HarnessInstallFile {
+                        name: adapter.name.clone(),
+                        path: path.display().to_string(),
+                        written: false,
+                        message: install_plan_message(check.status),
+                    });
+                    if !write {
+                        continue;
+                    }
+
                     if let Some(parent) = path.parent() {
                         fs::create_dir_all(parent)?;
                     }
@@ -418,14 +415,12 @@ fn has_marker(contents: &str) -> bool {
     contents.contains(MARKER_MD) || contents.contains(MARKER_SH)
 }
 
-fn install_plan_message(status: HarnessAdapterStatus, write: bool) -> String {
-    match (status, write) {
-        (_, false) => "dry-run; no file will be written".to_string(),
-        (HarnessAdapterStatus::Missing, true) => "will create generated adapter".to_string(),
-        (HarnessAdapterStatus::Drifted, true) => "will update generated adapter".to_string(),
-        (HarnessAdapterStatus::Installed, true) => "already installed".to_string(),
-        (HarnessAdapterStatus::UserOwned, true) => {
-            "will skip user-owned file without Engram marker".to_string()
+fn install_plan_message(status: HarnessAdapterStatus) -> String {
+    match status {
+        HarnessAdapterStatus::Missing => "will create generated adapter".to_string(),
+        HarnessAdapterStatus::Drifted => "will update generated adapter".to_string(),
+        HarnessAdapterStatus::Installed | HarnessAdapterStatus::UserOwned => {
+            "no generated adapter write planned".to_string()
         }
     }
 }
@@ -684,6 +679,36 @@ mod tests {
 
         assert!(report
             .skipped
+            .iter()
+            .any(|file| file.path == path.display().to_string()));
+        assert_eq!(fs::read_to_string(path).unwrap(), "user-owned");
+    }
+
+    #[test]
+    fn dry_run_install_reports_user_owned_file_as_skipped() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root
+            .path()
+            .join(".codex/skills/engram-memory-session/SKILL.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "user-owned").unwrap();
+
+        let report = HarnessService::new()
+            .install(HarnessKind::Codex, Some(root.path()), false)
+            .unwrap();
+
+        assert!(report.dry_run);
+        assert!(report.written.is_empty());
+        assert!(report
+            .skipped
+            .iter()
+            .any(|file| file.path == path.display().to_string()));
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("user-owned")));
+        assert!(!report
+            .planned
             .iter()
             .any(|file| file.path == path.display().to_string()));
         assert_eq!(fs::read_to_string(path).unwrap(), "user-owned");
