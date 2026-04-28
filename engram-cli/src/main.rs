@@ -1731,6 +1731,10 @@ enum MemoryCommands {
         #[arg(short, long)]
         limit: Option<usize>,
 
+        /// Exclude sources already decided in generated review batches under this path
+        #[arg(long)]
+        exclude_reviewed_path: Option<String>,
+
         /// Print the full inventory as JSON
         #[arg(long)]
         json: bool,
@@ -1760,6 +1764,10 @@ enum MemoryCommands {
         /// Maximum candidates to include in the review batch
         #[arg(short, long)]
         limit: Option<usize>,
+
+        /// Exclude sources already decided in generated review batches under this path
+        #[arg(long)]
+        exclude_reviewed_path: Option<String>,
 
         /// Print the full export result as JSON
         #[arg(long)]
@@ -7708,6 +7716,7 @@ async fn main() -> Result<()> {
                 MemoryCommands::MigrationInventory {
                     project_filter,
                     limit,
+                    exclude_reviewed_path,
                     json,
                     no_entity_observations,
                     no_session_history,
@@ -7725,6 +7734,7 @@ async fn main() -> Result<()> {
                             include_entity_observations: !no_entity_observations,
                             include_session_history: !no_session_history,
                             include_work_observations: !no_work_observations,
+                            exclude_reviewed_path,
                         })
                         .await?;
 
@@ -7738,6 +7748,7 @@ async fn main() -> Result<()> {
                     path,
                     project_filter,
                     limit,
+                    exclude_reviewed_path,
                     json,
                     no_entity_observations,
                     no_session_history,
@@ -7757,6 +7768,7 @@ async fn main() -> Result<()> {
                                 include_entity_observations: !no_entity_observations,
                                 include_session_history: !no_session_history,
                                 include_work_observations: !no_work_observations,
+                                exclude_reviewed_path,
                             },
                         )
                         .await?;

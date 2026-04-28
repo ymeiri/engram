@@ -39,6 +39,8 @@ pub struct MigrationInventoryOptions {
     pub include_session_history: bool,
     /// Include Layer 7 project/task observations.
     pub include_work_observations: bool,
+    /// Exclude sources already decided in generated review batches under this path.
+    pub exclude_reviewed_path: Option<String>,
 }
 
 impl MigrationInventoryOptions {
@@ -51,6 +53,7 @@ impl MigrationInventoryOptions {
             include_entity_observations: true,
             include_session_history: true,
             include_work_observations: true,
+            exclude_reviewed_path: None,
         }
     }
 }
@@ -410,12 +413,29 @@ impl MigrationService {
         }
 
         let existing_sources = self.existing_migration_source_tags().await?;
+        let reviewed_sources = options
+            .exclude_reviewed_path
+            .as_deref()
+            .map(|path| reviewed_migration_source_tags(Path::new(path)))
+            .transpose()?
+            .unwrap_or_default();
+
         let candidates_before_dedupe = candidates.len();
         candidates.retain(|candidate| !existing_sources.contains(&migration_source_tag(candidate)));
         let skipped_existing_sources = candidates_before_dedupe.saturating_sub(candidates.len());
         if skipped_existing_sources > 0 {
             warnings.push(format!(
                 "Skipped {skipped_existing_sources} candidates whose source was already migrated."
+            ));
+        }
+
+        let candidates_before_review_filter = candidates.len();
+        candidates.retain(|candidate| !reviewed_sources.contains(&migration_source_tag(candidate)));
+        let skipped_reviewed_sources =
+            candidates_before_review_filter.saturating_sub(candidates.len());
+        if skipped_reviewed_sources > 0 {
+            warnings.push(format!(
+                "Skipped {skipped_reviewed_sources} candidates already decided in review workspace."
             ));
         }
 
@@ -1825,6 +1845,77 @@ fn collect_candidate_review_files(
     Ok(files)
 }
 
+fn reviewed_migration_source_tags(root: &Path) -> IndexResult<HashSet<String>> {
+    let mut roots = Vec::new();
+    collect_migration_review_roots(root, &mut roots)?;
+
+    let mut tags = HashSet::new();
+    for root in roots {
+        let mut report = empty_review_apply_report(&root, true);
+        for path in collect_candidate_review_files(&root, &mut report)? {
+            let relative_path = relative_markdown_path(&root, &path);
+            let contents = fs::read_to_string(&path)?;
+            if let Some(parsed) =
+                parse_review_candidate_page(&contents, &relative_path, &mut report)?
+            {
+                tags.insert(migration_source_tag(&parsed.candidate));
+            }
+        }
+    }
+    Ok(tags)
+}
+
+fn collect_migration_review_roots(root: &Path, roots: &mut Vec<PathBuf>) -> IndexResult<()> {
+    if !root.exists() || !root.is_dir() {
+        return Ok(());
+    }
+
+    let index_path = root.join("index.md");
+    if index_path.exists() {
+        let contents = fs::read_to_string(&index_path)?;
+        if contents.contains(REVIEW_GENERATED_MARKER)
+            && (contents.contains("page_type: \"migration_review_index\"")
+                || contents.contains("page_type: migration_review_index"))
+        {
+            roots.push(root.to_path_buf());
+            return Ok(());
+        }
+    }
+
+    for entry in fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_migration_review_roots(&path, roots)?;
+        }
+    }
+    Ok(())
+}
+
+fn empty_review_apply_report(root: &Path, dry_run: bool) -> MigrationReviewApply {
+    MigrationReviewApply {
+        root: root.display().to_string(),
+        dry_run,
+        files_scanned: 0,
+        files_skipped: Vec::new(),
+        files_with_no_decision: Vec::new(),
+        files_with_conflicts: Vec::new(),
+        files_not_in_index: Vec::new(),
+        indexed_files_missing: Vec::new(),
+        accepted_count: 0,
+        accepted_with_edits_count: 0,
+        accepted_files: Vec::new(),
+        quarantined_count: 0,
+        quarantined_files: Vec::new(),
+        rejected_count: 0,
+        rejected_files: Vec::new(),
+        duplicate_count: 0,
+        planned_items: Vec::new(),
+        written_items: Vec::new(),
+        commit: None,
+        warnings: Vec::new(),
+    }
+}
+
 fn skip_candidate_files_without_generated_index(
     root: &Path,
     report: &mut MigrationReviewApply,
@@ -2250,6 +2341,7 @@ mod tests {
                 include_session_history: false,
                 include_work_observations: true,
                 limit: None,
+                exclude_reviewed_path: None,
             })
             .await
             .unwrap();
@@ -2272,6 +2364,7 @@ mod tests {
                 include_session_history: false,
                 include_work_observations: true,
                 limit: None,
+                exclude_reviewed_path: None,
             })
             .await
             .unwrap();
@@ -2348,6 +2441,7 @@ mod tests {
                 include_session_history: true,
                 include_work_observations: false,
                 limit: None,
+                exclude_reviewed_path: None,
             })
             .await
             .unwrap();
@@ -2405,6 +2499,7 @@ mod tests {
                 include_session_history: false,
                 include_work_observations: true,
                 limit: None,
+                exclude_reviewed_path: None,
             })
             .await
             .unwrap();
@@ -2871,6 +2966,64 @@ mod tests {
             .any(|warning| warning == "Skipped 1 candidates whose source was already migrated."));
     }
 
+    #[tokio::test]
+    async fn inventory_excludes_sources_decided_in_review_workspace() {
+        let (service, _entity_repo, _session_repo, work_repo, _memory_repo) = setup_service().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        for (key, content) in [
+            (
+                "decisions.first-reviewed",
+                "The first reviewed source should not appear in later batches.",
+            ),
+            (
+                "decisions.next-review",
+                "The next undecided source should remain available for review.",
+            ),
+        ] {
+            work_repo
+                .add_project_observation(
+                    &ProjectObservation::new(project.id, content).with_key(key),
+                )
+                .await
+                .unwrap();
+        }
+
+        let dir = tempdir().unwrap();
+        let export = service
+            .export_review_batch(
+                dir.path(),
+                MigrationInventoryOptions {
+                    limit: Some(1),
+                    ..MigrationInventoryOptions::all()
+                },
+            )
+            .await
+            .unwrap();
+        let first_candidate_path = first_candidate_path(&export);
+        let first_candidate = candidate_from_file(dir.path(), &first_candidate_path);
+        mark_candidate_decision(dir.path(), &first_candidate_path, "Quarantine");
+
+        let inventory = service
+            .inventory(MigrationInventoryOptions {
+                exclude_reviewed_path: Some(dir.path().display().to_string()),
+                ..MigrationInventoryOptions::all()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(inventory.sources_scanned, 2);
+        assert_eq!(inventory.total_candidates, 1);
+        assert_eq!(inventory.returned_candidates, 1);
+        assert!(inventory
+            .candidates
+            .iter()
+            .all(|candidate| candidate.source_id != first_candidate.source_id));
+        assert!(inventory.warnings.iter().any(|warning| {
+            warning == "Skipped 1 candidates already decided in review workspace."
+        }));
+    }
+
     #[test]
     fn machine_record_json_ignores_inline_fences_inside_json_strings() {
         let contents = r#"## Machine Record
@@ -2910,6 +3063,11 @@ mod tests {
 
     fn mark_candidate_decision(root: &Path, candidate_path: &str, decision: &str) {
         mark_candidate_decision_at_path(&root.join(candidate_path), decision);
+    }
+
+    fn candidate_from_file(root: &Path, candidate_path: &str) -> MigrationCandidate {
+        let contents = fs::read_to_string(root.join(candidate_path)).unwrap();
+        parse_machine_candidate(&contents).unwrap()
     }
 
     fn mark_candidate_decision_at_path(path: &Path, decision: &str) {

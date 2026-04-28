@@ -7659,6 +7659,8 @@ pub struct MemoryRequestNew {
     pub vault_path: Option<String>,
     /// Migration review output path (required for migration_review_export)
     pub migration_review_path: Option<String>,
+    /// Exclude sources already decided in generated review batches under this path
+    pub exclude_reviewed_path: Option<String>,
     /// Digest extraction review path (required for digest_extraction_apply)
     pub digest_extraction_path: Option<String>,
     /// Dry-run mode for migration_review_apply or digest_extraction_apply; defaults to true
@@ -7927,6 +7929,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             let mut options = MigrationInventoryOptions::all();
             options.project_filter = request.project_name.clone();
             options.limit = request.limit;
+            options.exclude_reviewed_path = request.exclude_reviewed_path.clone();
             if let Some(include) = request.include_entity_observations {
                 options.include_entity_observations = include;
             }
@@ -7956,6 +7959,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             let mut options = MigrationInventoryOptions::all();
             options.project_filter = request.project_name.clone();
             options.limit = request.limit;
+            options.exclude_reviewed_path = request.exclude_reviewed_path.clone();
             if let Some(include) = request.include_entity_observations {
                 options.include_entity_observations = include;
             }

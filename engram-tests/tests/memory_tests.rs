@@ -71,6 +71,7 @@ fn request(action: &str) -> MemoryRequestNew {
         archived_by: None,
         vault_path: None,
         migration_review_path: None,
+        exclude_reviewed_path: None,
         digest_extraction_path: None,
         dry_run: None,
         create_commit: None,
