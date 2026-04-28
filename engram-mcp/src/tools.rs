@@ -6970,8 +6970,8 @@ pub struct HarnessRequest {
     /// Action: status, doctor, render_policy, render_adapter, install
     #[schemars(description = "Action: status, doctor, render_policy, render_adapter, install")]
     pub action: String,
-    /// Harness name: claude_code, codex, or generic
-    #[schemars(description = "Harness name: claude_code, codex, or generic")]
+    /// Harness name: claude_code, codex, gemini_cli, or generic
+    #[schemars(description = "Harness name: claude_code, codex, gemini_cli, or generic")]
     pub harness: Option<String>,
     /// Install root. Defaults to the user's home directory.
     #[schemars(description = "Install root. Defaults to the user's home directory.")]
@@ -7599,7 +7599,7 @@ pub struct MemoryRequestNew {
     /// Custom scope name
     pub scope_name: Option<String>,
 
-    /// Writer harness/interface: claude_code, codex, chatgpt, cursor, or custom
+    /// Writer harness/interface: claude_code, codex, gemini_cli, chatgpt, cursor, or custom
     #[schemars(description = "Writer harness/interface (required for add and commit)")]
     pub writer_harness: Option<String>,
     /// Writer harness version

@@ -258,6 +258,7 @@ fn adapters_for(harness: HarnessKind) -> Vec<HarnessAdapterSpec> {
     match harness {
         HarnessKind::ClaudeCode => claude_adapters(),
         HarnessKind::Codex => codex_adapters(),
+        HarnessKind::GeminiCli => gemini_adapters(),
         HarnessKind::Generic => generic_adapters(),
     }
 }
@@ -340,6 +341,43 @@ fn codex_adapters() -> Vec<HarnessAdapterSpec> {
             "Project instruction snippet that can be merged into AGENTS.md.",
             false,
             agents_snippet(),
+        ),
+    ]
+}
+
+fn gemini_adapters() -> Vec<HarnessAdapterSpec> {
+    vec![
+        adapter(
+            "gemini-memory-session-command",
+            HarnessAdapterKind::GeminiCommand,
+            ".gemini/commands/engram/memory-session.toml",
+            "Gemini CLI custom command for the Memory OS lifecycle contract.",
+            true,
+            gemini_memory_session_command(),
+        ),
+        adapter(
+            "gemini-resume-session-command",
+            HarnessAdapterKind::GeminiCommand,
+            ".gemini/commands/engram/resume-session.toml",
+            "Gemini CLI custom command for project/session resumption from Engram.",
+            true,
+            gemini_resume_session_command(),
+        ),
+        adapter(
+            "gemini-end-session-command",
+            HarnessAdapterKind::GeminiCommand,
+            ".gemini/commands/engram/end-session.toml",
+            "Gemini CLI custom command for handoff compilation and memory commits.",
+            true,
+            gemini_end_session_command(),
+        ),
+        adapter(
+            "gemini-global-context",
+            HarnessAdapterKind::GeminiContext,
+            ".gemini/GEMINI.md",
+            "Gemini CLI global context file for Memory OS lifecycle nudges.",
+            true,
+            gemini_global_context(),
         ),
     ]
 }
@@ -558,6 +596,96 @@ Steps:
     )
 }
 
+fn gemini_memory_session_command() -> String {
+    format!(
+        r#"{MARKER_SH}
+description = "Follow the Engram Memory OS lifecycle contract."
+prompt = """
+# Engram Memory Session
+
+You are Gemini CLI working in a repository or project with persistent Engram memory.
+This command is invoked as `/engram:memory-session`.
+
+Follow this soft lifecycle contract:
+- Start by calling the Engram MCP `orient` tool with project, cwd, prompt, and `agent=gemini_cli`.
+- Treat the returned memory cursor as the baseline for this turn.
+- Before a major decision or final response, call `memory(action=changes_since)`.
+- Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- For commit messages, check memory for user/project commit preferences first.
+- If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
+
+This contract is advisory. Report skipped lifecycle steps as warnings; do not block coding work.
+"""
+"#
+    )
+}
+
+fn gemini_resume_session_command() -> String {
+    format!(
+        r#"{MARKER_SH}
+description = "Resume project work from Engram memory and handoffs."
+prompt = """
+# Resume Engram Session
+
+You are Gemini CLI resuming work with persistent Engram memory.
+This command is invoked as `/engram:resume-session`.
+
+Steps:
+- Call the Engram MCP `orient` tool before reading broad files.
+- Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
+- Use `handoff(action=get)` when available.
+- Poll `memory(action=changes_since)` before major decisions and final response.
+- Store compact, evidenced memory if the session discovered something future agents need.
+"""
+"#
+    )
+}
+
+fn gemini_end_session_command() -> String {
+    format!(
+        r#"{MARKER_SH}
+description = "Compile a Memory OS handoff and knowledge commit candidate."
+prompt = """
+# End Engram Session
+
+You are Gemini CLI closing out work with persistent Engram memory.
+This command is invoked as `/engram:end-session`.
+
+Before ending:
+- Call `memory(action=changes_since)` from the latest cursor.
+- Update or compile `handoff` with completed work, open decisions, next actions, and risks.
+- If durable memory changed, prepare a `memory(action=commit)` candidate.
+- Leave migration and digest promotions review-gated; do not auto-promote orphan data.
+"""
+"#
+    )
+}
+
+fn gemini_global_context() -> String {
+    format!(
+        r#"{MARKER_MD}
+# Engram Memory OS Harness
+
+Gemini CLI should treat Engram as persistent project memory when Engram MCP tools are available.
+
+- Start work by calling `orient` with the current project, cwd, prompt, and `agent=gemini_cli`.
+- Keep the returned memory cursor and call `memory(action=changes_since)` before major
+  decisions, before final response, and during long sessions.
+- Record source-grounded decisions, preferences, rules, limitations, and non-obvious
+  discoveries. Use writer provenance so Gemini CLI, Claude Code, Codex, and other harnesses
+  can be distinguished.
+- Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
+- Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
+- Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
+
+Useful commands when installed:
+- `/engram:memory-session`
+- `/engram:resume-session`
+- `/engram:end-session`
+"#
+    )
+}
+
 fn agents_snippet() -> String {
     format!(
         r#"{MARKER_MD}
@@ -615,6 +743,22 @@ mod tests {
     }
 
     #[test]
+    fn status_reports_missing_required_gemini_adapters() {
+        let root = tempfile::tempdir().unwrap();
+        let report = HarnessService::new()
+            .status(HarnessKind::GeminiCli, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(!report.ready);
+        assert_eq!(report.harness, HarnessKind::GeminiCli);
+        assert!(report
+            .adapters
+            .iter()
+            .filter(|check| check.required)
+            .all(|check| check.status == HarnessAdapterStatus::Missing));
+    }
+
+    #[test]
     fn dry_run_install_writes_nothing() {
         let root = tempfile::tempdir().unwrap();
         let report = HarnessService::new()
@@ -643,6 +787,34 @@ mod tests {
         assert!(contents.contains(MARKER_MD));
         assert!(contents.contains("orient"));
         assert!(contents.contains("changes_since"));
+    }
+
+    #[test]
+    fn write_install_creates_gemini_adapters() {
+        let root = tempfile::tempdir().unwrap();
+        let report = HarnessService::new()
+            .install(HarnessKind::GeminiCli, Some(root.path()), true)
+            .unwrap();
+
+        assert!(!report.dry_run);
+        assert_eq!(report.written.len(), 4);
+
+        let command = root
+            .path()
+            .join(".gemini/commands/engram/memory-session.toml");
+        let context = root.path().join(".gemini/GEMINI.md");
+        assert!(command.exists());
+        assert!(context.exists());
+
+        let command_contents = fs::read_to_string(command).unwrap();
+        assert!(command_contents.contains(MARKER_SH));
+        assert!(command_contents.contains("description = "));
+        assert!(command_contents.contains("prompt = "));
+        assert!(command_contents.contains("/engram:memory-session"));
+
+        let context_contents = fs::read_to_string(context).unwrap();
+        assert!(context_contents.contains(MARKER_MD));
+        assert!(context_contents.contains("agent=gemini_cli"));
     }
 
     #[test]
@@ -740,5 +912,19 @@ mod tests {
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
         assert_eq!(adapters.len(), 1);
         assert!(adapters[0].contents.contains("commit preferences"));
+    }
+
+    #[test]
+    fn render_gemini_adapter_mentions_namespaced_command() {
+        let adapters = HarnessService::new().render_adapters(
+            HarnessKind::GeminiCli,
+            Some("gemini-memory-session-command"),
+        );
+        assert_eq!(adapters.len(), 1);
+        assert_eq!(
+            adapters[0].relative_path,
+            ".gemini/commands/engram/memory-session.toml"
+        );
+        assert!(adapters[0].contents.contains("/engram:memory-session"));
     }
 }

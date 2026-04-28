@@ -14,6 +14,8 @@ pub enum HarnessKind {
     ClaudeCode,
     /// Codex.
     Codex,
+    /// Gemini CLI.
+    GeminiCli,
     /// Generic policy with no surface-specific files.
     #[default]
     Generic,
@@ -24,6 +26,7 @@ impl std::fmt::Display for HarnessKind {
         match self {
             Self::ClaudeCode => write!(f, "claude_code"),
             Self::Codex => write!(f, "codex"),
+            Self::GeminiCli => write!(f, "gemini_cli"),
             Self::Generic => write!(f, "generic"),
         }
     }
@@ -36,6 +39,7 @@ impl HarnessKind {
         match value.to_lowercase().replace('-', "_").as_str() {
             "claude" | "claude_code" => Self::ClaudeCode,
             "codex" => Self::Codex,
+            "gemini" | "gemini_cli" => Self::GeminiCli,
             _ => Self::Generic,
         }
     }
@@ -84,6 +88,10 @@ pub enum HarnessAdapterKind {
     ClaudeHook,
     /// Codex skill.
     CodexSkill,
+    /// Gemini CLI custom command.
+    GeminiCommand,
+    /// Gemini CLI context file.
+    GeminiContext,
     /// Project instruction snippet.
     ProjectInstructions,
     /// Generic policy document.

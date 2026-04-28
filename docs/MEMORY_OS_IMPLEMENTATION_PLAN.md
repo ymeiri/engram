@@ -16,7 +16,7 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Generated Markdown vault with generated-file marker and Obsidian backlinks.
 - [x] Orientation packet with repository/project resolution and deterministic relevance ordering.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
-- [x] Agent harness layer: MCP `harness`, CLI `engram harness`, Claude Code adapter rendering, Codex skill rendering, dry-run install by default.
+- [x] Agent harness layer: MCP `harness`, CLI `engram harness`, Claude Code adapter rendering, Codex skill rendering, Gemini CLI custom command/context rendering, dry-run install by default.
 - [x] Lint/recalibration MVP: missing evidence, stale preference, duplicate entity candidate, orphan task/project scope, stale active session, superseded active item, vault marker/frontmatter, handoff missing next actions.
 - [x] Archive metadata and archive-aware retrieval; normal orientation uses active memory only.
 - [x] Derived graph traversal: MCP/CLI `graph around|path|subgraph|export`.

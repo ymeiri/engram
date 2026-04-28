@@ -1875,6 +1875,7 @@ enum MemoryCommands {
 enum HarnessKindArg {
     ClaudeCode,
     Codex,
+    GeminiCli,
     Generic,
 }
 
@@ -1883,6 +1884,7 @@ impl From<HarnessKindArg> for HarnessKind {
         match value {
             HarnessKindArg::ClaudeCode => Self::ClaudeCode,
             HarnessKindArg::Codex => Self::Codex,
+            HarnessKindArg::GeminiCli => Self::GeminiCli,
             HarnessKindArg::Generic => Self::Generic,
         }
     }
