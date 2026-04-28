@@ -241,6 +241,7 @@ fn lifecycle_triggers() -> Vec<HarnessLifecycleTrigger> {
         HarnessLifecycleTrigger::AfterDiscoveryRecord,
         HarnessLifecycleTrigger::BeforeFinalChangesSince,
         HarnessLifecycleTrigger::BeforeFinalObligations,
+        HarnessLifecycleTrigger::BeforeContextCompactionSave,
         HarnessLifecycleTrigger::SessionEndHandoff,
         HarnessLifecycleTrigger::CommitWorkflowConsultMemory,
     ]
@@ -539,6 +540,8 @@ Lifecycle contract:
 - Before final response, call `changes_since`; if relevant updates appeared, account for them.
 - Before final response, call `obligations(action=detect)` and `obligations(action=doctor)`;
   resolve open obligations or report explicit skip reasons.
+- Before context compaction, context transition, or any expected loss of conversation state,
+  update `handoff` and record/commit compact durable memory for future sessions.
 - At session end, compile a handoff and create a knowledge commit candidate.
 - In commit workflows, consult memory for relevant preferences, rules, and limitations first.
 
@@ -559,6 +562,8 @@ fn claude_resume_session_command() -> String {
 5. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
    obligations; close or explicitly skip open items before final response.
 6. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
+7. If this is a resume after compaction, first inspect `handoff(action=get)` and recent
+   `memory(action=changes_since)` before continuing.
 "#
     )
 }
@@ -574,6 +579,7 @@ Before ending:
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
+- Use this same flow before context compaction or any context transition.
 - Leave migration and digest promotions review-gated; do not auto-promote orphan data.
 "#
     )
@@ -598,7 +604,7 @@ fn claude_stop_nudge_hook() -> String {
 set -euo pipefail
 
 printf '%s\n' \
-  'Engram: before final response, check changes_since and obligations doctor; resolve or explicitly skip open obligations.'
+  'Engram: before final response or context compaction, check changes_since, update handoff, and resolve or explicitly skip open obligations.'
 "#
     )
 }
@@ -618,6 +624,8 @@ Workflow:
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
   is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
   skip open obligations.
+- Before Codex context compaction or any expected context loss, update `handoff` and record or
+  commit compact durable memory so the next Codex session can resume without the transcript.
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
@@ -641,6 +649,8 @@ Steps:
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
+- If resuming after compaction, read `handoff(action=get)` and recent
+  `memory(action=changes_since)` before continuing.
 "#
     )
 }
@@ -663,6 +673,8 @@ Follow this soft lifecycle contract:
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
   is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
   skip open obligations.
+- Before context compaction or any expected context loss, update `handoff` and record or commit
+  compact durable memory for the next session.
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
@@ -690,6 +702,8 @@ Steps:
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
+- If resuming after compaction, read `handoff(action=get)` and recent
+  `memory(action=changes_since)` before continuing.
 """
 "#
     )
@@ -711,6 +725,7 @@ Before ending:
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
+- Use this same flow before context compaction or any context transition.
 - Leave migration and digest promotions review-gated; do not auto-promote orphan data.
 """
 "#
@@ -732,6 +747,8 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
   can be distinguished.
 - Detect and close agent obligations before final response: document dispositions, failed tool
   recovery, source/design reading, verification, handoff, and commit-preference checks.
+- Before context compaction or expected context loss, update `handoff` and record or commit
+  compact durable memory.
 - Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
 - Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
 - Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
@@ -763,6 +780,8 @@ Workflow:
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
   is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
   skip open obligations.
+- Before context compaction or any expected context loss, update `handoff` and record or commit
+  compact durable memory for the next session.
 - Use writer provenance with `writer_harness=cursor` when writing durable memory.
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
@@ -791,6 +810,8 @@ Steps:
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
+- If resuming after compaction, read `handoff(action=get)` and recent
+  `memory(action=changes_since)` before continuing.
 - Use writer provenance with `writer_harness=cursor` for durable memory writes.
 "#
     )
@@ -813,6 +834,7 @@ Before ending:
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
+- Use this same flow before context compaction or any context transition.
 - Use writer provenance with `writer_harness=cursor`.
 - Leave migration and digest promotions review-gated; do not auto-promote orphan data.
 "#
@@ -833,6 +855,8 @@ fn agents_snippet() -> String {
 - Use `obligations(action=detect)` at task start and before final response. Resolve or explicitly
   skip document, failed-tool, source/design reading, verification, handoff, and commit-preference
   obligations before claiming the task is done.
+- Before context compaction or expected context loss, update `handoff` and record or commit
+  compact durable memory for the next session.
 - Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
 - Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
 - Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
@@ -854,6 +878,7 @@ Lifecycle:
 - before final response: call `changes_since` and distill if needed
 - before final response: detect obligations, run obligations doctor, and close or explicitly skip
   open obligations
+- before context compaction/context loss: update handoff and persist compact durable memory
 - session end/handoff: compile handoff and knowledge commit candidate
 - commit workflows: consult memory for relevant preferences/rules
 
@@ -1088,6 +1113,20 @@ mod tests {
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
         assert_eq!(adapters.len(), 1);
         assert!(adapters[0].contents.contains("commit preferences"));
+    }
+
+    #[test]
+    fn codex_policy_mentions_context_compaction_save() {
+        let policy = HarnessService::new()
+            .render_policy(HarnessKind::Codex)
+            .unwrap();
+        assert!(policy.contains("before_context_compaction_save"));
+
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
+        assert_eq!(adapters.len(), 1);
+        assert!(adapters[0].contents.contains("context compaction"));
+        assert!(adapters[0].contents.contains("handoff"));
     }
 
     #[test]
