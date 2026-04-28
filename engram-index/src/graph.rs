@@ -3,26 +3,32 @@
 use crate::error::IndexResult;
 use engram_core::graph::{MemoryEdge, MemoryGraphPath, MemoryNode, MemorySubgraph};
 use engram_core::memory::{EvidenceKind, KnowledgeCommit, MemoryItem, MemoryScope};
-use engram_store::{Db, MemoryRepo};
+use engram_core::repository::{
+    GitRepository, LocalCheckout, MonorepoComponent, ProjectRepositoryLink,
+};
+use engram_store::{Db, MemoryRepo, RepositoryRepo};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Service for graph traversal over Memory OS records.
 #[derive(Clone)]
 pub struct GraphService {
     repo: MemoryRepo,
+    repository_repo: RepositoryRepo,
 }
 
 impl GraphService {
     /// Create a graph service.
     pub fn new(db: Db) -> Self {
         Self {
-            repo: MemoryRepo::new(db),
+            repo: MemoryRepo::new(db.clone()),
+            repository_repo: RepositoryRepo::new(db),
         }
     }
 
     /// Initialize graph-related schemas.
     pub async fn init_schema(&self) -> IndexResult<()> {
         self.repo.init_schema().await?;
+        self.repository_repo.init_schema().await?;
         Ok(())
     }
 
@@ -70,11 +76,37 @@ impl GraphService {
     async fn full_graph(&self) -> IndexResult<MemorySubgraph> {
         let items = self.repo.list_memory_items(None, None).await?;
         let commits = self.repo.list_knowledge_commits(None).await?;
-        Ok(build_graph(&items, &commits))
+        let repositories = self.repository_repo.list_repositories(None).await?;
+        let checkouts = self.repository_repo.list_checkouts().await?;
+        let mut components = Vec::new();
+        let mut project_links = Vec::new();
+        for repository in &repositories {
+            components.extend(self.repository_repo.list_components(&repository.id).await?);
+            project_links.extend(
+                self.repository_repo
+                    .list_project_links(&repository.id)
+                    .await?,
+            );
+        }
+        Ok(build_graph(
+            &items,
+            &commits,
+            &repositories,
+            &checkouts,
+            &components,
+            &project_links,
+        ))
     }
 }
 
-fn build_graph(items: &[MemoryItem], commits: &[KnowledgeCommit]) -> MemorySubgraph {
+fn build_graph(
+    items: &[MemoryItem],
+    commits: &[KnowledgeCommit],
+    repositories: &[GitRepository],
+    checkouts: &[LocalCheckout],
+    components: &[MonorepoComponent],
+    project_links: &[ProjectRepositoryLink],
+) -> MemorySubgraph {
     let mut nodes: HashMap<String, MemoryNode> = HashMap::new();
     let mut edges: HashSet<MemoryEdge> = HashSet::new();
 
@@ -160,6 +192,15 @@ fn build_graph(items: &[MemoryItem], commits: &[KnowledgeCommit]) -> MemorySubgr
         }
     }
 
+    add_repository_topology(
+        &mut nodes,
+        &mut edges,
+        repositories,
+        checkouts,
+        components,
+        project_links,
+    );
+
     let mut nodes = nodes.into_values().collect::<Vec<_>>();
     nodes.sort_by(|left, right| left.id.cmp(&right.id));
     let mut edges = edges.into_iter().collect::<Vec<_>>();
@@ -172,6 +213,125 @@ fn build_graph(items: &[MemoryItem], commits: &[KnowledgeCommit]) -> MemorySubgr
     MemorySubgraph::new(nodes, edges)
 }
 
+fn add_repository_topology(
+    nodes: &mut HashMap<String, MemoryNode>,
+    edges: &mut HashSet<MemoryEdge>,
+    repositories: &[GitRepository],
+    checkouts: &[LocalCheckout],
+    components: &[MonorepoComponent],
+    project_links: &[ProjectRepositoryLink],
+) {
+    for repository in repositories {
+        let repository_id = repository_node_id(&repository.id.to_string());
+        insert_node(
+            nodes,
+            MemoryNode::new(&repository_id, "repository", repository.name.clone()),
+        );
+        add_repository_alias(nodes, edges, &repository.name, &repository_id);
+        if let Some(remote_url) = &repository.remote_url {
+            add_repository_alias(nodes, edges, remote_url, &repository_id);
+        }
+    }
+
+    for checkout in checkouts {
+        let checkout_id = checkout_node_id(&checkout.id.to_string());
+        insert_node(
+            nodes,
+            MemoryNode::new(&checkout_id, "checkout", checkout.local_path.clone()),
+        );
+        if let Some(repository_id) = checkout.repository_id {
+            let repository_id = repository_node_id(&repository_id.to_string());
+            insert_node(
+                nodes,
+                MemoryNode::new(&repository_id, "repository", repository_id.clone()),
+            );
+            edges.insert(MemoryEdge::new(&checkout_id, &repository_id, "checkout_of"));
+            add_repository_alias(nodes, edges, &checkout.local_path, &repository_id);
+        }
+    }
+
+    for component in components {
+        let component_id = component_node_id(&component.id.to_string());
+        insert_node(
+            nodes,
+            MemoryNode::new(&component_id, "component", component_label(component)),
+        );
+        let repository_id = repository_node_id(&component.repository_id.to_string());
+        insert_node(
+            nodes,
+            MemoryNode::new(&repository_id, "repository", repository_id.clone()),
+        );
+        edges.insert(MemoryEdge::new(
+            &component_id,
+            &repository_id,
+            "component_of",
+        ));
+    }
+
+    for link in project_links {
+        let project_id = project_node_id(&link.project_name);
+        let repository_id = repository_node_id(&link.repository_id.to_string());
+        insert_node(
+            nodes,
+            MemoryNode::new(&project_id, "project", link.project_name.clone()),
+        );
+        insert_node(
+            nodes,
+            MemoryNode::new(&repository_id, "repository", repository_id.clone()),
+        );
+        edges.insert(MemoryEdge::new(
+            &project_id,
+            &repository_id,
+            format!("repository_{}", link.role),
+        ));
+        if let Some(component_id) = link.component_id {
+            let component_id = component_node_id(&component_id.to_string());
+            insert_node(
+                nodes,
+                MemoryNode::new(&component_id, "component", component_id.clone()),
+            );
+            edges.insert(MemoryEdge::new(
+                &project_id,
+                &component_id,
+                format!("component_{}", link.role),
+            ));
+        } else if let Some(component_path) = &link.component_path {
+            let component_id =
+                component_path_node_id(&link.repository_id.to_string(), component_path);
+            insert_node(
+                nodes,
+                MemoryNode::new(&component_id, "component", component_path.clone()),
+            );
+            edges.insert(MemoryEdge::new(
+                &component_id,
+                &repository_id,
+                "component_of",
+            ));
+            edges.insert(MemoryEdge::new(
+                &project_id,
+                &component_id,
+                format!("component_{}", link.role),
+            ));
+        }
+    }
+}
+
+fn add_repository_alias(
+    nodes: &mut HashMap<String, MemoryNode>,
+    edges: &mut HashSet<MemoryEdge>,
+    alias: &str,
+    repository_id: &str,
+) {
+    let alias_id = repository_alias_node_id(alias);
+    insert_node(
+        nodes,
+        MemoryNode::new(&alias_id, "repository_alias", alias.to_string()),
+    );
+    if alias_id != repository_id {
+        edges.insert(MemoryEdge::new(alias_id, repository_id, "alias_of"));
+    }
+}
+
 fn add_scope(
     nodes: &mut HashMap<String, MemoryNode>,
     edges: &mut HashSet<MemoryEdge>,
@@ -182,7 +342,7 @@ fn add_scope(
         MemoryScope::Global => ("scope:global".to_string(), "scope", "global".to_string()),
         MemoryScope::User => ("scope:user".to_string(), "scope", "user".to_string()),
         MemoryScope::Project { project_name, .. } => (
-            format!("project:{}", slug(project_name)),
+            project_node_id(project_name),
             "project",
             project_name.clone(),
         ),
@@ -193,7 +353,7 @@ fn add_scope(
         } => {
             let task_id = format!("task:{}", slug(task_name));
             if let Some(project_name) = project_name {
-                let project_id = format!("project:{}", slug(project_name));
+                let project_id = project_node_id(project_name);
                 insert_node(nodes, MemoryNode::new(&project_id, "project", project_name));
                 edges.insert(MemoryEdge::new(&task_id, project_id, "part_of"));
             }
@@ -205,6 +365,7 @@ fn add_scope(
             entity_name.clone(),
         ),
         MemoryScope::Repository {
+            repository_id,
             remote_url,
             local_path,
             ..
@@ -213,7 +374,10 @@ fn add_scope(
                 .clone()
                 .or_else(|| remote_url.clone())
                 .unwrap_or_else(|| "repository".to_string());
-            (format!("repository:{}", slug(&label)), "repository", label)
+            let node_id = repository_id
+                .map(|id| repository_node_id(&id.to_string()))
+                .unwrap_or_else(|| repository_alias_node_id(&label));
+            (node_id, "repository", label)
         }
         MemoryScope::Session { session_id } => (
             session_node_id(&session_id.to_string()),
@@ -328,6 +492,38 @@ fn memory_node_id(id: &str) -> String {
     format!("memory:{id}")
 }
 
+fn repository_node_id(id: &str) -> String {
+    format!("repository:{id}")
+}
+
+fn repository_alias_node_id(value: &str) -> String {
+    format!("repository:{}", slug(value))
+}
+
+fn checkout_node_id(id: &str) -> String {
+    format!("checkout:{id}")
+}
+
+fn component_node_id(id: &str) -> String {
+    format!("component:{id}")
+}
+
+fn component_path_node_id(repository_id: &str, component_path: &str) -> String {
+    format!("component:{repository_id}:{}", slug(component_path))
+}
+
+fn project_node_id(project_name: &str) -> String {
+    format!("project:{}", slug(project_name))
+}
+
+fn component_label(component: &MonorepoComponent) -> String {
+    if component.path == "." {
+        component.name.clone()
+    } else {
+        format!("{} ({})", component.name, component.path)
+    }
+}
+
 fn commit_node_id(id: &str) -> String {
     format!("commit:{id}")
 }
@@ -404,6 +600,10 @@ mod tests {
     use engram_core::memory::{
         ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryKind, MemoryScope, ModelIdentity,
         WriterProvenance,
+    };
+    use engram_core::repository::{
+        GitRepository, LocalCheckout, MonorepoComponent, ProjectRepositoryLink,
+        ProjectRepositoryRole,
     };
     use engram_store::{connect_and_init, StoreConfig};
 
@@ -512,5 +712,75 @@ mod tests {
                 && edge.to == "project:engram"
                 && edge.relation == "part_of"
         }));
+    }
+
+    #[tokio::test]
+    async fn graph_includes_repository_topology() {
+        let service = service().await;
+        let repository =
+            GitRepository::new("engram").with_remote_url("git@github.com:ymeiri/engram.git");
+        let repository_id = repository.id;
+        let checkout =
+            LocalCheckout::new("/Users/yuval.meiri/projects/engram").with_repository(repository_id);
+        let component = MonorepoComponent::new(repository_id, "engram-index", "engram-index");
+        let link =
+            ProjectRepositoryLink::new("engram", repository_id, ProjectRepositoryRole::Primary)
+                .with_component(Some(component.id), component.path.clone());
+
+        service
+            .repository_repo
+            .save_repository(&repository)
+            .await
+            .unwrap();
+        service
+            .repository_repo
+            .save_checkout(&checkout)
+            .await
+            .unwrap();
+        service
+            .repository_repo
+            .save_component(&component)
+            .await
+            .unwrap();
+        service
+            .repository_repo
+            .save_project_link(&link)
+            .await
+            .unwrap();
+
+        let graph = service
+            .around(&format!("repository:{repository_id}"), 1)
+            .await
+            .unwrap();
+
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id == format!("repository:{repository_id}")));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id == format!("checkout:{}", checkout.id)));
+        assert!(graph
+            .nodes
+            .iter()
+            .any(|node| node.id == format!("component:{}", component.id)));
+        assert!(graph.nodes.iter().any(|node| node.id == "project:engram"));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from == "project:engram"
+                && edge.to == format!("repository:{repository_id}")
+                && edge.relation == "repository_primary"
+        }));
+        assert!(graph.edges.iter().any(|edge| {
+            edge.from == format!("repository:{}", slug("git@github.com:ymeiri/engram.git"))
+                && edge.to == format!("repository:{repository_id}")
+                && edge.relation == "alias_of"
+        }));
+
+        let path = service
+            .path("project:engram", &format!("repository:{repository_id}"), 2)
+            .await
+            .unwrap();
+        assert!(path.is_some());
     }
 }
