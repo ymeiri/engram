@@ -6,11 +6,12 @@
 //! 3. Generate embeddings
 //! 4. Store in database
 
-use crate::chunker::{chunk_document, ChunkerConfig};
+use crate::chunker::{chunk_document, chunking_strategy, ChunkerConfig, ChunkingStrategy};
 use crate::error::IndexResult;
 use crate::parser::{parse_content, parse_file, ParsedDocument};
 use engram_core::document::{DocChunk, DocSource};
 use engram_embed::Embedder;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
@@ -32,6 +33,47 @@ pub struct IndexedChunk {
     pub chunk: DocChunk,
     /// The embedding vector.
     pub embedding: Vec<f32>,
+}
+
+/// Dry-run plan for document ingestion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentIngestionPlan {
+    /// Planned documents.
+    pub documents: Vec<PlannedDocument>,
+    /// Files or sources that could not be planned.
+    pub warnings: Vec<String>,
+}
+
+impl DocumentIngestionPlan {
+    /// Total number of planned chunks.
+    #[must_use]
+    pub fn total_chunks(&self) -> usize {
+        self.documents
+            .iter()
+            .map(|document| document.chunk_count)
+            .sum()
+    }
+}
+
+/// Dry-run plan for one document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlannedDocument {
+    /// Source path or URL.
+    pub path: String,
+    /// Parsed document title.
+    pub title: String,
+    /// Source character count after trimming whitespace.
+    pub content_chars: usize,
+    /// Number of markdown sections parsed from headings.
+    pub section_count: usize,
+    /// Number of chunks that would be embedded.
+    pub chunk_count: usize,
+    /// Chunking strategy selected by the policy.
+    pub chunking_strategy: ChunkingStrategy,
+    /// Current short-document threshold.
+    pub short_document_char_limit: usize,
+    /// Current maximum chunk size.
+    pub max_chunk_size: usize,
 }
 
 /// Configuration for the ingestion pipeline.
@@ -107,6 +149,53 @@ impl Pipeline {
         })
     }
 
+    /// Build a dry-run ingestion plan for a single file without generating embeddings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
+    pub fn plan_file(&self, path: impl AsRef<Path>) -> IndexResult<PlannedDocument> {
+        Self::plan_file_with_config(path, &self.config)
+    }
+
+    /// Build a dry-run ingestion plan for a single file without constructing an embedder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or parsed.
+    pub fn plan_file_with_config(
+        path: impl AsRef<Path>,
+        config: &PipelineConfig,
+    ) -> IndexResult<PlannedDocument> {
+        let path = path.as_ref();
+        let parsed = parse_file(path)?;
+        let source =
+            DocSource::local_file(path.display().to_string()).with_title(parsed.title.clone());
+
+        Ok(plan_parsed_document(&parsed, &source, &config.chunker))
+    }
+
+    /// Build a dry-run ingestion plan for caller-supplied markdown content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the content cannot be parsed.
+    pub fn plan_content(
+        &self,
+        path_or_url: impl Into<String>,
+        content: impl Into<String>,
+        title: Option<String>,
+    ) -> IndexResult<PlannedDocument> {
+        let path_or_url = path_or_url.into();
+        let mut parsed = parse_content(path_or_url.clone(), content.into())?;
+        if let Some(title) = title.filter(|title| !title.trim().is_empty()) {
+            parsed.title = title;
+        }
+        let source = DocSource::local_file(path_or_url).with_title(parsed.title.clone());
+
+        Ok(plan_parsed_document(&parsed, &source, &self.config.chunker))
+    }
+
     /// Index markdown content supplied by the caller.
     ///
     /// # Errors
@@ -165,35 +254,66 @@ impl Pipeline {
         Ok(results)
     }
 
-    /// Find all indexable files in a directory.
-    fn find_files(&self, path: &Path) -> IndexResult<Vec<PathBuf>> {
-        let mut files = Vec::new();
-        self.find_files_recursive(path, &mut files)?;
-        Ok(files)
+    /// Build a dry-run ingestion plan for all indexable files in a directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read.
+    pub fn plan_directory(&self, path: impl AsRef<Path>) -> IndexResult<DocumentIngestionPlan> {
+        Self::plan_directory_with_config(path, &self.config)
     }
 
-    fn find_files_recursive(&self, path: &Path, files: &mut Vec<PathBuf>) -> IndexResult<()> {
-        for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let path = entry.path();
+    /// Build a dry-run ingestion plan for all indexable files in a directory without constructing
+    /// an embedder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read.
+    pub fn plan_directory_with_config(
+        path: impl AsRef<Path>,
+        config: &PipelineConfig,
+    ) -> IndexResult<DocumentIngestionPlan> {
+        let path = path.as_ref();
+        let files = find_files_with_config(path, config)?;
+        let mut documents = Vec::new();
+        let mut warnings = Vec::new();
 
-            if path.is_dir() {
-                if self.config.recursive {
-                    self.find_files_recursive(&path, files)?;
-                }
-            } else if self.should_index(&path) {
-                files.push(path);
+        for file in &files {
+            match Self::plan_file_with_config(file, config) {
+                Ok(document) => documents.push(document),
+                Err(error) => warnings.push(format!("{}: {}", file.display(), error)),
             }
         }
-        Ok(())
+
+        Ok(DocumentIngestionPlan {
+            documents,
+            warnings,
+        })
     }
 
-    /// Check if a file should be indexed.
-    fn should_index(&self, path: &Path) -> bool {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .map(|ext| self.config.extensions.iter().any(|e| e == ext))
-            .unwrap_or(false)
+    /// Build a dry-run ingestion plan for a file or directory without constructing an embedder.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path cannot be read or parsed.
+    pub fn plan_path_with_config(
+        path: impl AsRef<Path>,
+        config: &PipelineConfig,
+    ) -> IndexResult<DocumentIngestionPlan> {
+        let path = path.as_ref();
+        if path.is_dir() {
+            Self::plan_directory_with_config(path, config)
+        } else {
+            Ok(DocumentIngestionPlan {
+                documents: vec![Self::plan_file_with_config(path, config)?],
+                warnings: Vec::new(),
+            })
+        }
+    }
+
+    /// Find all indexable files in a directory.
+    fn find_files(&self, path: &Path) -> IndexResult<Vec<PathBuf>> {
+        find_files_with_config(path, &self.config)
     }
 
     /// Generate embeddings for chunks.
@@ -223,6 +343,57 @@ impl Pipeline {
     pub fn embedding_dimension(&self) -> usize {
         self.embedder.dimension()
     }
+}
+
+fn plan_parsed_document(
+    parsed: &ParsedDocument,
+    source: &DocSource,
+    chunker: &ChunkerConfig,
+) -> PlannedDocument {
+    let chunks = chunk_document(parsed, source, chunker);
+    PlannedDocument {
+        path: parsed.path.clone(),
+        title: parsed.title.clone(),
+        content_chars: parsed.raw_content.trim().chars().count(),
+        section_count: parsed.sections.len(),
+        chunk_count: chunks.len(),
+        chunking_strategy: chunking_strategy(parsed, chunker),
+        short_document_char_limit: chunker.short_document_char_limit,
+        max_chunk_size: chunker.max_chunk_size,
+    }
+}
+
+fn find_files_with_config(path: &Path, config: &PipelineConfig) -> IndexResult<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    find_files_recursive_with_config(path, config, &mut files)?;
+    Ok(files)
+}
+
+fn find_files_recursive_with_config(
+    path: &Path,
+    config: &PipelineConfig,
+    files: &mut Vec<PathBuf>,
+) -> IndexResult<()> {
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if config.recursive {
+                find_files_recursive_with_config(&path, config, files)?;
+            }
+        } else if should_index_with_config(&path, config) {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn should_index_with_config(path: &Path, config: &PipelineConfig) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|ext| config.extensions.iter().any(|e| e == ext))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -261,6 +432,40 @@ mod tests {
             .collect();
 
         assert_eq!(files.len(), 2);
+    }
+
+    #[test]
+    fn test_plan_path_with_config_does_not_require_embedder() {
+        let dir = TempDir::new().unwrap();
+        create_test_file(
+            dir.path(),
+            "short.md",
+            "# Short\n\nA compact memory note that should stay whole.",
+        );
+        create_test_file(
+            dir.path(),
+            "long.md",
+            &format!(
+                "# Long\n\n## Context\n\n{}",
+                "This is repeated long context. ".repeat(200)
+            ),
+        );
+        create_test_file(dir.path(), "ignore.txt", "not indexed");
+
+        let config = PipelineConfig::default();
+        let plan = Pipeline::plan_path_with_config(dir.path(), &config).unwrap();
+
+        assert_eq!(plan.documents.len(), 2);
+        assert_eq!(plan.warnings.len(), 0);
+        assert!(plan.total_chunks() >= 2);
+        assert!(plan
+            .documents
+            .iter()
+            .any(|document| document.chunking_strategy == ChunkingStrategy::WholeDocument));
+        assert!(plan
+            .documents
+            .iter()
+            .any(|document| document.chunking_strategy == ChunkingStrategy::HeadingSections));
     }
 
     #[test]

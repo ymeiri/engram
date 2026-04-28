@@ -18,6 +18,9 @@
 //! - [`work`] - Work management (Layer 7): projects, tasks, PRs
 //! - [`memory`] - Memory OS ontology: provenance, scope, lifecycle, commits
 //! - [`repository`] - Git repository topology and local checkout mapping
+//! - [`harness`] - Agent harness policy and adapter contracts
+//! - [`lint`] - Memory health and migration-safety linting
+//! - [`graph`] - Memory OS graph traversal types
 //! - [`id`] - ID types and generation
 //! - [`error`] - Error types
 
@@ -25,8 +28,11 @@ pub mod coordination;
 pub mod document;
 pub mod entity;
 pub mod error;
+pub mod graph;
+pub mod harness;
 pub mod id;
 pub mod knowledge;
+pub mod lint;
 pub mod memory;
 pub mod repository;
 pub mod search;

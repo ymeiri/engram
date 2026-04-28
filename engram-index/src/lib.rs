@@ -31,7 +31,11 @@ pub mod coordination;
 pub mod digest;
 pub mod entity;
 pub mod error;
+pub mod graph;
+pub mod handoff;
+pub mod harness;
 pub mod knowledge;
+pub mod lint;
 pub mod memory;
 pub mod migration;
 pub mod parser;
@@ -45,7 +49,7 @@ pub mod vault;
 pub mod version;
 pub mod work;
 
-pub use chunker::ChunkerConfig;
+pub use chunker::{ChunkerConfig, ChunkingStrategy};
 pub use coordination::{ConflictCheckResult, CoordinationService};
 pub use digest::{
     DigestExcludedPath, DigestExtractionCandidateSummary, DigestExtractionOptions,
@@ -57,12 +61,17 @@ pub use digest::{
 };
 pub use entity::EntityService;
 pub use error::{IndexError, IndexResult};
+pub use graph::GraphService;
+pub use handoff::{HandoffCompile, HandoffGet, HandoffService, HandoffUpdate};
+pub use harness::HarnessService;
 pub use knowledge::{
     DuplicateGroup, KnowledgeConfig, KnowledgeService, KnowledgeStats, ScanResult, VersionChain,
     VersionedFile,
 };
+pub use lint::{LintOptions, LintService};
 pub use memory::{
-    MemoryChanges, MemoryService, OrientInput, OrientationPacket, OrientationResolution,
+    MemoryChangeRelevance, MemoryChanges, MemoryChangesSinceOptions, MemoryService,
+    MemoryWriterStat, OrientInput, OrientationPacket, OrientationResolution, SessionDistillation,
 };
 pub use migration::{
     MigrationCandidate, MigrationDisposition, MigrationInventory, MigrationInventoryOptions,
@@ -70,7 +79,9 @@ pub use migration::{
     MigrationReviewStatus, MigrationService, MigrationSourceKind,
 };
 pub use parser::{parse_content, parse_file, ParsedDocument, Section};
-pub use pipeline::{IndexedChunk, IndexedDocument, Pipeline, PipelineConfig};
+pub use pipeline::{
+    DocumentIngestionPlan, IndexedChunk, IndexedDocument, Pipeline, PipelineConfig, PlannedDocument,
+};
 pub use repository::{
     RepositoryDetection, RepositoryMigrationCandidate, RepositoryMigrationDisposition,
     RepositoryMigrationEvidence, RepositoryMigrationInventory, RepositoryMigrationOptions,
@@ -79,7 +90,24 @@ pub use repository::{
     RepositoryMigrationSourceKind, RepositoryReferenceKind, RepositoryService,
 };
 pub use search::{SearchService, SearchStats};
-pub use service::{DocumentService, DocumentStats};
+pub use service::{
+    DocumentOrphanCleanupAction, DocumentOrphanCleanupExecutionAction,
+    DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupExecutionReport,
+    DocumentOrphanCleanupExecutionStatus, DocumentOrphanCleanupGroupPlan,
+    DocumentOrphanCleanupPlan, DocumentOrphanCleanupPlanOptions,
+    DocumentOrphanQuarantineMemoryReviewPlan, DocumentOrphanQuarantineReviewApply,
+    DocumentOrphanQuarantineReviewApplyOptions, DocumentOrphanQuarantineReviewDecision,
+    DocumentOrphanQuarantineReviewExport, DocumentOrphanQuarantineReviewFileState,
+    DocumentOrphanQuarantineReviewFileStatus, DocumentOrphanQuarantineReviewOptions,
+    DocumentOrphanQuarantineReviewPrioritization,
+    DocumentOrphanQuarantineReviewPrioritizationOptions, DocumentOrphanQuarantineReviewPriority,
+    DocumentOrphanQuarantineReviewPriorityItem, DocumentOrphanQuarantineReviewStatus,
+    DocumentOrphanQuarantineReviewSuggestedStep, DocumentRecoveryOptions, DocumentReindexAction,
+    DocumentReindexExecutionAction, DocumentReindexExecutionOptions,
+    DocumentReindexExecutionReport, DocumentReindexExecutionStatus, DocumentReindexGroupRef,
+    DocumentReindexPlan, DocumentReindexReviewOnlyGroup, DocumentReindexSourcePlan,
+    DocumentService, DocumentStats,
+};
 pub use session::SessionService;
 pub use tool_intel::{ToolIntelService, ToolUsageInfo};
 pub use vault::{
@@ -87,3 +115,9 @@ pub use vault::{
 };
 pub use version::{VersionDetector, VersionInfo, VersionSource};
 pub use work::{FullWorkContext, GraduateFrom, WorkService};
+
+pub use engram_store::{
+    DocumentDetectedReference, DocumentOrphanChunkSample, DocumentOrphanGroup,
+    DocumentOrphanReport, DocumentRecoveryCandidateMatch, DocumentRecoveryClass,
+    DocumentRecoverySummary,
+};

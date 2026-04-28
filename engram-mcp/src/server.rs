@@ -4,8 +4,9 @@
 
 use crate::tools::{self, ToolState};
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, MemoryService,
-    RepositoryService, SearchService, SessionService, ToolIntelService, WorkService,
+    CoordinationService, DocumentService, EntityService, GraphService, HandoffService,
+    KnowledgeService, LintService, MemoryService, RepositoryService, SearchService, SessionService,
+    ToolIntelService, WorkService,
 };
 use rmcp::{
     handler::server::{tool::ToolRouter, wrapper::Parameters},
@@ -30,10 +31,14 @@ pub use crate::tools::{
     EntityObserveRequestNew,
     EntityRequestNew,
     EntityStatsRequest,
+    // Memory OS tools
+    GraphRequest,
+    HandoffRequest,
+    HarnessRequest,
     // Layer 6: Knowledge management tools
     KnowledgeRequestNew,
     KnowledgeStatsRequest,
-    // Memory OS tools
+    LintRequest,
     MemoryChangeRequest,
     MemoryEvidenceRequest,
     MemoryRequestNew,
@@ -113,6 +118,21 @@ impl EngramServer {
     /// Initialize the server with a Memory OS service.
     pub async fn init_memory(&self, service: MemoryService) {
         self.state.init_memory(service).await;
+    }
+
+    /// Initialize the server with a Memory OS lint service.
+    pub async fn init_lint(&self, service: LintService) {
+        self.state.init_lint(service).await;
+    }
+
+    /// Initialize the server with a Memory OS graph service.
+    pub async fn init_graph(&self, service: GraphService) {
+        self.state.init_graph(service).await;
+    }
+
+    /// Initialize the server with a rolling handoff service.
+    pub async fn init_handoff(&self, service: HandoffService) {
+        self.state.init_handoff(service).await;
     }
 
     /// Initialize the server with a repository topology service.
@@ -237,7 +257,7 @@ impl EngramServer {
 
     /// Manage document indexing and search.
     #[tool(
-        description = "Manage documents: search, index, stats. Use 'action' parameter. search: semantic search (query, limit, min_score). index: add documents (path to file or directory). stats: index statistics."
+        description = "Manage documents: search, index, plan, orphan_report, reindex_plan, reindex_execute, cleanup_plan, cleanup_execute, quarantine_review_export, quarantine_review_status, quarantine_review_prioritize, quarantine_review_apply, stats. Use 'action' parameter. search: semantic search (query, limit, min_score). index: add documents (path to file or directory). plan: dry-run ingestion policy and chunks (path). orphan_report: read-only recovery report for orphan chunks. reindex_plan: read-only source-level reindex plan for recoverable orphan chunks. reindex_execute: guarded dry-run/write execution from a JSON plan; write mode requires execute=true and all=true or source_paths. cleanup_plan: read-only cleanup/quarantine plan using optional reindex plan and write execution report. cleanup_execute: guarded dry-run/write deletion of delete_after_successful_reindex groups only; quarantine groups are retained. quarantine_review_export: write generated Markdown review pages for retained quarantine groups. quarantine_review_status/prioritize/apply: validate, rank, and dry-run generated quarantine review decisions; prioritize is duplicate-fingerprint aware and omits duplicate fingerprints by default; apply is dry-run only. stats: index statistics."
     )]
     pub async fn docs(
         &self,
@@ -313,7 +333,7 @@ impl EngramServer {
 
     /// Manage coding sessions.
     #[tool(
-        description = "Manage sessions: start, end, get, list, log, search. Use 'action' parameter. start: begin session (agent, project, goal). end: finish session (session_id, summary). get: details (session_id). list: filter by status/agent/project. log: record event (session_id, event_type, content). search: find events (query). Event types: decision, observation, error, command, file_change, tool_use, milestone."
+        description = "Manage sessions: start, end, get, list, log, search. Use 'action' parameter. start: begin session (agent, project, goal). end: finish session (session_id, summary). get: details (session_id). list: filter by status/agent/project. log: record event (session_id, event_type, content). search: find events (query). Event types: decision, observation, error, command, file_change, tool_use, milestone, prompt, plan, tool_result, test, preference, rule, limitation, handoff_update."
     )]
     pub async fn session(
         &self,
@@ -387,13 +407,54 @@ impl EngramServer {
 
     /// Manage Memory OS items and knowledge commits.
     #[tool(
-        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply. Requires writer provenance for add, commit, migration_review_apply, and digest_extraction_apply: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
+        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session. Requires writer provenance for add, commit, migration_review_apply, digest_extraction_apply, and distill_session: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
     )]
     pub async fn memory(
         &self,
         params: Parameters<MemoryRequestNew>,
     ) -> Result<CallToolResult, McpError> {
         to_call_result(tools::memory_new(&self.state, params.0).await)
+    }
+
+    /// Manage Memory OS agent harness policy and adapters.
+    #[tool(
+        description = "Manage the Memory OS agent harness contract: status, doctor, render_policy, render_adapter, install. Supports claude_code, codex, and generic. Installation is dry-run unless write=true; user-owned files without the Engram marker are skipped."
+    )]
+    pub async fn harness(
+        &self,
+        params: Parameters<HarnessRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::harness_new(&self.state, params.0).await)
+    }
+
+    /// Run Memory OS lint checks and safe remediations.
+    #[tool(
+        description = "Run Memory OS health linting: run, list, apply_safe. Checks missing evidence, stale preferences, duplicate entity candidates, orphan project/task memory, stale active sessions, superseded active items, vault metadata, and handoffs missing next actions. apply_safe writes only when write=true."
+    )]
+    pub async fn lint(&self, params: Parameters<LintRequest>) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::lint_new(&self.state, params.0).await)
+    }
+
+    /// Traverse the derived Memory OS graph.
+    #[tool(
+        description = "Traverse the derived Memory OS graph: around, path, subgraph, export. Connects memory, project/task/entity/repository/session scopes, evidence, supersedes links, and knowledge commits."
+    )]
+    pub async fn graph(
+        &self,
+        params: Parameters<GraphRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::graph_new(&self.state, params.0).await)
+    }
+
+    /// Manage rolling Memory OS handoffs.
+    #[tool(
+        description = "Manage rolling Memory OS handoffs: get, update, compile. update and compile default to dry-run unless dry_run=false and require writer_harness, model_provider, and model when writing/planning a handoff."
+    )]
+    pub async fn handoff(
+        &self,
+        params: Parameters<HandoffRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::handoff_new(&self.state, params.0).await)
     }
 
     /// Manage the generated Memory OS Markdown vault.
@@ -558,7 +619,7 @@ impl ServerHandler for EngramServer {
                  - session: Manage sessions (actions: start, end, get, list, log, search)\n\
                  - session_stats: Get session statistics\n\n\
                  **Layer 3 - Document Search (Action-Based API):**\n\
-                 - docs: Manage documents (actions: search, index, stats)\n\n\
+                 - docs: Manage documents (actions: search, index, plan, orphan_report, reindex_plan, reindex_execute, cleanup_plan, cleanup_execute, quarantine_review_export, quarantine_review_status, quarantine_review_prioritize, quarantine_review_apply, stats; prioritize omits duplicate fingerprints by default)\n\n\
                  **Layer 4 - Tool Intelligence (Action-Based API):**\n\
                  - tool: Manage tool usage (actions: log, recommend, stats, list, search)\n\
                  - tool_intel_stats: Get overall tool intelligence statistics\n\n\
@@ -579,7 +640,11 @@ impl ServerHandler for EngramServer {
                  - work_stats: Get work statistics\n\n\
                  **Memory OS:**\n\
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
-                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply)\n\
+                 - harness: Manage agent harness policy/adapters (actions: status, doctor, render_policy, render_adapter, install; install is dry-run unless write=true)\n\
+                 - lint: Run Memory OS health checks and safe remediations (actions: run, list, apply_safe; write required for safe actions)\n\
+                 - graph: Traverse derived memory graph (actions: around, path, subgraph, export)\n\
+                 - handoff: Manage rolling handoffs (actions: get, update, compile; dry-run by default)\n\
+                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session)\n\
                  - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
                  - digest: Inventory digest source files, export metadata-only review batches, parse review decisions, build review-gated extraction plans, or index reviewed source_only digests as document evidence (actions: inventory, review_export, review_apply, extraction_plan, source_index)\n\
                  - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply)\n\n\

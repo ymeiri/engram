@@ -34,7 +34,10 @@ pub mod repos;
 pub use config::{StorageBackend, StoreConfig};
 pub use error::{StoreError, StoreResult};
 pub use repos::{
-    AliasSearchResult, ArchivedObservation, CoordinationRepo, CoordinationStats, DocumentRepo,
+    AliasSearchResult, ArchivedObservation, CoordinationRepo, CoordinationStats,
+    DocumentDeletedOrphanSource, DocumentDetectedReference, DocumentOrphanChunkSample,
+    DocumentOrphanDeleteResult, DocumentOrphanGroup, DocumentOrphanReport,
+    DocumentRecoveryCandidateMatch, DocumentRecoveryClass, DocumentRecoverySummary, DocumentRepo,
     EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, MemoryRepo,
     ObservationSearchResult, ProjectObservationSearchResult, RepositoryRepo, SessionRepo,
     TaskObservationSearchResult, ToolIntelStats, ToolRepo, WorkRepo, WorkStats,

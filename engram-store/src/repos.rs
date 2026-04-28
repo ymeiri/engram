@@ -14,7 +14,11 @@ pub mod tool;
 pub mod work;
 
 pub use coordination::{CoordinationRepo, CoordinationStats};
-pub use document::DocumentRepo;
+pub use document::{
+    DocumentDeletedOrphanSource, DocumentDetectedReference, DocumentOrphanChunkSample,
+    DocumentOrphanDeleteResult, DocumentOrphanGroup, DocumentOrphanReport,
+    DocumentRecoveryCandidateMatch, DocumentRecoveryClass, DocumentRecoverySummary, DocumentRepo,
+};
 pub use entity::{
     AliasSearchResult, ArchivedObservation, EntityRepo, EntitySearchResult, EntityStats,
     ObservationSearchResult,

@@ -32,6 +32,7 @@ impl ProxyConfig {
 struct ProxyState {
     session_id: Option<String>,
     initialized: bool,
+    initialize_request: Option<serde_json::Value>,
     /// Queue of requests received before initialization completed.
     pending_requests: Vec<serde_json::Value>,
 }
@@ -59,6 +60,7 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
     let state = Arc::new(Mutex::new(ProxyState {
         session_id: None,
         initialized: false,
+        initialize_request: None,
         pending_requests: Vec::new(),
     }));
 
@@ -99,6 +101,7 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
                                 {
                                     let mut s = state.lock().await;
                                     s.session_id = session_id;
+                                    s.initialize_request = Some(request.clone());
                                     debug!("Captured session ID: {:?}", s.session_id);
                                 }
 
@@ -135,13 +138,12 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
                                 // Process any requests that were queued before initialization
                                 if !pending.is_empty() {
                                     debug!("Processing {} pending requests", pending.len());
-                                    let session_id = state.lock().await.session_id.clone();
                                     for pending_req in pending {
                                         let is_notification = pending_req.get("id").is_none();
-                                        match forward_request(
+                                        match forward_request_with_recovery(
                                             &client,
                                             &mcp_url,
-                                            &session_id,
+                                            &state,
                                             &pending_req,
                                         )
                                         .await
@@ -189,9 +191,9 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
                     }
                     _ => {
                         // Regular request - check if initialized first
-                        let (initialized, session_id) = {
+                        let initialized = {
                             let s = state.lock().await;
-                            (s.initialized, s.session_id.clone())
+                            s.initialized
                         };
 
                         if !initialized {
@@ -207,7 +209,9 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
                         // Check if this is a notification (no id field)
                         let is_notification = request.get("id").is_none();
 
-                        match forward_request(&client, &mcp_url, &session_id, &request).await {
+                        match forward_request_with_recovery(&client, &mcp_url, &state, &request)
+                            .await
+                        {
                             Ok(response) => {
                                 if !is_notification {
                                     let response_str = serde_json::to_string(&response)?;
@@ -372,6 +376,62 @@ async fn forward_request(
             .await
             .context("Failed to parse daemon response")
     }
+}
+
+/// Forward a JSON-RPC request and recover once from a stale HTTP MCP session.
+async fn forward_request_with_recovery(
+    client: &reqwest::Client,
+    mcp_url: &str,
+    state: &Arc<Mutex<ProxyState>>,
+    request: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    let session_id = state.lock().await.session_id.clone();
+    match forward_request(client, mcp_url, &session_id, request).await {
+        Ok(response) => Ok(response),
+        Err(error) if is_stale_session_error(&error) => {
+            info!("HTTP MCP session is stale; refreshing proxy session");
+            refresh_session(client, mcp_url, state).await?;
+            let session_id = state.lock().await.session_id.clone();
+            forward_request(client, mcp_url, &session_id, request).await
+        }
+        Err(error) => Err(error),
+    }
+}
+
+async fn refresh_session(
+    client: &reqwest::Client,
+    mcp_url: &str,
+    state: &Arc<Mutex<ProxyState>>,
+) -> Result<()> {
+    let initialize_request = {
+        let s = state.lock().await;
+        s.initialize_request
+            .clone()
+            .context("Cannot refresh HTTP MCP session before initialize")?
+    };
+
+    let (_, session_id) = forward_initialize(client, mcp_url, &initialize_request).await?;
+    {
+        let mut s = state.lock().await;
+        s.session_id = session_id;
+        s.initialized = false;
+    }
+
+    let initialized_notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let session_id = state.lock().await.session_id.clone();
+    forward_notification(client, mcp_url, &session_id, &initialized_notification).await?;
+
+    let mut s = state.lock().await;
+    s.initialized = true;
+    Ok(())
+}
+
+fn is_stale_session_error(error: &anyhow::Error) -> bool {
+    let message = error.to_string();
+    message.contains("401 Unauthorized") && message.contains("Session not found")
 }
 
 /// Handle an SSE (Server-Sent Events) response.

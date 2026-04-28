@@ -355,6 +355,30 @@ pub enum MemoryStatus {
     Rejected,
 }
 
+/// Archive metadata for memory hidden from normal retrieval.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArchiveMetadata {
+    /// Reason the memory was archived.
+    pub reason: String,
+    /// Actor or harness that archived it.
+    pub archived_by: Option<String>,
+    /// Archive timestamp.
+    #[serde(with = "time::serde::rfc3339")]
+    pub archived_at: OffsetDateTime,
+}
+
+impl ArchiveMetadata {
+    /// Create archive metadata.
+    #[must_use]
+    pub fn new(reason: impl Into<String>, archived_by: Option<String>) -> Self {
+        Self {
+            reason: reason.into(),
+            archived_by,
+            archived_at: OffsetDateTime::now_utc(),
+        }
+    }
+}
+
 impl std::fmt::Display for MemoryStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -522,6 +546,9 @@ pub struct MemoryItem {
     /// Review timestamp for recalibration.
     #[serde(default, with = "time::serde::rfc3339::option")]
     pub review_after: Option<OffsetDateTime>,
+    /// Archive metadata when the item has been archived.
+    #[serde(default)]
+    pub archive: Option<ArchiveMetadata>,
 }
 
 impl MemoryItem {
@@ -555,6 +582,7 @@ impl MemoryItem {
             updated_at: now,
             last_used_at: None,
             review_after: None,
+            archive: None,
         }
     }
 
@@ -578,6 +606,15 @@ impl MemoryItem {
     #[must_use]
     pub fn with_status(mut self, status: MemoryStatus) -> Self {
         self.status = status;
+        self.updated_at = OffsetDateTime::now_utc();
+        self
+    }
+
+    /// Archive this item with metadata.
+    #[must_use]
+    pub fn with_archive(mut self, reason: impl Into<String>, archived_by: Option<String>) -> Self {
+        self.status = MemoryStatus::Archived;
+        self.archive = Some(ArchiveMetadata::new(reason, archived_by));
         self.updated_at = OffsetDateTime::now_utc();
         self
     }
@@ -647,6 +684,20 @@ pub enum MemoryChangeType {
     Linked,
     /// A graph link was removed.
     Unlinked,
+}
+
+impl std::fmt::Display for MemoryChangeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Added => write!(f, "added"),
+            Self::Updated => write!(f, "updated"),
+            Self::Superseded => write!(f, "superseded"),
+            Self::Archived => write!(f, "archived"),
+            Self::Rejected => write!(f, "rejected"),
+            Self::Linked => write!(f, "linked"),
+            Self::Unlinked => write!(f, "unlinked"),
+        }
+    }
 }
 
 /// A single memory change inside a knowledge commit.

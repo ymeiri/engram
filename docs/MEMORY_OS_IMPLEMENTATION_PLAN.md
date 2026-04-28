@@ -1,9 +1,40 @@
 # Engram Memory OS: Design and Implementation Plan
 
-Status: Draft
+Status: Implementation in progress
 Date: 2026-04-26
+Last Updated: 2026-04-28
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
+
+---
+
+## Living Implementation Checklist
+
+- [x] Memory OS ontology, writer provenance, lifecycle statuses, and knowledge commits.
+- [x] Consolidated MCP `memory(action=commit)` surface; no separate `memory_commit` tool.
+- [x] CLI `engram memory log`, `engram memory diff`, `engram memory changes-since`, `engram memory writer-stats`, and archive UX.
+- [x] Generated Markdown vault with generated-file marker and Obsidian backlinks.
+- [x] Orientation packet with repository/project resolution and deterministic relevance ordering.
+- [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
+- [x] Agent harness layer: MCP `harness`, CLI `engram harness`, Claude Code adapter rendering, Codex skill rendering, dry-run install by default.
+- [x] Lint/recalibration MVP: missing evidence, stale preference, duplicate entity candidate, orphan task/project scope, stale active session, superseded active item, vault marker/frontmatter, handoff missing next actions.
+- [x] Archive metadata and archive-aware retrieval; normal orientation uses active memory only.
+- [x] Derived graph traversal: MCP/CLI `graph around|path|subgraph|export`.
+- [x] Multi-writer changes_since filters and relevance reasons for harness/model/surface/session-aware polling.
+- [x] Rolling handoff: MCP/CLI `handoff get|update|compile`.
+- [x] Session-following event vocabulary: prompts, plans, tool results, tests, preferences, rules, limitations, and handoff updates.
+- [x] Session distillation dry-run candidate generation through `memory(action=distill_session)` and `engram memory distill-session`.
+- [x] Full validation and live daemon smoke from installed binary.
+- [ ] Migration completion run: inventory, review export, prioritize/dedupe, human review, dry-run apply, approved write apply, knowledge commit, vault compile, lint run.
+
+Current MCP/CLI Memory OS surface:
+
+- MCP: `orient`, `memory`, `harness`, `lint`, `graph`, `handoff`, `vault`, `digest`, `repo`.
+- CLI: `engram orient`, `engram memory`, `engram harness`, `engram lint`, `engram graph`, `engram handoff`, `engram vault`, `engram digest`, `engram repo`.
+
+Migration safety rule:
+
+No orphan, digest, or legacy Engram data is automatically promoted to active memory. Promotion requires review decisions, dry-run apply, approved write apply, and a knowledge commit.
 
 ---
 

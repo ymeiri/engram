@@ -20,19 +20,50 @@ use crate::vault::{
 };
 use engram_core::id::Id;
 use engram_core::memory::{
-    KnowledgeCommit, MemoryChange, MemoryCursor, MemoryItem, MemoryKind, MemoryScope, MemoryStatus,
-    WriterProvenance,
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange, MemoryCursor,
+    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, WriterProvenance,
 };
 use engram_core::repository::{MonorepoComponent, ProjectRepositoryLink, RepositoryContext};
-use engram_store::{Db, MemoryRepo, RepositoryRepo};
+use engram_core::session::{Event, EventType};
+use engram_store::{Db, MemoryRepo, RepositoryRepo, SessionRepo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use time::OffsetDateTime;
 use tracing::info;
 
+/// Relevance score for a memory item returned by changes_since.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryChangeRelevance {
+    /// Memory item ID.
+    pub item_id: Id,
+    /// Deterministic score.
+    pub score: f32,
+    /// Reasons contributing to the score.
+    pub reasons: Vec<String>,
+}
+
+/// Options for changes_since filtering and relevance scoring.
+#[derive(Debug, Clone, Default)]
+pub struct MemoryChangesSinceOptions {
+    /// Optional writer harness filter.
+    pub writer_harness: Option<String>,
+    /// Optional model filter.
+    pub model: Option<String>,
+    /// Optional surface filter.
+    pub surface: Option<String>,
+    /// Optional writer session filter.
+    pub writer_session_id: Option<Id>,
+    /// Optional project used for relevance scoring.
+    pub project: Option<String>,
+    /// Optional cwd used for repository relevance scoring.
+    pub cwd: Option<String>,
+    /// Optional prompt/query used for keyword scoring.
+    pub query: Option<String>,
+}
+
 /// Memory changes visible after a cursor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryChanges {
     /// Cursor used for the query.
     pub since: MemoryCursor,
@@ -42,6 +73,34 @@ pub struct MemoryChanges {
     pub items: Vec<MemoryItem>,
     /// Knowledge commits created after the cursor.
     pub commits: Vec<KnowledgeCommit>,
+    /// Relevance scores for returned memory items.
+    pub item_relevance: Vec<MemoryChangeRelevance>,
+}
+
+/// Dry-run session distillation candidate generation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDistillation {
+    /// Session distilled.
+    pub session_id: Id,
+    /// Candidates generated for review.
+    pub candidates: Vec<MemoryItem>,
+    /// Warning explaining that candidates are not durable writes.
+    pub warning: String,
+}
+
+/// Aggregate memory count by writer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryWriterStat {
+    /// Harness.
+    pub harness: String,
+    /// Model provider.
+    pub model_provider: String,
+    /// Model.
+    pub model: String,
+    /// Surface.
+    pub surface: Option<String>,
+    /// Item count.
+    pub count: usize,
 }
 
 impl MemoryChanges {
@@ -180,6 +239,7 @@ pub struct OrientationPacket {
 pub struct MemoryService {
     repo: MemoryRepo,
     repository_repo: RepositoryRepo,
+    session_repo: SessionRepo,
     migration_service: MigrationService,
 }
 
@@ -189,6 +249,7 @@ impl MemoryService {
         Self {
             repo: MemoryRepo::new(db.clone()),
             repository_repo: RepositoryRepo::new(db.clone()),
+            session_repo: SessionRepo::new(db.clone()),
             migration_service: MigrationService::new(db),
         }
     }
@@ -197,6 +258,7 @@ impl MemoryService {
     pub async fn init_schema(&self) -> IndexResult<()> {
         self.repo.init_schema().await?;
         self.repository_repo.init_schema().await?;
+        self.session_repo.init_schema().await?;
         Ok(())
     }
 
@@ -210,6 +272,23 @@ impl MemoryService {
     /// Get a memory item by ID.
     pub async fn get_memory(&self, id: &Id) -> IndexResult<Option<MemoryItem>> {
         Ok(self.repo.get_memory_item(id).await?)
+    }
+
+    /// Archive a memory item with metadata.
+    pub async fn archive_memory(
+        &self,
+        id: &Id,
+        reason: impl Into<String>,
+        archived_by: Option<String>,
+    ) -> IndexResult<MemoryItem> {
+        let item = self
+            .repo
+            .get_memory_item(id)
+            .await?
+            .ok_or_else(|| IndexError::NotFound(format!("memory item not found: {id}")))?;
+        let item = item.with_archive(reason, archived_by);
+        self.repo.save_memory_item(&item).await?;
+        Ok(item)
     }
 
     /// List memory items.
@@ -275,6 +354,34 @@ impl MemoryService {
     /// List knowledge commits.
     pub async fn list_commits(&self, limit: Option<usize>) -> IndexResult<Vec<KnowledgeCommit>> {
         Ok(self.repo.list_knowledge_commits(limit).await?)
+    }
+
+    /// Aggregate memory records by writer provenance.
+    pub async fn writer_stats(&self) -> IndexResult<Vec<MemoryWriterStat>> {
+        let mut stats: std::collections::BTreeMap<(String, String, String, Option<String>), usize> =
+            std::collections::BTreeMap::new();
+        for item in self.repo.list_memory_items(None, None).await? {
+            *stats
+                .entry((
+                    item.writer.harness.to_string(),
+                    item.writer.model.provider,
+                    item.writer.model.model,
+                    item.writer.surface,
+                ))
+                .or_default() += 1;
+        }
+        Ok(stats
+            .into_iter()
+            .map(
+                |((harness, model_provider, model, surface), count)| MemoryWriterStat {
+                    harness,
+                    model_provider,
+                    model,
+                    surface,
+                    count,
+                },
+            )
+            .collect())
     }
 
     /// Export Memory OS records into an Obsidian-compatible Markdown vault.
@@ -377,6 +484,26 @@ impl MemoryService {
         Ok(report)
     }
 
+    /// Generate review candidates from a session event stream. This does not
+    /// persist memory; callers must export/review/apply accepted candidates and
+    /// create a knowledge commit separately.
+    pub async fn distill_session(
+        &self,
+        session_id: Id,
+        writer: WriterProvenance,
+    ) -> IndexResult<SessionDistillation> {
+        let events = self.session_repo.get_events(&session_id).await?;
+        let candidates = events
+            .into_iter()
+            .filter_map(|event| distill_event_candidate(event, writer.clone()))
+            .collect();
+        Ok(SessionDistillation {
+            session_id,
+            candidates,
+            warning: "Dry-run candidates only; durable writes require accepted review decisions and a knowledge commit.".to_string(),
+        })
+    }
+
     /// Create a cursor for the current point in time.
     pub async fn current_cursor(&self) -> IndexResult<MemoryCursor> {
         let latest_commit_id = self
@@ -393,10 +520,35 @@ impl MemoryService {
         cursor: MemoryCursor,
         limit: Option<usize>,
     ) -> IndexResult<MemoryChanges> {
-        let items = self
+        self.changes_since_with_options(cursor, limit, MemoryChangesSinceOptions::default())
+            .await
+    }
+
+    /// Return filtered memory and commit changes after a cursor.
+    pub async fn changes_since_with_options(
+        &self,
+        cursor: MemoryCursor,
+        limit: Option<usize>,
+        options: MemoryChangesSinceOptions,
+    ) -> IndexResult<MemoryChanges> {
+        let mut items = self
             .repo
-            .list_memory_items_updated_after(cursor.timestamp, limit)
-            .await?;
+            .list_memory_items_updated_after(cursor.timestamp, None)
+            .await?
+            .into_iter()
+            .filter(|item| matches_changes_since_filters(item, &options))
+            .collect::<Vec<_>>();
+        let scores = score_changes_since_items(&items, &options);
+        items.sort_by(|left, right| {
+            change_relevance_score(&scores, right.id)
+                .partial_cmp(&change_relevance_score(&scores, left.id))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| right.updated_at.cmp(&left.updated_at))
+        });
+        if let Some(limit) = limit {
+            items.truncate(limit);
+        }
+        let item_relevance = score_changes_since_items(&items, &options);
         let commits = self
             .repo
             .list_knowledge_commits_after(cursor.timestamp, limit)
@@ -426,6 +578,7 @@ impl MemoryService {
             },
             items,
             commits,
+            item_relevance,
         })
     }
 
@@ -459,8 +612,18 @@ impl MemoryService {
         );
         let effective_project = resolution.selected_project.as_deref();
 
-        let relevant_active = filter_relevant(active, effective_project, input.cwd.as_deref());
-        let mut relevant_review = filter_relevant(review, effective_project, input.cwd.as_deref());
+        let relevant_active = filter_relevant(
+            active,
+            effective_project,
+            input.cwd.as_deref(),
+            input.prompt.as_deref(),
+        );
+        let mut relevant_review = filter_relevant(
+            review,
+            effective_project,
+            input.cwd.as_deref(),
+            input.prompt.as_deref(),
+        );
         relevant_review.truncate(limit);
 
         let active_decisions = take_kind(&relevant_active, MemoryKind::Decision, limit);
@@ -618,11 +781,19 @@ fn filter_relevant(
     items: Vec<MemoryItem>,
     project: Option<&str>,
     cwd: Option<&str>,
+    query: Option<&str>,
 ) -> Vec<MemoryItem> {
-    items
+    let mut items = items
         .into_iter()
         .filter(|item| is_relevant(item, project, cwd))
-        .collect()
+        .collect::<Vec<_>>();
+    items.sort_by(|left, right| {
+        orientation_score(right, project, cwd, query)
+            .partial_cmp(&orientation_score(left, project, cwd, query))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| right.updated_at.cmp(&left.updated_at))
+    });
+    items
 }
 
 fn resolve_orientation_project(
@@ -830,6 +1001,182 @@ fn is_relevant(item: &MemoryItem, project: Option<&str>, cwd: Option<&str>) -> b
             false
         }
     }
+}
+
+fn orientation_score(
+    item: &MemoryItem,
+    project: Option<&str>,
+    cwd: Option<&str>,
+    query: Option<&str>,
+) -> f32 {
+    let mut score = 0.0;
+    score += scope_match_score(item, project, cwd);
+    score += keyword_score(item, query);
+    score += recency_score(item.updated_at);
+    score += item.confidence.value() * 0.5;
+    if item.status == MemoryStatus::Active {
+        score += 1.0;
+    }
+    score
+}
+
+fn scope_match_score(item: &MemoryItem, project: Option<&str>, cwd: Option<&str>) -> f32 {
+    match &item.scope {
+        MemoryScope::Project { project_name, .. } => project
+            .filter(|project| project_name.eq_ignore_ascii_case(project))
+            .map(|_| 4.0)
+            .unwrap_or(0.0),
+        MemoryScope::Task { project_name, .. } => match (project, project_name) {
+            (Some(project), Some(item_project)) if item_project.eq_ignore_ascii_case(project) => {
+                3.5
+            }
+            _ => 0.0,
+        },
+        MemoryScope::Repository { local_path, .. } => match (cwd, local_path) {
+            (Some(cwd), Some(local_path)) => {
+                let cwd_path = canonical_or_original(Path::new(cwd));
+                let local_path = canonical_or_original(Path::new(local_path));
+                if path_starts_with(&cwd_path, &local_path) {
+                    3.0
+                } else {
+                    0.0
+                }
+            }
+            _ => 0.0,
+        },
+        MemoryScope::Global | MemoryScope::User => 1.0,
+        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
+            0.0
+        }
+    }
+}
+
+fn keyword_score(item: &MemoryItem, query: Option<&str>) -> f32 {
+    let Some(query) = query.filter(|query| !query.trim().is_empty()) else {
+        return 0.0;
+    };
+    let haystack = format!("{} {}", item.title, item.content).to_lowercase();
+    query
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|term| term.len() >= 3)
+        .map(str::to_lowercase)
+        .filter(|term| haystack.contains(term))
+        .count()
+        .min(5) as f32
+        * 0.7
+}
+
+fn recency_score(updated_at: OffsetDateTime) -> f32 {
+    let age = OffsetDateTime::now_utc() - updated_at;
+    if age < time::Duration::days(7) {
+        1.0
+    } else if age < time::Duration::days(30) {
+        0.7
+    } else if age < time::Duration::days(120) {
+        0.3
+    } else {
+        0.0
+    }
+}
+
+fn matches_changes_since_filters(item: &MemoryItem, options: &MemoryChangesSinceOptions) -> bool {
+    if let Some(harness) = &options.writer_harness {
+        if item.writer.harness.to_string() != Harness::parse(harness).to_string() {
+            return false;
+        }
+    }
+    if let Some(model) = &options.model {
+        if item.writer.model.model != *model {
+            return false;
+        }
+    }
+    if let Some(surface) = &options.surface {
+        if item.writer.surface.as_deref() != Some(surface.as_str()) {
+            return false;
+        }
+    }
+    if let Some(session_id) = options.writer_session_id {
+        if item.writer.session_id != Some(session_id) {
+            return false;
+        }
+    }
+    true
+}
+
+fn score_changes_since_items(
+    items: &[MemoryItem],
+    options: &MemoryChangesSinceOptions,
+) -> Vec<MemoryChangeRelevance> {
+    items
+        .iter()
+        .map(|item| {
+            let mut score = 0.0;
+            let mut reasons = Vec::new();
+            let scope_score =
+                scope_match_score(item, options.project.as_deref(), options.cwd.as_deref());
+            if scope_score > 0.0 {
+                score += scope_score;
+                reasons.push("scope_match".to_string());
+            }
+            let keyword_score = keyword_score(item, options.query.as_deref());
+            if keyword_score > 0.0 {
+                score += keyword_score;
+                reasons.push("keyword_match".to_string());
+            }
+            score += recency_score(item.updated_at);
+            reasons.push("recency".to_string());
+            score += item.confidence.value() * 0.5;
+            if item.status == MemoryStatus::Active {
+                score += 1.0;
+                reasons.push("active".to_string());
+            }
+            MemoryChangeRelevance {
+                item_id: item.id,
+                score,
+                reasons,
+            }
+        })
+        .collect()
+}
+
+fn change_relevance_score(scores: &[MemoryChangeRelevance], item_id: Id) -> f32 {
+    scores
+        .iter()
+        .find(|score| score.item_id == item_id)
+        .map(|score| score.score)
+        .unwrap_or(0.0)
+}
+
+fn distill_event_candidate(event: Event, writer: WriterProvenance) -> Option<MemoryItem> {
+    let (kind, title) = match event.event_type {
+        EventType::Decision => (MemoryKind::Decision, "Session decision"),
+        EventType::Preference => (MemoryKind::Preference, "Session preference"),
+        EventType::Rule => (MemoryKind::Rule, "Session rule"),
+        EventType::Limitation => (MemoryKind::Limitation, "Session limitation"),
+        EventType::HandoffUpdate => (MemoryKind::Handoff, "Session handoff update"),
+        EventType::Observation | EventType::Milestone => {
+            (MemoryKind::SessionInsight, "Session insight")
+        }
+        _ => return None,
+    };
+    Some(
+        MemoryItem::new(
+            kind,
+            title,
+            event.content,
+            MemoryScope::Session {
+                session_id: event.session_id,
+            },
+            ClaimOrigin::GeneratedSummary,
+            writer,
+        )
+        .with_evidence(
+            EvidenceRef::new(EvidenceKind::SessionEvent, event.id.to_string())
+                .with_summary("Generated from session distillation candidate"),
+        )
+        .with_status(MemoryStatus::NeedsReview)
+        .with_tag("distillation-candidate"),
+    )
 }
 
 fn take_kind(items: &[MemoryItem], kind: MemoryKind, limit: usize) -> Vec<MemoryItem> {

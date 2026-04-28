@@ -8,7 +8,12 @@ mod proxy;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use engram_core::entity::{EntityType, RelationType};
+use engram_core::graph::MemorySubgraph;
+use engram_core::harness::{
+    HarnessAdapterStatus, HarnessInstallReport, HarnessKind, HarnessStatusReport,
+};
 use engram_core::knowledge::DocType;
+use engram_core::lint::{LintFinding, LintReport, LintSeverity};
 use engram_core::memory::{
     Harness, MemoryCursor, MemoryItem, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
 };
@@ -17,17 +22,28 @@ use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DigestExtractionOptions, DigestExtractionPlan,
+    ChunkingStrategy, CoordinationService, DigestExtractionOptions, DigestExtractionPlan,
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions, DigestInventory,
     DigestInventoryOptions, DigestReviewApply, DigestReviewExport, DigestService,
-    DigestSourceIndexOptions, DigestSourceIndexPlan, DocumentService, EntityService,
-    KnowledgeService, MemoryChanges, MemoryService, MigrationInventory, MigrationInventoryOptions,
-    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
-    MigrationReviewStatus, OrientInput, OrientationPacket, RepositoryMigrationInventory,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApply,
-    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport,
-    RepositoryMigrationReviewStatus, RepositoryService, SearchService, SessionService,
-    ToolIntelService, WorkService,
+    DigestSourceIndexOptions, DigestSourceIndexPlan, DocumentIngestionPlan,
+    DocumentOrphanCleanupAction, DocumentOrphanCleanupExecutionOptions,
+    DocumentOrphanCleanupExecutionReport, DocumentOrphanCleanupExecutionStatus,
+    DocumentOrphanCleanupPlan, DocumentOrphanCleanupPlanOptions,
+    DocumentOrphanQuarantineReviewApply, DocumentOrphanQuarantineReviewApplyOptions,
+    DocumentOrphanQuarantineReviewExport, DocumentOrphanQuarantineReviewOptions,
+    DocumentOrphanQuarantineReviewPrioritization,
+    DocumentOrphanQuarantineReviewPrioritizationOptions, DocumentOrphanQuarantineReviewStatus,
+    DocumentOrphanReport, DocumentRecoveryClass, DocumentRecoveryOptions, DocumentReindexAction,
+    DocumentReindexExecutionOptions, DocumentReindexExecutionReport,
+    DocumentReindexExecutionStatus, DocumentReindexPlan, DocumentService, EntityService,
+    GraphService, HandoffService, HarnessService, KnowledgeService, LintOptions, LintService,
+    MemoryChanges, MemoryChangesSinceOptions, MemoryService, MigrationInventory,
+    MigrationInventoryOptions, MigrationReviewApply, MigrationReviewApplyOptions,
+    MigrationReviewExport, MigrationReviewStatus, OrientInput, OrientationPacket, Pipeline,
+    PipelineConfig, RepositoryMigrationInventory, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
+    RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus, RepositoryService,
+    SearchService, SessionService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -119,6 +135,10 @@ enum Commands {
         /// Recursive indexing
         #[arg(short, long)]
         recursive: bool,
+
+        /// Show the ingestion plan without writing document sources or chunks
+        #[arg(long)]
+        plan: bool,
     },
 
     /// Search documentation
@@ -137,6 +157,273 @@ enum Commands {
 
     /// Show database statistics
     Stats,
+
+    /// Report orphan document chunks without changing the store
+    DocOrphans {
+        /// Maximum orphan source groups to return
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Include all orphan source groups in the report
+        #[arg(long)]
+        all: bool,
+
+        /// Sample chunks to include per orphan source group
+        #[arg(short, long, default_value = "3")]
+        samples: usize,
+
+        /// Current file or directory path to scan for fingerprint matches
+        #[arg(long = "scan-path")]
+        scan_paths: Vec<String>,
+
+        /// Digest review batch root to scan for reviewed source matches
+        #[arg(long = "digest-review-path")]
+        digest_review_paths: Vec<String>,
+
+        /// Maximum candidate files or digest sources to read
+        #[arg(long, default_value = "5000")]
+        max_candidate_files: usize,
+
+        /// Maximum bytes to read per candidate file
+        #[arg(long, default_value = "1048576")]
+        max_file_bytes: usize,
+
+        /// Write the report to a file
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Export file format
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: OrphanExportFormat,
+    },
+
+    /// Build a read-only source-level reindex plan for recoverable orphan chunks
+    DocReindexPlan {
+        /// Maximum orphan source groups to analyze
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Analyze all orphan source groups
+        #[arg(long)]
+        all: bool,
+
+        /// Sample chunks to include per orphan source group
+        #[arg(short, long, default_value = "3")]
+        samples: usize,
+
+        /// Current file or directory path to scan for fingerprint matches
+        #[arg(long = "scan-path")]
+        scan_paths: Vec<String>,
+
+        /// Digest review batch root to scan for reviewed source matches
+        #[arg(long = "digest-review-path")]
+        digest_review_paths: Vec<String>,
+
+        /// Maximum candidate files or digest sources to read
+        #[arg(long, default_value = "5000")]
+        max_candidate_files: usize,
+
+        /// Maximum bytes to read per candidate file
+        #[arg(long, default_value = "1048576")]
+        max_file_bytes: usize,
+
+        /// Write the plan to a file
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Export file format
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: OrphanExportFormat,
+    },
+
+    /// Execute or dry-run a guarded source-level orphan reindex plan
+    DocReindexExecute {
+        /// JSON plan file produced by doc-reindex-plan --format json
+        #[arg(long = "plan")]
+        plan_path: String,
+
+        /// Perform writes. Default mode is a dry-run.
+        #[arg(long)]
+        execute: bool,
+
+        /// Approve all selected source actions in write mode
+        #[arg(long)]
+        all: bool,
+
+        /// Exact source path to include. Repeat to approve a subset.
+        #[arg(long = "source")]
+        source_paths: Vec<String>,
+
+        /// Action kind to include: reindex_file, reindex_digest_reviewed_source, inspect_existing_source
+        #[arg(long = "action")]
+        actions: Vec<String>,
+
+        /// Digest review batch root to resolve digest reviewed source actions
+        #[arg(long = "digest-review-path")]
+        digest_review_paths: Vec<String>,
+
+        /// Maximum bytes to read per digest source
+        #[arg(long, default_value = "1048576")]
+        max_source_bytes: usize,
+
+        /// Maximum selected source actions to process
+        #[arg(long)]
+        max_actions: Option<usize>,
+
+        /// Write the execution report to a file
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Export file format
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: OrphanExportFormat,
+    },
+
+    /// Build a read-only cleanup/quarantine plan for remaining orphan chunks
+    DocOrphanCleanupPlan {
+        /// Maximum orphan source groups to analyze
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+
+        /// Analyze all orphan source groups
+        #[arg(long)]
+        all: bool,
+
+        /// Sample chunks to include per orphan source group
+        #[arg(short, long, default_value = "3")]
+        samples: usize,
+
+        /// Current file or directory path to scan for fingerprint matches
+        #[arg(long = "scan-path")]
+        scan_paths: Vec<String>,
+
+        /// Digest review batch root to scan for reviewed source matches
+        #[arg(long = "digest-review-path")]
+        digest_review_paths: Vec<String>,
+
+        /// Maximum candidate files or digest sources to read
+        #[arg(long, default_value = "5000")]
+        max_candidate_files: usize,
+
+        /// Maximum bytes to read per candidate file
+        #[arg(long, default_value = "1048576")]
+        max_file_bytes: usize,
+
+        /// JSON source-level reindex plan used to map sources back to orphan groups
+        #[arg(long = "reindex-plan")]
+        reindex_plan_path: Option<String>,
+
+        /// JSON write execution report used to prove successful reindex coverage
+        #[arg(long = "execution-report")]
+        execution_report_path: Option<String>,
+
+        /// Write the cleanup/quarantine plan to a file
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Export file format
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: OrphanExportFormat,
+    },
+
+    /// Execute or dry-run deletion for cleanup-plan delete candidates
+    DocOrphanCleanupExecute {
+        /// JSON cleanup plan file produced by doc-orphan-cleanup-plan --format json
+        #[arg(long = "plan")]
+        plan_path: String,
+
+        /// Perform deletion. Default mode is a dry-run.
+        #[arg(long)]
+        execute: bool,
+
+        /// Explicitly approve deleting delete_after_successful_reindex groups in write mode
+        #[arg(long)]
+        delete_candidates: bool,
+
+        /// Approve all delete candidates in write mode
+        #[arg(long)]
+        all_delete_candidates: bool,
+
+        /// Exact missing source ID to include. Repeat to approve a subset.
+        #[arg(long = "source-id")]
+        source_ids: Vec<String>,
+
+        /// Maximum selected delete groups to process
+        #[arg(long)]
+        max_groups: Option<usize>,
+
+        /// Export quarantine groups to a separate file without deleting them
+        #[arg(long)]
+        quarantine_output: Option<String>,
+
+        /// Write the execution report to a file
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Export file format
+        #[arg(long, value_enum, default_value = "markdown")]
+        format: OrphanExportFormat,
+    },
+
+    /// Export retained quarantine orphan chunks into a generated Markdown review batch
+    DocOrphanQuarantineReviewExport {
+        /// JSON cleanup plan file with quarantine groups
+        #[arg(long = "plan")]
+        plan_path: String,
+
+        /// Output directory for generated review pages
+        #[arg(long = "output-dir")]
+        output_dir: String,
+
+        /// Maximum quarantine groups to export
+        #[arg(long)]
+        max_groups: Option<usize>,
+
+        /// Maximum chunks to include per group
+        #[arg(long)]
+        max_chunks_per_group: Option<usize>,
+
+        /// Maximum content bytes per chunk before truncation
+        #[arg(long, default_value = "16384")]
+        max_chunk_bytes: usize,
+    },
+
+    /// Inspect decision status for a generated document orphan quarantine review batch
+    DocOrphanQuarantineReviewStatus {
+        /// Review batch directory produced by doc-orphan-quarantine-review-export
+        #[arg(long = "review-path")]
+        review_path: String,
+    },
+
+    /// Rank generated document orphan quarantine review pages for a small review pilot
+    DocOrphanQuarantineReviewPrioritize {
+        /// Review batch directory produced by doc-orphan-quarantine-review-export
+        #[arg(long = "review-path")]
+        review_path: String,
+
+        /// Maximum prioritized pages to print
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+
+        /// Include already decided pages in the prioritization output
+        #[arg(long)]
+        include_decided: bool,
+
+        /// Include duplicate content fingerprints in the prioritization output
+        #[arg(long)]
+        include_duplicate_fingerprints: bool,
+
+        /// Maximum excerpt bytes to include per item
+        #[arg(long, default_value = "800")]
+        max_excerpt_bytes: usize,
+    },
+
+    /// Dry-run actions implied by a generated document orphan quarantine review batch
+    DocOrphanQuarantineReviewApply {
+        /// Review batch directory produced by doc-orphan-quarantine-review-export
+        #[arg(long = "review-path")]
+        review_path: String,
+    },
 
     /// Manage Layer 6: Knowledge Documents
     Knowledge {
@@ -233,6 +520,54 @@ enum Commands {
         json: bool,
     },
 
+    /// Manage Memory OS agent harness policy and adapters
+    Harness {
+        #[command(subcommand)]
+        command: HarnessCommands,
+    },
+
+    /// Run Memory OS health linting
+    Lint {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: LintCommands,
+    },
+
+    /// Traverse the derived Memory OS graph
+    Graph {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: GraphCommands,
+    },
+
+    /// Manage rolling Memory OS handoffs
+    Handoff {
+        /// Use a project-specific Engram data store
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Use an explicit RocksDB data directory
+        #[arg(long)]
+        data_dir: Option<String>,
+
+        #[command(subcommand)]
+        command: HandoffCommands,
+    },
+
     /// Manage the generated Memory OS Markdown vault
     Vault {
         /// Use a project-specific Engram data store
@@ -266,6 +601,13 @@ enum Commands {
         #[command(subcommand)]
         command: RepoCommands,
     },
+}
+
+/// Export format for document orphan recovery reports.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum OrphanExportFormat {
+    Markdown,
+    Json,
 }
 
 /// Document type for knowledge management.
@@ -414,6 +756,14 @@ enum EventTypeArg {
     Error,
     Milestone,
     Observation,
+    Prompt,
+    Plan,
+    ToolResult,
+    Test,
+    Preference,
+    Rule,
+    Limitation,
+    HandoffUpdate,
 }
 
 impl From<EventTypeArg> for EventType {
@@ -426,6 +776,14 @@ impl From<EventTypeArg> for EventType {
             EventTypeArg::Error => EventType::Error,
             EventTypeArg::Milestone => EventType::Milestone,
             EventTypeArg::Observation => EventType::Observation,
+            EventTypeArg::Prompt => EventType::Prompt,
+            EventTypeArg::Plan => EventType::Plan,
+            EventTypeArg::ToolResult => EventType::ToolResult,
+            EventTypeArg::Test => EventType::Test,
+            EventTypeArg::Preference => EventType::Preference,
+            EventTypeArg::Rule => EventType::Rule,
+            EventTypeArg::Limitation => EventType::Limitation,
+            EventTypeArg::HandoffUpdate => EventType::HandoffUpdate,
         }
     }
 }
@@ -1278,7 +1636,81 @@ enum MemoryCommands {
         #[arg(short, long)]
         limit: Option<usize>,
 
+        /// Filter changed memory by writer harness
+        #[arg(long)]
+        writer_harness: Option<String>,
+
+        /// Filter changed memory by writer model
+        #[arg(long)]
+        model: Option<String>,
+
+        /// Filter changed memory by writer surface
+        #[arg(long)]
+        surface: Option<String>,
+
+        /// Filter changed memory by writer session ID
+        #[arg(long)]
+        writer_session_id: Option<String>,
+
+        /// Project for relevance scoring
+        #[arg(long)]
+        relevance_project: Option<String>,
+
+        /// Current working directory for relevance scoring
+        #[arg(long)]
+        cwd: Option<String>,
+
+        /// Prompt/query for relevance scoring
+        #[arg(long)]
+        query: Option<String>,
+
         /// Print changes as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show knowledge commit log
+    Log {
+        /// Maximum commits to return
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print records as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show one knowledge commit and its recorded changes
+    Diff {
+        /// Knowledge commit ID
+        commit_id: String,
+
+        /// Print record as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show memory writer statistics
+    WriterStats {
+        /// Print records as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Archive a memory item
+    Archive {
+        /// Memory item ID
+        id: String,
+
+        /// Archive reason
+        #[arg(long)]
+        reason: String,
+
+        /// Actor/harness archiving the item
+        #[arg(long)]
+        archived_by: Option<String>,
+
+        /// Print item as JSON
         #[arg(long)]
         json: bool,
     },
@@ -1413,6 +1845,310 @@ enum MemoryCommands {
 
         /// Model/tool label recorded on imported records
         #[arg(long, default_value = "digest-extraction-apply")]
+        model: String,
+    },
+
+    /// Generate review candidates from a session event stream without writing memory
+    DistillSession {
+        /// Session ID to distill
+        session_id: String,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Writer harness/interface recorded on generated candidates
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on generated candidates
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on generated candidates
+        #[arg(long, default_value = "distill-session")]
+        model: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum HarnessKindArg {
+    ClaudeCode,
+    Codex,
+    Generic,
+}
+
+impl From<HarnessKindArg> for HarnessKind {
+    fn from(value: HarnessKindArg) -> Self {
+        match value {
+            HarnessKindArg::ClaudeCode => Self::ClaudeCode,
+            HarnessKindArg::Codex => Self::Codex,
+            HarnessKindArg::Generic => Self::Generic,
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum HarnessCommands {
+    /// Check whether harness adapters are present
+    Status {
+        /// Harness to check
+        #[arg(long, value_enum, default_value = "generic")]
+        harness: HarnessKindArg,
+
+        /// Install root, defaults to home directory
+        #[arg(long)]
+        root: Option<String>,
+
+        /// Print report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Run harness diagnostics
+    Doctor {
+        /// Harness to check
+        #[arg(long, value_enum, default_value = "generic")]
+        harness: HarnessKindArg,
+
+        /// Install root, defaults to home directory
+        #[arg(long)]
+        root: Option<String>,
+
+        /// Print report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Render the policy or one/all adapters without writing files
+    Render {
+        /// Harness to render
+        #[arg(long, value_enum, default_value = "generic")]
+        harness: HarnessKindArg,
+
+        /// Render a specific adapter by name instead of the policy JSON
+        #[arg(long)]
+        adapter: Option<String>,
+
+        /// Print adapter metadata and contents as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Install harness adapters. Dry-run unless --write is supplied.
+    Install {
+        /// Harness to install
+        #[arg(long, value_enum, default_value = "generic")]
+        harness: HarnessKindArg,
+
+        /// Install root, defaults to home directory
+        #[arg(long)]
+        root: Option<String>,
+
+        /// Actually write generated adapters
+        #[arg(long)]
+        write: bool,
+
+        /// Print report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum LintCommands {
+    /// Run lint checks
+    Run {
+        /// Optional Memory OS vault root to scan
+        #[arg(long)]
+        vault_path: Option<String>,
+
+        /// Maximum findings to print
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Alias for run
+    List {
+        /// Optional Memory OS vault root to scan
+        #[arg(long)]
+        vault_path: Option<String>,
+
+        /// Maximum findings to print
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Print report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Apply safe lint actions only
+    ApplySafe {
+        /// Optional Memory OS vault root to scan
+        #[arg(long)]
+        vault_path: Option<String>,
+
+        /// Maximum findings to inspect
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Actually write safe actions. Omitted means dry-run.
+        #[arg(long)]
+        write: bool,
+
+        /// Print report as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum GraphCommands {
+    /// Return a subgraph around a node ID
+    Around {
+        /// Node ID. Plain UUIDs are treated as memory:<id>.
+        node: String,
+
+        /// Traversal depth
+        #[arg(short, long, default_value = "2")]
+        depth: usize,
+
+        /// Print graph as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Find a graph path between two node IDs
+    Path {
+        /// Start node ID
+        from: String,
+
+        /// End node ID
+        to: String,
+
+        /// Maximum traversal depth
+        #[arg(long, default_value = "6")]
+        max_depth: usize,
+
+        /// Print path as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Return the full graph or a bounded graph around a node
+    Subgraph {
+        /// Optional start node ID
+        #[arg(long)]
+        node: Option<String>,
+
+        /// Traversal depth when --node is supplied
+        #[arg(short, long, default_value = "2")]
+        depth: usize,
+
+        /// Print graph as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Export graph as Mermaid
+    Export {
+        /// Optional start node ID
+        #[arg(long)]
+        node: Option<String>,
+
+        /// Traversal depth when --node is supplied
+        #[arg(short, long, default_value = "2")]
+        depth: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum HandoffCommands {
+    /// Get the latest active handoff
+    Get {
+        /// Project scope
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Session scope
+        #[arg(long)]
+        session_id: Option<String>,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Update the rolling handoff
+    Update {
+        /// Project scope
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Session scope
+        #[arg(long)]
+        session_id: Option<String>,
+
+        /// Handoff Markdown content
+        content: String,
+
+        /// Next action line; may be repeated
+        #[arg(long = "next-action")]
+        next_actions: Vec<String>,
+
+        /// Actually write the handoff. Omitted means dry-run.
+        #[arg(long)]
+        write: bool,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Writer harness/interface recorded on the handoff
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on the handoff
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on the handoff
+        #[arg(long, default_value = "handoff-update")]
+        model: String,
+    },
+
+    /// Compile a handoff from session events
+    Compile {
+        /// Session ID
+        session_id: String,
+
+        /// Project scope for the written handoff
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Actually write the compiled handoff. Omitted means dry-run.
+        #[arg(long)]
+        write: bool,
+
+        /// Print result as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Writer harness/interface recorded on the handoff
+        #[arg(long, default_value = "engram_cli")]
+        writer_harness: String,
+
+        /// Model/provider label recorded on the handoff
+        #[arg(long, default_value = "engram")]
+        model_provider: String,
+
+        /// Model/tool label recorded on the handoff
+        #[arg(long, default_value = "handoff-compile")]
         model: String,
     },
 }
@@ -1798,6 +2534,102 @@ fn print_orientation_packet(packet: &OrientationPacket) {
     println!("{}", packet.context_pack);
 }
 
+fn print_harness_status(report: &HarnessStatusReport) {
+    println!("Harness: {}", report.harness);
+    println!("Root:    {}", report.root);
+    println!("Ready:   {}", report.ready);
+    println!("Adapters:");
+    for adapter in &report.adapters {
+        let marker = match adapter.status {
+            HarnessAdapterStatus::Installed => "installed",
+            HarnessAdapterStatus::Missing => "missing",
+            HarnessAdapterStatus::Drifted => "drifted",
+            HarnessAdapterStatus::UserOwned => "user-owned",
+        };
+        println!("  - {} [{}] {}", adapter.name, marker, adapter.path);
+    }
+    if !report.missing_mcp_tools.is_empty() {
+        println!("Missing MCP tools: {}", report.missing_mcp_tools.join(", "));
+    }
+    if !report.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &report.warnings {
+            println!("  - {warning}");
+        }
+    }
+}
+
+fn print_harness_install(report: &HarnessInstallReport) {
+    println!("Harness install: {}", report.harness);
+    println!("Root:            {}", report.root);
+    println!("Dry-run:         {}", report.dry_run);
+    println!("Planned files:   {}", report.planned.len());
+    println!("Written files:   {}", report.written.len());
+    println!("Skipped files:   {}", report.skipped.len());
+
+    if !report.written.is_empty() {
+        println!("Written:");
+        for file in &report.written {
+            println!("  - {}", file.path);
+        }
+    }
+    if !report.skipped.is_empty() {
+        println!("Skipped:");
+        for file in &report.skipped {
+            println!("  - {} ({})", file.path, file.message);
+        }
+    }
+    if !report.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &report.warnings {
+            println!("  - {warning}");
+        }
+    }
+}
+
+fn print_lint_report(report: &LintReport, dry_run: bool) {
+    println!("Lint findings: {}", report.findings.len());
+    if report.applied_safe_actions > 0 || dry_run {
+        println!("Safe actions applied: {}", report.applied_safe_actions);
+        if dry_run {
+            println!("Dry-run: safe actions were not written");
+        }
+    }
+    for finding in &report.findings {
+        print_lint_finding(finding);
+    }
+}
+
+fn print_lint_finding(finding: &LintFinding) {
+    let severity = match finding.severity {
+        LintSeverity::Info => "info",
+        LintSeverity::Warning => "warning",
+        LintSeverity::Error => "error",
+    };
+    println!("- [{}] {}: {}", severity, finding.rule, finding.title);
+    println!("  {}", finding.message);
+    if let Some(item_id) = finding.item_id {
+        println!("  item: {item_id}");
+    }
+    if let Some(session_id) = finding.session_id {
+        println!("  session: {session_id}");
+    }
+    if let Some(path) = &finding.path {
+        println!("  path: {path}");
+    }
+}
+
+fn print_subgraph(graph: &MemorySubgraph) {
+    println!("Nodes: {}", graph.nodes.len());
+    for node in &graph.nodes {
+        println!("  - {} [{}] {}", node.id, node.kind, node.label);
+    }
+    println!("Edges: {}", graph.edges.len());
+    for edge in &graph.edges {
+        println!("  - {} --{}--> {}", edge.from, edge.relation, edge.to);
+    }
+}
+
 fn print_repository_context(context: &RepositoryContext) {
     println!("Repository:");
     println!("  ID:   {}", context.repository.id);
@@ -1907,6 +2739,17 @@ fn print_memory_changes(changes: &MemoryChanges) {
 
     if !changes.items.is_empty() {
         print_memory_items("Changed memory items", &changes.items);
+        if !changes.item_relevance.is_empty() {
+            println!("Relevance");
+            for relevance in &changes.item_relevance {
+                println!(
+                    "  {} score {:.2}: {}",
+                    relevance.item_id,
+                    relevance.score,
+                    relevance.reasons.join(", ")
+                );
+            }
+        }
     }
     if !changes.commits.is_empty() {
         println!("Knowledge commits");
@@ -2140,6 +2983,1379 @@ fn print_digest_source_index_plan(plan: &DigestSourceIndexPlan, indexed_document
         for warning in &plan.warnings {
             println!("  - {}", warning);
         }
+    }
+}
+
+fn print_document_ingestion_plan(plan: &DocumentIngestionPlan) {
+    println!("Document ingestion plan");
+    println!("  Documents planned:      {}", plan.documents.len());
+    println!("  Chunks planned:         {}", plan.total_chunks());
+
+    if !plan.documents.is_empty() {
+        println!("Documents:");
+        for document in &plan.documents {
+            println!(
+                "  - {} [{}; {} chars; {} sections; {} chunks]",
+                document.title,
+                chunking_strategy_label(document.chunking_strategy),
+                document.content_chars,
+                document.section_count,
+                document.chunk_count
+            );
+            println!("    Path: {}", document.path);
+        }
+    }
+
+    if !plan.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &plan.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_report(report: &DocumentOrphanReport) {
+    print_document_orphan_report_summary(report);
+
+    if report.groups.is_empty() {
+        println!("No orphan groups returned.");
+        return;
+    }
+
+    println!("Groups:");
+    for group in &report.groups {
+        println!(
+            "  - {} [{} chunks; {}; {}]",
+            group.missing_source_id,
+            group.chunk_count,
+            recovery_class_label(group.recovery_class),
+            group.recovery_hint
+        );
+        if !group.detected_references.is_empty() {
+            println!("    References:");
+            for reference in &group.detected_references {
+                match &reference.existing_source_id {
+                    Some(source_id) => println!(
+                        "      - {}: {} (matches source {})",
+                        reference.reference_type, reference.value, source_id
+                    ),
+                    None => println!("      - {}: {}", reference.reference_type, reference.value),
+                }
+            }
+        }
+        if !group.candidate_matches.is_empty() {
+            println!("    Candidate matches:");
+            for candidate in &group.candidate_matches {
+                println!(
+                    "      - {} [{}; score {:.2}; {}/{} anchors]",
+                    candidate.path,
+                    candidate.match_type,
+                    candidate.score,
+                    candidate.matched_anchors,
+                    candidate.total_anchors
+                );
+            }
+        }
+        if !group.samples.is_empty() {
+            println!("    Samples:");
+            for sample in &group.samples {
+                println!(
+                    "      - {} :: {}",
+                    sample.heading_path, sample.content_preview
+                );
+            }
+        }
+    }
+
+    if !report.candidate_scan_warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &report.candidate_scan_warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_report_summary(report: &DocumentOrphanReport) {
+    println!("Document orphan recovery report");
+    println!("  Orphan chunks:            {}", report.orphan_chunk_count);
+    println!("  Missing source IDs:       {}", report.orphan_source_count);
+    println!("  Groups returned:          {}", report.groups_returned);
+    println!(
+        "  Known source matches:     {}",
+        report.groups_with_known_source_match
+    );
+    println!(
+        "  Recoverable groups:       {}",
+        report.recovery_summary.recoverable
+    );
+    println!(
+        "  Unknown groups:           {}",
+        report.recovery_summary.unknown
+    );
+    println!(
+        "  Safe-to-quarantine:       {}",
+        report.recovery_summary.safe_to_quarantine
+    );
+    println!(
+        "  Candidate matches:        {}",
+        report.groups_with_candidate_matches
+    );
+    println!(
+        "  Candidate files scanned:  {}",
+        report.candidate_files_scanned
+    );
+    println!(
+        "  Candidate files skipped:  {}",
+        report.candidate_files_skipped
+    );
+    println!(
+        "  Samples per group:        {}",
+        report.sample_limit_per_group
+    );
+}
+
+fn write_document_orphan_report(
+    report: &DocumentOrphanReport,
+    output: &str,
+    format: OrphanExportFormat,
+) -> Result<()> {
+    let path = std::path::Path::new(output);
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    let contents = match format {
+        OrphanExportFormat::Markdown => document_orphan_report_markdown(report),
+        OrphanExportFormat::Json => serde_json::to_string_pretty(report)?,
+    };
+    std::fs::write(path, contents)?;
+    Ok(())
+}
+
+fn document_orphan_report_markdown(report: &DocumentOrphanReport) -> String {
+    let mut output = String::new();
+    output.push_str("# Document Orphan Recovery Report\n\n");
+    output.push_str("## Summary\n\n");
+    output.push_str(&format!("- Orphan chunks: {}\n", report.orphan_chunk_count));
+    output.push_str(&format!(
+        "- Missing source IDs: {}\n",
+        report.orphan_source_count
+    ));
+    output.push_str(&format!("- Groups returned: {}\n", report.groups_returned));
+    output.push_str(&format!(
+        "- Recoverable groups: {}\n",
+        report.recovery_summary.recoverable
+    ));
+    output.push_str(&format!(
+        "- Unknown groups: {}\n",
+        report.recovery_summary.unknown
+    ));
+    output.push_str(&format!(
+        "- Safe-to-quarantine groups: {}\n",
+        report.recovery_summary.safe_to_quarantine
+    ));
+    output.push_str(&format!(
+        "- Known source matches: {}\n",
+        report.groups_with_known_source_match
+    ));
+    output.push_str(&format!(
+        "- Candidate matches: {}\n",
+        report.groups_with_candidate_matches
+    ));
+    output.push_str(&format!(
+        "- Candidate files scanned: {}\n",
+        report.candidate_files_scanned
+    ));
+    output.push_str(&format!(
+        "- Candidate files skipped: {}\n",
+        report.candidate_files_skipped
+    ));
+
+    output.push_str("\n## Groups\n\n");
+    for group in &report.groups {
+        output.push_str(&format!("### `{}`\n\n", group.missing_source_id));
+        output.push_str(&format!("- Chunks: {}\n", group.chunk_count));
+        output.push_str(&format!(
+            "- Recovery class: `{}`\n",
+            recovery_class_label(group.recovery_class)
+        ));
+        output.push_str(&format!("- Recovery hint: `{}`\n", group.recovery_hint));
+        output.push_str(&format!(
+            "- Content fingerprint: `{}`\n",
+            group.content_fingerprint
+        ));
+        output.push_str(&format!(
+            "- Content anchors: {}\n",
+            group.content_anchor_count
+        ));
+
+        if !group.detected_references.is_empty() {
+            output.push_str("\nReferences:\n\n");
+            for reference in &group.detected_references {
+                if let Some(source_id) = &reference.existing_source_id {
+                    output.push_str(&format!(
+                        "- `{}`: `{}` (matches source `{}`)\n",
+                        reference.reference_type, reference.value, source_id
+                    ));
+                } else {
+                    output.push_str(&format!(
+                        "- `{}`: `{}`\n",
+                        reference.reference_type, reference.value
+                    ));
+                }
+            }
+        }
+
+        if !group.candidate_matches.is_empty() {
+            output.push_str("\nCandidate matches:\n\n");
+            for candidate in &group.candidate_matches {
+                output.push_str(&format!(
+                    "- `{}` (`{}`, score {:.2}, {}/{} anchors, exact: {})\n",
+                    candidate.path,
+                    candidate.match_type,
+                    candidate.score,
+                    candidate.matched_anchors,
+                    candidate.total_anchors,
+                    candidate.exact_fingerprint_match
+                ));
+                for evidence in &candidate.evidence {
+                    output.push_str(&format!("  - Evidence: {}\n", evidence));
+                }
+            }
+        }
+
+        if !group.samples.is_empty() {
+            output.push_str("\nSamples:\n\n");
+            for sample in &group.samples {
+                output.push_str(&format!(
+                    "- `{}`: {}\n",
+                    sample.heading_path, sample.content_preview
+                ));
+            }
+        }
+
+        output.push('\n');
+    }
+
+    if !report.candidate_scan_warnings.is_empty() {
+        output.push_str("## Warnings\n\n");
+        for warning in &report.candidate_scan_warnings {
+            output.push_str(&format!("- {}\n", warning));
+        }
+    }
+
+    output
+}
+
+fn print_document_reindex_plan(plan: &DocumentReindexPlan) {
+    print_document_reindex_plan_summary(plan);
+
+    if plan.sources.is_empty() {
+        println!("No source-level reindex actions planned.");
+    } else {
+        println!("Sources:");
+        for source in &plan.sources {
+            println!(
+                "  - {} [{}; {}; {} groups; {} orphan chunks]",
+                source.source_path,
+                reindex_action_label(source.action),
+                source.match_type,
+                source.group_count,
+                source.orphan_chunk_count
+            );
+            println!(
+                "    Score range: {:.2} - {:.2}",
+                source.min_score, source.max_score
+            );
+            if !source.existing_source_ids.is_empty() {
+                println!("    Existing source IDs:");
+                for source_id in &source.existing_source_ids {
+                    println!("      - {}", source_id);
+                }
+            }
+            if !source.notes.is_empty() {
+                println!("    Notes:");
+                for note in &source.notes {
+                    println!("      - {}", note);
+                }
+            }
+            if !source.groups.is_empty() {
+                println!("    Groups:");
+                for group in &source.groups {
+                    println!(
+                        "      - {} [{} chunks; score {:.2}; {}/{} anchors; exact: {}]",
+                        group.missing_source_id,
+                        group.orphan_chunk_count,
+                        group.score,
+                        group.matched_anchors,
+                        group.total_anchors,
+                        group.exact_fingerprint_match
+                    );
+                }
+            }
+        }
+    }
+
+    if !plan.review_only.is_empty() {
+        println!("Review-only groups:");
+        for group in &plan.review_only {
+            println!(
+                "  - {} [{} chunks; {}]",
+                group.missing_source_id, group.orphan_chunk_count, group.reason
+            );
+        }
+    }
+}
+
+fn print_document_reindex_plan_summary(plan: &DocumentReindexPlan) {
+    println!("Document orphan reindex plan");
+    println!("  Read-only:                 {}", plan.read_only);
+    println!("  Orphan chunks:             {}", plan.orphan_chunk_count);
+    println!("  Missing source IDs:        {}", plan.orphan_source_count);
+    println!("  Recoverable groups:        {}", plan.recoverable_groups);
+    println!("  Unknown groups:            {}", plan.unknown_groups);
+    println!(
+        "  Safe-to-quarantine:        {}",
+        plan.safe_to_quarantine_groups
+    );
+    println!("  Planned source actions:    {}", plan.sources.len());
+    println!("  Planned groups:            {}", plan.planned_groups);
+    println!(
+        "  Planned orphan chunks:     {}",
+        plan.planned_orphan_chunks
+    );
+    println!("  Review-only groups:        {}", plan.review_only_groups);
+}
+
+fn write_document_reindex_plan(
+    plan: &DocumentReindexPlan,
+    output: &str,
+    format: OrphanExportFormat,
+) -> Result<()> {
+    let path = std::path::Path::new(output);
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    let contents = match format {
+        OrphanExportFormat::Markdown => document_reindex_plan_markdown(plan),
+        OrphanExportFormat::Json => serde_json::to_string_pretty(plan)?,
+    };
+    std::fs::write(path, contents)?;
+    Ok(())
+}
+
+fn document_reindex_plan_markdown(plan: &DocumentReindexPlan) -> String {
+    let mut output = String::new();
+    output.push_str("# Document Orphan Reindex Plan\n\n");
+    output.push_str("## Summary\n\n");
+    output.push_str(&format!("- Read-only: {}\n", plan.read_only));
+    output.push_str(&format!("- Orphan chunks: {}\n", plan.orphan_chunk_count));
+    output.push_str(&format!(
+        "- Missing source IDs: {}\n",
+        plan.orphan_source_count
+    ));
+    output.push_str(&format!(
+        "- Recoverable groups: {}\n",
+        plan.recoverable_groups
+    ));
+    output.push_str(&format!("- Unknown groups: {}\n", plan.unknown_groups));
+    output.push_str(&format!(
+        "- Safe-to-quarantine groups: {}\n",
+        plan.safe_to_quarantine_groups
+    ));
+    output.push_str(&format!(
+        "- Planned source actions: {}\n",
+        plan.sources.len()
+    ));
+    output.push_str(&format!("- Planned groups: {}\n", plan.planned_groups));
+    output.push_str(&format!(
+        "- Planned orphan chunks: {}\n",
+        plan.planned_orphan_chunks
+    ));
+    output.push_str(&format!(
+        "- Review-only groups: {}\n",
+        plan.review_only_groups
+    ));
+
+    output.push_str("\n## Source Actions\n\n");
+    for source in &plan.sources {
+        output.push_str(&format!("### `{}`\n\n", source.source_path));
+        output.push_str(&format!(
+            "- Action: `{}`\n",
+            reindex_action_label(source.action)
+        ));
+        output.push_str(&format!("- Match type: `{}`\n", source.match_type));
+        output.push_str(&format!("- Groups: {}\n", source.group_count));
+        output.push_str(&format!("- Orphan chunks: {}\n", source.orphan_chunk_count));
+        output.push_str(&format!(
+            "- Score range: {:.2} - {:.2}\n",
+            source.min_score, source.max_score
+        ));
+
+        if !source.existing_source_ids.is_empty() {
+            output.push_str("\nExisting source IDs:\n\n");
+            for source_id in &source.existing_source_ids {
+                output.push_str(&format!("- `{}`\n", source_id));
+            }
+        }
+
+        if !source.notes.is_empty() {
+            output.push_str("\nNotes:\n\n");
+            for note in &source.notes {
+                output.push_str(&format!("- {}\n", note));
+            }
+        }
+
+        if !source.groups.is_empty() {
+            output.push_str("\nCovered orphan groups:\n\n");
+            for group in &source.groups {
+                output.push_str(&format!(
+                    "- `{}`: {} chunks, score {:.2}, {}/{} anchors, exact: {}\n",
+                    group.missing_source_id,
+                    group.orphan_chunk_count,
+                    group.score,
+                    group.matched_anchors,
+                    group.total_anchors,
+                    group.exact_fingerprint_match
+                ));
+                for evidence in &group.evidence {
+                    output.push_str(&format!("  - Evidence: {}\n", evidence));
+                }
+            }
+        }
+
+        output.push('\n');
+    }
+
+    if !plan.review_only.is_empty() {
+        output.push_str("## Review-Only Groups\n\n");
+        for group in &plan.review_only {
+            output.push_str(&format!("### `{}`\n\n", group.missing_source_id));
+            output.push_str(&format!("- Chunks: {}\n", group.orphan_chunk_count));
+            output.push_str(&format!("- Recovery hint: `{}`\n", group.recovery_hint));
+            output.push_str(&format!("- Reason: {}\n\n", group.reason));
+        }
+    }
+
+    output
+}
+
+fn read_document_reindex_plan(path: &str) -> Result<DocumentReindexPlan> {
+    let contents = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&contents)?)
+}
+
+fn read_document_reindex_execution_report(path: &str) -> Result<DocumentReindexExecutionReport> {
+    let contents = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&contents)?)
+}
+
+fn read_document_orphan_cleanup_plan(path: &str) -> Result<DocumentOrphanCleanupPlan> {
+    let contents = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&contents)?)
+}
+
+fn parse_reindex_actions(actions: &[String]) -> Result<Vec<DocumentReindexAction>> {
+    actions
+        .iter()
+        .map(|action| {
+            DocumentReindexAction::parse(action).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Unknown reindex action '{}'. Valid: reindex_file, reindex_digest_reviewed_source, inspect_existing_source",
+                    action
+                )
+            })
+        })
+        .collect()
+}
+
+fn print_document_reindex_execution_report(report: &DocumentReindexExecutionReport) {
+    print_document_reindex_execution_summary(report);
+
+    if report.actions.is_empty() {
+        println!("No source actions in execution report.");
+        return;
+    }
+
+    println!("Actions:");
+    for action in &report.actions {
+        println!(
+            "  - {} [{}; {}; {}]",
+            action.source_path,
+            reindex_action_label(action.action),
+            reindex_execution_status_label(action.status),
+            if action.dry_run { "dry-run" } else { "write" }
+        );
+        println!(
+            "    Groups: {}, orphan chunks: {}",
+            action.group_count, action.orphan_chunk_count
+        );
+        if let Some(chunk_count) = action.chunk_count {
+            println!("    Indexed/planned chunks: {}", chunk_count);
+        }
+        if let Some(title) = &action.title {
+            println!("    Title: {}", title);
+        }
+        if let Some(reason) = &action.reason {
+            println!("    Reason: {}", reason);
+        }
+    }
+
+    if !report.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &report.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_reindex_execution_summary(report: &DocumentReindexExecutionReport) {
+    println!("Document orphan reindex execution report");
+    println!("  Dry-run:                   {}", report.dry_run);
+    println!(
+        "  Orphan cleanup performed:  {}",
+        report.orphan_cleanup_performed
+    );
+    println!(
+        "  Plan source actions:       {}",
+        report.plan_source_actions
+    );
+    println!(
+        "  Selected source actions:   {}",
+        report.selected_source_actions
+    );
+    println!(
+        "  Planned source actions:    {}",
+        report.planned_source_actions
+    );
+    println!(
+        "  Reindexed source actions:  {}",
+        report.reindexed_source_actions
+    );
+    println!(
+        "  Already indexed actions:   {}",
+        report.already_indexed_source_actions
+    );
+    println!(
+        "  Inspection actions:        {}",
+        report.inspection_source_actions
+    );
+    println!(
+        "  Skipped source actions:    {}",
+        report.skipped_source_actions
+    );
+    println!(
+        "  Failed source actions:     {}",
+        report.failed_source_actions
+    );
+    println!(
+        "  Reindexed documents:       {}",
+        report.reindexed_documents
+    );
+    println!("  Planned chunks:            {}", report.planned_chunks);
+    println!("  Indexed chunks:            {}", report.indexed_chunks);
+}
+
+fn write_document_reindex_execution_report(
+    report: &DocumentReindexExecutionReport,
+    output: &str,
+    format: OrphanExportFormat,
+) -> Result<()> {
+    let path = std::path::Path::new(output);
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    let contents = match format {
+        OrphanExportFormat::Markdown => document_reindex_execution_markdown(report),
+        OrphanExportFormat::Json => serde_json::to_string_pretty(report)?,
+    };
+    std::fs::write(path, contents)?;
+    Ok(())
+}
+
+fn document_reindex_execution_markdown(report: &DocumentReindexExecutionReport) -> String {
+    let mut output = String::new();
+    output.push_str("# Document Orphan Reindex Execution Report\n\n");
+    output.push_str("## Summary\n\n");
+    output.push_str(&format!("- Dry-run: {}\n", report.dry_run));
+    output.push_str(&format!(
+        "- Orphan cleanup performed: {}\n",
+        report.orphan_cleanup_performed
+    ));
+    output.push_str(&format!(
+        "- Plan source actions: {}\n",
+        report.plan_source_actions
+    ));
+    output.push_str(&format!(
+        "- Selected source actions: {}\n",
+        report.selected_source_actions
+    ));
+    output.push_str(&format!(
+        "- Planned source actions: {}\n",
+        report.planned_source_actions
+    ));
+    output.push_str(&format!(
+        "- Reindexed source actions: {}\n",
+        report.reindexed_source_actions
+    ));
+    output.push_str(&format!(
+        "- Already indexed actions: {}\n",
+        report.already_indexed_source_actions
+    ));
+    output.push_str(&format!(
+        "- Inspection actions: {}\n",
+        report.inspection_source_actions
+    ));
+    output.push_str(&format!(
+        "- Skipped source actions: {}\n",
+        report.skipped_source_actions
+    ));
+    output.push_str(&format!(
+        "- Failed source actions: {}\n",
+        report.failed_source_actions
+    ));
+    output.push_str(&format!(
+        "- Reindexed documents: {}\n",
+        report.reindexed_documents
+    ));
+    output.push_str(&format!("- Planned chunks: {}\n", report.planned_chunks));
+    output.push_str(&format!("- Indexed chunks: {}\n", report.indexed_chunks));
+
+    output.push_str("\n## Actions\n\n");
+    for action in &report.actions {
+        output.push_str(&format!("### `{}`\n\n", action.source_path));
+        output.push_str(&format!(
+            "- Action: `{}`\n",
+            reindex_action_label(action.action)
+        ));
+        output.push_str(&format!(
+            "- Status: `{}`\n",
+            reindex_execution_status_label(action.status)
+        ));
+        output.push_str(&format!("- Dry-run: {}\n", action.dry_run));
+        output.push_str(&format!("- Groups: {}\n", action.group_count));
+        output.push_str(&format!("- Orphan chunks: {}\n", action.orphan_chunk_count));
+        if let Some(chunk_count) = action.chunk_count {
+            output.push_str(&format!("- Indexed/planned chunks: {}\n", chunk_count));
+        }
+        if let Some(title) = &action.title {
+            output.push_str(&format!("- Title: `{}`\n", title));
+        }
+        if let Some(reason) = &action.reason {
+            output.push_str(&format!("- Reason: {}\n", reason));
+        }
+        if !action.existing_source_ids.is_empty() {
+            output.push_str("\nExisting source IDs:\n\n");
+            for source_id in &action.existing_source_ids {
+                output.push_str(&format!("- `{}`\n", source_id));
+            }
+        }
+        if !action.notes.is_empty() {
+            output.push_str("\nNotes:\n\n");
+            for note in &action.notes {
+                output.push_str(&format!("- {}\n", note));
+            }
+        }
+        output.push('\n');
+    }
+
+    if !report.warnings.is_empty() {
+        output.push_str("## Warnings\n\n");
+        for warning in &report.warnings {
+            output.push_str(&format!("- {}\n", warning));
+        }
+    }
+
+    output
+}
+
+fn print_document_orphan_cleanup_plan(plan: &DocumentOrphanCleanupPlan) {
+    print_document_orphan_cleanup_plan_summary(plan);
+
+    if plan.groups.is_empty() {
+        println!("No orphan cleanup groups returned.");
+        return;
+    }
+
+    println!("Groups:");
+    for group in &plan.groups {
+        println!(
+            "  - {} [{}; {} chunks; {}]",
+            group.missing_source_id,
+            cleanup_action_label(group.cleanup_action),
+            group.orphan_chunk_count,
+            group.reason
+        );
+        if let Some(source_path) = &group.reindex_source_path {
+            println!("    Reindex source: {}", source_path);
+        }
+        if let Some(status) = group.reindex_status {
+            println!(
+                "    Reindex status: {}",
+                reindex_execution_status_label(status)
+            );
+        }
+        if !group.samples.is_empty() {
+            println!("    Samples:");
+            for sample in &group.samples {
+                println!(
+                    "      - {} :: {}",
+                    sample.heading_path, sample.content_preview
+                );
+            }
+        }
+    }
+
+    if !plan.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &plan.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_cleanup_plan_summary(plan: &DocumentOrphanCleanupPlan) {
+    println!("Document orphan cleanup/quarantine plan");
+    println!("  Read-only:                 {}", plan.read_only);
+    println!("  Orphan chunks:             {}", plan.orphan_chunk_count);
+    println!("  Missing source IDs:        {}", plan.orphan_source_count);
+    println!("  Groups returned:           {}", plan.groups_returned);
+    println!("  Recoverable groups:        {}", plan.recoverable_groups);
+    println!("  Unknown groups:            {}", plan.unknown_groups);
+    println!(
+        "  Safe-to-quarantine:        {}",
+        plan.safe_to_quarantine_groups
+    );
+    println!(
+        "  Delete candidate groups:   {}",
+        plan.delete_candidate_groups
+    );
+    println!(
+        "  Delete candidate chunks:   {}",
+        plan.delete_candidate_chunks
+    );
+    println!(
+        "  Quarantine groups:         {}",
+        plan.quarantine_candidate_groups
+    );
+    println!(
+        "  Quarantine chunks:         {}",
+        plan.quarantine_candidate_chunks
+    );
+    println!("  Manual review groups:      {}", plan.manual_review_groups);
+    println!("  Manual review chunks:      {}", plan.manual_review_chunks);
+}
+
+fn write_document_orphan_cleanup_plan(
+    plan: &DocumentOrphanCleanupPlan,
+    output: &str,
+    format: OrphanExportFormat,
+) -> Result<()> {
+    let path = std::path::Path::new(output);
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    let contents = match format {
+        OrphanExportFormat::Markdown => document_orphan_cleanup_plan_markdown(plan),
+        OrphanExportFormat::Json => serde_json::to_string_pretty(plan)?,
+    };
+    std::fs::write(path, contents)?;
+    Ok(())
+}
+
+fn document_orphan_cleanup_plan_markdown(plan: &DocumentOrphanCleanupPlan) -> String {
+    let mut output = String::new();
+    output.push_str("# Document Orphan Cleanup/Quarantine Plan\n\n");
+    output.push_str("## Summary\n\n");
+    output.push_str(&format!("- Read-only: {}\n", plan.read_only));
+    output.push_str(&format!("- Orphan chunks: {}\n", plan.orphan_chunk_count));
+    output.push_str(&format!(
+        "- Missing source IDs: {}\n",
+        plan.orphan_source_count
+    ));
+    output.push_str(&format!("- Groups returned: {}\n", plan.groups_returned));
+    output.push_str(&format!(
+        "- Recoverable groups: {}\n",
+        plan.recoverable_groups
+    ));
+    output.push_str(&format!("- Unknown groups: {}\n", plan.unknown_groups));
+    output.push_str(&format!(
+        "- Safe-to-quarantine groups: {}\n",
+        plan.safe_to_quarantine_groups
+    ));
+    output.push_str(&format!(
+        "- Delete candidate groups: {}\n",
+        plan.delete_candidate_groups
+    ));
+    output.push_str(&format!(
+        "- Delete candidate chunks: {}\n",
+        plan.delete_candidate_chunks
+    ));
+    output.push_str(&format!(
+        "- Quarantine candidate groups: {}\n",
+        plan.quarantine_candidate_groups
+    ));
+    output.push_str(&format!(
+        "- Quarantine candidate chunks: {}\n",
+        plan.quarantine_candidate_chunks
+    ));
+    output.push_str(&format!(
+        "- Manual review groups: {}\n",
+        plan.manual_review_groups
+    ));
+    output.push_str(&format!(
+        "- Manual review chunks: {}\n",
+        plan.manual_review_chunks
+    ));
+
+    output.push_str("\n## Groups\n\n");
+    for group in &plan.groups {
+        output.push_str(&format!("### `{}`\n\n", group.missing_source_id));
+        output.push_str(&format!(
+            "- Cleanup action: `{}`\n",
+            cleanup_action_label(group.cleanup_action)
+        ));
+        output.push_str(&format!("- Orphan chunks: {}\n", group.orphan_chunk_count));
+        output.push_str(&format!(
+            "- Recovery class: `{}`\n",
+            recovery_class_label(group.recovery_class)
+        ));
+        output.push_str(&format!("- Recovery hint: `{}`\n", group.recovery_hint));
+        output.push_str(&format!("- Reason: {}\n", group.reason));
+        output.push_str(&format!(
+            "- Content fingerprint: `{}`\n",
+            group.content_fingerprint
+        ));
+        if let Some(source_path) = &group.reindex_source_path {
+            output.push_str(&format!("- Reindex source: `{}`\n", source_path));
+        }
+        if let Some(action) = group.reindex_action {
+            output.push_str(&format!(
+                "- Reindex action: `{}`\n",
+                reindex_action_label(action)
+            ));
+        }
+        if let Some(status) = group.reindex_status {
+            output.push_str(&format!(
+                "- Reindex status: `{}`\n",
+                reindex_execution_status_label(status)
+            ));
+        }
+
+        if !group.existing_source_ids.is_empty() {
+            output.push_str("\nExisting source IDs:\n\n");
+            for source_id in &group.existing_source_ids {
+                output.push_str(&format!("- `{}`\n", source_id));
+            }
+        }
+
+        if !group.candidate_matches.is_empty() {
+            output.push_str("\nCandidate matches:\n\n");
+            for candidate in &group.candidate_matches {
+                output.push_str(&format!(
+                    "- `{}` (`{}`, score {:.2}, {}/{} anchors, exact: {})\n",
+                    candidate.path,
+                    candidate.match_type,
+                    candidate.score,
+                    candidate.matched_anchors,
+                    candidate.total_anchors,
+                    candidate.exact_fingerprint_match
+                ));
+            }
+        }
+
+        if !group.samples.is_empty() {
+            output.push_str("\nSamples:\n\n");
+            for sample in &group.samples {
+                output.push_str(&format!(
+                    "- `{}`: {}\n",
+                    sample.heading_path, sample.content_preview
+                ));
+            }
+        }
+
+        output.push('\n');
+    }
+
+    if !plan.warnings.is_empty() {
+        output.push_str("## Warnings\n\n");
+        for warning in &plan.warnings {
+            output.push_str(&format!("- {}\n", warning));
+        }
+    }
+
+    output
+}
+
+fn cleanup_action_label(action: DocumentOrphanCleanupAction) -> &'static str {
+    match action {
+        DocumentOrphanCleanupAction::DeleteAfterSuccessfulReindex => {
+            "delete_after_successful_reindex"
+        }
+        DocumentOrphanCleanupAction::Quarantine => "quarantine",
+        DocumentOrphanCleanupAction::ManualReview => "manual_review",
+    }
+}
+
+fn print_document_orphan_cleanup_execution_report(report: &DocumentOrphanCleanupExecutionReport) {
+    print_document_orphan_cleanup_execution_summary(report);
+
+    if report.actions.is_empty() {
+        println!("No cleanup execution actions returned.");
+        return;
+    }
+
+    println!("Actions:");
+    for action in &report.actions {
+        println!(
+            "  - {} [{}; {} chunks; {}]",
+            action.missing_source_id,
+            cleanup_execution_status_label(action.status),
+            action.planned_orphan_chunks,
+            action.reason
+        );
+    }
+
+    if !report.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &report.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_cleanup_execution_summary(report: &DocumentOrphanCleanupExecutionReport) {
+    println!("Document orphan cleanup execution report");
+    println!("  Dry-run:                   {}", report.dry_run);
+    println!(
+        "  Orphan cleanup performed:  {}",
+        report.orphan_cleanup_performed
+    );
+    println!("  Plan groups:               {}", report.plan_groups);
+    println!(
+        "  Plan delete candidates:    {}",
+        report.plan_delete_candidate_groups
+    );
+    println!(
+        "  Plan quarantine groups:    {}",
+        report.plan_quarantine_groups
+    );
+    println!(
+        "  Selected delete groups:    {}",
+        report.selected_delete_groups
+    );
+    println!(
+        "  Planned delete groups:     {}",
+        report.planned_delete_groups
+    );
+    println!(
+        "  Planned delete chunks:     {}",
+        report.planned_delete_chunks
+    );
+    println!("  Deleted groups:            {}", report.deleted_groups);
+    println!("  Deleted chunks:            {}", report.deleted_chunks);
+    println!(
+        "  Quarantine groups retained: {}",
+        report.quarantine_groups_retained
+    );
+    println!(
+        "  Quarantine chunks retained: {}",
+        report.quarantine_chunks_retained
+    );
+    println!(
+        "  Manual review groups:      {}",
+        report.manual_review_groups
+    );
+    println!("  Skipped groups:            {}", report.skipped_groups);
+    println!("  Protected groups:          {}", report.protected_groups);
+}
+
+fn write_document_orphan_cleanup_execution_report(
+    report: &DocumentOrphanCleanupExecutionReport,
+    output: &str,
+    format: OrphanExportFormat,
+) -> Result<()> {
+    let path = std::path::Path::new(output);
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    let contents = match format {
+        OrphanExportFormat::Markdown => document_orphan_cleanup_execution_markdown(report),
+        OrphanExportFormat::Json => serde_json::to_string_pretty(report)?,
+    };
+    std::fs::write(path, contents)?;
+    Ok(())
+}
+
+fn document_orphan_cleanup_execution_markdown(
+    report: &DocumentOrphanCleanupExecutionReport,
+) -> String {
+    let mut output = String::new();
+    output.push_str("# Document Orphan Cleanup Execution Report\n\n");
+    output.push_str("## Summary\n\n");
+    output.push_str(&format!("- Dry-run: {}\n", report.dry_run));
+    output.push_str(&format!(
+        "- Orphan cleanup performed: {}\n",
+        report.orphan_cleanup_performed
+    ));
+    output.push_str(&format!("- Plan groups: {}\n", report.plan_groups));
+    output.push_str(&format!(
+        "- Plan delete candidates: {}\n",
+        report.plan_delete_candidate_groups
+    ));
+    output.push_str(&format!(
+        "- Plan quarantine groups: {}\n",
+        report.plan_quarantine_groups
+    ));
+    output.push_str(&format!(
+        "- Selected delete groups: {}\n",
+        report.selected_delete_groups
+    ));
+    output.push_str(&format!(
+        "- Planned delete groups: {}\n",
+        report.planned_delete_groups
+    ));
+    output.push_str(&format!(
+        "- Planned delete chunks: {}\n",
+        report.planned_delete_chunks
+    ));
+    output.push_str(&format!("- Deleted groups: {}\n", report.deleted_groups));
+    output.push_str(&format!("- Deleted chunks: {}\n", report.deleted_chunks));
+    output.push_str(&format!(
+        "- Quarantine groups retained: {}\n",
+        report.quarantine_groups_retained
+    ));
+    output.push_str(&format!(
+        "- Quarantine chunks retained: {}\n",
+        report.quarantine_chunks_retained
+    ));
+    output.push_str(&format!(
+        "- Manual review groups: {}\n",
+        report.manual_review_groups
+    ));
+    output.push_str(&format!("- Skipped groups: {}\n", report.skipped_groups));
+    output.push_str(&format!(
+        "- Protected groups: {}\n",
+        report.protected_groups
+    ));
+
+    output.push_str("\n## Actions\n\n");
+    for action in &report.actions {
+        output.push_str(&format!("### `{}`\n\n", action.missing_source_id));
+        output.push_str(&format!(
+            "- Cleanup action: `{}`\n",
+            cleanup_action_label(action.cleanup_action)
+        ));
+        output.push_str(&format!(
+            "- Status: `{}`\n",
+            cleanup_execution_status_label(action.status)
+        ));
+        output.push_str(&format!("- Dry-run: {}\n", action.dry_run));
+        output.push_str(&format!(
+            "- Planned orphan chunks: {}\n",
+            action.planned_orphan_chunks
+        ));
+        output.push_str(&format!("- Deleted chunks: {}\n", action.deleted_chunks));
+        output.push_str(&format!("- Reason: {}\n\n", action.reason));
+    }
+
+    if !report.warnings.is_empty() {
+        output.push_str("## Warnings\n\n");
+        for warning in &report.warnings {
+            output.push_str(&format!("- {}\n", warning));
+        }
+    }
+
+    output
+}
+
+fn write_document_orphan_quarantine_export(
+    plan: &DocumentOrphanCleanupPlan,
+    output: &str,
+    format: OrphanExportFormat,
+) -> Result<()> {
+    let mut quarantine_plan = plan.clone();
+    quarantine_plan
+        .groups
+        .retain(|group| group.cleanup_action == DocumentOrphanCleanupAction::Quarantine);
+    let quarantine_chunks = quarantine_plan
+        .groups
+        .iter()
+        .map(|group| group.orphan_chunk_count)
+        .sum();
+    quarantine_plan.orphan_chunk_count = quarantine_chunks;
+    quarantine_plan.orphan_source_count = quarantine_plan.groups.len();
+    quarantine_plan.groups_returned = quarantine_plan.groups.len();
+    quarantine_plan.recoverable_groups = 0;
+    quarantine_plan.unknown_groups = 0;
+    quarantine_plan.safe_to_quarantine_groups = quarantine_plan.groups.len();
+    quarantine_plan.delete_candidate_groups = 0;
+    quarantine_plan.delete_candidate_chunks = 0;
+    quarantine_plan.quarantine_candidate_groups = quarantine_plan.groups.len();
+    quarantine_plan.quarantine_candidate_chunks = quarantine_chunks;
+    quarantine_plan.manual_review_groups = 0;
+    quarantine_plan.manual_review_chunks = 0;
+
+    write_document_orphan_cleanup_plan(&quarantine_plan, output, format)
+}
+
+fn print_document_orphan_quarantine_review_export(export: &DocumentOrphanQuarantineReviewExport) {
+    println!("Document orphan quarantine review export");
+    println!("  Root:                    {}", export.root);
+    println!("  Plan groups:             {}", export.plan_groups);
+    println!(
+        "  Plan quarantine groups:  {}",
+        export.plan_quarantine_groups
+    );
+    println!(
+        "  Plan quarantine chunks:  {}",
+        export.plan_quarantine_chunks
+    );
+    println!("  Selected groups:         {}", export.selected_groups);
+    println!(
+        "  Selected orphan chunks:  {}",
+        export.selected_orphan_chunks
+    );
+    println!("  Loaded chunks:           {}", export.loaded_chunks);
+    println!("  Truncated groups:        {}", export.truncated_groups);
+    println!("  Truncated chunks:        {}", export.truncated_chunks);
+    println!("  Files written:           {}", export.files_written.len());
+    println!("  Files skipped:           {}", export.files_skipped.len());
+    if !export.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &export.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_quarantine_review_status(status: &DocumentOrphanQuarantineReviewStatus) {
+    println!("Document orphan quarantine review status");
+    println!("  Root:                       {}", status.root);
+    println!("  Files scanned:              {}", status.files_scanned);
+    println!("  Generated files:            {}", status.generated_files);
+    println!("  Index pages:                {}", status.index_pages);
+    println!("  Group pages:                {}", status.group_pages);
+    println!("  User-owned files:           {}", status.user_owned_files);
+    println!("  Pending:                    {}", status.pending_count);
+    println!(
+        "  Retain quarantine:          {}",
+        status.retain_quarantine_count
+    );
+    println!(
+        "  Promote to memory review:   {}",
+        status.promote_to_memory_review_count
+    );
+    println!(
+        "  Archive legacy:             {}",
+        status.archive_legacy_count
+    );
+    println!(
+        "  Delete later:               {}",
+        status.delete_later_count
+    );
+    println!("  Invalid:                    {}", status.invalid_count);
+    println!("  Parse errors:               {}", status.parse_error_count);
+    println!("  Ready to apply:             {}", status.ready_to_apply);
+    if !status.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &status.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_quarantine_review_prioritization(
+    report: &DocumentOrphanQuarantineReviewPrioritization,
+) {
+    println!("Document orphan quarantine review prioritization");
+    println!("  Root:                       {}", report.root);
+    println!("  Files scanned:              {}", report.files_scanned);
+    println!("  Group pages:                {}", report.group_pages);
+    println!("  Pending:                    {}", report.pending_count);
+    println!(
+        "  Decided skipped:            {}",
+        report.decided_skipped_count
+    );
+    println!(
+        "  Invalid/parse skipped:      {}",
+        report.invalid_or_parse_error_count
+    );
+    println!("  Candidates ranked:          {}", report.candidate_count);
+    println!(
+        "  Candidates after dedupe:    {}",
+        report.ranked_candidate_count
+    );
+    println!("  Returned:                   {}", report.returned_count);
+    println!(
+        "  Duplicate fingerprint groups: {}",
+        report.duplicate_fingerprint_group_count
+    );
+    println!(
+        "  Duplicate fingerprint candidates: {}",
+        report.duplicate_fingerprint_candidate_count
+    );
+    println!(
+        "  Duplicate fingerprint skipped: {}",
+        report.duplicate_fingerprint_skipped_count
+    );
+    println!(
+        "  High priority:              {}",
+        report.high_priority_count
+    );
+    println!(
+        "  Medium priority:            {}",
+        report.medium_priority_count
+    );
+    println!(
+        "  Low priority:               {}",
+        report.low_priority_count
+    );
+
+    for (index, item) in report.items.iter().enumerate() {
+        println!();
+        println!(
+            "{}. {:?} score={} `{}`",
+            index + 1,
+            item.priority,
+            item.score,
+            item.relative_path
+        );
+        println!("   Missing source: {}", item.missing_source_id);
+        println!("   Suggested step: {:?}", item.suggested_next_step);
+        println!(
+            "   Chunks: {} planned, {} exported",
+            item.orphan_chunk_count, item.exported_chunk_count
+        );
+        if let Some(title) = &item.title_hint {
+            println!("   Title hint: {}", title);
+        }
+        if let Some(reason) = &item.reason {
+            println!("   Reason: {}", reason);
+        }
+        if item.fingerprint_group_size > 1 {
+            println!(
+                "   Fingerprint group: rank {}/{}",
+                item.fingerprint_group_rank, item.fingerprint_group_size
+            );
+            println!(
+                "   Duplicate paths: {}",
+                item.fingerprint_duplicate_paths.join(", ")
+            );
+        }
+        if !item.detected_signals.is_empty() {
+            println!("   Signals: {}", item.detected_signals.join(", "));
+        }
+        if !item.score_reasons.is_empty() {
+            println!("   Score reasons:");
+            for reason in &item.score_reasons {
+                println!("     - {}", reason);
+            }
+        }
+        if !item.excerpt.is_empty() {
+            println!("   Excerpt:");
+            for line in item.excerpt.lines().take(6) {
+                println!("     {}", line);
+            }
+        }
+    }
+
+    if !report.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &report.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn print_document_orphan_quarantine_review_apply(apply: &DocumentOrphanQuarantineReviewApply) {
+    println!("Document orphan quarantine review apply dry-run");
+    println!("  Root:                       {}", apply.root);
+    println!("  Dry-run:                    {}", apply.dry_run);
+    println!("  Files scanned:              {}", apply.files_scanned);
+    println!("  Group pages:                {}", apply.group_pages);
+    println!("  Pending:                    {}", apply.pending_count);
+    println!("  Invalid:                    {}", apply.invalid_count);
+    println!("  Parse errors:               {}", apply.parse_error_count);
+    println!(
+        "  Would retain quarantine:    {}",
+        apply.retain_quarantine_count
+    );
+    println!(
+        "  Would promote to review:    {}",
+        apply.promote_to_memory_review_count
+    );
+    println!(
+        "  Would archive legacy:       {}",
+        apply.archive_legacy_count
+    );
+    println!("  Would mark delete later:    {}", apply.delete_later_count);
+    println!(
+        "  Ready for future write:     {}",
+        apply.ready_for_future_write
+    );
+    if !apply.warnings.is_empty() {
+        println!("Warnings:");
+        for warning in &apply.warnings {
+            println!("  - {}", warning);
+        }
+    }
+}
+
+fn cleanup_execution_status_label(status: DocumentOrphanCleanupExecutionStatus) -> &'static str {
+    match status {
+        DocumentOrphanCleanupExecutionStatus::PlannedDelete => "planned_delete",
+        DocumentOrphanCleanupExecutionStatus::Deleted => "deleted",
+        DocumentOrphanCleanupExecutionStatus::QuarantineRetained => "quarantine_retained",
+        DocumentOrphanCleanupExecutionStatus::ManualReviewRequired => "manual_review_required",
+        DocumentOrphanCleanupExecutionStatus::Skipped => "skipped",
+        DocumentOrphanCleanupExecutionStatus::Protected => "protected",
+    }
+}
+
+fn reindex_action_label(action: DocumentReindexAction) -> &'static str {
+    action.as_str()
+}
+
+fn reindex_execution_status_label(status: DocumentReindexExecutionStatus) -> &'static str {
+    match status {
+        DocumentReindexExecutionStatus::Planned => "planned",
+        DocumentReindexExecutionStatus::Reindexed => "reindexed",
+        DocumentReindexExecutionStatus::AlreadyIndexed => "already_indexed",
+        DocumentReindexExecutionStatus::RequiresInspection => "requires_inspection",
+        DocumentReindexExecutionStatus::Skipped => "skipped",
+        DocumentReindexExecutionStatus::Failed => "failed",
+    }
+}
+
+fn recovery_class_label(class: DocumentRecoveryClass) -> &'static str {
+    match class {
+        DocumentRecoveryClass::Recoverable => "recoverable",
+        DocumentRecoveryClass::Unknown => "unknown",
+        DocumentRecoveryClass::SafeToQuarantine => "safe_to_quarantine",
+    }
+}
+
+fn chunking_strategy_label(strategy: ChunkingStrategy) -> &'static str {
+    match strategy {
+        ChunkingStrategy::Empty => "empty",
+        ChunkingStrategy::WholeDocument => "whole-document",
+        ChunkingStrategy::HeadingSections => "heading-sections",
+        ChunkingStrategy::SyntheticSections => "synthetic-sections",
     }
 }
 
@@ -2684,6 +4900,18 @@ fn cli_migration_writer(
     }
 }
 
+fn cli_agent_writer(writer_harness: &str, model_provider: &str, model: &str) -> WriterProvenance {
+    WriterProvenance {
+        harness: Harness::parse(writer_harness),
+        harness_version: None,
+        model: ModelIdentity::new(model_provider, model),
+        surface: Some("cli".to_string()),
+        actor: "agent".to_string(),
+        session_id: None,
+        written_at: OffsetDateTime::now_utc(),
+    }
+}
+
 fn setup_logging(verbose: bool) {
     let filter = if verbose {
         EnvFilter::new("debug")
@@ -2802,6 +5030,18 @@ async fn main() -> Result<()> {
                 let memory_service = MemoryService::new(db.clone());
                 memory_service.init_schema().await?;
 
+                // Create Memory OS lint service
+                let lint_service = LintService::new(db.clone());
+                lint_service.init_schema().await?;
+
+                // Create Memory OS graph service
+                let graph_service = GraphService::new(db.clone());
+                graph_service.init_schema().await?;
+
+                // Create rolling handoff service
+                let handoff_service = HandoffService::new(db.clone());
+                handoff_service.init_schema().await?;
+
                 // Create repository topology service
                 let repository_service = RepositoryService::new(db.clone());
                 repository_service.init_schema().await?;
@@ -2819,6 +5059,9 @@ async fn main() -> Result<()> {
                 server.init_knowledge(knowledge_service).await;
                 server.init_work(work_service).await;
                 server.init_memory(memory_service).await;
+                server.init_lint(lint_service).await;
+                server.init_graph(graph_service).await;
+                server.init_handoff(handoff_service).await;
                 server.init_repository(repository_service).await;
                 server.init_search(search_service).await;
 
@@ -2992,8 +5235,20 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Index { path, recursive: _ } => {
+        Commands::Index {
+            path,
+            recursive: _,
+            plan,
+        } => {
             println!("Indexing: {}", path);
+
+            let path = std::path::Path::new(&path);
+            if plan {
+                let ingestion_plan =
+                    Pipeline::plan_path_with_config(path, &PipelineConfig::default())?;
+                print_document_ingestion_plan(&ingestion_plan);
+                return Ok(());
+            }
 
             // Connect to database using RocksDB for persistence
             let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
@@ -3004,7 +5259,6 @@ async fn main() -> Result<()> {
             service.init_schema().await?;
 
             // Index the path
-            let path = std::path::Path::new(&path);
             if path.is_dir() {
                 let results = service.index_directory(path).await?;
                 let chunks: usize = results.iter().map(|d| d.chunks.len()).sum();
@@ -3030,8 +5284,8 @@ async fn main() -> Result<()> {
             limit,
             score,
         } => {
-            // Connect to database
-            let config = StoreConfig::default();
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
             let db = connect_and_init(&config).await?;
 
             // Create document service
@@ -3076,8 +5330,8 @@ async fn main() -> Result<()> {
         }
 
         Commands::Stats => {
-            // Connect to database
-            let config = StoreConfig::default();
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
             let db = connect_and_init(&config).await?;
 
             // Create document service
@@ -3089,7 +5343,319 @@ async fn main() -> Result<()> {
             println!("Database statistics:");
             println!("  Document sources: {}", stats.source_count);
             println!("  Document chunks:  {}", stats.chunk_count);
+            println!("  Searchable chunks: {}", stats.searchable_chunk_count);
+            println!("  Orphan chunks:     {}", stats.orphan_chunk_count);
             println!("  Embedding dim:    {}", stats.embedding_dimension);
+        }
+
+        Commands::DocOrphans {
+            limit,
+            all,
+            samples,
+            scan_paths,
+            digest_review_paths,
+            max_candidate_files,
+            max_file_bytes,
+            output,
+            format,
+        } => {
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
+            let db = connect_and_init(&config).await?;
+
+            let service = DocumentService::with_defaults(db)?;
+            let group_limit = if all { usize::MAX } else { limit };
+            let report = service
+                .orphan_recovery_report(DocumentRecoveryOptions {
+                    group_limit,
+                    sample_limit_per_group: samples,
+                    scan_paths: scan_paths.into_iter().map(Into::into).collect(),
+                    digest_review_paths: digest_review_paths.into_iter().map(Into::into).collect(),
+                    max_candidate_files,
+                    max_file_bytes,
+                    ..Default::default()
+                })
+                .await?;
+            let wrote_output = output.is_some();
+            if let Some(output) = output {
+                write_document_orphan_report(&report, &output, format)?;
+                println!("Wrote document orphan recovery report: {}", output);
+            }
+            if wrote_output {
+                print_document_orphan_report_summary(&report);
+            } else {
+                print_document_orphan_report(&report);
+            }
+        }
+
+        Commands::DocReindexPlan {
+            limit,
+            all,
+            samples,
+            scan_paths,
+            digest_review_paths,
+            max_candidate_files,
+            max_file_bytes,
+            output,
+            format,
+        } => {
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
+            let db = connect_and_init(&config).await?;
+
+            let service = DocumentService::with_defaults(db)?;
+            let group_limit = if all { usize::MAX } else { limit };
+            let plan = service
+                .orphan_reindex_plan(DocumentRecoveryOptions {
+                    group_limit,
+                    sample_limit_per_group: samples,
+                    scan_paths: scan_paths.into_iter().map(Into::into).collect(),
+                    digest_review_paths: digest_review_paths.into_iter().map(Into::into).collect(),
+                    max_candidate_files,
+                    max_file_bytes,
+                    ..Default::default()
+                })
+                .await?;
+            let wrote_output = output.is_some();
+            if let Some(output) = output {
+                write_document_reindex_plan(&plan, &output, format)?;
+                println!("Wrote document orphan reindex plan: {}", output);
+            }
+            if wrote_output {
+                print_document_reindex_plan_summary(&plan);
+            } else {
+                print_document_reindex_plan(&plan);
+            }
+        }
+
+        Commands::DocReindexExecute {
+            plan_path,
+            execute,
+            all,
+            source_paths,
+            actions,
+            digest_review_paths,
+            max_source_bytes,
+            max_actions,
+            output,
+            format,
+        } => {
+            if execute && !all && source_paths.is_empty() {
+                anyhow::bail!(
+                    "write mode requires explicit approval: pass --all or one or more --source values"
+                );
+            }
+
+            let plan = read_document_reindex_plan(&plan_path)?;
+            let parsed_actions = parse_reindex_actions(&actions)?;
+
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
+            let db = connect_and_init(&config).await?;
+
+            let service = DocumentService::with_defaults(db)?;
+            let report = service
+                .execute_orphan_reindex_plan(
+                    &plan,
+                    DocumentReindexExecutionOptions {
+                        dry_run: !execute,
+                        source_paths,
+                        actions: parsed_actions,
+                        digest_review_paths: digest_review_paths
+                            .into_iter()
+                            .map(Into::into)
+                            .collect(),
+                        max_source_bytes,
+                        max_actions,
+                    },
+                )
+                .await?;
+
+            let wrote_output = output.is_some();
+            if let Some(output) = output {
+                write_document_reindex_execution_report(&report, &output, format)?;
+                println!("Wrote document orphan reindex execution report: {}", output);
+            }
+            if wrote_output {
+                print_document_reindex_execution_summary(&report);
+            } else {
+                print_document_reindex_execution_report(&report);
+            }
+        }
+
+        Commands::DocOrphanCleanupPlan {
+            limit,
+            all,
+            samples,
+            scan_paths,
+            digest_review_paths,
+            max_candidate_files,
+            max_file_bytes,
+            reindex_plan_path,
+            execution_report_path,
+            output,
+            format,
+        } => {
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
+            let db = connect_and_init(&config).await?;
+
+            let service = DocumentService::with_defaults(db)?;
+            let group_limit = if all { usize::MAX } else { limit };
+            let reindex_plan = reindex_plan_path
+                .as_deref()
+                .map(read_document_reindex_plan)
+                .transpose()?;
+            let execution_report = execution_report_path
+                .as_deref()
+                .map(read_document_reindex_execution_report)
+                .transpose()?;
+            let plan = service
+                .orphan_cleanup_plan(DocumentOrphanCleanupPlanOptions {
+                    recovery: DocumentRecoveryOptions {
+                        group_limit,
+                        sample_limit_per_group: samples,
+                        scan_paths: scan_paths.into_iter().map(Into::into).collect(),
+                        digest_review_paths: digest_review_paths
+                            .into_iter()
+                            .map(Into::into)
+                            .collect(),
+                        max_candidate_files,
+                        max_file_bytes,
+                        ..Default::default()
+                    },
+                    reindex_plan,
+                    execution_report,
+                })
+                .await?;
+
+            let wrote_output = output.is_some();
+            if let Some(output) = output {
+                write_document_orphan_cleanup_plan(&plan, &output, format)?;
+                println!("Wrote document orphan cleanup/quarantine plan: {}", output);
+            }
+            if wrote_output {
+                print_document_orphan_cleanup_plan_summary(&plan);
+            } else {
+                print_document_orphan_cleanup_plan(&plan);
+            }
+        }
+
+        Commands::DocOrphanCleanupExecute {
+            plan_path,
+            execute,
+            delete_candidates,
+            all_delete_candidates,
+            source_ids,
+            max_groups,
+            quarantine_output,
+            output,
+            format,
+        } => {
+            if execute && (!delete_candidates || (!all_delete_candidates && source_ids.is_empty()))
+            {
+                anyhow::bail!(
+                    "write mode requires explicit approval: pass --delete-candidates and either --all-delete-candidates or one or more --source-id values"
+                );
+            }
+
+            let plan = read_document_orphan_cleanup_plan(&plan_path)?;
+            if let Some(quarantine_output) = quarantine_output.as_ref() {
+                write_document_orphan_quarantine_export(&plan, quarantine_output, format)?;
+                println!(
+                    "Wrote document orphan quarantine export: {}",
+                    quarantine_output
+                );
+            }
+
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
+            let db = connect_and_init(&config).await?;
+
+            let service = DocumentService::with_defaults(db)?;
+            let report = service
+                .execute_orphan_cleanup_plan(
+                    &plan,
+                    DocumentOrphanCleanupExecutionOptions {
+                        dry_run: !execute,
+                        approve_delete_candidates: delete_candidates,
+                        missing_source_ids: source_ids,
+                        max_groups,
+                    },
+                )
+                .await?;
+
+            let wrote_output = output.is_some();
+            if let Some(output) = output {
+                write_document_orphan_cleanup_execution_report(&report, &output, format)?;
+                println!("Wrote document orphan cleanup execution report: {}", output);
+            }
+            if wrote_output {
+                print_document_orphan_cleanup_execution_summary(&report);
+            } else {
+                print_document_orphan_cleanup_execution_report(&report);
+            }
+        }
+
+        Commands::DocOrphanQuarantineReviewExport {
+            plan_path,
+            output_dir,
+            max_groups,
+            max_chunks_per_group,
+            max_chunk_bytes,
+        } => {
+            let plan = read_document_orphan_cleanup_plan(&plan_path)?;
+
+            // Connect to the persistent document database.
+            let config = StoreConfig::rocksdb(StoreConfig::default_data_dir());
+            let db = connect_and_init(&config).await?;
+
+            let service = DocumentService::with_defaults(db)?;
+            let export = service
+                .export_orphan_quarantine_review(
+                    &plan,
+                    &output_dir,
+                    DocumentOrphanQuarantineReviewOptions {
+                        max_groups,
+                        max_chunks_per_group,
+                        max_chunk_bytes,
+                    },
+                )
+                .await?;
+
+            print_document_orphan_quarantine_review_export(&export);
+        }
+
+        Commands::DocOrphanQuarantineReviewStatus { review_path } => {
+            let status = DocumentService::orphan_quarantine_review_status_for_dir(&review_path)?;
+            print_document_orphan_quarantine_review_status(&status);
+        }
+
+        Commands::DocOrphanQuarantineReviewPrioritize {
+            review_path,
+            limit,
+            include_decided,
+            include_duplicate_fingerprints,
+            max_excerpt_bytes,
+        } => {
+            let report = DocumentService::prioritize_orphan_quarantine_review_for_dir(
+                &review_path,
+                DocumentOrphanQuarantineReviewPrioritizationOptions {
+                    limit: Some(limit),
+                    include_decided,
+                    include_duplicate_fingerprints,
+                    max_excerpt_bytes,
+                },
+            )?;
+            print_document_orphan_quarantine_review_prioritization(&report);
+        }
+
+        Commands::DocOrphanQuarantineReviewApply { review_path } => {
+            let apply = DocumentService::apply_orphan_quarantine_review_for_dir(
+                &review_path,
+                DocumentOrphanQuarantineReviewApplyOptions::default(),
+            )?;
+            print_document_orphan_quarantine_review_apply(&apply);
         }
 
         Commands::Knowledge { command } => {
@@ -3578,6 +6144,14 @@ async fn main() -> Result<()> {
                                 EventType::FileChange => "📝",
                                 EventType::ToolUse => "🔧",
                                 EventType::Milestone => "🎯",
+                                EventType::Prompt => "💬",
+                                EventType::Plan => "📋",
+                                EventType::ToolResult => "🧰",
+                                EventType::Test => "✅",
+                                EventType::Preference => "⚙️",
+                                EventType::Rule => "📏",
+                                EventType::Limitation => "⛔",
+                                EventType::HandoffUpdate => "📦",
                                 EventType::Custom(_) => "📌",
                             };
                             println!("    {} [{}] {}", type_icon, e.event_type, e.content);
@@ -3642,6 +6216,14 @@ async fn main() -> Result<()> {
                                 EventType::FileChange => "📝",
                                 EventType::ToolUse => "🔧",
                                 EventType::Milestone => "🎯",
+                                EventType::Prompt => "💬",
+                                EventType::Plan => "📋",
+                                EventType::ToolResult => "🧰",
+                                EventType::Test => "✅",
+                                EventType::Preference => "⚙️",
+                                EventType::Rule => "📏",
+                                EventType::Limitation => "⛔",
+                                EventType::HandoffUpdate => "📦",
                                 EventType::Custom(_) => "📌",
                             };
                             println!(
@@ -4637,6 +7219,291 @@ async fn main() -> Result<()> {
             }
         }
 
+        Commands::Harness { command } => {
+            let service = HarnessService::new();
+            match command {
+                HarnessCommands::Status {
+                    harness,
+                    root,
+                    json,
+                } => {
+                    let report = service.status(
+                        harness.into(),
+                        root.as_deref().map(std::path::Path::new),
+                        &[],
+                    )?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&report)?);
+                    } else {
+                        print_harness_status(&report);
+                    }
+                }
+                HarnessCommands::Doctor {
+                    harness,
+                    root,
+                    json,
+                } => {
+                    let report = service.doctor(
+                        harness.into(),
+                        root.as_deref().map(std::path::Path::new),
+                        &[],
+                    )?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&report)?);
+                    } else {
+                        print_harness_status(&report);
+                    }
+                }
+                HarnessCommands::Render {
+                    harness,
+                    adapter,
+                    json,
+                } => {
+                    let harness = harness.into();
+                    if let Some(adapter) = adapter {
+                        let adapters = service.render_adapters(harness, Some(&adapter));
+                        if json {
+                            println!("{}", serde_json::to_string_pretty(&adapters)?);
+                        } else if adapters.is_empty() {
+                            return Err(anyhow::anyhow!("No adapter matched '{}'", adapter));
+                        } else {
+                            for adapter in adapters {
+                                println!(
+                                    "# {} ({})\n{}",
+                                    adapter.name, adapter.relative_path, adapter.contents
+                                );
+                            }
+                        }
+                    } else {
+                        let policy = service.render_policy(harness)?;
+                        println!("{policy}");
+                    }
+                }
+                HarnessCommands::Install {
+                    harness,
+                    root,
+                    write,
+                    json,
+                } => {
+                    let report = service.install(
+                        harness.into(),
+                        root.as_deref().map(std::path::Path::new),
+                        write,
+                    )?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&report)?);
+                    } else {
+                        print_harness_install(&report);
+                    }
+                }
+            }
+        }
+
+        Commands::Lint {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = LintService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                LintCommands::Run {
+                    vault_path,
+                    limit,
+                    json,
+                }
+                | LintCommands::List {
+                    vault_path,
+                    limit,
+                    json,
+                } => {
+                    let report = service.run(LintOptions { vault_path, limit }).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&report)?);
+                    } else {
+                        print_lint_report(&report, false);
+                    }
+                }
+                LintCommands::ApplySafe {
+                    vault_path,
+                    limit,
+                    write,
+                    json,
+                } => {
+                    let mut report = if write {
+                        service
+                            .apply_safe(LintOptions { vault_path, limit })
+                            .await?
+                    } else {
+                        service.run(LintOptions { vault_path, limit }).await?
+                    };
+                    if !write {
+                        report.applied_safe_actions = 0;
+                    }
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&report)?);
+                    } else {
+                        print_lint_report(&report, !write);
+                    }
+                }
+            }
+        }
+
+        Commands::Graph {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = GraphService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                GraphCommands::Around { node, depth, json } => {
+                    let graph = service.around(&node, depth).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&graph)?);
+                    } else {
+                        print_subgraph(&graph);
+                    }
+                }
+                GraphCommands::Path {
+                    from,
+                    to,
+                    max_depth,
+                    json,
+                } => {
+                    let path = service.path(&from, &to, max_depth).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&path)?);
+                    } else if let Some(path) = path {
+                        println!("Path nodes: {}", path.nodes.join(" -> "));
+                        for edge in path.edges {
+                            println!("  - {} --{}--> {}", edge.from, edge.relation, edge.to);
+                        }
+                    } else {
+                        println!("No path found");
+                    }
+                }
+                GraphCommands::Subgraph { node, depth, json } => {
+                    let graph = service.subgraph(node.as_deref(), depth).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&graph)?);
+                    } else {
+                        print_subgraph(&graph);
+                    }
+                }
+                GraphCommands::Export { node, depth } => {
+                    let output = service.export_mermaid(node.as_deref(), depth).await?;
+                    println!("{output}");
+                }
+            }
+        }
+
+        Commands::Handoff {
+            project,
+            data_dir,
+            command,
+        } => {
+            let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
+            let db = connect_and_init(&config).await?;
+            let service = HandoffService::new(db);
+            service.init_schema().await?;
+
+            match command {
+                HandoffCommands::Get {
+                    project,
+                    session_id,
+                    json,
+                } => {
+                    let session_id = session_id
+                        .as_deref()
+                        .map(Id::parse)
+                        .transpose()
+                        .map_err(|e| anyhow::anyhow!("Invalid session ID: {}", e))?;
+                    let result = service.get(project.as_deref(), session_id).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                    } else if let Some(item) = result.item {
+                        print_memory_item(&item);
+                    } else {
+                        println!("No active handoff found");
+                    }
+                }
+                HandoffCommands::Update {
+                    project,
+                    session_id,
+                    content,
+                    next_actions,
+                    write,
+                    json,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let session_id = session_id
+                        .as_deref()
+                        .map(Id::parse)
+                        .transpose()
+                        .map_err(|e| anyhow::anyhow!("Invalid session ID: {}", e))?;
+                    let result = service
+                        .update(
+                            project,
+                            session_id,
+                            content,
+                            next_actions,
+                            cli_agent_writer(&writer_harness, &model_provider, &model),
+                            !write,
+                        )
+                        .await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                    } else {
+                        println!(
+                            "Handoff {}",
+                            if result.written { "written" } else { "planned" }
+                        );
+                        println!("  Item: {}", result.item.id);
+                        if let Some(previous_id) = result.previous_id {
+                            println!("  Supersedes: {}", previous_id);
+                        }
+                    }
+                }
+                HandoffCommands::Compile {
+                    session_id,
+                    project,
+                    write,
+                    json,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let session_id = Id::parse(&session_id)
+                        .map_err(|e| anyhow::anyhow!("Invalid session ID: {}", e))?;
+                    let result = service
+                        .compile(
+                            session_id,
+                            project,
+                            cli_agent_writer(&writer_harness, &model_provider, &model),
+                            !write,
+                        )
+                        .await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&result)?);
+                    } else {
+                        println!("{}", result.content);
+                        if let Some(update) = result.update {
+                            println!("\nWritten handoff: {}", update.item.id);
+                        }
+                    }
+                }
+            }
+        }
+
         Commands::Memory {
             project,
             data_dir,
@@ -4697,6 +7564,13 @@ async fn main() -> Result<()> {
                     timestamp,
                     commit_id,
                     limit,
+                    writer_harness,
+                    model,
+                    surface,
+                    writer_session_id,
+                    relevance_project,
+                    cwd,
+                    query,
                     json,
                 } => {
                     let timestamp = parse_rfc3339_timestamp(&timestamp)?;
@@ -4705,13 +7579,27 @@ async fn main() -> Result<()> {
                         .map(Id::parse)
                         .transpose()
                         .map_err(|e| anyhow::anyhow!("Invalid commit ID: {}", e))?;
+                    let writer_session_id = writer_session_id
+                        .as_deref()
+                        .map(Id::parse)
+                        .transpose()
+                        .map_err(|e| anyhow::anyhow!("Invalid writer session ID: {}", e))?;
                     let changes = service
-                        .changes_since(
+                        .changes_since_with_options(
                             MemoryCursor {
                                 commit_id,
                                 timestamp,
                             },
                             limit,
+                            MemoryChangesSinceOptions {
+                                writer_harness,
+                                model,
+                                surface,
+                                writer_session_id,
+                                project: relevance_project,
+                                cwd,
+                                query,
+                            },
                         )
                         .await?;
 
@@ -4723,12 +7611,75 @@ async fn main() -> Result<()> {
                                 "next_cursor": changes.next_cursor,
                                 "item_count": changes.items.len(),
                                 "commit_count": changes.commits.len(),
+                                "item_relevance": changes.item_relevance,
                                 "items": changes.items,
                                 "commits": changes.commits
                             }))?
                         );
                     } else {
                         print_memory_changes(&changes);
+                    }
+                }
+                MemoryCommands::Log { limit, json } => {
+                    let commits = service.list_commits(limit).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&commits)?);
+                    } else {
+                        println!("Knowledge commits");
+                        for commit in commits {
+                            println!("  {} - {}", commit.id, commit.message);
+                        }
+                    }
+                }
+                MemoryCommands::Diff { commit_id, json } => {
+                    let commit_id = Id::parse(&commit_id)
+                        .map_err(|e| anyhow::anyhow!("Invalid commit ID: {}", e))?;
+                    let commit = service.get_commit(&commit_id).await?.ok_or_else(|| {
+                        anyhow::anyhow!("Knowledge commit not found: {}", commit_id)
+                    })?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&commit)?);
+                    } else {
+                        println!("Commit: {} - {}", commit.id, commit.message);
+                        for change in commit.changes {
+                            println!(
+                                "  - {} {}: {}",
+                                change.change_type, change.title, change.summary
+                            );
+                        }
+                    }
+                }
+                MemoryCommands::WriterStats { json } => {
+                    let stats = service.writer_stats().await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&stats)?);
+                    } else {
+                        println!("Memory writer stats");
+                        for stat in stats {
+                            println!(
+                                "  {} / {} / {} / {}: {}",
+                                stat.harness,
+                                stat.model_provider,
+                                stat.model,
+                                stat.surface.as_deref().unwrap_or("unknown"),
+                                stat.count
+                            );
+                        }
+                    }
+                }
+                MemoryCommands::Archive {
+                    id,
+                    reason,
+                    archived_by,
+                    json,
+                } => {
+                    let id = Id::parse(&id)
+                        .map_err(|e| anyhow::anyhow!("Invalid memory item ID: {}", e))?;
+                    let item = service.archive_memory(&id, reason, archived_by).await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&item)?);
+                    } else {
+                        println!("Archived memory item: {}", item.id);
                     }
                 }
                 MemoryCommands::ExportVault { path } => {
@@ -4881,6 +7832,32 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&apply)?);
                     } else {
                         print_digest_extraction_review_apply(&apply);
+                    }
+                }
+                MemoryCommands::DistillSession {
+                    session_id,
+                    json,
+                    writer_harness,
+                    model_provider,
+                    model,
+                } => {
+                    let session_id = Id::parse(&session_id)
+                        .map_err(|e| anyhow::anyhow!("Invalid session ID: {}", e))?;
+                    let distillation = service
+                        .distill_session(
+                            session_id,
+                            cli_agent_writer(&writer_harness, &model_provider, &model),
+                        )
+                        .await?;
+
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&distillation)?);
+                    } else {
+                        println!("Session distillation candidates");
+                        println!("  Session:    {}", distillation.session_id);
+                        println!("  Candidates: {}", distillation.candidates.len());
+                        println!("  Warning:    {}", distillation.warning);
+                        print_memory_items("Candidates needing review", &distillation.candidates);
                     }
                 }
             }

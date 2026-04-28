@@ -184,6 +184,15 @@ pub(crate) fn write_memory_vault(
     let project_names = project_names(&sorted_items, &sorted_repositories);
     let project_paths = unique_named_paths(&project_names, "projects");
     export.project_count = project_names.len();
+    let item_paths: BTreeMap<_, _> = sorted_items
+        .iter()
+        .map(|item| {
+            (
+                item.id.to_string(),
+                strip_md_extension(&item_relative_path(item).display().to_string()),
+            )
+        })
+        .collect();
 
     write_generated_file(
         root,
@@ -210,7 +219,7 @@ pub(crate) fn write_memory_vault(
         write_generated_file(
             root,
             item_relative_path(item),
-            &memory_item_page(item),
+            &memory_item_page(item, &item_paths),
             &mut export,
         )?;
     }
@@ -456,7 +465,7 @@ fn memory_index(items: &[MemoryItem], commits: &[KnowledgeCommit]) -> String {
     output
 }
 
-fn memory_item_page(item: &MemoryItem) -> String {
+fn memory_item_page(item: &MemoryItem, item_paths: &BTreeMap<String, String>) -> String {
     let mut fields = vec![
         ("engram_id".to_string(), yaml_string(&item.id.to_string())),
         ("kind".to_string(), yaml_string(&item.kind.to_string())),
@@ -535,6 +544,14 @@ fn memory_item_page(item: &MemoryItem) -> String {
         output.push_str("- Supersedes:\n");
         for id in &item.supersedes {
             output.push_str(&format!("  - {}\n", id));
+        }
+    }
+
+    let backlinks = memory_backlinks(item, item_paths);
+    if !backlinks.is_empty() {
+        output.push_str("\n## Backlinks\n\n");
+        for backlink in backlinks {
+            output.push_str(&format!("- [[{}]]\n", backlink));
         }
     }
 
@@ -1085,6 +1102,37 @@ fn item_relative_path(item: &MemoryItem) -> PathBuf {
     Path::new("memory")
         .join("items")
         .join(format!("{}-{}.md", item.id, slugify(&item.title)))
+}
+
+fn strip_md_extension(path: &str) -> String {
+    path.strip_suffix(".md").unwrap_or(path).to_string()
+}
+
+fn memory_backlinks(item: &MemoryItem, item_paths: &BTreeMap<String, String>) -> Vec<String> {
+    let mut links = Vec::new();
+    for id in &item.supersedes {
+        if let Some(path) = item_paths.get(&id.to_string()) {
+            links.push(path.clone());
+        }
+    }
+    match &item.scope {
+        MemoryScope::Project { project_name, .. } => {
+            links.push(format!("projects/{}", slugify(project_name)));
+        }
+        MemoryScope::Entity { entity_name, .. } => {
+            links.push(format!("entities/{}", slugify(entity_name)));
+        }
+        MemoryScope::Repository {
+            local_path: Some(local_path),
+            ..
+        } => {
+            links.push(format!("repositories/{}", slugify(local_path)));
+        }
+        _ => {}
+    }
+    links.sort();
+    links.dedup();
+    links
 }
 
 fn commit_relative_path(commit: &KnowledgeCommit) -> PathBuf {

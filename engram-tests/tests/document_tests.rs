@@ -5,7 +5,7 @@
 use engram_core::document::{DocChunk, DocSource, SourceType};
 use engram_core::id::Id;
 use engram_store::repos::DocumentRepo;
-use engram_store::{connect_and_init, StoreConfig};
+use engram_store::{connect, connect_and_init, StoreConfig};
 
 // =============================================================================
 // Test Fixtures
@@ -14,6 +14,51 @@ use engram_store::{connect_and_init, StoreConfig};
 async fn setup_repo() -> DocumentRepo {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config).await.expect("Failed to connect");
+    let repo = DocumentRepo::new(db);
+    repo.init_schema().await.expect("Failed to init schema");
+    repo
+}
+
+async fn setup_rocksdb_repo(dir: &tempfile::TempDir) -> DocumentRepo {
+    let config = StoreConfig::rocksdb(dir.path());
+    let db = connect_and_init(&config).await.expect("Failed to connect");
+    let repo = DocumentRepo::new(db);
+    repo.init_schema().await.expect("Failed to init schema");
+    repo
+}
+
+async fn setup_legacy_rocksdb_repo(dir: &tempfile::TempDir) -> DocumentRepo {
+    let config = StoreConfig::rocksdb(dir.path());
+    let db = connect(&config).await.expect("Failed to connect");
+    db.query(
+        r#"
+        DEFINE TABLE doc_source SCHEMAFULL;
+        DEFINE FIELD id ON doc_source TYPE string;
+        DEFINE FIELD source_type ON doc_source TYPE string;
+        DEFINE FIELD path_or_url ON doc_source TYPE string;
+        DEFINE FIELD title ON doc_source TYPE option<string>;
+        DEFINE FIELD space_key ON doc_source TYPE option<string>;
+        DEFINE FIELD last_indexed ON doc_source TYPE option<datetime>;
+        DEFINE FIELD ttl_days ON doc_source TYPE int;
+        DEFINE INDEX idx_source_path ON doc_source FIELDS path_or_url UNIQUE;
+
+        DEFINE TABLE doc_chunk SCHEMAFULL;
+        DEFINE FIELD id ON doc_chunk TYPE string;
+        DEFINE FIELD source_id ON doc_chunk TYPE string;
+        DEFINE FIELD heading_path ON doc_chunk TYPE string;
+        DEFINE FIELD heading_level ON doc_chunk TYPE int;
+        DEFINE FIELD content ON doc_chunk TYPE string;
+        DEFINE FIELD start_line ON doc_chunk TYPE option<int>;
+        DEFINE FIELD end_line ON doc_chunk TYPE option<int>;
+        DEFINE FIELD parent_id ON doc_chunk TYPE option<string>;
+        DEFINE FIELD embedding ON doc_chunk TYPE array<float>;
+        DEFINE FIELD embedding[*] ON doc_chunk TYPE float;
+        DEFINE INDEX idx_chunk_source ON doc_chunk FIELDS source_id;
+        "#,
+    )
+    .await
+    .expect("Failed to create legacy schema");
+
     let repo = DocumentRepo::new(db);
     repo.init_schema().await.expect("Failed to init schema");
     repo
@@ -355,6 +400,190 @@ async fn test_search_empty_database() {
     assert!(results.is_empty());
 }
 
+#[tokio::test]
+async fn test_search_ignores_orphan_chunks_before_limit() {
+    let repo = setup_repo().await;
+
+    let orphan_source_id = Id::new();
+    let orphan = DocChunk::new(orphan_source_id, "# Orphan", 1, "Orphan content");
+    repo.save_chunks(&orphan_source_id, vec![(orphan, vec![1.0, 0.0, 0.0])])
+        .await
+        .unwrap();
+
+    let source = DocSource::local_file("/docs/valid-search.md").with_title("Valid Search");
+    repo.save_source(&source).await.unwrap();
+    let valid = DocChunk::new(source.id, "# Valid", 1, "Valid content");
+    repo.save_chunks(&source.id, vec![(valid, vec![0.9, 0.1, 0.0])])
+        .await
+        .unwrap();
+
+    let results = repo
+        .search_similar(&[1.0, 0.0, 0.0], 1)
+        .await
+        .expect("Search failed");
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].source.id, source.id);
+
+    let stats = repo.stats().await.expect("Failed to get stats");
+    assert_eq!(stats.source_count, 1);
+    assert_eq!(stats.chunk_count, 2);
+    assert_eq!(stats.searchable_chunk_count, 1);
+    assert_eq!(stats.orphan_chunk_count, 1);
+}
+
+#[tokio::test]
+async fn test_delete_orphan_chunks_for_sources_protects_current_sources() {
+    let repo = setup_repo().await;
+    let orphan_source_id = Id::new();
+    let protected_source = DocSource::local_file("/docs/protected.md");
+    repo.save_source(&protected_source).await.unwrap();
+
+    let orphan = DocChunk::new(orphan_source_id, "# Orphan", 1, "Orphan content");
+    repo.save_chunks(&orphan_source_id, vec![(orphan, vec![1.0, 0.0, 0.0])])
+        .await
+        .unwrap();
+
+    let protected = DocChunk::new(protected_source.id, "# Protected", 1, "Protected content");
+    repo.save_chunks(&protected_source.id, vec![(protected, vec![0.0, 1.0, 0.0])])
+        .await
+        .unwrap();
+
+    let result = repo
+        .delete_orphan_chunks_for_sources(&[
+            orphan_source_id.to_string(),
+            protected_source.id.to_string(),
+        ])
+        .await
+        .unwrap();
+
+    assert_eq!(result.requested_source_ids, 2);
+    assert_eq!(result.deleted_chunk_count, 1);
+    assert_eq!(result.deleted_sources.len(), 1);
+    assert_eq!(
+        result.deleted_sources[0].missing_source_id,
+        orphan_source_id.to_string()
+    );
+    assert_eq!(
+        result.protected_source_ids,
+        vec![protected_source.id.to_string()]
+    );
+
+    let stats = repo.stats().await.unwrap();
+    assert_eq!(stats.orphan_chunk_count, 0);
+    let protected_chunks = repo
+        .get_chunks_for_source(&protected_source.id)
+        .await
+        .unwrap();
+    assert_eq!(protected_chunks.len(), 1);
+}
+
+#[tokio::test]
+async fn test_orphan_report_groups_samples_and_detects_source_references() {
+    let repo = setup_repo().await;
+
+    let known_source =
+        DocSource::local_file("/Users/example/digests/day.md").with_title("Known Digest Source");
+    repo.save_source(&known_source).await.unwrap();
+
+    let orphan_source_id = Id::new();
+    let orphan_content = r#"# Digest source: day.md
+
+## Source Metadata
+
+- Source review: `reviews/day.md`
+- Source path: `digests/day.md`
+- Absolute path: `/Users/example/digests/day.md`
+
+## Digest Content
+
+Daily digest evidence that was indexed before its source row survived.
+"#;
+    let orphan = DocChunk::new(
+        orphan_source_id,
+        "# Digest source: day.md",
+        1,
+        orphan_content,
+    )
+    .with_lines(1, 12);
+    repo.save_chunks(&orphan_source_id, vec![(orphan, vec![1.0, 0.0, 0.0])])
+        .await
+        .unwrap();
+
+    let report = repo.orphan_report(10, 2, 80).await.unwrap();
+
+    assert_eq!(report.orphan_chunk_count, 1);
+    assert_eq!(report.orphan_source_count, 1);
+    assert_eq!(report.groups_returned, 1);
+    assert_eq!(report.groups_with_known_source_match, 1);
+    assert_eq!(report.recovery_summary.recoverable, 1);
+    assert_eq!(report.recovery_summary.unknown, 0);
+    assert_eq!(report.recovery_summary.safe_to_quarantine, 0);
+
+    let group = &report.groups[0];
+    assert_eq!(group.missing_source_id, orphan_source_id.to_string());
+    assert_eq!(group.chunk_count, 1);
+    assert_eq!(
+        group.recovery_class,
+        engram_store::repos::document::DocumentRecoveryClass::Recoverable
+    );
+    assert_eq!(group.recovery_hint, "matches_existing_source");
+    assert_eq!(group.samples.len(), 1);
+    assert!(group.samples[0]
+        .content_preview
+        .contains("Digest source: day.md"));
+
+    let absolute_path = group
+        .detected_references
+        .iter()
+        .find(|reference| reference.reference_type == "absolute_path")
+        .expect("absolute path reference should be detected");
+    assert_eq!(absolute_path.value, "/Users/example/digests/day.md");
+    let known_source_id = known_source.id.to_string();
+    assert_eq!(
+        absolute_path.existing_source_id.as_deref(),
+        Some(known_source_id.as_str())
+    );
+}
+
+#[tokio::test]
+async fn test_orphan_report_respects_group_and_sample_limits() {
+    let repo = setup_repo().await;
+
+    let first_source_id = Id::new();
+    let second_source_id = Id::new();
+    let first_a = DocChunk::new(first_source_id, "# First A", 1, "First orphan A");
+    let first_b = DocChunk::new(first_source_id, "# First B", 1, "First orphan B");
+    let second = DocChunk::new(second_source_id, "# Second", 1, "Second orphan");
+
+    repo.save_chunks(
+        &first_source_id,
+        vec![(first_a, vec![1.0]), (first_b, vec![0.9])],
+    )
+    .await
+    .unwrap();
+    repo.save_chunks(&second_source_id, vec![(second, vec![0.8])])
+        .await
+        .unwrap();
+
+    let report = repo.orphan_report(1, 1, 80).await.unwrap();
+
+    assert_eq!(report.orphan_chunk_count, 3);
+    assert_eq!(report.orphan_source_count, 2);
+    assert_eq!(report.groups_returned, 1);
+    assert_eq!(report.recovery_summary.safe_to_quarantine, 1);
+    assert_eq!(
+        report.groups[0].missing_source_id,
+        first_source_id.to_string()
+    );
+    assert_eq!(
+        report.groups[0].recovery_class,
+        engram_store::repos::document::DocumentRecoveryClass::SafeToQuarantine
+    );
+    assert_eq!(report.groups[0].chunk_count, 2);
+    assert_eq!(report.groups[0].samples.len(), 1);
+}
+
 // =============================================================================
 // Statistics Tests
 // =============================================================================
@@ -391,6 +620,75 @@ async fn test_document_stats() {
     let stats = repo.stats().await.expect("Failed to get stats");
     assert_eq!(stats.source_count, 2);
     assert_eq!(stats.chunk_count, 3);
+}
+
+#[tokio::test]
+async fn test_rocksdb_document_stats_include_sources_and_chunks() {
+    let dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+    let repo = setup_rocksdb_repo(&dir).await;
+
+    let source = DocSource::local_file("/docs/rocksdb.md").with_title("RocksDB Source");
+    repo.save_source(&source).await.unwrap();
+
+    let chunk = DocChunk::new(source.id, "# RocksDB", 1, "RocksDB-backed document content");
+    repo.save_chunks(&source.id, vec![(chunk, vec![0.1, 0.2, 0.3])])
+        .await
+        .unwrap();
+
+    let stats = repo.stats().await.expect("Failed to get stats");
+    assert_eq!(stats.source_count, 1);
+    assert_eq!(stats.chunk_count, 1);
+
+    let found = repo
+        .find_source_by_path("/docs/rocksdb.md")
+        .await
+        .expect("Query failed");
+    assert!(found.is_some(), "RocksDB source should be findable by path");
+}
+
+#[tokio::test]
+async fn test_document_schema_init_migrates_legacy_schemafull_tables() {
+    let dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+    let repo = setup_legacy_rocksdb_repo(&dir).await;
+
+    let source = DocSource::local_file("/docs/legacy-schema.md").with_title("Legacy Schema");
+    repo.save_source(&source).await.unwrap();
+
+    let chunk = DocChunk::new(source.id, "# Legacy", 1, "Legacy schema content");
+    repo.save_chunks(&source.id, vec![(chunk, vec![0.1, 0.2, 0.3])])
+        .await
+        .unwrap();
+
+    let stats = repo.stats().await.expect("Failed to get stats");
+    assert_eq!(stats.source_count, 1);
+    assert_eq!(stats.chunk_count, 1);
+
+    let found = repo
+        .find_source_by_path("/docs/legacy-schema.md")
+        .await
+        .expect("Query failed");
+    assert!(found.is_some(), "Legacy source should be findable by path");
+}
+
+#[tokio::test]
+async fn test_legacy_schema_persists_indexed_sources_with_last_indexed() {
+    let dir = tempfile::TempDir::new().expect("Failed to create temp dir");
+    let repo = setup_legacy_rocksdb_repo(&dir).await;
+
+    let mut source = DocSource::local_file("/docs/legacy-indexed.md").with_title("Legacy Indexed");
+    source.mark_indexed();
+    repo.save_source(&source).await.unwrap();
+
+    let stats = repo.stats().await.expect("Failed to get stats");
+    assert_eq!(stats.source_count, 1);
+
+    let found = repo
+        .find_source_by_path("/docs/legacy-indexed.md")
+        .await
+        .expect("Query failed")
+        .expect("Indexed source should be findable by path");
+    assert_eq!(found.id, source.id);
+    assert!(found.last_indexed.is_some());
 }
 
 // =============================================================================

@@ -1060,6 +1060,29 @@ fn candidate_from_session_event(
                     .to_string(),
             ],
         ),
+        EventType::Preference => (
+            MemoryKind::Preference,
+            Some(MigrationDisposition::Quarantine),
+            vec![
+                "Preference event requires recalibration before becoming active memory."
+                    .to_string(),
+            ],
+        ),
+        EventType::Rule => (
+            MemoryKind::Rule,
+            Some(MigrationDisposition::Quarantine),
+            vec!["Rule event requires review before becoming active memory.".to_string()],
+        ),
+        EventType::Limitation => (
+            MemoryKind::Limitation,
+            Some(MigrationDisposition::Quarantine),
+            vec!["Limitation event requires validation before becoming active memory.".to_string()],
+        ),
+        EventType::HandoffUpdate => (
+            MemoryKind::Handoff,
+            Some(MigrationDisposition::Quarantine),
+            vec!["Handoff updates should be reviewed before migration.".to_string()],
+        ),
         EventType::Error => (
             MemoryKind::Limitation,
             Some(MigrationDisposition::Quarantine),
@@ -1072,6 +1095,14 @@ fn candidate_from_session_event(
             MemoryKind::SessionInsight,
             Some(MigrationDisposition::Skip),
             vec!["Operational trace events are skipped unless manually promoted.".to_string()],
+        ),
+        EventType::Prompt | EventType::Plan | EventType::ToolResult | EventType::Test => (
+            MemoryKind::SessionInsight,
+            Some(MigrationDisposition::Skip),
+            vec![
+                "Session-following operational events are skipped unless manually promoted."
+                    .to_string(),
+            ],
         ),
         EventType::Custom(_) => (
             MemoryKind::SessionInsight,
