@@ -40,15 +40,16 @@ use engram_index::{
     DocumentOrphanReport, DocumentRecoveryClass, DocumentRecoveryOptions, DocumentReindexAction,
     DocumentReindexExecutionOptions, DocumentReindexExecutionReport,
     DocumentReindexExecutionStatus, DocumentReindexPlan, DocumentService, EntityService,
-    GraphService, HandoffService, HarnessService, KnowledgeService, LintOptions, LintService,
-    MemoryChanges, MemoryChangesSinceOptions, MemoryService, MigrationInventory,
-    MigrationInventoryOptions, MigrationReviewApply, MigrationReviewApplyOptions,
-    MigrationReviewExport, MigrationReviewStatus, ObligationDetectOptions, ObligationDetection,
-    ObligationDoctorReport, ObligationService, OrientInput, OrientationPacket, Pipeline,
-    PipelineConfig, RepositoryMigrationInventory, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
-    RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus, RepositoryService,
-    SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
+    GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
+    HarnessService, KnowledgeService, LintOptions, LintService, MemoryChanges,
+    MemoryChangesSinceOptions, MemoryService, MigrationInventory, MigrationInventoryOptions,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
+    MigrationReviewStatus, ObligationDetectOptions, ObligationDetection, ObligationDoctorReport,
+    ObligationService, OrientInput, OrientationPacket, Pipeline, PipelineConfig,
+    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport,
+    RepositoryMigrationReviewStatus, RepositoryService, SearchService, SessionService,
+    TelemetryService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -1920,6 +1921,7 @@ impl From<HarnessKindArg> for HarnessKind {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum HarnessCommands {
     /// Check whether harness adapters are present
     Status {
@@ -1980,9 +1982,108 @@ enum HarnessCommands {
         #[arg(long)]
         write: bool,
 
+        /// Back up and replace user-owned adapters; only active with --write
+        #[arg(long)]
+        adopt_user_owned: bool,
+
         /// Print report as JSON
         #[arg(long)]
         json: bool,
+    },
+
+    /// Handle one agent hook event and print hook JSON
+    Hook {
+        /// Harness handling the hook
+        #[arg(long, value_enum, default_value = "claude-code")]
+        harness: HarnessKindArg,
+
+        /// Hook event name, e.g. UserPromptSubmit, PostToolUseFailure, Stop
+        #[arg(long)]
+        event: String,
+
+        /// Claude session ID
+        #[arg(long)]
+        session_id: Option<String>,
+
+        /// Current working directory
+        #[arg(long)]
+        cwd: Option<String>,
+
+        /// Transcript path
+        #[arg(long)]
+        transcript_path: Option<String>,
+
+        /// User prompt
+        #[arg(long)]
+        prompt: Option<String>,
+
+        /// Tool name
+        #[arg(long)]
+        tool_name: Option<String>,
+
+        /// Tool error
+        #[arg(long)]
+        tool_error: Option<String>,
+
+        /// Tool input command
+        #[arg(long)]
+        tool_input_command: Option<String>,
+
+        /// File path touched by a tool
+        #[arg(long)]
+        file_path: Option<String>,
+
+        /// Last assistant message
+        #[arg(long)]
+        last_assistant_message: Option<String>,
+
+        /// Compact summary
+        #[arg(long)]
+        compact_summary: Option<String>,
+
+        /// Hook trigger/matcher
+        #[arg(long)]
+        trigger: Option<String>,
+
+        /// Session end or permission reason
+        #[arg(long)]
+        reason: Option<String>,
+
+        /// Whether Stop is already active
+        #[arg(long)]
+        stop_hook_active: bool,
+
+        /// Hook write policy: durable or nudge
+        #[arg(long, default_value = "durable")]
+        write_policy: String,
+
+        /// Project scope override
+        #[arg(long)]
+        project: Option<String>,
+
+        /// Writer model provider
+        #[arg(long, default_value = "anthropic")]
+        model_provider: String,
+
+        /// Writer model
+        #[arg(long, default_value = "claude-code")]
+        model: String,
+
+        /// Surface label
+        #[arg(long, default_value = "claude-code")]
+        surface: String,
+
+        /// Actor label
+        #[arg(long, default_value = "agent")]
+        actor: String,
+
+        /// Store project scope for CLI database access
+        #[arg(long = "store-project")]
+        store_project: Option<String>,
+
+        /// Override data directory
+        #[arg(long)]
+        data_dir: Option<String>,
     },
 }
 
@@ -2693,6 +2794,91 @@ fn scoped_store_config(project: Option<&str>, data_dir: Option<&str>) -> Result<
     }
 
     Ok(StoreConfig::rocksdb(StoreConfig::default_data_dir()))
+}
+
+async fn handle_harness_hook_via_daemon(
+    hook_event: &HarnessHookEvent,
+    store_project: Option<&str>,
+) -> Result<Option<serde_json::Value>> {
+    let daemon_config = match store_project {
+        Some(project) => daemon::DaemonConfig::project(project),
+        None => daemon::DaemonConfig::global(),
+    };
+    let info = match daemon::get_daemon_info(&daemon_config).await {
+        Ok(info) if info.healthy => info,
+        _ => return Ok(None),
+    };
+
+    let arguments = harness_hook_daemon_arguments(hook_event);
+    let response = proxy::call_tool_once(info.port, "harness", arguments).await?;
+    extract_mcp_tool_json_text(response).map(Some)
+}
+
+fn harness_hook_daemon_arguments(hook_event: &HarnessHookEvent) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("action".to_string(), serde_json::json!("hook_event"));
+    map.insert(
+        "harness".to_string(),
+        serde_json::json!(hook_event.harness.to_string()),
+    );
+    map.insert(
+        "hook_event_name".to_string(),
+        serde_json::json!(hook_event.hook_event_name),
+    );
+    map.insert(
+        "stop_hook_active".to_string(),
+        serde_json::json!(hook_event.stop_hook_active.to_string()),
+    );
+    insert_optional_string(&mut map, "session_id", &hook_event.session_id);
+    insert_optional_string(&mut map, "cwd", &hook_event.cwd);
+    insert_optional_string(&mut map, "transcript_path", &hook_event.transcript_path);
+    insert_optional_string(&mut map, "prompt", &hook_event.prompt);
+    insert_optional_string(&mut map, "tool_name", &hook_event.tool_name);
+    insert_optional_string(&mut map, "tool_error", &hook_event.tool_error);
+    insert_optional_string(
+        &mut map,
+        "tool_input_command",
+        &hook_event.tool_input_command,
+    );
+    insert_optional_string(&mut map, "file_path", &hook_event.file_path);
+    insert_optional_string(
+        &mut map,
+        "last_assistant_message",
+        &hook_event.last_assistant_message,
+    );
+    insert_optional_string(&mut map, "compact_summary", &hook_event.compact_summary);
+    insert_optional_string(&mut map, "trigger", &hook_event.trigger);
+    insert_optional_string(&mut map, "reason", &hook_event.reason);
+    insert_optional_string(&mut map, "write_policy", &hook_event.write_policy);
+    insert_optional_string(&mut map, "project", &hook_event.project);
+    insert_optional_string(&mut map, "model_provider", &hook_event.model_provider);
+    insert_optional_string(&mut map, "model", &hook_event.model);
+    insert_optional_string(&mut map, "surface", &hook_event.surface);
+    insert_optional_string(&mut map, "actor", &hook_event.actor);
+    serde_json::Value::Object(map)
+}
+
+fn insert_optional_string(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: &Option<String>,
+) {
+    if let Some(value) = value {
+        map.insert(key.to_string(), serde_json::json!(value));
+    }
+}
+
+fn extract_mcp_tool_json_text(response: serde_json::Value) -> Result<serde_json::Value> {
+    if let Some(error) = response.get("error") {
+        return Err(anyhow::anyhow!("daemon MCP tool error: {}", error));
+    }
+
+    let text = response
+        .pointer("/result/content/0/text")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| anyhow::anyhow!("daemon MCP tool response did not include text content"))?;
+    serde_json::from_str(text)
+        .map_err(|error| anyhow::anyhow!("daemon MCP tool response was not JSON: {}", error))
 }
 
 fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
@@ -7551,18 +7737,103 @@ async fn main() -> Result<()> {
                     harness,
                     root,
                     write,
+                    adopt_user_owned,
                     json,
                 } => {
-                    let report = service.install(
+                    let report = service.install_with_options(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
-                        write,
+                        HarnessInstallOptions {
+                            write,
+                            adopt_user_owned,
+                        },
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
                         print_harness_install(&report);
                     }
+                }
+                HarnessCommands::Hook {
+                    harness,
+                    event,
+                    session_id,
+                    cwd,
+                    transcript_path,
+                    prompt,
+                    tool_name,
+                    tool_error,
+                    tool_input_command,
+                    file_path,
+                    last_assistant_message,
+                    compact_summary,
+                    trigger,
+                    reason,
+                    stop_hook_active,
+                    write_policy,
+                    project,
+                    model_provider,
+                    model,
+                    surface,
+                    actor,
+                    store_project,
+                    data_dir,
+                } => {
+                    let hook_event = HarnessHookEvent {
+                        harness: harness.into(),
+                        hook_event_name: event,
+                        session_id,
+                        cwd,
+                        transcript_path,
+                        prompt,
+                        tool_name,
+                        tool_error,
+                        tool_input_command,
+                        file_path,
+                        last_assistant_message,
+                        compact_summary,
+                        trigger,
+                        reason,
+                        stop_hook_active,
+                        write_policy: Some(write_policy),
+                        project,
+                        model_provider: Some(model_provider),
+                        model: Some(model),
+                        surface: Some(surface),
+                        actor: Some(actor),
+                    };
+
+                    if data_dir.is_none() {
+                        if let Some(response) =
+                            handle_harness_hook_via_daemon(&hook_event, store_project.as_deref())
+                                .await?
+                        {
+                            println!("{}", serde_json::to_string_pretty(&response)?);
+                            return Ok(());
+                        }
+                    }
+
+                    let config =
+                        scoped_store_config(store_project.as_deref(), data_dir.as_deref())?;
+                    let db = connect_and_init(&config).await?;
+                    let memory_service = MemoryService::new(db.clone());
+                    memory_service.init_schema().await?;
+                    let obligation_service = ObligationService::new(db.clone());
+                    obligation_service.init_schema().await?;
+                    let handoff_service = HandoffService::new(db);
+                    handoff_service.init_schema().await?;
+
+                    let outcome = service
+                        .handle_hook_event(
+                            hook_event,
+                            HarnessHookServices {
+                                memory: Some(&memory_service),
+                                obligations: Some(&obligation_service),
+                                handoff: Some(&handoff_service),
+                            },
+                        )
+                        .await?;
+                    println!("{}", serde_json::to_string_pretty(&outcome.response)?);
                 }
             }
         }

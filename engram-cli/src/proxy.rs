@@ -252,6 +252,56 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
     Ok(())
 }
 
+/// Call a single MCP tool through the HTTP daemon.
+pub async fn call_tool_once(
+    daemon_port: u16,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<serde_json::Value> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .context("Failed to create HTTP client")?;
+    let mcp_url = format!("http://127.0.0.1:{daemon_port}/mcp");
+    let initialize_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "engram-cli",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        }
+    });
+
+    let (_, session_id) = forward_initialize(&client, &mcp_url, &initialize_request).await?;
+    let initialized_notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    forward_notification(&client, &mcp_url, &session_id, &initialized_notification).await?;
+
+    let request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments
+        }
+    });
+    let response = forward_request(&client, &mcp_url, &session_id, &request).await;
+
+    if let Some(sid) = session_id {
+        let _ = delete_session(&client, &mcp_url, &sid).await;
+    }
+
+    response
+}
+
 /// Forward an initialize request and capture the session ID from response headers.
 async fn forward_initialize(
     client: &reqwest::Client,

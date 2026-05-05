@@ -430,7 +430,7 @@ impl EngramServer {
 
     /// Manage Memory OS agent harness policy and adapters.
     #[tool(
-        description = "Manage the Memory OS agent harness contract: status, doctor, render_policy, render_adapter, install. Supports claude_code, codex, gemini_cli, cursor, and generic. Installation is dry-run unless write=true; user-owned files without the Engram marker are skipped."
+        description = "Manage the Memory OS agent harness contract: status, doctor, render_policy, render_adapter, install, hook_event. Supports claude_code, codex, gemini_cli, cursor, and generic. Installation is dry-run unless write=true; user-owned files require adopt_user_owned=true to replace. hook_event returns valid Claude hook JSON."
     )]
     pub async fn harness(
         &self,
@@ -674,7 +674,7 @@ impl ServerHandler for EngramServer {
                  - work_stats: Get work statistics\n\n\
                  **Memory OS:**\n\
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
-                 - harness: Manage agent harness policy/adapters (actions: status, doctor, render_policy, render_adapter, install; install is dry-run unless write=true)\n\
+                 - harness: Manage agent harness policy/adapters and hook events (actions: status, doctor, render_policy, render_adapter, install, hook_event; install is dry-run unless write=true)\n\
                  - lint: Run Memory OS health checks and safe remediations (actions: run, list, apply_safe; write required for safe actions)\n\
                  - graph: Traverse derived memory graph (actions: around, path, subgraph, export)\n\
                  - handoff: Manage rolling handoffs (actions: get, update, compile; dry-run by default)\n\

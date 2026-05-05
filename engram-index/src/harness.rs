@@ -10,11 +10,106 @@ use engram_core::harness::{
     HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleTrigger, HarnessPolicy,
     HarnessRenderedAdapter, HarnessStatusReport,
 };
+use engram_core::memory::{
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
+    ModelIdentity, WriterProvenance,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const MARKER_MD: &str = "<!-- engram:harness-adapter:v1 -->";
 const MARKER_SH: &str = "# engram:harness-adapter:v1";
+const CLAUDE_HOOK_COMMAND: &str =
+    "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"";
+const CLAUDE_SESSION_END_HOOK_COMMAND: &str =
+    "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"";
+
+/// Options for harness adapter installation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HarnessInstallOptions {
+    /// Actually write generated adapters and settings changes.
+    pub write: bool,
+    /// Back up and replace user-owned adapter files.
+    pub adopt_user_owned: bool,
+}
+
+/// A Claude Code hook event routed through the Engram harness.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessHookEvent {
+    /// Harness handling the event.
+    pub harness: HarnessKind,
+    /// Claude Code hook event name.
+    pub hook_event_name: String,
+    /// Claude Code session identifier.
+    pub session_id: Option<String>,
+    /// Current working directory.
+    pub cwd: Option<String>,
+    /// Transcript path.
+    pub transcript_path: Option<String>,
+    /// Submitted user prompt.
+    pub prompt: Option<String>,
+    /// Tool name for tool hooks.
+    pub tool_name: Option<String>,
+    /// Tool failure error.
+    pub tool_error: Option<String>,
+    /// Tool input command, when available.
+    pub tool_input_command: Option<String>,
+    /// File path touched by a tool, when available.
+    pub file_path: Option<String>,
+    /// Last assistant message for stop hooks.
+    pub last_assistant_message: Option<String>,
+    /// Compaction summary.
+    pub compact_summary: Option<String>,
+    /// Compaction trigger or hook matcher.
+    pub trigger: Option<String>,
+    /// Session end reason or permission reason.
+    pub reason: Option<String>,
+    /// Whether Claude is already continuing because of a Stop hook.
+    pub stop_hook_active: bool,
+    /// Write policy, normally "durable" or "nudge".
+    pub write_policy: Option<String>,
+    /// Project scope override.
+    pub project: Option<String>,
+    /// Model provider for writer provenance.
+    pub model_provider: Option<String>,
+    /// Model name for writer provenance.
+    pub model: Option<String>,
+    /// Surface label for writer provenance.
+    pub surface: Option<String>,
+    /// Actor label for writer provenance.
+    pub actor: Option<String>,
+}
+
+/// Services used by hook-event handling. All are optional so hook handling stays soft.
+pub struct HarnessHookServices<'a> {
+    /// Memory service.
+    pub memory: Option<&'a crate::memory::MemoryService>,
+    /// Obligation service.
+    pub obligations: Option<&'a crate::obligation::ObligationService>,
+    /// Handoff service.
+    pub handoff: Option<&'a crate::handoff::HandoffService>,
+}
+
+/// Result of handling a Claude Code hook event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HarnessHookEventOutcome {
+    /// Claude hook JSON response.
+    pub response: Value,
+    /// Human-readable additional context.
+    pub additional_context: String,
+    /// Memory items written.
+    pub memory_written: usize,
+    /// Obligations written.
+    pub obligations_written: usize,
+    /// Whether a handoff was written.
+    pub handoff_written: bool,
+    /// Whether the hook blocked the current stop; Claude adapters currently keep this false.
+    pub blocked: bool,
+    /// Non-fatal warnings.
+    pub warnings: Vec<String>,
+}
 
 /// Stateless service for rendering and verifying harness integration adapters.
 #[derive(Debug, Default, Clone, Copy)]
@@ -93,11 +188,19 @@ impl HarnessService {
             ));
         }
 
-        let ready = adapters
+        let mut ready = adapters
             .iter()
             .filter(|check| check.required)
             .all(|check| check.status == HarnessAdapterStatus::Installed)
             && missing_mcp_tools.is_empty();
+
+        if harness == HarnessKind::ClaudeCode {
+            let settings_warnings = claude_settings_warnings(&root)?;
+            if !settings_warnings.is_empty() {
+                ready = false;
+                warnings.extend(settings_warnings);
+            }
+        }
 
         Ok(HarnessStatusReport {
             harness,
@@ -168,6 +271,23 @@ impl HarnessService {
         root: Option<&Path>,
         write: bool,
     ) -> IndexResult<HarnessInstallReport> {
+        self.install_with_options(
+            harness,
+            root,
+            HarnessInstallOptions {
+                write,
+                adopt_user_owned: false,
+            },
+        )
+    }
+
+    /// Install harness adapters with explicit safety options.
+    pub fn install_with_options(
+        &self,
+        harness: HarnessKind,
+        root: Option<&Path>,
+        options: HarnessInstallOptions,
+    ) -> IndexResult<HarnessInstallReport> {
         let root = resolve_root(root)?;
         let mut planned = Vec::new();
         let mut written = Vec::new();
@@ -185,7 +305,7 @@ impl HarnessService {
                         written: false,
                         message: install_plan_message(check.status),
                     });
-                    if !write {
+                    if !options.write {
                         continue;
                     }
 
@@ -210,25 +330,307 @@ impl HarnessService {
                     });
                 }
                 HarnessAdapterStatus::UserOwned => {
-                    let message = "skipped user-owned file without Engram marker".to_string();
-                    warnings.push(format!("{}: {}", path.display(), message));
-                    skipped.push(HarnessInstallFile {
-                        name: adapter.name,
-                        path: path.display().to_string(),
-                        written: false,
-                        message,
-                    });
+                    if options.adopt_user_owned {
+                        let message =
+                            "will back up and adopt user-owned file without Engram marker"
+                                .to_string();
+                        planned.push(HarnessInstallFile {
+                            name: adapter.name.clone(),
+                            path: path.display().to_string(),
+                            written: false,
+                            message,
+                        });
+                        if !options.write {
+                            continue;
+                        }
+
+                        let backup = backup_path(&path);
+                        fs::copy(&path, &backup)?;
+                        fs::write(&path, adapter.contents.as_bytes())?;
+                        set_executable_if_hook(&path, adapter.kind)?;
+                        written.push(HarnessInstallFile {
+                            name: adapter.name,
+                            path: path.display().to_string(),
+                            written: true,
+                            message: format!(
+                                "adopted user-owned file; backup={}",
+                                backup.display()
+                            ),
+                        });
+                    } else {
+                        let message = "skipped user-owned file without Engram marker".to_string();
+                        warnings.push(format!("{}: {}", path.display(), message));
+                        skipped.push(HarnessInstallFile {
+                            name: adapter.name,
+                            path: path.display().to_string(),
+                            written: false,
+                            message,
+                        });
+                    }
                 }
             }
+        }
+
+        if harness == HarnessKind::ClaudeCode {
+            merge_claude_settings(
+                &root,
+                options.write,
+                &mut planned,
+                &mut written,
+                &mut skipped,
+            )?;
         }
 
         Ok(HarnessInstallReport {
             harness,
             root: root.display().to_string(),
-            dry_run: !write,
+            dry_run: !options.write,
             planned,
             written,
             skipped,
+            warnings,
+        })
+    }
+
+    /// Handle a Claude Code hook event and return valid Claude hook JSON.
+    pub async fn handle_hook_event(
+        &self,
+        event: HarnessHookEvent,
+        services: HarnessHookServices<'_>,
+    ) -> IndexResult<HarnessHookEventOutcome> {
+        let mut warnings = Vec::new();
+        let mut memory_written = 0;
+        let mut obligations_written = 0;
+        let mut handoff_written = false;
+        let write_durable = event
+            .write_policy
+            .as_deref()
+            .map(|policy| policy.eq_ignore_ascii_case("durable"))
+            .unwrap_or(false);
+        let project = event
+            .project
+            .clone()
+            .or_else(|| project_from_cwd(event.cwd.as_deref()));
+        let writer = hook_writer(&event);
+
+        match normalized_event_name(&event.hook_event_name).as_str() {
+            "userpromptsubmit" => {
+                if let Some(service) = services.obligations {
+                    let detection = service
+                        .detect(crate::obligation::ObligationDetectOptions {
+                            cwd: event.cwd.clone(),
+                            prompt: event.prompt.clone(),
+                            project: project.clone(),
+                            writer: writer.clone(),
+                            write: write_durable,
+                            limit: Some(16),
+                        })
+                        .await;
+                    match detection {
+                        Ok(detection) => {
+                            obligations_written += detection.written.len();
+                            warnings.extend(detection.warnings);
+                        }
+                        Err(error) => {
+                            warnings.push(format!("obligation detection failed: {error}"))
+                        }
+                    }
+                }
+                if write_durable {
+                    if let (Some(service), Some(item)) = (
+                        services.memory,
+                        explicit_user_memory_from_prompt(&event, &writer),
+                    ) {
+                        match service.capture_memory(item).await {
+                            Ok(_) => memory_written += 1,
+                            Err(error) => warnings.push(format!("memory capture failed: {error}")),
+                        }
+                    }
+                }
+            }
+            "posttooluse" => {
+                if let Some(service) = services.obligations {
+                    let detection = service
+                        .detect(crate::obligation::ObligationDetectOptions {
+                            cwd: event.cwd.clone(),
+                            prompt: tool_prompt(&event),
+                            project: project.clone(),
+                            writer: writer.clone(),
+                            write: write_durable,
+                            limit: Some(16),
+                        })
+                        .await;
+                    match detection {
+                        Ok(detection) => {
+                            obligations_written += detection.written.len();
+                            warnings.extend(detection.warnings);
+                        }
+                        Err(error) => {
+                            warnings.push(format!("obligation detection failed: {error}"))
+                        }
+                    }
+                }
+                if write_durable {
+                    if let (Some(service), Some(item)) =
+                        (services.memory, document_memory_from_tool(&event, &writer))
+                    {
+                        match service.capture_memory(item).await {
+                            Ok(_) => memory_written += 1,
+                            Err(error) => warnings.push(format!("memory capture failed: {error}")),
+                        }
+                    }
+                }
+            }
+            "posttoolusefailure" => {
+                if let Some(service) = services.obligations {
+                    let detection = service
+                        .detect(crate::obligation::ObligationDetectOptions {
+                            cwd: event.cwd.clone(),
+                            prompt: tool_failure_prompt(&event),
+                            project: project.clone(),
+                            writer: writer.clone(),
+                            write: write_durable,
+                            limit: Some(16),
+                        })
+                        .await;
+                    match detection {
+                        Ok(detection) => {
+                            obligations_written += detection.written.len();
+                            warnings.extend(detection.warnings);
+                        }
+                        Err(error) => {
+                            warnings.push(format!("obligation detection failed: {error}"))
+                        }
+                    }
+                }
+                if write_durable {
+                    if let Some(service) = services.memory {
+                        let item = tool_failure_memory(&event, &writer);
+                        match service.capture_memory(item).await {
+                            Ok(_) => memory_written += 1,
+                            Err(error) => warnings.push(format!("memory capture failed: {error}")),
+                        }
+                    }
+                }
+            }
+            "precompact" => {
+                if write_durable {
+                    if let Some(service) = services.handoff {
+                        let content = format!(
+                            "# Claude Code Pre-Compact Handoff\n\nSession: {}\nCWD: {}\nTrigger: {}\nTranscript: {}\n\n## Next Actions\n- Resume by calling orient, handoff(action=get), and memory(action=changes_since).\n",
+                            event.session_id.as_deref().unwrap_or("unknown"),
+                            event.cwd.as_deref().unwrap_or("unknown"),
+                            event.trigger.as_deref().unwrap_or("unknown"),
+                            event.transcript_path.as_deref().unwrap_or("unknown"),
+                        );
+                        match service
+                            .update(
+                                project.clone(),
+                                None,
+                                content,
+                                vec![
+                                    "Resume by calling orient and inspecting the rolling handoff."
+                                        .to_string(),
+                                ],
+                                writer.clone(),
+                                false,
+                            )
+                            .await
+                        {
+                            Ok(update) => handoff_written = update.written,
+                            Err(error) => warnings.push(format!("handoff update failed: {error}")),
+                        }
+                    }
+                }
+            }
+            "postcompact" => {
+                if write_durable {
+                    if let (Some(service), Some(summary)) =
+                        (services.handoff, event.compact_summary.clone())
+                    {
+                        let content = format!(
+                            "# Claude Code Post-Compact Summary\n\n{}\n\n## Next Actions\n- Continue with orient, handoff(action=get), and memory(action=changes_since).\n",
+                            summary.trim()
+                        );
+                        match service
+                            .update(
+                                project.clone(),
+                                None,
+                                content,
+                                vec![
+                                    "Continue with orient and recent memory changes after compaction."
+                                        .to_string(),
+                                ],
+                                writer.clone(),
+                                false,
+                            )
+                            .await
+                        {
+                            Ok(update) => handoff_written = update.written,
+                            Err(error) => warnings.push(format!("handoff update failed: {error}")),
+                        }
+                    }
+                }
+            }
+            "sessionend" => {
+                if write_durable {
+                    if let Some(service) = services.handoff {
+                        let content = format!(
+                            "# Claude Code Session-End Handoff\n\nSession: {}\nCWD: {}\nReason: {}\nTranscript: {}\n\n## Next Actions\n- On resume, call orient and inspect this handoff before acting.\n",
+                            event.session_id.as_deref().unwrap_or("unknown"),
+                            event.cwd.as_deref().unwrap_or("unknown"),
+                            event.reason.as_deref().unwrap_or("unknown"),
+                            event.transcript_path.as_deref().unwrap_or("unknown"),
+                        );
+                        match service
+                            .update(
+                                project.clone(),
+                                None,
+                                content,
+                                vec!["On resume, call orient and inspect this handoff.".to_string()],
+                                writer.clone(),
+                                false,
+                            )
+                            .await
+                        {
+                            Ok(update) => handoff_written = update.written,
+                            Err(error) => warnings.push(format!("handoff update failed: {error}")),
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        let open_obligations = if let Some(service) = services.obligations {
+            match service.doctor(Some(8)).await {
+                Ok(report) => report.open.len(),
+                Err(error) => {
+                    warnings.push(format!("obligation doctor failed: {error}"));
+                    0
+                }
+            }
+        } else {
+            0
+        };
+
+        let additional_context = hook_additional_context(
+            &event,
+            memory_written,
+            obligations_written,
+            handoff_written,
+            open_obligations,
+            &warnings,
+        );
+        let response = claude_hook_response(&event, &additional_context);
+
+        Ok(HarnessHookEventOutcome {
+            response,
+            additional_context,
+            memory_written,
+            obligations_written,
+            handoff_written,
+            blocked: false,
             warnings,
         })
     }
@@ -245,6 +647,308 @@ fn lifecycle_triggers() -> Vec<HarnessLifecycleTrigger> {
         HarnessLifecycleTrigger::SessionEndHandoff,
         HarnessLifecycleTrigger::CommitWorkflowConsultMemory,
     ]
+}
+
+fn normalized_event_name(event: &str) -> String {
+    event
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn project_from_cwd(cwd: Option<&str>) -> Option<String> {
+    cwd.and_then(|cwd| {
+        Path::new(cwd)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_string)
+    })
+}
+
+fn hook_writer(event: &HarnessHookEvent) -> WriterProvenance {
+    let harness = match event.harness {
+        HarnessKind::ClaudeCode => Harness::ClaudeCode,
+        HarnessKind::Codex => Harness::Codex,
+        HarnessKind::Cursor => Harness::Cursor,
+        HarnessKind::GeminiCli => Harness::Other("gemini_cli".to_string()),
+        HarnessKind::Generic => Harness::Other("generic".to_string()),
+    };
+    let model = ModelIdentity::new(
+        event.model_provider.as_deref().unwrap_or("anthropic"),
+        event.model.as_deref().unwrap_or("claude-code"),
+    );
+    let mut writer = WriterProvenance::agent(harness, model);
+    writer.surface = Some(
+        event
+            .surface
+            .clone()
+            .unwrap_or_else(|| "claude-code".to_string()),
+    );
+    writer.actor = event.actor.clone().unwrap_or_else(|| "agent".to_string());
+    writer
+}
+
+fn hook_scope(event: &HarnessHookEvent) -> MemoryScope {
+    event
+        .project
+        .clone()
+        .or_else(|| project_from_cwd(event.cwd.as_deref()))
+        .map(MemoryScope::project)
+        .unwrap_or_else(|| {
+            event
+                .cwd
+                .clone()
+                .map(|cwd| MemoryScope::Custom {
+                    name: format!("cwd:{cwd}"),
+                })
+                .unwrap_or(MemoryScope::Global)
+        })
+}
+
+fn tool_prompt(event: &HarnessHookEvent) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(tool) = &event.tool_name {
+        parts.push(format!("Tool used: {tool}."));
+    }
+    if let Some(command) = &event.tool_input_command {
+        if !command.trim().is_empty() {
+            parts.push(format!("Command: {command}"));
+        }
+    }
+    if let Some(path) = &event.file_path {
+        if is_durable_doc_path(path) {
+            parts.push(format!("Durable document changed: {path}"));
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+fn tool_failure_prompt(event: &HarnessHookEvent) -> Option<String> {
+    let mut prompt = String::from("A failed tool call occurred and needs recovery.");
+    if let Some(tool) = &event.tool_name {
+        prompt.push_str(&format!(" Tool: {tool}."));
+    }
+    if let Some(error) = &event.tool_error {
+        prompt.push_str(&format!(" Error: {error}."));
+    }
+    Some(prompt)
+}
+
+fn explicit_user_memory_from_prompt(
+    event: &HarnessHookEvent,
+    writer: &WriterProvenance,
+) -> Option<MemoryItem> {
+    let prompt = event.prompt.as_deref()?.trim();
+    if prompt.is_empty() {
+        return None;
+    }
+    let lower = prompt.to_lowercase();
+    let kind = if contains_any(
+        &lower,
+        &[
+            "remember",
+            "my preference",
+            "i prefer",
+            "i don't like",
+            "i do not like",
+        ],
+    ) {
+        MemoryKind::Preference
+    } else if contains_any(&lower, &["from now on", "always ", "never "]) {
+        MemoryKind::Rule
+    } else {
+        return None;
+    };
+
+    Some(
+        MemoryItem::new(
+            kind,
+            "Claude Code user-stated instruction",
+            prompt.chars().take(1200).collect::<String>(),
+            hook_scope(event),
+            ClaimOrigin::UserStated,
+            writer.clone(),
+        )
+        .with_evidence(
+            EvidenceRef::new(EvidenceKind::ManualReview, "claude_user_prompt")
+                .with_summary("Explicit user prompt captured by Claude Code UserPromptSubmit hook"),
+        )
+        .with_tag("claude-code")
+        .with_tag("hook-event")
+        .with_tag("user-stated"),
+    )
+}
+
+fn document_memory_from_tool(
+    event: &HarnessHookEvent,
+    writer: &WriterProvenance,
+) -> Option<MemoryItem> {
+    let path = event.file_path.as_deref()?.trim();
+    if !is_durable_doc_path(path) {
+        return None;
+    }
+    let absolute = event
+        .cwd
+        .as_deref()
+        .map(|cwd| absolutize(Path::new(cwd), path))
+        .unwrap_or_else(|| PathBuf::from(path));
+    Some(
+        MemoryItem::new(
+            MemoryKind::SessionInsight,
+            format!("Claude Code durable document changed: {path}"),
+            format!(
+                "Claude Code edited or wrote durable document `{path}`. The agent must index, register, record, handoff-link, or explicitly skip this document before claiming the task is complete."
+            ),
+            hook_scope(event),
+            ClaimOrigin::ToolResult,
+            writer.clone(),
+        )
+        .with_evidence(
+            EvidenceRef::new(EvidenceKind::File, absolute.to_string_lossy())
+                .with_summary("Claude Code PostToolUse hook observed durable document change"),
+        )
+        .with_tag("claude-code")
+        .with_tag("document-disposition")
+        .with_tag("hook-event"),
+    )
+}
+
+fn tool_failure_memory(event: &HarnessHookEvent, writer: &WriterProvenance) -> MemoryItem {
+    let tool_name = event.tool_name.as_deref().unwrap_or("unknown-tool");
+    let error = event.tool_error.as_deref().unwrap_or("unknown error");
+    MemoryItem::new(
+        MemoryKind::SessionInsight,
+        format!("Claude Code tool failure: {tool_name}"),
+        format!(
+            "Claude Code observed a failed tool call for `{tool_name}`. Error: {error}. The agent should inspect the schema/help, retry correctly if the action still matters, abandon explicitly if it does not, and record reusable gotchas when non-obvious."
+        ),
+        hook_scope(event),
+        ClaimOrigin::ToolResult,
+        writer.clone(),
+    )
+    .with_evidence(
+        EvidenceRef::new(EvidenceKind::ToolCall, tool_name)
+            .with_summary("Claude Code PostToolUseFailure hook")
+            .with_excerpt(error.chars().take(1200).collect::<String>()),
+    )
+    .with_tag("claude-code")
+    .with_tag("tool-failure")
+    .with_tag("hook-event")
+}
+
+fn hook_additional_context(
+    event: &HarnessHookEvent,
+    memory_written: usize,
+    obligations_written: usize,
+    handoff_written: bool,
+    open_obligations: usize,
+    warnings: &[String],
+) -> String {
+    let mut lines = vec![format!(
+        "<engram_hook event=\"{}\" write_policy=\"{}\">",
+        event.hook_event_name,
+        event.write_policy.as_deref().unwrap_or("nudge")
+    )];
+    lines.push(format!(
+        "Engram captured lifecycle state: memory_written={memory_written}, obligations_written={obligations_written}, handoff_written={handoff_written}, open_obligations={open_obligations}."
+    ));
+    match normalized_event_name(&event.hook_event_name).as_str() {
+        "userpromptsubmit" => lines.push(
+            "Before acting, call orient if this is a new task and use obligations for source/design, document, failed-tool, verification, handoff, and commit-preference checks."
+                .to_string(),
+        ),
+        "posttoolusefailure" => lines.push(
+            "A tool failed. Inspect the tool schema/help before retrying; record reusable gotchas when non-obvious."
+                .to_string(),
+        ),
+        "posttooluse" => lines.push(
+            "If a durable document changed, resolve its document disposition before final response."
+                .to_string(),
+        ),
+        "stop" => lines.push(
+            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user."
+                .to_string(),
+        ),
+        "precompact" | "postcompact" => lines.push(
+            "Before relying on compacted context, use handoff(action=get) and memory(action=changes_since)."
+                .to_string(),
+        ),
+        "sessionend" => lines.push(
+            "The session ended; the next session should resume from orient and the rolling handoff."
+                .to_string(),
+        ),
+        _ => {}
+    }
+    if !warnings.is_empty() {
+        lines.push(format!("Warnings: {}", warnings.join("; ")));
+    }
+    lines.push("</engram_hook>".to_string());
+    lines.join("\n")
+}
+
+fn claude_hook_response(event: &HarnessHookEvent, additional_context: &str) -> Value {
+    let event_name = event.hook_event_name.trim();
+    if !event_supports_hook_specific_output(event_name) {
+        return json!({
+            "continue": true,
+            "systemMessage": additional_context
+        });
+    }
+
+    json!({
+        "continue": true,
+        "hookSpecificOutput": {
+            "hookEventName": event_name,
+            "additionalContext": additional_context
+        }
+    })
+}
+
+fn event_supports_hook_specific_output(event_name: &str) -> bool {
+    matches!(
+        normalized_event_name(event_name).as_str(),
+        "pretooluse" | "userpromptsubmit" | "posttooluse" | "posttoolbatch"
+    )
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
+}
+
+fn is_durable_doc_path(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    let extension = Path::new(&lower)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
+    if !matches!(extension, "md" | "markdown" | "mdx" | "rst" | "txt") {
+        return false;
+    }
+
+    extension == "md"
+        || lower.contains("/docs/")
+        || lower.starts_with("docs/")
+        || lower.contains("guide")
+        || lower.contains("plan")
+        || lower.contains("design")
+        || lower.contains("runbook")
+        || lower.contains("adr")
+        || lower.contains("eval")
+        || lower.ends_with("readme.md")
+}
+
+fn absolutize(cwd: &Path, path: &str) -> PathBuf {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    }
 }
 
 fn required_mcp_tools() -> Vec<String> {
@@ -314,6 +1018,22 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             "Claude hook nudge before stopping/final response.",
             true,
             claude_stop_nudge_hook(),
+        ),
+        adapter(
+            "claude-session-end-hook",
+            HarnessAdapterKind::ClaudeHook,
+            ".claude/hooks/engram-session-end.sh",
+            "Claude command hook for session-end handoff when MCP tool hooks are unavailable.",
+            true,
+            claude_session_end_hook(),
+        ),
+        adapter(
+            "claude-settings-snippet",
+            HarnessAdapterKind::PolicyDocument,
+            ".claude/engram-settings-snippet.json",
+            "Claude Code settings snippet for Engram MCP permissions and lifecycle hooks.",
+            false,
+            claude_settings_snippet(),
         ),
         adapter(
             "project-agents-snippet",
@@ -502,6 +1222,361 @@ fn install_plan_message(status: HarnessAdapterStatus) -> String {
     }
 }
 
+fn backup_path(path: &Path) -> PathBuf {
+    for index in 0.. {
+        let suffix = if index == 0 {
+            "engram-backup".to_string()
+        } else {
+            format!("engram-backup.{index}")
+        };
+        let candidate = PathBuf::from(format!("{}.{}", path.display(), suffix));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("infinite backup path search should always return")
+}
+
+fn claude_settings_path(root: &Path) -> PathBuf {
+    root.join(".claude/settings.json")
+}
+
+fn claude_settings_warnings(root: &Path) -> IndexResult<Vec<String>> {
+    let path = claude_settings_path(root);
+    let contents = match fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(vec![format!(
+                "Claude settings are missing at {}; run harness install --write to add Engram hooks and permissions.",
+                path.display()
+            )]);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let settings: Value = serde_json::from_str(&contents)
+        .map_err(|e| IndexError::Parse(format!("failed to parse Claude settings: {e}")))?;
+
+    let mut warnings = Vec::new();
+    let allow = settings
+        .pointer("/permissions/allow")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for permission in claude_required_permissions() {
+        if !allow.iter().any(|value| value.as_str() == Some(permission)) {
+            warnings.push(format!(
+                "Claude settings are missing permission allow entry '{permission}'."
+            ));
+        }
+    }
+
+    for (event, matcher) in claude_required_hook_events() {
+        if !claude_settings_has_hook(&settings, event, matcher) {
+            warnings.push(format!(
+                "Claude settings are missing Engram hook registration for {event}."
+            ));
+        }
+    }
+    Ok(warnings)
+}
+
+fn merge_claude_settings(
+    root: &Path,
+    write: bool,
+    planned: &mut Vec<HarnessInstallFile>,
+    written: &mut Vec<HarnessInstallFile>,
+    skipped: &mut Vec<HarnessInstallFile>,
+) -> IndexResult<()> {
+    let path = claude_settings_path(root);
+    let mut settings = match fs::read_to_string(&path) {
+        Ok(contents) => serde_json::from_str::<Value>(&contents)
+            .map_err(|e| IndexError::Parse(format!("failed to parse Claude settings: {e}")))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(error) => return Err(error.into()),
+    };
+
+    let changed_permissions = merge_claude_permissions(&mut settings);
+    let changed_hooks = merge_claude_hooks(&mut settings);
+    let changed = changed_permissions || changed_hooks;
+    let path_string = path.display().to_string();
+    if changed {
+        planned.push(HarnessInstallFile {
+            name: "claude-settings-merge".to_string(),
+            path: path_string.clone(),
+            written: false,
+            message: "will merge Engram MCP permissions and lifecycle hooks".to_string(),
+        });
+        if write {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let contents = serde_json::to_string_pretty(&settings)
+                .map_err(|e| IndexError::Parse(format!("failed to render Claude settings: {e}")))?;
+            fs::write(&path, contents + "\n")?;
+            written.push(HarnessInstallFile {
+                name: "claude-settings-merge".to_string(),
+                path: path_string,
+                written: true,
+                message: "merged Engram MCP permissions and lifecycle hooks".to_string(),
+            });
+        }
+    } else {
+        skipped.push(HarnessInstallFile {
+            name: "claude-settings-merge".to_string(),
+            path: path_string,
+            written: false,
+            message: "Claude settings already include Engram permissions and hooks".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn merge_claude_permissions(settings: &mut Value) -> bool {
+    ensure_object(settings);
+    if settings
+        .get("permissions")
+        .and_then(Value::as_object)
+        .is_none()
+    {
+        settings["permissions"] = json!({});
+    }
+    if settings["permissions"]
+        .get("allow")
+        .and_then(Value::as_array)
+        .is_none()
+    {
+        settings["permissions"]["allow"] = json!([]);
+    }
+    let allow = settings["permissions"]["allow"]
+        .as_array_mut()
+        .expect("allow must be an array");
+    let mut changed = false;
+    for permission in claude_required_permissions() {
+        if !allow.iter().any(|value| value.as_str() == Some(permission)) {
+            allow.push(Value::String(permission.to_string()));
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn merge_claude_hooks(settings: &mut Value) -> bool {
+    ensure_object(settings);
+    if settings.get("hooks").and_then(Value::as_object).is_none() {
+        settings["hooks"] = json!({});
+    }
+    let mut changed = false;
+    changed |= remove_claude_hook_handler(
+        settings,
+        "SessionEnd",
+        None,
+        &claude_mcp_hook_handler("SessionEnd"),
+    );
+    changed |= ensure_claude_hook(
+        settings,
+        "SessionStart",
+        Some("startup|resume|compact"),
+        json!({
+            "type": "command",
+            "command": CLAUDE_HOOK_COMMAND,
+            "timeout": 10
+        }),
+    );
+    for (event, matcher) in claude_mcp_hook_events() {
+        changed |= ensure_claude_hook(settings, event, matcher, claude_mcp_hook_handler(event));
+    }
+    changed |= ensure_claude_hook(
+        settings,
+        "SessionEnd",
+        None,
+        json!({
+            "type": "command",
+            "command": CLAUDE_SESSION_END_HOOK_COMMAND,
+            "timeout": 15
+        }),
+    );
+    changed
+}
+
+fn ensure_object(value: &mut Value) {
+    if !value.is_object() {
+        *value = json!({});
+    }
+}
+
+fn ensure_claude_hook(
+    settings: &mut Value,
+    event: &str,
+    matcher: Option<&str>,
+    handler: Value,
+) -> bool {
+    let hooks = settings["hooks"]
+        .as_object_mut()
+        .expect("hooks must be object");
+    let event_entry = hooks.entry(event.to_string()).or_insert_with(|| json!([]));
+    if !event_entry.is_array() {
+        *event_entry = json!([]);
+    }
+    if claude_event_has_handler(event_entry, matcher, &handler) {
+        return false;
+    }
+
+    let mut group = json!({ "hooks": [handler] });
+    if let Some(matcher) = matcher {
+        group["matcher"] = Value::String(matcher.to_string());
+    }
+    event_entry
+        .as_array_mut()
+        .expect("event entry must be array")
+        .push(group);
+    true
+}
+
+fn claude_event_has_handler(event_entry: &Value, matcher: Option<&str>, handler: &Value) -> bool {
+    event_entry.as_array().into_iter().flatten().any(|group| {
+        let matcher_matches = match matcher {
+            Some(expected) => group.get("matcher").and_then(Value::as_str) == Some(expected),
+            None => group.get("matcher").is_none(),
+        };
+        matcher_matches
+            && group
+                .get("hooks")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|existing| existing == handler)
+    })
+}
+
+fn remove_claude_hook_handler(
+    settings: &mut Value,
+    event: &str,
+    matcher: Option<&str>,
+    handler: &Value,
+) -> bool {
+    let Some(groups) = settings
+        .pointer_mut(&format!("/hooks/{event}"))
+        .and_then(Value::as_array_mut)
+    else {
+        return false;
+    };
+
+    let mut changed = false;
+    for group in groups.iter_mut() {
+        let matcher_matches = match matcher {
+            Some(expected) => group.get("matcher").and_then(Value::as_str) == Some(expected),
+            None => group.get("matcher").is_none(),
+        };
+        if !matcher_matches {
+            continue;
+        }
+        if let Some(hooks) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+            let before = hooks.len();
+            hooks.retain(|existing| existing != handler);
+            changed |= hooks.len() != before;
+        }
+    }
+    let before = groups.len();
+    groups.retain(|group| {
+        group
+            .get("hooks")
+            .and_then(Value::as_array)
+            .map(|hooks| !hooks.is_empty())
+            .unwrap_or(true)
+    });
+    changed || groups.len() != before
+}
+
+fn claude_settings_has_hook(settings: &Value, event: &str, matcher: Option<&str>) -> bool {
+    settings
+        .pointer(&format!("/hooks/{event}"))
+        .map(|entry| claude_event_has_handler(entry, matcher, &claude_expected_handler(event)))
+        .unwrap_or(false)
+}
+
+fn claude_expected_handler(event: &str) -> Value {
+    if event == "SessionStart" {
+        json!({
+            "type": "command",
+            "command": CLAUDE_HOOK_COMMAND,
+            "timeout": 10
+        })
+    } else if event == "SessionEnd" {
+        json!({
+            "type": "command",
+            "command": CLAUDE_SESSION_END_HOOK_COMMAND,
+            "timeout": 15
+        })
+    } else {
+        claude_mcp_hook_handler(event)
+    }
+}
+
+fn claude_required_permissions() -> &'static [&'static str] {
+    &[
+        "mcp__engram__orient",
+        "mcp__engram__memory",
+        "mcp__engram__harness",
+        "mcp__engram__lint",
+        "mcp__engram__graph",
+        "mcp__engram__handoff",
+        "mcp__engram__obligations",
+        "mcp__engram__vault",
+        "mcp__engram__digest",
+        "mcp__engram__repo",
+    ]
+}
+
+fn claude_required_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
+    let mut events = vec![("SessionStart", Some("startup|resume|compact"))];
+    events.extend(claude_mcp_hook_events());
+    events.push(("SessionEnd", None));
+    events
+}
+
+fn claude_mcp_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
+    vec![
+        ("UserPromptSubmit", None),
+        ("PostToolUse", Some("Write|Edit|MultiEdit")),
+        ("PostToolUseFailure", Some("*")),
+        ("Stop", None),
+        ("PreCompact", Some("manual|auto")),
+        ("PostCompact", Some("manual|auto")),
+    ]
+}
+
+fn claude_mcp_hook_handler(event: &str) -> Value {
+    json!({
+        "type": "mcp_tool",
+        "server": "engram",
+        "tool": "harness",
+        "timeout": 10,
+        "input": {
+            "action": "hook_event",
+            "harness": "claude_code",
+            "hook_event_name": event,
+            "session_id": "${session_id}",
+            "cwd": "${cwd}",
+            "transcript_path": "${transcript_path}",
+            "prompt": "${prompt}",
+            "tool_name": "${tool_name}",
+            "tool_error": "${error}",
+            "tool_input_command": "${tool_input.command}",
+            "file_path": "${tool_input.file_path}",
+            "last_assistant_message": "${last_assistant_message}",
+            "compact_summary": "${compact_summary}",
+            "trigger": "${trigger}",
+            "reason": "${reason}",
+            "stop_hook_active": "${stop_hook_active}",
+            "write_policy": "durable",
+            "model_provider": "anthropic",
+            "model": "claude-code",
+            "surface": "claude-code",
+            "actor": "agent"
+        }
+    })
+}
+
 fn resolve_root(root: Option<&Path>) -> IndexResult<PathBuf> {
     match root {
         Some(path) => Ok(path.to_path_buf()),
@@ -587,26 +1662,204 @@ Before ending:
 
 fn claude_session_start_hook() -> String {
     format!(
-        r#"{MARKER_SH}
-#!/usr/bin/env bash
+        r#"#!/usr/bin/env bash
+{MARKER_SH}
 set -euo pipefail
 
-printf '%s\n' \
-  'Engram: start by calling orient with project/cwd/prompt, then keep the memory cursor for changes_since.'
+INPUT=$(cat)
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
+SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty')
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+
+if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
+  CWD="${{CLAUDE_PROJECT_DIR:-}}"
+fi
+
+PROJECT_NAME=""
+if [ -n "$CWD" ] && [ "$CWD" != "null" ]; then
+  PROJECT_NAME=$(basename "$CWD")
+fi
+
+CONTEXT="<engram_session_activation source=\"$SOURCE\" project=\"$PROJECT_NAME\" session_id=\"$SESSION_ID\">
+Engram is the durable Memory OS for this Claude Code session.
+Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, and agent=claude_code.
+Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
+Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
+Before context compaction or session end, update handoff and commit compact durable memory when useful.
+This is a soft contract: resolve obligations or state explicit skip reasons; do not fabricate missing memory.
+</engram_session_activation>"
+
+CONTEXT_JSON=$(printf '%s' "$CONTEXT" | jq -Rs .)
+
+cat <<EOF
+{{
+  "continue": true,
+  "systemMessage": $CONTEXT_JSON
+}}
+EOF
 "#
     )
 }
 
 fn claude_stop_nudge_hook() -> String {
     format!(
-        r#"{MARKER_SH}
-#!/usr/bin/env bash
+        r#"#!/usr/bin/env bash
+{MARKER_SH}
 set -euo pipefail
 
-printf '%s\n' \
-  'Engram: before final response or context compaction, check changes_since, update handoff, and resolve or explicitly skip open obligations.'
+INPUT=$(cat)
+STOP_HOOK_ACTIVE=$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false')
+
+if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
+  cat <<'EOF'
+{{
+  "continue": true,
+  "systemMessage": "Engram final-response check already ran for this Stop turn."
+}}
+EOF
+  exit 0
+fi
+
+cat <<'EOF'
+{{
+  "continue": true,
+  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+}}
+EOF
 "#
     )
+}
+
+fn claude_session_end_hook() -> String {
+    let body = r#"set -euo pipefail
+
+if ! command -v jq >/dev/null 2>&1; then
+  printf '%s\n' '{"continue":true,"systemMessage":"Engram SessionEnd hook skipped: jq is unavailable."}'
+  exit 0
+fi
+
+fallback() {
+  local message="$1"
+  jq -n --arg message "$message" '{continue: true, systemMessage: $message}'
+}
+
+if ! command -v curl >/dev/null 2>&1; then
+  fallback "Engram SessionEnd hook skipped: curl is unavailable."
+  exit 0
+fi
+
+INPUT=$(cat)
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
+TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
+REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty')
+WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "durable"')
+
+if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
+  CWD="${CLAUDE_PROJECT_DIR:-}"
+fi
+
+PORT_FILE="${ENGRAM_DAEMON_PORT_FILE:-$HOME/.engram/daemon.port}"
+if [ ! -r "$PORT_FILE" ]; then
+  fallback "Engram SessionEnd handoff skipped: daemon port file was not found."
+  exit 0
+fi
+
+PORT=$(tr -d '[:space:]' < "$PORT_FILE")
+if [ -z "$PORT" ]; then
+  fallback "Engram SessionEnd handoff skipped: daemon port file was empty."
+  exit 0
+fi
+
+MCP_URL="http://127.0.0.1:${PORT}/mcp"
+HEADERS=$(mktemp)
+trap 'rm -f "$HEADERS"' EXIT
+
+INIT_PAYLOAD=$(jq -nc '{jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2024-11-05",capabilities:{},clientInfo:{name:"engram-claude-session-end-hook",version:"1.0"}}}')
+if ! curl -sS --max-time 5 -D "$HEADERS" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -X POST "$MCP_URL" -d "$INIT_PAYLOAD" >/dev/null; then
+  fallback "Engram SessionEnd handoff skipped: could not initialize MCP session with daemon."
+  exit 0
+fi
+
+MCP_SESSION_ID=$(awk 'tolower($1)=="mcp-session-id:" {print $2}' "$HEADERS" | tr -d '\r')
+if [ -z "$MCP_SESSION_ID" ]; then
+  fallback "Engram SessionEnd handoff skipped: daemon did not return an MCP session id."
+  exit 0
+fi
+
+curl -sS --max-time 5 -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "mcp-session-id: $MCP_SESSION_ID" -X POST "$MCP_URL" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null || true
+
+CALL_PAYLOAD=$(jq -nc \
+  --arg session_id "$SESSION_ID" \
+  --arg cwd "$CWD" \
+  --arg transcript_path "$TRANSCRIPT_PATH" \
+  --arg reason "$REASON" \
+  --arg write_policy "$WRITE_POLICY" \
+  '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"harness",arguments:{action:"hook_event",harness:"claude_code",hook_event_name:"SessionEnd",session_id:$session_id,cwd:$cwd,transcript_path:$transcript_path,reason:$reason,write_policy:$write_policy,model_provider:"anthropic",model:"claude-code",surface:"claude-code",actor:"agent"}}}')
+
+if ! CALL_RESPONSE=$(curl -sS --max-time 10 -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "mcp-session-id: $MCP_SESSION_ID" -X POST "$MCP_URL" -d "$CALL_PAYLOAD"); then
+  fallback "Engram SessionEnd handoff skipped: harness hook_event call failed."
+  exit 0
+fi
+
+HOOK_JSON=$(printf '%s' "$CALL_RESPONSE" | sed -n 's/^data: //p' | jq -rs -r 'map(select(type=="object" and (.result? != null)))[0].result.content[0].text // ""' 2>/dev/null || true)
+if [ -z "$HOOK_JSON" ] || ! printf '%s' "$HOOK_JSON" | jq -e . >/dev/null 2>&1; then
+  fallback "Engram SessionEnd handoff attempted, but daemon returned an unreadable hook response."
+  exit 0
+fi
+
+printf '%s\n' "$HOOK_JSON"
+"#;
+
+    format!("#!/usr/bin/env bash\n{MARKER_SH}\n{body}")
+}
+
+fn claude_settings_snippet() -> String {
+    serde_json::to_string_pretty(&json!({
+        "permissions": {
+            "allow": claude_required_permissions()
+        },
+        "hooks": {
+            "SessionStart": [{
+                "matcher": "startup|resume|compact",
+                "hooks": [{
+                    "type": "command",
+                    "command": CLAUDE_HOOK_COMMAND,
+                    "timeout": 10
+                }]
+            }],
+            "UserPromptSubmit": [{
+                "hooks": [claude_mcp_hook_handler("UserPromptSubmit")]
+            }],
+            "PostToolUse": [{
+                "matcher": "Write|Edit|MultiEdit",
+                "hooks": [claude_mcp_hook_handler("PostToolUse")]
+            }],
+            "PostToolUseFailure": [{
+                "matcher": "*",
+                "hooks": [claude_mcp_hook_handler("PostToolUseFailure")]
+            }],
+            "Stop": [{
+                "hooks": [claude_mcp_hook_handler("Stop")]
+            }],
+            "PreCompact": [{
+                "matcher": "manual|auto",
+                "hooks": [claude_mcp_hook_handler("PreCompact")]
+            }],
+            "PostCompact": [{
+                "matcher": "manual|auto",
+                "hooks": [claude_mcp_hook_handler("PostCompact")]
+            }],
+            "SessionEnd": [{
+                "hooks": [{
+                    "type": "command",
+                    "command": CLAUDE_SESSION_END_HOOK_COMMAND,
+                    "timeout": 15
+                }]
+            }]
+        }
+    }))
+    .expect("Claude settings snippet should serialize")
 }
 
 fn codex_memory_session_skill() -> String {
@@ -1153,5 +2406,279 @@ mod tests {
             ".cursor/skills/engram-memory-session/SKILL.md"
         );
         assert!(adapters[0].contents.contains("writer_harness=cursor"));
+    }
+
+    #[test]
+    fn claude_install_merges_settings_and_is_ready() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join(".claude")).unwrap();
+        let stale_session_end_handler = claude_mcp_hook_handler("SessionEnd");
+        fs::write(
+            root.path().join(".claude/settings.json"),
+            serde_json::to_string(&serde_json::json!({
+                "hooks": {
+                    "UserPromptSubmit": [{
+                        "hooks": [{
+                            "type": "command",
+                            "command": "existing"
+                        }]
+                    }],
+                    "SessionEnd": [{
+                        "hooks": [stale_session_end_handler]
+                    }]
+                },
+                "permissions": {
+                    "allow": ["mcp__engram__search"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let service = HarnessService::new();
+        let report = service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                },
+            )
+            .unwrap();
+
+        assert!(report
+            .written
+            .iter()
+            .any(|file| file.name == "claude-settings-merge"));
+        let settings = fs::read_to_string(root.path().join(".claude/settings.json")).unwrap();
+        assert!(settings.contains("mcp__engram__orient"));
+        assert!(settings.contains("\"PostToolUseFailure\""));
+        assert!(settings.contains("existing"));
+        let settings_json: Value = serde_json::from_str(&settings).unwrap();
+        let session_end_hooks = settings_json
+            .pointer("/hooks/SessionEnd")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert!(session_end_hooks.iter().any(|group| {
+            group
+                .get("hooks")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|hook| {
+                    hook.get("type").and_then(Value::as_str) == Some("command")
+                        && hook.get("command").and_then(Value::as_str)
+                            == Some(CLAUDE_SESSION_END_HOOK_COMMAND)
+                })
+        }));
+        assert!(!session_end_hooks.iter().any(|group| {
+            group
+                .get("hooks")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|hook| hook.get("type").and_then(Value::as_str) == Some("mcp_tool"))
+        }));
+        let session_start_hook =
+            fs::read_to_string(root.path().join(".claude/hooks/engram-session-start.sh")).unwrap();
+        assert!(session_start_hook.contains("\"systemMessage\""));
+        assert!(!session_start_hook.contains("hookSpecificOutput"));
+        let session_end_hook =
+            fs::read_to_string(root.path().join(".claude/hooks/engram-session-end.sh")).unwrap();
+        assert!(session_end_hook.contains("daemon.port"));
+        assert!(session_end_hook.contains("SessionEnd"));
+
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+        assert!(status.ready, "{:?}", status.warnings);
+    }
+
+    #[test]
+    fn adopt_user_owned_hook_backs_up_and_replaces_file() {
+        let root = tempfile::tempdir().unwrap();
+        let hook = root.path().join(".claude/hooks/engram-session-start.sh");
+        fs::create_dir_all(hook.parent().unwrap()).unwrap();
+        fs::write(&hook, "user-owned hook").unwrap();
+
+        let report = HarnessService::new()
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: true,
+                },
+            )
+            .unwrap();
+
+        assert!(report.written.iter().any(|file| {
+            file.path == hook.display().to_string() && file.message.contains("backup=")
+        }));
+        assert!(fs::read_to_string(&hook).unwrap().contains(MARKER_SH));
+        assert!(root
+            .path()
+            .join(".claude/hooks/engram-session-start.sh.engram-backup")
+            .exists());
+    }
+
+    #[tokio::test]
+    async fn hook_event_does_not_persist_generic_task_instruction_as_memory() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let memory = crate::memory::MemoryService::new(db);
+        memory.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("You should implement the design and commit it.".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: None,
+                    handoff: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.memory_written, 0);
+    }
+
+    #[tokio::test]
+    async fn hook_event_stop_nudges_without_blocking_when_obligations_are_open() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let memory = crate::memory::MemoryService::new(db.clone());
+        memory.init_schema().await.unwrap();
+        let obligations = crate::obligation::ObligationService::new(db.clone());
+        obligations.init_schema().await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+        let service = HarnessService::new();
+
+        let prompt_outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("Implement the design and commit it".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(prompt_outcome.obligations_written >= 2);
+        assert_eq!(
+            prompt_outcome.response["hookSpecificOutput"]["hookEventName"],
+            "UserPromptSubmit"
+        );
+
+        let stop_outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "Stop".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    stop_hook_active: false,
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!stop_outcome.blocked);
+        assert_eq!(stop_outcome.response["continue"], true);
+        assert!(stop_outcome.response.get("hookSpecificOutput").is_none());
+        assert!(stop_outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("without blocking the user"));
+
+        let active_stop = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "Stop".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    stop_hook_active: true,
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!active_stop.blocked);
+        assert_eq!(active_stop.response["continue"], true);
+        assert!(active_stop.response.get("hookSpecificOutput").is_none());
+        assert!(active_stop.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("open_obligations="));
+    }
+
+    #[tokio::test]
+    async fn hook_event_failed_tool_writes_memory_and_obligation() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let memory = crate::memory::MemoryService::new(db.clone());
+        memory.init_schema().await.unwrap();
+        let obligations = crate::obligation::ObligationService::new(db.clone());
+        obligations.init_schema().await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "PostToolUseFailure".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("mcp__engram__memory".to_string()),
+                    tool_error: Some("invalid type: string, expected struct".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.memory_written, 1);
+        assert!(outcome.obligations_written >= 1);
+        assert_eq!(outcome.response["continue"], true);
+        assert!(outcome.response.get("hookSpecificOutput").is_none());
+        assert!(outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("memory_written=1"));
     }
 }

@@ -29,11 +29,12 @@ use engram_index::{
     DocumentOrphanQuarantineReviewOptions, DocumentOrphanQuarantineReviewPrioritizationOptions,
     DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
     DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
-    GraphService, HandoffService, HarnessService, KnowledgeService, LintOptions, LintService,
-    MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
-    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService, OrientInput,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
-    SearchOptions, SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
+    GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
+    HarnessService, KnowledgeService, LintOptions, LintService, MemoryChangesSinceOptions,
+    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, ObligationDetectOptions,
+    ObligationService, OrientInput, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
+    SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7262,8 +7263,10 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
 /// Request for Memory OS harness policy and adapter operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct HarnessRequest {
-    /// Action: status, doctor, render_policy, render_adapter, install
-    #[schemars(description = "Action: status, doctor, render_policy, render_adapter, install")]
+    /// Action: status, doctor, render_policy, render_adapter, install, hook_event
+    #[schemars(
+        description = "Action: status, doctor, render_policy, render_adapter, install, hook_event"
+    )]
     pub action: String,
     /// Harness name: claude_code, codex, gemini_cli, cursor, or generic
     #[schemars(description = "Harness name: claude_code, codex, gemini_cli, cursor, or generic")]
@@ -7275,13 +7278,55 @@ pub struct HarnessRequest {
     pub adapter: Option<String>,
     /// Actually write adapter files. Defaults to false.
     pub write: Option<bool>,
+    /// Back up and replace user-owned adapters when write=true.
+    pub adopt_user_owned: Option<bool>,
     /// MCP tool names observed by the client for doctor/status checks.
     #[serde(default)]
     pub observed_mcp_tools: Vec<String>,
+    /// Claude hook event name for hook_event.
+    pub hook_event_name: Option<String>,
+    /// Claude session ID for hook_event.
+    pub session_id: Option<String>,
+    /// Current working directory for hook_event.
+    pub cwd: Option<String>,
+    /// Transcript path for hook_event.
+    pub transcript_path: Option<String>,
+    /// Submitted user prompt for hook_event.
+    pub prompt: Option<String>,
+    /// Tool name for hook_event.
+    pub tool_name: Option<String>,
+    /// Tool error for hook_event.
+    pub tool_error: Option<String>,
+    /// Tool input command for hook_event.
+    pub tool_input_command: Option<String>,
+    /// File path touched by a tool for hook_event.
+    pub file_path: Option<String>,
+    /// Last assistant message for Stop hooks.
+    pub last_assistant_message: Option<String>,
+    /// Compact summary for PostCompact hooks.
+    pub compact_summary: Option<String>,
+    /// Hook trigger or matcher value.
+    pub trigger: Option<String>,
+    /// Session end reason or permission reason.
+    pub reason: Option<String>,
+    /// Whether Stop is already active.
+    pub stop_hook_active: Option<String>,
+    /// Hook write policy: durable or nudge.
+    pub write_policy: Option<String>,
+    /// Project scope override.
+    pub project: Option<String>,
+    /// Writer model provider.
+    pub model_provider: Option<String>,
+    /// Writer model.
+    pub model: Option<String>,
+    /// Surface label.
+    pub surface: Option<String>,
+    /// Actor label.
+    pub actor: Option<String>,
 }
 
 /// Manage Memory OS harness policy and local adapters.
-pub async fn harness_new(_state: &ToolState, request: HarnessRequest) -> Result<String, String> {
+pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<String, String> {
     debug!("harness: action={}", request.action);
 
     let service = HarnessService::new();
@@ -7316,15 +7361,75 @@ pub async fn harness_new(_state: &ToolState, request: HarnessRequest) -> Result<
         }
         "install" => {
             let report = service
-                .install(harness, root, request.write.unwrap_or(false))
+                .install_with_options(
+                    harness,
+                    root,
+                    HarnessInstallOptions {
+                        write: request.write.unwrap_or(false),
+                        adopt_user_owned: request.adopt_user_owned.unwrap_or(false),
+                    },
+                )
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
         }
+        "hook_event" | "hook" => {
+            let memory_guard = state.memory_service.read().await;
+            let obligation_guard = state.obligation_service.read().await;
+            let handoff_guard = state.handoff_service.read().await;
+            let event = HarnessHookEvent {
+                harness,
+                hook_event_name: request
+                    .hook_event_name
+                    .clone()
+                    .unwrap_or_else(|| "Unknown".to_string()),
+                session_id: clean_hook_string(request.session_id),
+                cwd: clean_hook_string(request.cwd),
+                transcript_path: clean_hook_string(request.transcript_path),
+                prompt: clean_hook_string(request.prompt),
+                tool_name: clean_hook_string(request.tool_name),
+                tool_error: clean_hook_string(request.tool_error),
+                tool_input_command: clean_hook_string(request.tool_input_command),
+                file_path: clean_hook_string(request.file_path),
+                last_assistant_message: clean_hook_string(request.last_assistant_message),
+                compact_summary: clean_hook_string(request.compact_summary),
+                trigger: clean_hook_string(request.trigger),
+                reason: clean_hook_string(request.reason),
+                stop_hook_active: request
+                    .stop_hook_active
+                    .as_deref()
+                    .map(|value| value.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false),
+                write_policy: request.write_policy.clone(),
+                project: clean_hook_string(request.project),
+                model_provider: clean_hook_string(request.model_provider),
+                model: clean_hook_string(request.model),
+                surface: clean_hook_string(request.surface),
+                actor: clean_hook_string(request.actor),
+            };
+            let outcome = service
+                .handle_hook_event(
+                    event,
+                    HarnessHookServices {
+                        memory: memory_guard.as_ref(),
+                        obligations: obligation_guard.as_ref(),
+                        handoff: handoff_guard.as_ref(),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&outcome.response).map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: status, doctor, render_policy, render_adapter, install",
+            "Unknown action: '{}'. Valid actions: status, doctor, render_policy, render_adapter, install, hook_event",
             request.action
         )),
     }
+}
+
+fn clean_hook_string(value: Option<String>) -> Option<String> {
+    value.map(|value| value.trim().to_string()).filter(|value| {
+        !value.is_empty() && value != "null" && !(value.starts_with("${") && value.ends_with('}'))
+    })
 }
 
 // =============================================================================
