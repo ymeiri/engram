@@ -21,6 +21,8 @@ pub enum SearchResultSource {
     Document,
     /// Tool usage context match
     ToolUsage,
+    /// Memory OS item match
+    Memory,
 }
 
 impl std::fmt::Display for SearchResultSource {
@@ -32,6 +34,7 @@ impl std::fmt::Display for SearchResultSource {
             Self::SessionEvent => write!(f, "session_event"),
             Self::Document => write!(f, "document"),
             Self::ToolUsage => write!(f, "tool_usage"),
+            Self::Memory => write!(f, "memory"),
         }
     }
 }
@@ -95,6 +98,8 @@ pub enum SearchLayer {
     Document,
     /// Tool usage history
     ToolUsage,
+    /// Memory OS items
+    Memory,
 }
 
 impl SearchLayer {
@@ -107,6 +112,7 @@ impl SearchLayer {
             "session_event" | "session" => Some(Self::SessionEvent),
             "document" | "doc" => Some(Self::Document),
             "tool_usage" | "tool" => Some(Self::ToolUsage),
+            "memory" | "memory_item" | "memoryitem" => Some(Self::Memory),
             _ => None,
         }
     }
@@ -120,6 +126,7 @@ impl SearchLayer {
             Self::SessionEvent,
             Self::Document,
             Self::ToolUsage,
+            Self::Memory,
         ]
     }
 }
@@ -133,6 +140,7 @@ impl std::fmt::Display for SearchLayer {
             Self::SessionEvent => write!(f, "session_event"),
             Self::Document => write!(f, "document"),
             Self::ToolUsage => write!(f, "tool_usage"),
+            Self::Memory => write!(f, "memory"),
         }
     }
 }

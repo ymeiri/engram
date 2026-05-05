@@ -45,6 +45,7 @@ pub mod repository;
 pub mod search;
 pub mod service;
 pub mod session;
+pub mod telemetry;
 pub mod tool_intel;
 pub mod vault;
 pub mod version;
@@ -94,7 +95,7 @@ pub use repository::{
     RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus,
     RepositoryMigrationSourceKind, RepositoryReferenceKind, RepositoryService,
 };
-pub use search::{SearchService, SearchStats};
+pub use search::{SearchOptions, SearchService, SearchStats};
 pub use service::{
     DocumentOrphanCleanupAction, DocumentOrphanCleanupExecutionAction,
     DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupExecutionReport,
@@ -114,6 +115,7 @@ pub use service::{
     DocumentService, DocumentStats,
 };
 pub use session::SessionService;
+pub use telemetry::TelemetryService;
 pub use tool_intel::{ToolIntelService, ToolUsageInfo};
 pub use vault::{
     MemoryVaultExport, MemoryVaultInit, MemoryVaultPage, MemoryVaultStatus, RepositoryVaultSnapshot,

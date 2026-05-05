@@ -1,0 +1,343 @@
+//! Integration tests for brain-harness telemetry and agent feedback.
+
+use engram_core::memory::{
+    ClaimOrigin, Harness, MemoryItem, MemoryKind, MemoryScope, ModelIdentity, WriterProvenance,
+};
+use engram_core::telemetry::{
+    AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
+};
+use engram_index::{
+    MemoryChangesSinceOptions, MemoryService, OrientInput, SearchService, TelemetryService,
+};
+use engram_mcp::tools::{self, SearchRequest, TelemetryRequest, ToolState};
+use engram_store::{connect_and_init, StoreConfig};
+use serde_json::Value;
+
+async fn setup_services() -> (TelemetryService, MemoryService) {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+
+    let telemetry = TelemetryService::new(db.clone());
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+
+    let memory = MemoryService::new(db);
+    memory
+        .init_schema()
+        .await
+        .expect("failed to initialize memory schema");
+
+    (telemetry, memory)
+}
+
+fn writer() -> WriterProvenance {
+    WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-5.5"))
+        .with_surface("telemetry-test")
+}
+
+fn telemetry_request(action: &str) -> TelemetryRequest {
+    TelemetryRequest {
+        action: action.to_string(),
+        trace_id: None,
+        operation: None,
+        intent: None,
+        query: None,
+        project: None,
+        agent: None,
+        session_id: None,
+        returned_memory_ids: Vec::new(),
+        returned_result_ids: Vec::new(),
+        latency_ms: None,
+        warnings: Vec::new(),
+        used_memory_ids: Vec::new(),
+        rejected_memory_ids: Vec::new(),
+        used_result_ids: Vec::new(),
+        rejected_result_ids: Vec::new(),
+        stale_memory_ids: Vec::new(),
+        wrong_scope_memory_ids: Vec::new(),
+        missing_context: None,
+        usefulness_score: None,
+        correctness_score: None,
+        noise_score: None,
+        suggested_memory_changes: None,
+        note: None,
+        limit: None,
+    }
+}
+
+fn parse_json(response: &str) -> Value {
+    serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+#[tokio::test]
+async fn trace_and_feedback_are_persisted_and_aggregated_by_intent() {
+    let (telemetry, _) = setup_services().await;
+    let memory_id = engram_core::Id::new();
+    let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+        .with_agent(Some("codex".to_string()))
+        .with_intent(Some(BrainHarnessIntent::ResumeSession))
+        .with_query(Some("continue telemetry spike".to_string()))
+        .with_project(Some("engram".to_string()))
+        .with_returned_memory_ids(vec![memory_id])
+        .with_latency_ms(42);
+
+    let trace = telemetry
+        .record_trace(trace)
+        .await
+        .expect("trace should be recorded");
+    let stored = telemetry
+        .get_trace(&trace.id)
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+    assert_eq!(stored.intent, Some(BrainHarnessIntent::ResumeSession));
+    assert_eq!(stored.returned_memory_ids, vec![memory_id]);
+
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = vec![memory_id];
+    feedback.usefulness_score = Some(5);
+    feedback.correctness_score = Some(4);
+    feedback.noise_score = Some(1);
+    feedback.note = Some("The retrieved preference was useful.".to_string());
+
+    let feedback = telemetry
+        .submit_feedback(feedback)
+        .await
+        .expect("feedback should be accepted");
+    let stored_feedback = telemetry
+        .list_feedback_for_trace(&trace.id)
+        .await
+        .expect("feedback lookup should run");
+    assert_eq!(stored_feedback.len(), 1);
+    assert_eq!(stored_feedback[0].id, feedback.id);
+
+    let stats = telemetry
+        .stats_by_intent()
+        .await
+        .expect("stats should aggregate");
+    let resume = stats
+        .iter()
+        .find(|item| item.intent == "resume_session")
+        .expect("resume_session stats should exist");
+    assert_eq!(resume.trace_count, 1);
+    assert_eq!(resume.feedback_count, 1);
+    assert_eq!(resume.used_memory_count, 1);
+    assert_eq!(resume.avg_latency_ms, Some(42.0));
+    assert_eq!(resume.avg_usefulness_score, Some(5.0));
+    assert_eq!(resume.avg_correctness_score, Some(4.0));
+    assert_eq!(resume.avg_noise_score, Some(1.0));
+}
+
+#[tokio::test]
+async fn feedback_rejects_scores_outside_one_to_five() {
+    let (telemetry, _) = setup_services().await;
+    let trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_query(Some("memory telemetry".to_string()))
+                .with_intent(Some(BrainHarnessIntent::AnswerQuestion)),
+        )
+        .await
+        .expect("trace should be recorded");
+
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.note = Some("bad score".to_string());
+    feedback.usefulness_score = Some(6);
+
+    let err = telemetry.submit_feedback(feedback).await.unwrap_err();
+    assert!(err.to_string().contains("usefulness_score"));
+}
+
+#[tokio::test]
+async fn orient_with_intent_emits_trace_for_agent_feedback() {
+    let (telemetry, memory) = setup_services().await;
+    let preference = MemoryItem::new(
+        MemoryKind::Preference,
+        "Prefer intent-aware telemetry",
+        "Correlate retrieval feedback with the agent intent.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    );
+    let preference = memory
+        .capture_memory(preference)
+        .await
+        .expect("memory should be captured");
+
+    let packet = memory
+        .orient(OrientInput {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("continue telemetry implementation".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::ImplementChange),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+
+    let trace_id = packet.trace_id.expect("orient should return trace_id");
+    let trace = telemetry
+        .get_trace(&trace_id)
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+
+    assert_eq!(packet.intent, Some(BrainHarnessIntent::ImplementChange));
+    assert_eq!(trace.operation, BrainHarnessOperation::Orient);
+    assert_eq!(trace.intent, Some(BrainHarnessIntent::ImplementChange));
+    assert_eq!(trace.returned_memory_ids, vec![preference.id]);
+    assert_eq!(trace.project.as_deref(), Some("engram"));
+}
+
+#[tokio::test]
+async fn changes_since_with_intent_emits_trace_for_agent_feedback() {
+    let (telemetry, memory) = setup_services().await;
+    let cursor = memory
+        .current_cursor()
+        .await
+        .expect("cursor should be created");
+    let decision = MemoryItem::new(
+        MemoryKind::Decision,
+        "Track changes_since telemetry",
+        "changes_since should produce a trace for agent feedback.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    );
+    let decision = memory
+        .capture_memory(decision)
+        .await
+        .expect("memory should be captured");
+
+    let changes = memory
+        .changes_since_with_options(
+            cursor,
+            Some(10),
+            MemoryChangesSinceOptions {
+                project: Some("engram".to_string()),
+                query: Some("telemetry trace".to_string()),
+                intent: Some(BrainHarnessIntent::ReviewMemory),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("changes_since should work");
+
+    let trace_id = changes
+        .trace_id
+        .expect("changes_since should return trace_id");
+    let trace = telemetry
+        .get_trace(&trace_id)
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+
+    assert_eq!(trace.operation, BrainHarnessOperation::ChangesSince);
+    assert_eq!(trace.intent, Some(BrainHarnessIntent::ReviewMemory));
+    assert_eq!(trace.returned_memory_ids, vec![decision.id]);
+}
+
+#[tokio::test]
+async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("search".to_string());
+    trace_request.intent = Some("answer_question".to_string());
+    trace_request.query = Some("how does telemetry work?".to_string());
+    trace_request.agent = Some("codex".to_string());
+    trace_request.returned_result_ids = vec!["result-1".to_string()];
+    trace_request.latency_ms = Some(18);
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id);
+    feedback_request.agent = Some("codex".to_string());
+    feedback_request.used_result_ids = vec!["result-1".to_string()];
+    feedback_request.usefulness_score = Some(4);
+    feedback_request.correctness_score = Some(5);
+    feedback_request.noise_score = Some(1);
+    feedback_request.note = Some("The result answered the question.".to_string());
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    assert_eq!(feedback_json["feedback"]["used_result_ids"][0], "result-1");
+
+    let stats_response = tools::telemetry_new(&state, telemetry_request("stats_by_intent"))
+        .await
+        .expect("stats should work");
+    let stats_json = parse_json(&stats_response);
+    assert_eq!(stats_json["stats"][0]["intent"], "answer_question");
+    assert_eq!(stats_json["stats"][0]["trace_count"], 1);
+    assert_eq!(stats_json["stats"][0]["feedback_count"], 1);
+}
+
+#[tokio::test]
+async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db.clone());
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_search(SearchService::new(db)).await;
+    state.init_telemetry(telemetry.clone()).await;
+
+    let response = tools::search(
+        &state,
+        SearchRequest {
+            query: "intent aware telemetry".to_string(),
+            limit: 5,
+            min_score: Some(0.0),
+            layers: None,
+            intent: Some("answer_question".to_string()),
+            agent: Some("codex".to_string()),
+            session_id: None,
+            project: Some("engram".to_string()),
+            cwd: None,
+        },
+    )
+    .await
+    .expect("search should work");
+
+    let json = parse_json(&response);
+    let trace_id = json["trace_id"].as_str().expect("trace_id should be set");
+    let trace = telemetry
+        .get_trace(&engram_core::Id::parse(trace_id).unwrap())
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+
+    assert_eq!(trace.operation, BrainHarnessOperation::Search);
+    assert_eq!(trace.intent, Some(BrainHarnessIntent::AnswerQuestion));
+    assert_eq!(trace.query.as_deref(), Some("intent aware telemetry"));
+    assert_eq!(trace.project.as_deref(), Some("engram"));
+}

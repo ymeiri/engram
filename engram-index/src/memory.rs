@@ -25,10 +25,12 @@ use engram_core::memory::{
 };
 use engram_core::repository::{MonorepoComponent, ProjectRepositoryLink, RepositoryContext};
 use engram_core::session::{Event, EventType};
-use engram_store::{Db, MemoryRepo, RepositoryRepo, SessionRepo};
+use engram_core::telemetry::{BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace};
+use engram_store::{Db, MemoryRepo, RepositoryRepo, SessionRepo, TelemetryRepo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
+use std::time::Instant;
 use time::OffsetDateTime;
 use tracing::info;
 
@@ -60,6 +62,8 @@ pub struct MemoryChangesSinceOptions {
     pub cwd: Option<String>,
     /// Optional prompt/query used for keyword scoring.
     pub query: Option<String>,
+    /// Caller intent for telemetry correlation.
+    pub intent: Option<BrainHarnessIntent>,
 }
 
 /// Memory changes visible after a cursor.
@@ -69,6 +73,8 @@ pub struct MemoryChanges {
     pub since: MemoryCursor,
     /// Cursor to use for the next poll.
     pub next_cursor: MemoryCursor,
+    /// Trace ID for later telemetry feedback.
+    pub trace_id: Option<Id>,
     /// Memory items updated after the cursor.
     pub items: Vec<MemoryItem>,
     /// Knowledge commits created after the cursor.
@@ -128,6 +134,8 @@ pub struct OrientInput {
     pub project: Option<String>,
     /// Agent/harness name.
     pub agent: Option<String>,
+    /// Caller intent for telemetry correlation.
+    pub intent: Option<BrainHarnessIntent>,
     /// Include recent knowledge commits.
     pub include_recent_commits: bool,
     /// Maximum memory items per grouped bucket.
@@ -204,6 +212,10 @@ pub struct OrientationPacket {
     pub cwd: Option<String>,
     /// Agent/harness name.
     pub agent: Option<String>,
+    /// Caller intent, when supplied.
+    pub intent: Option<BrainHarnessIntent>,
+    /// Trace ID for later telemetry feedback.
+    pub trace_id: Option<Id>,
     /// Prompt that triggered orientation.
     pub prompt: Option<String>,
     /// Human-readable scope label.
@@ -238,6 +250,7 @@ pub struct OrientationPacket {
 #[derive(Clone)]
 pub struct MemoryService {
     repo: MemoryRepo,
+    telemetry_repo: TelemetryRepo,
     repository_repo: RepositoryRepo,
     session_repo: SessionRepo,
     migration_service: MigrationService,
@@ -248,6 +261,7 @@ impl MemoryService {
     pub fn new(db: Db) -> Self {
         Self {
             repo: MemoryRepo::new(db.clone()),
+            telemetry_repo: TelemetryRepo::new(db.clone()),
             repository_repo: RepositoryRepo::new(db.clone()),
             session_repo: SessionRepo::new(db.clone()),
             migration_service: MigrationService::new(db),
@@ -257,6 +271,7 @@ impl MemoryService {
     /// Initialize Memory OS schema.
     pub async fn init_schema(&self) -> IndexResult<()> {
         self.repo.init_schema().await?;
+        self.telemetry_repo.init_schema().await?;
         self.repository_repo.init_schema().await?;
         self.session_repo.init_schema().await?;
         Ok(())
@@ -531,6 +546,7 @@ impl MemoryService {
         limit: Option<usize>,
         options: MemoryChangesSinceOptions,
     ) -> IndexResult<MemoryChanges> {
+        let started = Instant::now();
         let mut items = self
             .repo
             .list_memory_items_updated_after(cursor.timestamp, None)
@@ -570,12 +586,29 @@ impl MemoryService {
             commits.len()
         );
 
+        let returned_memory_ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
+        let trace = BrainHarnessTrace::new(BrainHarnessOperation::ChangesSince)
+            .with_intent(options.intent.clone())
+            .with_query(options.query.clone())
+            .with_project(options.project.clone())
+            .with_returned_memory_ids(returned_memory_ids.clone())
+            .with_returned_result_ids(
+                returned_memory_ids
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .chain(commits.iter().map(|commit| commit.id.to_string()))
+                    .collect(),
+            )
+            .with_latency_ms(started.elapsed().as_millis() as u64);
+        self.telemetry_repo.save_trace(&trace).await?;
+
         Ok(MemoryChanges {
             since: cursor,
             next_cursor: MemoryCursor {
                 commit_id: next_commit_id,
                 timestamp: next_timestamp,
             },
+            trace_id: Some(trace.id),
             items,
             commits,
             item_relevance,
@@ -593,6 +626,7 @@ impl MemoryService {
 
     /// Build the first-version orientation context packet.
     pub async fn orient(&self, input: OrientInput) -> IndexResult<OrientationPacket> {
+        let started = Instant::now();
         let limit = input.limit.unwrap_or(20);
         let cursor = self.current_cursor().await?;
         let active = self.list_active_memory(None).await?;
@@ -675,10 +709,34 @@ impl MemoryService {
             recommended_actions: &recommended_actions,
         });
 
+        let returned_memory_ids = returned_orientation_memory_ids(&[
+            &active_decisions,
+            &active_rules,
+            &preferences,
+            &limitations,
+            &relevant_review,
+        ]);
+        let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_agent(input.agent.clone())
+            .with_intent(input.intent.clone())
+            .with_query(input.prompt.clone())
+            .with_project(effective_project.map(str::to_string))
+            .with_returned_memory_ids(returned_memory_ids.clone())
+            .with_returned_result_ids(
+                returned_memory_ids
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
+            )
+            .with_latency_ms(started.elapsed().as_millis() as u64);
+        self.telemetry_repo.save_trace(&trace).await?;
+
         Ok(OrientationPacket {
             project: input.project,
             cwd: input.cwd,
             agent: input.agent,
+            intent: input.intent,
+            trace_id: Some(trace.id),
             prompt: input.prompt,
             scope,
             resolution,
@@ -1327,6 +1385,13 @@ fn append_memory_section(lines: &mut Vec<String>, title: &str, items: &[MemoryIt
     }
 }
 
+fn returned_orientation_memory_ids(groups: &[&[MemoryItem]]) -> Vec<Id> {
+    groups
+        .iter()
+        .flat_map(|items| items.iter().map(|item| item.id))
+        .collect()
+}
+
 fn append_string_section(lines: &mut Vec<String>, title: &str, items: &[String]) {
     lines.push(String::new());
     lines.push(format!("## {title}"));
@@ -1693,6 +1758,7 @@ mod tests {
                 project: Some("engram".to_string()),
                 cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
                 agent: Some("codex".to_string()),
+                intent: None,
                 prompt: Some("continue".to_string()),
                 include_recent_commits: false,
                 limit: Some(10),

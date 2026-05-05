@@ -6,7 +6,7 @@ use crate::tools::{self, ToolState};
 use engram_index::{
     CoordinationService, DocumentService, EntityService, GraphService, HandoffService,
     KnowledgeService, LintService, MemoryService, ObligationService, RepositoryService,
-    SearchService, SessionService, ToolIntelService, WorkService,
+    SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use rmcp::{
     handler::server::{tool::ToolRouter, wrapper::Parameters},
@@ -50,6 +50,7 @@ pub use crate::tools::{
     // Layer 2: Session tools
     SessionRequestNew,
     SessionStatsRequest,
+    TelemetryRequest,
     // Layer 4: Tool intelligence tools
     ToolIntelStatsRequest,
     ToolRequestNew,
@@ -149,6 +150,11 @@ impl EngramServer {
     /// Initialize the server with a search service.
     pub async fn init_search(&self, service: SearchService) {
         self.state.init_search(service).await;
+    }
+
+    /// Initialize the server with a brain harness telemetry service.
+    pub async fn init_telemetry(&self, service: TelemetryService) {
+        self.state.init_telemetry(service).await;
     }
 
     /// Start the server with stdio transport.
@@ -507,6 +513,17 @@ impl EngramServer {
         to_call_result(tools::orient(&self.state, params.0).await)
     }
 
+    /// Manage brain-harness telemetry traces and agent feedback.
+    #[tool(
+        description = "Manage brain-harness telemetry and agent feedback: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent. Feedback should reference a trace_id returned by orient/search."
+    )]
+    pub async fn telemetry(
+        &self,
+        params: Parameters<TelemetryRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        to_call_result(tools::telemetry_new(&self.state, params.0).await)
+    }
+
     /// Manage repository topology and local checkout mapping.
     #[tool(
         description = "Manage repository topology: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply. Use detect with cwd to register a Git checkout; use migration_inventory before migrating legacy repo/path mentions. migration_review_status writes nothing. migration_review_apply defaults to dry-run unless dry_run=false, and write mode requires writer_harness, model_provider, and model unless create_commit=false."
@@ -521,7 +538,7 @@ impl EngramServer {
 
     /// Search across ALL knowledge layers with a single query.
     #[tool(
-        description = "Search across ALL knowledge layers (entities, aliases, observations, session events, documents, tool usages) with a single query. Returns results sorted by relevance score. Use this for broad searches when you don't know which layer contains the information."
+        description = "Search across ALL knowledge layers (memory items, entities, aliases, observations, session events, documents, tool usages) with a single query. Returns results sorted by relevance score. Use this for broad searches when you don't know which layer contains the information."
     )]
     pub async fn search(
         &self,

@@ -40,7 +40,7 @@ pub use repos::{
     DocumentRecoveryCandidateMatch, DocumentRecoveryClass, DocumentRecoverySummary, DocumentRepo,
     EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, MemoryRepo, ObligationRepo,
     ObservationSearchResult, ProjectObservationSearchResult, RepositoryRepo, SessionRepo,
-    TaskObservationSearchResult, ToolIntelStats, ToolRepo, WorkRepo, WorkStats,
+    TaskObservationSearchResult, TelemetryRepo, ToolIntelStats, ToolRepo, WorkRepo, WorkStats,
 };
 
 use surrealdb::engine::any::Any;
@@ -122,6 +122,10 @@ pub async fn init_schema(db: &Db) -> StoreResult<()> {
     // Initialize Memory OS schema
     let memory_repo = MemoryRepo::new(db.clone());
     memory_repo.init_schema().await?;
+
+    // Initialize brain harness telemetry schema
+    let telemetry_repo = TelemetryRepo::new(db.clone());
+    telemetry_repo.init_schema().await?;
 
     // Initialize repository topology schema
     let repository_repo = RepositoryRepo::new(db.clone());

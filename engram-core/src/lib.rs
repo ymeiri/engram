@@ -20,6 +20,7 @@
 //! - [`repository`] - Git repository topology and local checkout mapping
 //! - [`harness`] - Agent harness policy and adapter contracts
 //! - [`obligation`] - Agent-native session obligations
+//! - [`telemetry`] - Brain-harness traces and agent feedback
 //! - [`lint`] - Memory health and migration-safety linting
 //! - [`graph`] - Memory OS graph traversal types
 //! - [`id`] - ID types and generation
@@ -39,6 +40,7 @@ pub mod obligation;
 pub mod repository;
 pub mod search;
 pub mod session;
+pub mod telemetry;
 pub mod tool;
 pub mod work;
 

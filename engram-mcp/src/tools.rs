@@ -17,6 +17,9 @@ use engram_core::obligation::{
 use engram_core::repository::ProjectRepositoryRole;
 use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
+use engram_core::telemetry::{
+    AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
+};
 use engram_core::tool::ToolOutcome;
 use engram_index::{
     CoordinationService, DigestExtractionOptions, DigestExtractionReviewApplyOptions,
@@ -30,7 +33,7 @@ use engram_index::{
     MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
     MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService, OrientInput,
     RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
-    SearchService, SessionService, ToolIntelService, WorkService,
+    SearchOptions, SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -69,6 +72,8 @@ pub struct ToolState {
     pub repository_service: Arc<RwLock<Option<RepositoryService>>>,
     /// The unified search service (cross-layer search).
     pub search_service: Arc<RwLock<Option<SearchService>>>,
+    /// The brain harness telemetry service.
+    pub telemetry_service: Arc<RwLock<Option<TelemetryService>>>,
 }
 
 impl ToolState {
@@ -89,6 +94,7 @@ impl ToolState {
             obligation_service: Arc::new(RwLock::new(None)),
             repository_service: Arc::new(RwLock::new(None)),
             search_service: Arc::new(RwLock::new(None)),
+            telemetry_service: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -173,6 +179,12 @@ impl ToolState {
     /// Initialize with a search service.
     pub async fn init_search(&self, service: SearchService) {
         let mut guard = self.search_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a brain harness telemetry service.
+    pub async fn init_telemetry(&self, service: TelemetryService) {
+        let mut guard = self.telemetry_service.write().await;
         *guard = Some(service);
     }
 }
@@ -3149,7 +3161,7 @@ pub async fn coord_stats(state: &ToolState, _request: CoordStatsRequest) -> Resu
 pub struct SearchRequest {
     /// The search query.
     #[schemars(
-        description = "Search query - searches entity names, descriptions, observations, session events, documents, and tool usages"
+        description = "Search query - searches memory items, entity names, descriptions, observations, session events, documents, and tool usages"
     )]
     pub query: String,
 
@@ -3165,9 +3177,29 @@ pub struct SearchRequest {
 
     /// Filter to specific layers.
     #[schemars(
-        description = "Filter to specific layers: entity, alias, observation, session_event, document, tool_usage"
+        description = "Filter to specific layers: entity, alias, observation, session_event, document, tool_usage, memory"
     )]
     pub layers: Option<Vec<String>>,
+
+    /// Caller intent for telemetry, e.g. answer_question, plan_work, debug_error.
+    #[schemars(description = "Caller intent for telemetry correlation")]
+    pub intent: Option<String>,
+
+    /// Agent/harness name for telemetry.
+    #[schemars(description = "Agent or harness name for telemetry")]
+    pub agent: Option<String>,
+
+    /// Session ID for telemetry correlation.
+    #[schemars(description = "Session ID for telemetry correlation")]
+    pub session_id: Option<String>,
+
+    /// Project name for telemetry correlation.
+    #[schemars(description = "Project name for telemetry correlation")]
+    pub project: Option<String>,
+
+    /// Current working directory for repository-scoped memory filtering.
+    #[schemars(description = "Current working directory for repository-scoped memory filtering")]
+    pub cwd: Option<String>,
 }
 
 fn default_search_limit() -> usize {
@@ -3194,6 +3226,8 @@ pub struct UnifiedSearchResultInfo {
 /// Response from unified search.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SearchResponse {
+    /// Trace ID for later telemetry feedback.
+    pub trace_id: Option<String>,
     /// Search results sorted by score.
     pub results: Vec<UnifiedSearchResultInfo>,
     /// Total number of results.
@@ -3222,15 +3256,40 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
             .collect()
     });
 
+    let started = std::time::Instant::now();
     let results = service
-        .search(
+        .search_with_options(
             &request.query,
             request.limit,
             request.min_score,
             layers.as_deref(),
+            SearchOptions {
+                project: request.project.clone(),
+                cwd: request.cwd.clone(),
+            },
         )
         .await
         .map_err(|e| e.to_string())?;
+
+    let returned_result_ids = results.iter().map(|result| result.id.clone()).collect();
+    let trace_id = record_optional_trace(
+        state,
+        BrainHarnessTrace::new(BrainHarnessOperation::Search)
+            .with_session(
+                request
+                    .session_id
+                    .as_deref()
+                    .map(|id| parse_id(id, "session ID"))
+                    .transpose()?,
+            )
+            .with_agent(request.agent.clone())
+            .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
+            .with_query(Some(request.query.clone()))
+            .with_project(request.project.clone())
+            .with_returned_result_ids(returned_result_ids)
+            .with_latency_ms(started.elapsed().as_millis() as u64),
+    )
+    .await?;
 
     // Count results by layer
     let mut by_layer: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -3239,6 +3298,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
     }
 
     let response = SearchResponse {
+        trace_id: trace_id.map(|id| id.to_string()),
         count: results.len(),
         results: results
             .into_iter()
@@ -3255,6 +3315,225 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
     };
 
     serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+}
+
+async fn record_optional_trace(
+    state: &ToolState,
+    trace: BrainHarnessTrace,
+) -> Result<Option<engram_core::id::Id>, String> {
+    let service_guard = state.telemetry_service.read().await;
+    let Some(service) = service_guard.as_ref() else {
+        return Ok(None);
+    };
+
+    let trace = service
+        .record_trace(trace)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(Some(trace.id))
+}
+
+// =============================================================================
+// Brain Harness Telemetry Tool
+// =============================================================================
+
+/// Request for brain-harness telemetry and agent feedback.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TelemetryRequest {
+    /// Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent
+    #[schemars(
+        description = "Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent"
+    )]
+    pub action: String,
+    /// Trace ID for get_trace, submit_feedback, or list_feedback.
+    pub trace_id: Option<String>,
+    /// Operation for record_trace: orient, search, changes_since, feedback.
+    pub operation: Option<String>,
+    /// Intent for trace correlation: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
+    pub intent: Option<String>,
+    /// Query, prompt, or short operation context.
+    pub query: Option<String>,
+    /// Project scope.
+    pub project: Option<String>,
+    /// Agent or harness label.
+    pub agent: Option<String>,
+    /// Session ID.
+    pub session_id: Option<String>,
+    /// Returned memory IDs for record_trace.
+    #[serde(default)]
+    pub returned_memory_ids: Vec<String>,
+    /// Returned generic result IDs for record_trace.
+    #[serde(default)]
+    pub returned_result_ids: Vec<String>,
+    /// Latency in milliseconds for record_trace.
+    pub latency_ms: Option<u64>,
+    /// Non-fatal operation warnings for record_trace.
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    /// Memory IDs the agent used.
+    #[serde(default)]
+    pub used_memory_ids: Vec<String>,
+    /// Memory IDs the agent rejected.
+    #[serde(default)]
+    pub rejected_memory_ids: Vec<String>,
+    /// Generic result IDs the agent used.
+    #[serde(default)]
+    pub used_result_ids: Vec<String>,
+    /// Generic result IDs the agent rejected.
+    #[serde(default)]
+    pub rejected_result_ids: Vec<String>,
+    /// Memory IDs the agent believes are stale.
+    #[serde(default)]
+    pub stale_memory_ids: Vec<String>,
+    /// Memory IDs the agent believes have wrong scope.
+    #[serde(default)]
+    pub wrong_scope_memory_ids: Vec<String>,
+    /// Context the agent expected but did not receive.
+    pub missing_context: Option<String>,
+    /// Agent-reported usefulness score, 1-5.
+    pub usefulness_score: Option<u8>,
+    /// Agent-reported correctness score, 1-5.
+    pub correctness_score: Option<u8>,
+    /// Agent-reported noise score, 1-5.
+    pub noise_score: Option<u8>,
+    /// Suggested memory changes from the agent.
+    pub suggested_memory_changes: Option<String>,
+    /// Free-form feedback note.
+    pub note: Option<String>,
+    /// Maximum rows for list actions.
+    pub limit: Option<usize>,
+}
+
+/// Manage brain-harness telemetry and agent feedback.
+pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Result<String, String> {
+    debug!("telemetry_new: action={}", request.action);
+
+    let service_guard = state.telemetry_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Telemetry service not initialized".to_string())?;
+
+    match request.action.as_str() {
+        "record_trace" | "trace" => {
+            let operation = request
+                .operation
+                .as_deref()
+                .map(BrainHarnessOperation::parse)
+                .ok_or("operation required for record_trace")?;
+            let mut trace = BrainHarnessTrace::new(operation)
+                .with_session(parse_optional_id(&request.session_id, "session ID")?)
+                .with_agent(request.agent)
+                .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
+                .with_query(request.query)
+                .with_project(request.project)
+                .with_returned_memory_ids(parse_id_vec(
+                    &request.returned_memory_ids,
+                    "returned memory ID",
+                )?)
+                .with_returned_result_ids(request.returned_result_ids);
+            if let Some(latency_ms) = request.latency_ms {
+                trace = trace.with_latency_ms(latency_ms);
+            }
+            for warning in request.warnings {
+                trace = trace.with_warning(warning);
+            }
+
+            let trace = service
+                .record_trace(trace)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "trace": trace }))
+                .map_err(|e| e.to_string())
+        }
+        "get_trace" => {
+            let trace_id = parse_id(
+                &required(&request.trace_id, "trace_id", "get_trace")?,
+                "trace ID",
+            )?;
+            let trace = service
+                .get_trace(&trace_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "trace": trace }))
+                .map_err(|e| e.to_string())
+        }
+        "list_traces" => {
+            let traces = service
+                .list_traces(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": traces.len(),
+                "traces": traces
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "submit_feedback" | "feedback_submit" => {
+            let trace_id = parse_id(
+                &required(&request.trace_id, "trace_id", "submit_feedback")?,
+                "trace ID",
+            )?;
+            let mut feedback = AgentFeedback::new(trace_id);
+            feedback.session_id = parse_optional_id(&request.session_id, "session ID")?;
+            feedback.agent = request.agent;
+            feedback.used_memory_ids = parse_id_vec(&request.used_memory_ids, "used memory ID")?;
+            feedback.rejected_memory_ids =
+                parse_id_vec(&request.rejected_memory_ids, "rejected memory ID")?;
+            feedback.used_result_ids = request.used_result_ids;
+            feedback.rejected_result_ids = request.rejected_result_ids;
+            feedback.stale_memory_ids = parse_id_vec(&request.stale_memory_ids, "stale memory ID")?;
+            feedback.wrong_scope_memory_ids =
+                parse_id_vec(&request.wrong_scope_memory_ids, "wrong-scope memory ID")?;
+            feedback.missing_context = request.missing_context;
+            feedback.usefulness_score = request.usefulness_score;
+            feedback.correctness_score = request.correctness_score;
+            feedback.noise_score = request.noise_score;
+            feedback.suggested_memory_changes = request.suggested_memory_changes;
+            feedback.note = request.note;
+
+            let feedback = service
+                .submit_feedback(feedback)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "feedback": feedback }))
+                .map_err(|e| e.to_string())
+        }
+        "list_feedback" => {
+            let feedback = if let Some(trace_id) = &request.trace_id {
+                let trace_id = parse_id(trace_id, "trace ID")?;
+                service
+                    .list_feedback_for_trace(&trace_id)
+                    .await
+                    .map_err(|e| e.to_string())?
+            } else {
+                service
+                    .list_feedback(request.limit)
+                    .await
+                    .map_err(|e| e.to_string())?
+            };
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": feedback.len(),
+                "feedback": feedback
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "stats_by_intent" | "stats" => {
+            let stats = service.stats_by_intent().await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": stats.len(),
+                "stats": stats
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent",
+            request.action
+        )),
+    }
+}
+
+fn parse_id_vec(values: &[String], label: &str) -> Result<Vec<engram_core::id::Id>, String> {
+    values.iter().map(|value| parse_id(value, label)).collect()
 }
 
 // ============================================================================
@@ -6940,6 +7219,8 @@ pub struct OrientRequest {
     pub project: Option<String>,
     /// Agent/harness name
     pub agent: Option<String>,
+    /// Caller intent for telemetry, e.g. resume_session, plan_work, debug_error
+    pub intent: Option<String>,
     /// Include recent knowledge commits
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
@@ -6964,6 +7245,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
             prompt: request.prompt,
             project: request.project,
             agent: request.agent,
+            intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
             include_recent_commits: request.include_recent_commits.unwrap_or(true),
             limit: request.limit,
         })
@@ -7878,6 +8160,8 @@ pub struct MemoryRequestNew {
     pub cwd: Option<String>,
     /// Query/prompt text for changes_since relevance scoring.
     pub query: Option<String>,
+    /// Caller intent for changes_since telemetry correlation.
+    pub intent: Option<String>,
     /// Archive reason for archive action.
     pub archive_reason: Option<String>,
     /// Actor/harness archiving the item for archive action.
@@ -8082,6 +8366,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                         project: request.relevance_project.clone().or(request.project_name.clone()),
                         cwd: request.cwd.clone(),
                         query: request.query.clone(),
+                        intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
                     },
                 )
                 .await
@@ -8090,6 +8375,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             serde_json::to_string_pretty(&serde_json::json!({
                 "since": changes.since,
                 "next_cursor": changes.next_cursor,
+                "trace_id": changes.trace_id,
                 "item_count": changes.items.len(),
                 "commit_count": changes.commits.len(),
                 "item_relevance": changes.item_relevance,

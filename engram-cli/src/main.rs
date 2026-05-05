@@ -48,7 +48,7 @@ use engram_index::{
     PipelineConfig, RepositoryMigrationInventory, RepositoryMigrationOptions,
     RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
     RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus, RepositoryService,
-    SearchService, SessionService, ToolIntelService, WorkService,
+    SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -2988,6 +2988,9 @@ fn print_memory_changes(changes: &MemoryChanges) {
     if let Some(commit_id) = changes.next_cursor.commit_id {
         println!("  Next commit:     {}", commit_id);
     }
+    if let Some(trace_id) = changes.trace_id {
+        println!("  Trace ID:        {}", trace_id);
+    }
     println!("  Memory items:    {}", changes.items.len());
     println!("  Commits:         {}", changes.commits.len());
 
@@ -5305,7 +5308,11 @@ async fn main() -> Result<()> {
                 repository_service.init_schema().await?;
 
                 // Create unified search service
-                let search_service = SearchService::with_defaults(db)?;
+                let search_service = SearchService::with_defaults(db.clone())?;
+
+                // Create brain harness telemetry service
+                let telemetry_service = TelemetryService::new(db);
+                telemetry_service.init_schema().await?;
 
                 // Start MCP HTTP server
                 let server = EngramServer::new();
@@ -5323,6 +5330,7 @@ async fn main() -> Result<()> {
                 server.init_obligation(obligation_service).await;
                 server.init_repository(repository_service).await;
                 server.init_search(search_service).await;
+                server.init_telemetry(telemetry_service).await;
 
                 let listen_port = port.unwrap_or(daemon::DEFAULT_DAEMON_PORT);
                 let addr = std::net::SocketAddr::from(([127, 0, 0, 1], listen_port));
@@ -7466,6 +7474,7 @@ async fn main() -> Result<()> {
                     prompt,
                     project,
                     agent,
+                    intent: None,
                     include_recent_commits,
                     limit,
                 })
@@ -8005,6 +8014,7 @@ async fn main() -> Result<()> {
                                 project: relevance_project,
                                 cwd,
                                 query,
+                                intent: None,
                             },
                         )
                         .await?;
@@ -8015,6 +8025,7 @@ async fn main() -> Result<()> {
                             serde_json::to_string_pretty(&serde_json::json!({
                                 "since": changes.since,
                                 "next_cursor": changes.next_cursor,
+                                "trace_id": changes.trace_id,
                                 "item_count": changes.items.len(),
                                 "commit_count": changes.commits.len(),
                                 "item_relevance": changes.item_relevance,
