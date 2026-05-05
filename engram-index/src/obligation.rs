@@ -401,9 +401,9 @@ fn detect_prompt_obligations(
                 AgentObligationKind::ToolFailureRecovery,
                 "Recover failed tool call instead of repeating wrong parameters",
                 "A tool failure cue appeared. Inspect the tool schema/help, retry correctly if the action still matters, abandon explicitly if it does not, and record reusable gotchas when non-obvious.",
-                scope,
+                scope.clone(),
                 AgentObligationTrigger::new("prompt", "task mentions failed tool-call recovery"),
-                writer,
+                writer.clone(),
             )
             .with_required_resolution(AgentObligationResolutionKind::RetriedTool)
             .with_required_resolution(AgentObligationResolutionKind::Abandoned)
@@ -411,6 +411,33 @@ fn detect_prompt_obligations(
             .with_required_resolution(AgentObligationResolutionKind::SkippedWithReason)
             .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "prompt"))
             .with_tag("tool-failure")
+            .with_tag("agent-native"),
+        );
+    }
+
+    if contains_any(
+        &lower,
+        &[
+            "commit",
+            "git commit",
+            "commit message",
+            "committing",
+            "create a commit",
+        ],
+    ) {
+        obligations.push(
+            AgentObligation::new(
+                AgentObligationKind::CommitPreferenceCheck,
+                "Check commit preferences before composing a commit",
+                "The task appears to involve a commit workflow. Consult relevant user/project commit preferences, rules, and limitations before composing the commit message.",
+                scope,
+                AgentObligationTrigger::new("prompt", "task mentions commit workflow"),
+                writer,
+            )
+            .with_required_resolution(AgentObligationResolutionKind::PreferenceChecked)
+            .with_required_resolution(AgentObligationResolutionKind::SkippedWithReason)
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "prompt"))
+            .with_tag("commit")
             .with_tag("agent-native"),
         );
     }
@@ -487,7 +514,7 @@ mod tests {
             .detect(ObligationDetectOptions {
                 cwd: None,
                 prompt: Some(
-                    "Implement the design after a failed tool call due to wrong parameters."
+                    "Implement the design after a failed tool call due to wrong parameters, then commit it."
                         .to_string(),
                 ),
                 project: Some("engram".to_string()),
@@ -506,6 +533,7 @@ mod tests {
         assert!(kinds.contains(&AgentObligationKind::SourceReading));
         assert!(kinds.contains(&AgentObligationKind::DesignContextReading));
         assert!(kinds.contains(&AgentObligationKind::ToolFailureRecovery));
+        assert!(kinds.contains(&AgentObligationKind::CommitPreferenceCheck));
         assert!(result.dry_run);
         assert!(result.written.is_empty());
     }
