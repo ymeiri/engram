@@ -7,6 +7,8 @@ the next agent decision better without forcing the agent to choose among special
 
 - Return a scoped orientation packet for the supplied `project` and `cwd`.
 - Return a memory cursor so long-running sessions can later ask what changed.
+- Return a `trace_id` when telemetry is initialized so agents can submit retrieval/outcome
+  feedback for the exact orientation they received.
 - Rank active `MemoryItem` guidance by scope, prompt relevance, recency, confidence, review state,
   and freshness.
 - Keep unreviewed or inferred claims out of active guidance; return them in `review_needed` with a
@@ -37,3 +39,5 @@ the next agent decision better without forcing the agent to choose among special
   ranking, and promoted reviewed memory surfacing.
 - `engram-tests/tests/obligation_tests.rs` covers obligation surfacing, bounds, `has_more`, and
   stale-obligation suppression.
+- `engram-tests/tests/telemetry_tests.rs` covers orientation trace emission, feedback linkage, and
+  scenario/arm tagging.
