@@ -17,6 +17,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Orientation packet with repository/project resolution and deterministic relevance ordering.
 - [x] Brain Loop v1 projection inside `orient`; bounded compiled context from already selected
       memory, with graph/obligations/lint kept out of the hot path.
+- [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
+      preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
 - [x] Agent harness layer: MCP `harness`, CLI `engram harness`, Claude Code adapter rendering, Codex skill rendering, Gemini CLI custom command/context rendering, Cursor Agent skill rendering, dry-run install by default.
 - [x] Agent-native obligations layer: MCP `obligations`, CLI `engram obligations`, lifecycle detection for document disposition, source/design context reading, failed tool-call recovery, tests, handoffs, and commit preference checks.

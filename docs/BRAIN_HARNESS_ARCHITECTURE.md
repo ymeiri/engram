@@ -679,7 +679,10 @@ Status: initial lifecycle review primitives exist. `MemoryService` can promote `
 items to active memory with manual-review evidence, reject review candidates while keeping them
 auditable, supersede an older item with a reviewed replacement, and archive active memory as the
 retirement path. The MCP `memory` tool exposes `promote`, `reject`, and `supersede` actions with
-reviewer/rationale fields.
+reviewer/rationale fields. It also exposes `promote_observation` for the narrow case where a
+keyed entity observation is intentionally graduated into a reviewed `MemoryItem`. This keeps raw
+observations out of the orientation hot path while preserving the source observation ID as
+`observation` evidence.
 
 ### M6: Migration From Legacy Layers
 
@@ -705,6 +708,12 @@ migration completion run against current data.
 Status: first checkpoint implemented. `orient` now returns `brain_loop` with a bounded compiled
 context and top memory signals. Specialist graph, obligation, lint, and change polling tools remain
 available but are not part of the normal orientation hot path.
+
+Dogfood checkpoint: a fresh Codex session showed that Brain Loop v1 correctly used active
+`MemoryItem` records but did not surface implementation facts that existed only as entity
+observations. The chosen fix is write-path curation: promote high-signal keyed observations into
+reviewed `MemoryItem` records when they should influence future orientation, rather than making
+`orient` retrieve raw observations directly.
 
 ---
 

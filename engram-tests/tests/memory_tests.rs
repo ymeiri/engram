@@ -1,9 +1,9 @@
 //! Integration tests for Memory OS MCP tooling.
 
-use engram_index::MemoryService;
+use engram_index::{EntityService, MemoryService};
 use engram_mcp::tools::{
-    self, MemoryChangeRequest, MemoryEvidenceRequest, MemoryRequestNew, OrientRequest, ToolState,
-    VaultRequest,
+    self, EntityObserveRequestNew, EntityRequestNew, MemoryChangeRequest, MemoryEvidenceRequest,
+    MemoryRequestNew, OrientRequest, ToolState, VaultRequest,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
@@ -13,14 +13,20 @@ use tempfile::tempdir;
 async fn setup_tool_state() -> ToolState {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config).await.expect("Failed to connect");
-    let service = MemoryService::new(db);
-    service
+    let memory_service = MemoryService::new(db.clone());
+    memory_service
         .init_schema()
         .await
         .expect("Failed to initialize memory schema");
+    let entity_service = EntityService::new(db);
+    entity_service
+        .init()
+        .await
+        .expect("Failed to initialize entity schema");
 
     let state = ToolState::new();
-    state.init_memory(service).await;
+    state.init_memory(memory_service).await;
+    state.init_entity(entity_service).await;
     state
 }
 
@@ -42,6 +48,8 @@ fn request(action: &str) -> MemoryRequestNew {
         task_name: None,
         entity_id: None,
         entity_name: None,
+        source_entity_name: None,
+        observation_key: None,
         repository_id: None,
         remote_url: None,
         local_path: None,
@@ -229,6 +237,125 @@ async fn test_mcp_memory_promote_review_candidate() {
     assert_eq!(
         promote_json["item"]["evidence"][0]["summary"],
         "Reviewed and accepted."
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_memory_promote_observation_surfaces_in_orient() {
+    let state = setup_tool_state().await;
+
+    tools::entity_new(
+        &state,
+        EntityRequestNew {
+            action: "create".to_string(),
+            name: Some("engram".to_string()),
+            entity_type: Some("repo".to_string()),
+            description: Some("Engram repository".to_string()),
+            query: None,
+            type_filter: None,
+            limit: None,
+            target: None,
+            relation: None,
+            alias: None,
+        },
+    )
+    .await
+    .expect("entity create should work");
+
+    tools::entity_observe_new(
+        &state,
+        EntityObserveRequestNew {
+            action: "add".to_string(),
+            entity: Some("engram".to_string()),
+            content: Some(
+                "Observation promotion should create reviewed MemoryItems with source evidence."
+                    .to_string(),
+            ),
+            key: Some("decisions.observation-promotion".to_string()),
+            source: Some("memory-tests".to_string()),
+            key_pattern: None,
+            query: None,
+            limit: None,
+        },
+    )
+    .await
+    .expect("observation add should work");
+
+    let mut promote = with_writer(request("promote_observation"));
+    promote.source_entity_name = Some("engram".to_string());
+    promote.observation_key = Some("decisions.observation-promotion".to_string());
+    promote.kind = Some("decision".to_string());
+    promote.title = Some("Observation promotion feeds Brain Loop".to_string());
+    promote.origin = Some("agent_observed".to_string());
+    promote.scope_type = Some("project".to_string());
+    promote.project_name = Some("engram".to_string());
+    promote.reviewer = Some("yuval".to_string());
+    promote.rationale = Some("Reviewed as durable project guidance.".to_string());
+    promote.tags = vec!["brain-loop".to_string(), "promotion".to_string()];
+
+    let promote_response = tools::memory_new(&state, promote)
+        .await
+        .expect("promote_observation should work");
+    let promote_json = parse_json(&promote_response);
+    let source_id = promote_json["source_observation"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    assert_eq!(promote_json["item"]["status"], "active");
+    assert_eq!(
+        promote_json["item"]["content"],
+        "Observation promotion should create reviewed MemoryItems with source evidence."
+    );
+    let evidence = promote_json["item"]["evidence"].as_array().unwrap();
+    assert!(evidence.iter().any(|e| {
+        e["kind"] == "observation" && e["target"].as_str() == Some(source_id.as_str())
+    }));
+    assert!(evidence
+        .iter()
+        .any(|e| e["kind"] == "manual_review" && e["target"] == "yuval"));
+
+    let err = tools::memory_new(&state, {
+        let mut duplicate = with_writer(request("promote_observation"));
+        duplicate.source_entity_name = Some("engram".to_string());
+        duplicate.observation_key = Some("decisions.observation-promotion".to_string());
+        duplicate.kind = Some("decision".to_string());
+        duplicate.title = Some("Duplicate promotion".to_string());
+        duplicate.origin = Some("agent_observed".to_string());
+        duplicate.scope_type = Some("project".to_string());
+        duplicate.project_name = Some("engram".to_string());
+        duplicate.reviewer = Some("yuval".to_string());
+        duplicate.rationale = Some("Already accepted.".to_string());
+        duplicate
+    })
+    .await
+    .unwrap_err();
+    assert!(err.contains("already promoted"));
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("continue Brain Loop promotion work".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: None,
+            include_recent_commits: Some(false),
+            limit: Some(10),
+        },
+    )
+    .await
+    .expect("orient should work");
+    let orient_json = parse_json(&response);
+    assert_eq!(
+        orient_json["brain_loop"]["top_items"][0]["title"],
+        "Observation promotion feeds Brain Loop"
+    );
+    assert_eq!(
+        orient_json["active_decisions"][0]["evidence"][0]["target"]
+            .as_str()
+            .unwrap(),
+        source_id
     );
 }
 

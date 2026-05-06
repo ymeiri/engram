@@ -19,6 +19,7 @@ use crate::vault::{
     MemoryVaultExport, MemoryVaultInit, MemoryVaultPage, MemoryVaultStatus,
     RepositoryVaultSnapshot,
 };
+use engram_core::entity::Observation;
 use engram_core::id::Id;
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange, MemoryCursor,
@@ -111,6 +112,33 @@ pub struct MemoryWriterStat {
     pub surface: Option<String>,
     /// Item count.
     pub count: usize,
+}
+
+/// Input for promoting an entity observation into a durable Memory OS item.
+#[derive(Debug, Clone)]
+pub struct ObservationPromotionInput {
+    /// Memory kind to create.
+    pub kind: MemoryKind,
+    /// Curated title for the promoted memory.
+    pub title: String,
+    /// Optional replacement content. Defaults to the source observation content.
+    pub content: Option<String>,
+    /// Scope for the promoted memory.
+    pub scope: MemoryScope,
+    /// Origin of the promoted claim.
+    pub origin: ClaimOrigin,
+    /// Writer provenance for the promotion.
+    pub writer: WriterProvenance,
+    /// Target lifecycle status. Only active and needs_review are valid for v1.
+    pub status: MemoryStatus,
+    /// Optional confidence override.
+    pub confidence: Option<f32>,
+    /// Extra tags to attach.
+    pub tags: Vec<String>,
+    /// Reviewer identity. Required when status is active.
+    pub reviewer: Option<String>,
+    /// Review rationale. Required when status is active.
+    pub rationale: Option<String>,
 }
 
 impl MemoryChanges {
@@ -321,6 +349,76 @@ impl MemoryService {
         Ok(item)
     }
 
+    /// Promote an entity observation into Memory OS while preserving source evidence.
+    pub async fn promote_observation_to_memory(
+        &self,
+        observation: &Observation,
+        input: ObservationPromotionInput,
+    ) -> IndexResult<MemoryItem> {
+        if !matches!(
+            input.status,
+            MemoryStatus::Active | MemoryStatus::NeedsReview
+        ) {
+            return Err(IndexError::InvalidState(format!(
+                "observation promotion cannot create {} memory",
+                input.status
+            )));
+        }
+        if let Some(existing) = self
+            .memory_promoted_from_observation(&observation.id)
+            .await?
+        {
+            return Err(IndexError::InvalidState(format!(
+                "observation {} is already promoted to memory item {}",
+                observation.id, existing.id
+            )));
+        }
+
+        let review = match (input.reviewer, input.rationale) {
+            (Some(reviewer), Some(rationale)) => Some(review_evidence(reviewer, rationale)?),
+            (None, None) => None,
+            _ => {
+                return Err(IndexError::Parse(
+                    "reviewer and rationale must be provided together".to_string(),
+                ))
+            }
+        };
+        if input.status == MemoryStatus::Active && review.is_none() {
+            return Err(IndexError::Parse(
+                "reviewer and rationale required for active observation promotion".to_string(),
+            ));
+        }
+
+        let source_key = observation.key.as_deref().unwrap_or("unkeyed observation");
+        let content = input.content.unwrap_or_else(|| observation.content.clone());
+        let mut item = MemoryItem::new(
+            input.kind,
+            input.title,
+            content,
+            input.scope,
+            input.origin,
+            input.writer,
+        )
+        .with_evidence(
+            EvidenceRef::new(EvidenceKind::Observation, observation.id.to_string())
+                .with_summary(format!("Promoted entity observation `{source_key}`.")),
+        )
+        .with_status(input.status)
+        .with_tag(format!("source-observation:{}", observation.id));
+
+        if let Some(confidence) = input.confidence {
+            item = item.with_confidence(confidence);
+        }
+        for tag in input.tags {
+            item = item.with_tag(tag);
+        }
+        if let Some(review) = review {
+            item = item.with_evidence(review);
+        }
+
+        self.capture_memory(item).await
+    }
+
     /// Get a memory item by ID.
     pub async fn get_memory(&self, id: &Id) -> IndexResult<Option<MemoryItem>> {
         Ok(self.repo.get_memory_item(id).await?)
@@ -464,6 +562,21 @@ impl MemoryService {
             .repo
             .list_memory_items_needing_review(OffsetDateTime::now_utc(), limit)
             .await?)
+    }
+
+    async fn memory_promoted_from_observation(
+        &self,
+        observation_id: &Id,
+    ) -> IndexResult<Option<MemoryItem>> {
+        let target = observation_id.to_string();
+        let items = self.repo.list_memory_items(None, None).await?;
+        Ok(items.into_iter().find(|item| {
+            !matches!(item.status, MemoryStatus::Archived | MemoryStatus::Rejected)
+                && item
+                    .evidence
+                    .iter()
+                    .any(|e| e.kind == EvidenceKind::Observation && e.target == target)
+        }))
     }
 
     async fn get_required_memory(&self, id: &Id) -> IndexResult<MemoryItem> {
@@ -1747,9 +1860,10 @@ mod tests {
     use super::*;
     use crate::digest::{DigestExtractionOptions, DigestInventoryOptions, DigestService};
     use crate::search::{SearchOptions, SearchService};
+    use engram_core::entity::Observation;
     use engram_core::memory::{
         ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChangeType, MemoryKind,
-        MemoryReviewState, MemoryScope, ModelIdentity,
+        MemoryReviewState, MemoryScope, MemoryStatus, ModelIdentity,
     };
     use engram_core::repository::{
         GitRepository, LocalCheckout, MonorepoComponent, ProjectRepositoryLink,
@@ -1918,6 +2032,101 @@ mod tests {
 
         let err = service.capture_memory(item).await.unwrap_err();
         assert!(matches!(err, IndexError::Parse(_)));
+    }
+
+    #[tokio::test]
+    async fn promote_observation_to_memory_creates_reviewed_active_item() {
+        let service = setup_service().await;
+        let observation = Observation::new(
+            Id::new(),
+            "Brain Loop v1 should keep raw observations out of the hot path.",
+        )
+        .with_key("decisions.brain-loop-observation-promotion")
+        .with_source("unit-test");
+
+        let item = service
+            .promote_observation_to_memory(
+                &observation,
+                ObservationPromotionInput {
+                    kind: MemoryKind::Decision,
+                    title: "Promote important observations explicitly".to_string(),
+                    content: None,
+                    scope: MemoryScope::project("engram"),
+                    origin: ClaimOrigin::AgentObserved,
+                    writer: writer(),
+                    status: MemoryStatus::Active,
+                    confidence: Some(0.9),
+                    tags: vec!["brain-loop".to_string()],
+                    reviewer: Some("yuval".to_string()),
+                    rationale: Some("Reviewed as durable architecture guidance.".to_string()),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(item.status, MemoryStatus::Active);
+        assert_eq!(item.confidence.value(), 0.9);
+        assert_eq!(item.content, observation.content);
+        assert!(item
+            .tags
+            .contains(&format!("source-observation:{}", observation.id)));
+        assert!(item.evidence.iter().any(|evidence| {
+            evidence.kind == EvidenceKind::Observation
+                && evidence.target == observation.id.to_string()
+        }));
+        assert!(item
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ManualReview));
+
+        let err = service
+            .promote_observation_to_memory(
+                &observation,
+                ObservationPromotionInput {
+                    kind: MemoryKind::Decision,
+                    title: "Duplicate".to_string(),
+                    content: None,
+                    scope: MemoryScope::project("engram"),
+                    origin: ClaimOrigin::AgentObserved,
+                    writer: writer(),
+                    status: MemoryStatus::Active,
+                    confidence: None,
+                    tags: Vec::new(),
+                    reviewer: Some("yuval".to_string()),
+                    rationale: Some("Already promoted.".to_string()),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("already promoted"));
+    }
+
+    #[tokio::test]
+    async fn promote_observation_to_active_memory_requires_review() {
+        let service = setup_service().await;
+        let observation =
+            Observation::new(Id::new(), "Potential guidance.").with_key("decisions.needs-review");
+
+        let err = service
+            .promote_observation_to_memory(
+                &observation,
+                ObservationPromotionInput {
+                    kind: MemoryKind::Decision,
+                    title: "Missing review".to_string(),
+                    content: None,
+                    scope: MemoryScope::project("engram"),
+                    origin: ClaimOrigin::AgentObserved,
+                    writer: writer(),
+                    status: MemoryStatus::Active,
+                    confidence: None,
+                    tags: Vec::new(),
+                    reviewer: None,
+                    rationale: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("reviewer and rationale required"));
     }
 
     #[tokio::test]

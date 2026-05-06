@@ -77,8 +77,8 @@ pub use knowledge::{
 pub use lint::{LintOptions, LintService};
 pub use memory::{
     BrainLoop, BrainLoopItem, MemoryChangeRelevance, MemoryChanges, MemoryChangesSinceOptions,
-    MemoryService, MemoryWriterStat, OrientInput, OrientationPacket, OrientationResolution,
-    SessionDistillation,
+    MemoryService, MemoryWriterStat, ObservationPromotionInput, OrientInput, OrientationPacket,
+    OrientationResolution, SessionDistillation,
 };
 pub use migration::{
     MigrationCandidate, MigrationDisposition, MigrationInventory, MigrationInventoryOptions,

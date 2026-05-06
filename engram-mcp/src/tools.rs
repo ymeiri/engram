@@ -32,9 +32,10 @@ use engram_index::{
     GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
     HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
     MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
-    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService, OrientInput,
-    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
-    SearchOptions, SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
+    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService,
+    ObservationPromotionInput, OrientInput, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
+    SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -8165,9 +8166,9 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
 /// Consolidated request for Memory OS operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryRequestNew {
-    /// Action to perform: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
+    /// Action to perform: add, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
     #[schemars(
-        description = "Action: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
+        description = "Action: add, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
     )]
     pub action: String,
 
@@ -8220,6 +8221,10 @@ pub struct MemoryRequestNew {
     pub entity_id: Option<String>,
     /// Entity name for entity scope
     pub entity_name: Option<String>,
+    /// Source entity name for promote_observation
+    pub source_entity_name: Option<String>,
+    /// Source observation key for promote_observation
+    pub observation_key: Option<String>,
     /// Repository ID for repository scope
     pub repository_id: Option<String>,
     /// Repository remote URL for repository scope
@@ -8442,6 +8447,85 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "promote_observation" | "promote-observation" => {
+            let source_entity_name = required(
+                &request
+                    .source_entity_name
+                    .clone()
+                    .or_else(|| request.entity_name.clone()),
+                "source_entity_name",
+                "promote_observation",
+            )?;
+            let observation_key = required(
+                &request.observation_key,
+                "observation_key",
+                "promote_observation",
+            )?;
+            let kind = MemoryKind::parse(&required(
+                &request.kind,
+                "kind",
+                "promote_observation",
+            )?);
+            let title = required(&request.title, "title", "promote_observation")?;
+            let origin = parse_claim_origin(&required(
+                &request.origin,
+                "origin",
+                "promote_observation",
+            )?)?;
+            let scope = parse_memory_scope(&request)?;
+            let writer = parse_writer(&request)?;
+            let status = request
+                .status
+                .as_deref()
+                .map(parse_memory_status)
+                .transpose()?
+                .unwrap_or(MemoryStatus::Active);
+
+            let entity_service_guard = state.entity_service.read().await;
+            let entity_service = entity_service_guard
+                .as_ref()
+                .ok_or_else(|| "Entity service not initialized".to_string())?;
+            let observation = entity_service
+                .get_observation_by_key(&source_entity_name, &observation_key)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| {
+                    format!(
+                        "Observation not found: entity='{source_entity_name}', key='{observation_key}'"
+                    )
+                })?;
+
+            let item = service
+                .promote_observation_to_memory(
+                    &observation,
+                    ObservationPromotionInput {
+                        kind,
+                        title,
+                        content: request.content.clone(),
+                        scope,
+                        origin,
+                        writer,
+                        status,
+                        confidence: request.confidence,
+                        tags: request.tags.clone(),
+                        reviewer: request.reviewer.clone(),
+                        rationale: request.rationale.clone(),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item,
+                "source_observation": {
+                    "id": observation.id.to_string(),
+                    "entity": source_entity_name,
+                    "key": observation.key,
+                    "source": observation.source
+                }
             }))
             .map_err(|e| e.to_string())
         }
@@ -8753,7 +8837,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
+            "Unknown action: '{}'. Valid actions: add, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
             request.action
         )),
     }
@@ -8814,7 +8898,7 @@ fn parse_writer(request: &MemoryRequestNew) -> Result<WriterProvenance, String> 
 }
 
 fn parse_memory_scope(request: &MemoryRequestNew) -> Result<MemoryScope, String> {
-    let scope_type = required(&request.scope_type, "scope_type", "add")?;
+    let scope_type = required(&request.scope_type, "scope_type", &request.action)?;
     match scope_type.to_lowercase().as_str() {
         "global" => Ok(MemoryScope::Global),
         "user" => Ok(MemoryScope::User),
