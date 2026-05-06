@@ -754,6 +754,8 @@ async fn memoryitem_eval_trace_records_orient_feedback_and_intent_stats() {
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::FollowUserPreference),
+            scenario_id: Some("commit_preference_trace".to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -775,6 +777,11 @@ async fn memoryitem_eval_trace_records_orient_feedback_and_intent_stats() {
         stored_trace.intent,
         Some(BrainHarnessIntent::FollowUserPreference)
     );
+    assert_eq!(
+        stored_trace.scenario_id.as_deref(),
+        Some("commit_preference_trace")
+    );
+    assert_eq!(stored_trace.arm.as_deref(), Some("memory_items"));
     assert!(stored_trace
         .returned_memory_ids
         .contains(&commit_preference.id));
@@ -915,6 +922,8 @@ async fn confidence_scenario_memoryitems_improve_preference_continuity_over_no_m
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::FollowUserPreference),
+            scenario_id: Some(scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1060,6 +1069,8 @@ async fn confidence_scenario_memoryitems_reject_stale_and_exclude_wrong_scope_me
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::ImplementChange),
+            scenario_id: Some(scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1194,6 +1205,8 @@ async fn confidence_scenario_memoryitems_preserve_decision_continuity() {
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::PlanWork),
+            scenario_id: Some(scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1365,6 +1378,8 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::FollowUserPreference),
+            scenario_id: Some(scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1562,6 +1577,8 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::ImplementChange),
+            scenario_id: Some(scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1772,6 +1789,8 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
             prompt: Some(prompt.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::PlanWork),
+            scenario_id: Some(scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1909,6 +1928,8 @@ async fn orient_surfaces_user_preference_as_raw_and_compiled_context() {
             prompt: Some("Continue the implementation and report status.".to_string()),
             agent: Some("codex".to_string()),
             intent: None,
+            scenario_id: None,
+            arm: None,
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -1999,6 +2020,8 @@ async fn orient_and_memory_search_share_memoryitem_ranking_order() {
             prompt: Some(query.to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::VerifyDecision),
+            scenario_id: None,
+            arm: None,
             include_recent_commits: false,
             limit: Some(10),
         })

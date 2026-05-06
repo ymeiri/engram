@@ -167,6 +167,8 @@ async fn test_mcp_repo_detect_component_link_context_and_orient() {
             project: None,
             agent: Some("codex".to_string()),
             intent: None,
+            scenario_id: None,
+            arm: None,
             include_recent_commits: Some(false),
             limit: Some(10),
         },

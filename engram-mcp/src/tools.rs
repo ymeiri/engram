@@ -3190,6 +3190,14 @@ pub struct SearchRequest {
     #[schemars(description = "Caller intent for telemetry correlation")]
     pub intent: Option<String>,
 
+    /// Free-form controlled eval scenario identifier for telemetry.
+    #[schemars(description = "Free-form controlled eval scenario identifier")]
+    pub scenario_id: Option<String>,
+
+    /// Free-form eval or comparison arm for telemetry.
+    #[schemars(description = "Free-form eval or comparison arm")]
+    pub arm: Option<String>,
+
     /// Agent/harness name for telemetry.
     #[schemars(description = "Agent or harness name for telemetry")]
     pub agent: Option<String>,
@@ -3291,6 +3299,8 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
             )
             .with_agent(request.agent.clone())
             .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
+            .with_scenario_id(request.scenario_id.clone())
+            .with_arm(request.arm.clone())
             .with_query(Some(request.query.clone()))
             .with_project(request.project.clone())
             .with_returned_result_ids(returned_result_ids)
@@ -7257,6 +7267,10 @@ pub struct OrientRequest {
     pub agent: Option<String>,
     /// Caller intent for telemetry, e.g. resume_session, plan_work, debug_error
     pub intent: Option<String>,
+    /// Free-form controlled eval scenario identifier for telemetry
+    pub scenario_id: Option<String>,
+    /// Free-form eval or comparison arm for telemetry
+    pub arm: Option<String>,
     /// Include recent knowledge commits
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
@@ -7321,6 +7335,8 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
                 project: project.clone(),
                 agent: request.agent,
                 intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
+                scenario_id: request.scenario_id,
+                arm: request.arm,
                 include_recent_commits: request.include_recent_commits.unwrap_or(true),
                 limit: request.limit,
             })

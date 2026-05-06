@@ -7680,6 +7680,8 @@ async fn main() -> Result<()> {
                     project,
                     agent,
                     intent: None,
+                    scenario_id: None,
+                    arm: None,
                     include_recent_commits,
                     limit,
                 })

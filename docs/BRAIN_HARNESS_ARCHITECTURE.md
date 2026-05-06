@@ -558,7 +558,8 @@ Implemented spike:
   generic result IDs, stale or wrong-scope memory IDs, missing context,
   usefulness/correctness/noise scores, task success, preference adherence, repeated context
   questions, bad-memory use, suggested memory changes, and a note.
-- `orient`, `search`, and `changes_since` can produce trace IDs.
+- `orient` and `search` accept free-form `scenario_id` and `arm` labels and preserve them on
+  the real operation trace; `orient`, `search`, and `changes_since` can produce trace IDs.
 - The MCP `telemetry` tool can record traces, submit feedback, list records, and aggregate stats by intent.
 - `telemetry(action=real_session_eval)` returns a read-only report over persisted traces and
   feedback, including coverage, per-intent quality signals, per-arm outcome rows, scenario

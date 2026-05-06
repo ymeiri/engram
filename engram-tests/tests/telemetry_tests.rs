@@ -10,7 +10,7 @@ use engram_core::telemetry::{
 use engram_index::{
     MemoryChangesSinceOptions, MemoryService, OrientInput, SearchService, TelemetryService,
 };
-use engram_mcp::tools::{self, SearchRequest, TelemetryRequest, ToolState};
+use engram_mcp::tools::{self, OrientRequest, SearchRequest, TelemetryRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
 
@@ -343,6 +343,8 @@ async fn orient_with_intent_emits_trace_for_agent_feedback() {
             project: Some("engram".to_string()),
             agent: Some("codex".to_string()),
             intent: Some(BrainHarnessIntent::ImplementChange),
+            scenario_id: Some("telemetry_implementation".to_string()),
+            arm: Some("memory_items".to_string()),
             include_recent_commits: false,
             limit: Some(10),
         })
@@ -359,6 +361,11 @@ async fn orient_with_intent_emits_trace_for_agent_feedback() {
     assert_eq!(packet.intent, Some(BrainHarnessIntent::ImplementChange));
     assert_eq!(trace.operation, BrainHarnessOperation::Orient);
     assert_eq!(trace.intent, Some(BrainHarnessIntent::ImplementChange));
+    assert_eq!(
+        trace.scenario_id.as_deref(),
+        Some("telemetry_implementation")
+    );
+    assert_eq!(trace.arm.as_deref(), Some("memory_items"));
     assert_eq!(trace.returned_memory_ids, vec![preference.id]);
     assert_eq!(trace.project.as_deref(), Some("engram"));
 }
@@ -490,6 +497,59 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
 }
 
 #[tokio::test]
+async fn mcp_orient_tags_trace_with_scenario_and_arm() {
+    let (telemetry, memory) = setup_services().await;
+    memory
+        .capture_memory(MemoryItem::new(
+            MemoryKind::Decision,
+            "Tag orient traces by eval arm",
+            "Controlled evals need scenario and arm on the real orient trace.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::UserStated,
+            writer(),
+        ))
+        .await
+        .expect("memory should be captured");
+
+    let state = ToolState::new();
+    state.init_memory(memory).await;
+    state.init_telemetry(telemetry.clone()).await;
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("continue controlled telemetry eval".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("verify_decision".to_string()),
+            scenario_id: Some("controlled_eval_tagging".to_string()),
+            arm: Some("memory_items".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(10),
+        },
+    )
+    .await
+    .expect("orient should work");
+
+    let json = parse_json(&response);
+    let trace_id = json["trace_id"].as_str().expect("trace_id should be set");
+    let trace = telemetry
+        .get_trace(&engram_core::Id::parse(trace_id).unwrap())
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+
+    assert_eq!(trace.operation, BrainHarnessOperation::Orient);
+    assert_eq!(trace.intent, Some(BrainHarnessIntent::VerifyDecision));
+    assert_eq!(
+        trace.scenario_id.as_deref(),
+        Some("controlled_eval_tagging")
+    );
+    assert_eq!(trace.arm.as_deref(), Some("memory_items"));
+}
+
+#[tokio::test]
 async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)
@@ -534,6 +594,8 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
             min_score: Some(0.0),
             layers: None,
             intent: Some("answer_question".to_string()),
+            scenario_id: Some("memory_search_relevance".to_string()),
+            arm: Some("memory_items".to_string()),
             agent: Some("codex".to_string()),
             session_id: None,
             project: Some("engram".to_string()),
@@ -569,6 +631,11 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
 
     assert_eq!(trace.operation, BrainHarnessOperation::Search);
     assert_eq!(trace.intent, Some(BrainHarnessIntent::AnswerQuestion));
+    assert_eq!(
+        trace.scenario_id.as_deref(),
+        Some("memory_search_relevance")
+    );
+    assert_eq!(trace.arm.as_deref(), Some("memory_items"));
     assert_eq!(trace.query.as_deref(), Some("intent aware telemetry"));
     assert_eq!(trace.project.as_deref(), Some("engram"));
 }

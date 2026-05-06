@@ -168,6 +168,10 @@ pub struct OrientInput {
     pub agent: Option<String>,
     /// Caller intent for telemetry correlation.
     pub intent: Option<BrainHarnessIntent>,
+    /// Free-form controlled eval scenario identifier for telemetry correlation.
+    pub scenario_id: Option<String>,
+    /// Free-form eval or comparison arm for telemetry correlation.
+    pub arm: Option<String>,
     /// Include recent knowledge commits.
     pub include_recent_commits: bool,
     /// Maximum memory items per grouped bucket.
@@ -994,6 +998,8 @@ impl MemoryService {
         let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
             .with_agent(input.agent.clone())
             .with_intent(input.intent.clone())
+            .with_scenario_id(input.scenario_id.clone())
+            .with_arm(input.arm.clone())
             .with_query(input.prompt.clone())
             .with_project(effective_project.map(str::to_string))
             .with_returned_memory_ids(returned_memory_ids.clone())
@@ -2888,6 +2894,8 @@ mod tests {
                 cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
                 agent: Some("codex".to_string()),
                 intent: None,
+                scenario_id: None,
+                arm: None,
                 prompt: Some("continue".to_string()),
                 include_recent_commits: false,
                 limit: Some(10),
