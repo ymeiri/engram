@@ -1906,7 +1906,10 @@ async fn unified_search_should_find_memoryitem_guidance() {
         MemoryScope::project("engram"),
         ClaimOrigin::UserStated,
         writer(),
-    );
+    )
+    .with_evidence(reviewed_evidence(
+        "Architecture work accepted MemoryItems as first-class retrieval results.",
+    ));
     let captured = memory_service
         .capture_memory(guidance)
         .await
@@ -1933,14 +1936,19 @@ async fn orient_and_memory_search_share_memoryitem_ranking_order() {
     let (memory_service, search_service) = setup_memory_and_search_services().await;
     for title in ["Shared ranker first", "Shared ranker second"] {
         memory_service
-            .capture_memory(MemoryItem::new(
-                MemoryKind::Decision,
-                title,
-                "Shared ranker should order MemoryItems consistently for orient and search.",
-                MemoryScope::project("engram"),
-                ClaimOrigin::UserStated,
-                writer(),
-            ))
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    title,
+                    "Shared ranker should order MemoryItems consistently for orient and search.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(reviewed_evidence(
+                    "Shared ranker ordering is accepted as active guidance.",
+                )),
+            )
             .await
             .expect("memory should be captured");
     }
@@ -1986,7 +1994,7 @@ async fn orient_and_memory_search_share_memoryitem_ranking_order() {
     assert!(packet
         .memory_metadata
         .iter()
-        .all(|metadata| metadata.review_state == MemoryReviewState::ActiveUnreviewed));
+        .all(|metadata| metadata.review_state == MemoryReviewState::Reviewed));
     assert!(search_results
         .iter()
         .all(|result| result.memory_metadata.is_some()));

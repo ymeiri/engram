@@ -261,6 +261,12 @@ async fn test_mcp_memory_export_vault() {
     add.origin = Some("user_stated".to_string());
     add.scope_type = Some("project".to_string());
     add.project_name = Some("engram".to_string());
+    add.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "memory_tests".to_string(),
+        summary: Some("Vault export test expects active durable guidance.".to_string()),
+        excerpt: None,
+    }];
 
     tools::memory_new(&state, add)
         .await
@@ -299,6 +305,12 @@ async fn test_mcp_vault_init_compile_status_page() {
     add.origin = Some("user_stated".to_string());
     add.scope_type = Some("project".to_string());
     add.project_name = Some("engram".to_string());
+    add.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "memory_tests".to_string(),
+        summary: Some("Vault compile test expects active durable guidance.".to_string()),
+        excerpt: None,
+    }];
     tools::memory_new(&state, add)
         .await
         .expect("add should work");
@@ -467,6 +479,12 @@ async fn test_mcp_orient_returns_context_packet() {
     add.origin = Some("user_stated".to_string());
     add.scope_type = Some("project".to_string());
     add.project_name = Some("engram".to_string());
+    add.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "memory_tests".to_string(),
+        summary: Some("Orient test expects active durable guidance.".to_string()),
+        excerpt: None,
+    }];
     tools::memory_new(&state, add)
         .await
         .expect("add should work");
@@ -497,10 +515,7 @@ async fn test_mcp_orient_returns_context_packet() {
         json["active_decisions"][0]["id"]
     );
     assert_eq!(json["memory_metadata"][0]["status"], "active");
-    assert_eq!(
-        json["memory_metadata"][0]["review_state"],
-        "active_unreviewed"
-    );
+    assert_eq!(json["memory_metadata"][0]["review_state"], "reviewed");
     assert_eq!(json["memory_metadata"][0]["freshness"], "unscheduled");
     assert_eq!(json["memory_metadata"][0]["claim_origin"], "user_stated");
     assert_eq!(json["memory_metadata"][0]["writer"]["harness"], "codex");
@@ -511,6 +526,6 @@ async fn test_mcp_orient_returns_context_packet() {
     assert!(json["context_pack"]
         .as_str()
         .unwrap()
-        .contains("Trust: status=active, review_state=active_unreviewed"));
+        .contains("Trust: status=active, review_state=reviewed"));
     assert!(json["memory_cursor"]["timestamp"].is_string());
 }

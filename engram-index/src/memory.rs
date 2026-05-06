@@ -280,9 +280,10 @@ impl MemoryService {
         Ok(())
     }
 
-    /// Persist a memory item after basic domain validation.
+    /// Persist a memory item after domain and capture-policy validation.
     pub async fn capture_memory(&self, item: MemoryItem) -> IndexResult<MemoryItem> {
         validate_memory_item(&item)?;
+        let item = apply_capture_policy(item);
         self.repo.save_memory_item(&item).await?;
         Ok(item)
     }
@@ -1378,6 +1379,60 @@ fn validate_memory_item(item: &MemoryItem) -> IndexResult<()> {
     Ok(())
 }
 
+fn apply_capture_policy(item: MemoryItem) -> MemoryItem {
+    if item.status != MemoryStatus::Active {
+        return item;
+    }
+
+    if origin_requires_review(&item.origin) && !has_manual_review_evidence(&item) {
+        return item.with_status(MemoryStatus::NeedsReview);
+    }
+
+    if item.kind == MemoryKind::Preference {
+        if preference_can_be_active(&item) {
+            return item;
+        }
+        return item.with_status(MemoryStatus::NeedsReview);
+    }
+
+    if durable_guidance_requires_evidence(&item.kind) && item.evidence.is_empty() {
+        return item.with_status(MemoryStatus::NeedsReview);
+    }
+
+    item
+}
+
+fn durable_guidance_requires_evidence(kind: &MemoryKind) -> bool {
+    matches!(
+        kind,
+        MemoryKind::Decision | MemoryKind::Rule | MemoryKind::Limitation
+    )
+}
+
+fn preference_can_be_active(item: &MemoryItem) -> bool {
+    matches!(
+        item.origin,
+        ClaimOrigin::UserStated | ClaimOrigin::UserCorrected
+    ) || has_manual_review_evidence(item)
+}
+
+fn origin_requires_review(origin: &ClaimOrigin) -> bool {
+    matches!(
+        origin,
+        ClaimOrigin::AgentInferred
+            | ClaimOrigin::Imported
+            | ClaimOrigin::Migrated
+            | ClaimOrigin::GeneratedSummary
+            | ClaimOrigin::Custom(_)
+    )
+}
+
+fn has_manual_review_evidence(item: &MemoryItem) -> bool {
+    item.evidence
+        .iter()
+        .any(|evidence| matches!(evidence.kind, EvidenceKind::ManualReview))
+}
+
 fn validate_knowledge_commit(commit: &KnowledgeCommit) -> IndexResult<()> {
     if commit.message.trim().is_empty() {
         return Err(IndexError::Parse(
@@ -1451,6 +1506,7 @@ mod tests {
             ClaimOrigin::UserStated,
             writer(),
         )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test"))
     }
 
     fn run_git(cwd: &Path, args: &[&str]) {
@@ -1528,6 +1584,159 @@ mod tests {
 
         let err = service.capture_memory(item).await.unwrap_err();
         assert!(matches!(err, IndexError::Parse(_)));
+    }
+
+    #[tokio::test]
+    async fn capture_policy_allows_user_preferences_without_extra_evidence() {
+        let service = setup_service().await;
+        for origin in [ClaimOrigin::UserStated, ClaimOrigin::UserCorrected] {
+            let item = MemoryItem::new(
+                MemoryKind::Preference,
+                format!("Preference from {origin}"),
+                "User prefers concise status updates.",
+                MemoryScope::User,
+                origin,
+                writer(),
+            );
+
+            let captured = service.capture_memory(item).await.unwrap();
+
+            assert_eq!(captured.status, MemoryStatus::Active);
+            assert!(captured.evidence.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_policy_downgrades_active_durable_guidance_without_evidence() {
+        let service = setup_service().await;
+        for kind in [
+            MemoryKind::Decision,
+            MemoryKind::Rule,
+            MemoryKind::Limitation,
+        ] {
+            let item = MemoryItem::new(
+                kind.clone(),
+                format!("Unevidenced {kind}"),
+                "Durable guidance must not become active without evidence.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            );
+
+            let captured = service.capture_memory(item).await.unwrap();
+
+            assert_eq!(captured.status, MemoryStatus::NeedsReview);
+        }
+
+        assert!(service.list_active_memory(None).await.unwrap().is_empty());
+        assert_eq!(
+            service
+                .list_memory_needing_review(None)
+                .await
+                .unwrap()
+                .len(),
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn capture_policy_allows_evidenced_durable_guidance() {
+        let service = setup_service().await;
+        for kind in [
+            MemoryKind::Decision,
+            MemoryKind::Rule,
+            MemoryKind::Limitation,
+        ] {
+            let item = MemoryItem::new(
+                kind.clone(),
+                format!("Evidenced {kind}"),
+                "Durable guidance can become active when backed by evidence.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test"));
+
+            let captured = service.capture_memory(item).await.unwrap();
+
+            assert_eq!(captured.status, MemoryStatus::Active);
+        }
+
+        assert_eq!(service.list_active_memory(None).await.unwrap().len(), 3);
+        assert!(service
+            .list_memory_needing_review(None)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn capture_policy_keeps_review_origins_out_of_active_memory() {
+        let service = setup_service().await;
+        for origin in [
+            ClaimOrigin::AgentInferred,
+            ClaimOrigin::Imported,
+            ClaimOrigin::Migrated,
+            ClaimOrigin::GeneratedSummary,
+        ] {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Review origin {origin}"),
+                "Review-origin memory should stay gated unless manually reviewed.",
+                MemoryScope::project("engram"),
+                origin,
+                writer(),
+            )
+            .with_status(MemoryStatus::Active);
+
+            let captured = service.capture_memory(item).await.unwrap();
+
+            assert_eq!(captured.status, MemoryStatus::NeedsReview);
+        }
+
+        assert!(service.list_active_memory(None).await.unwrap().is_empty());
+        assert_eq!(
+            service
+                .list_memory_needing_review(None)
+                .await
+                .unwrap()
+                .len(),
+            4
+        );
+    }
+
+    #[tokio::test]
+    async fn capture_policy_keeps_low_friction_agent_observations_active_without_evidence() {
+        let service = setup_service().await;
+        for kind in [
+            MemoryKind::ProjectFact,
+            MemoryKind::RepositoryFact,
+            MemoryKind::TaskFact,
+            MemoryKind::UserFact,
+            MemoryKind::SessionInsight,
+            MemoryKind::Handoff,
+        ] {
+            let item = MemoryItem::new(
+                kind.clone(),
+                format!("Low friction {kind}"),
+                "Low-friction memory can be captured without evidence.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            );
+
+            let captured = service.capture_memory(item).await.unwrap();
+
+            assert_eq!(captured.status, MemoryStatus::Active);
+            assert!(captured.evidence.is_empty());
+        }
+
+        assert_eq!(service.list_active_memory(None).await.unwrap().len(), 6);
+        assert!(service
+            .list_memory_needing_review(None)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]
