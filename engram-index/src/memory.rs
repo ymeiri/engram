@@ -8,6 +8,7 @@ use crate::digest::{
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions,
 };
 use crate::error::{IndexError, IndexResult};
+use crate::memory_ranker::{rank_memory_item, rank_memory_items, MemoryRankContext};
 use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, MigrationReviewStatus, MigrationService,
@@ -851,17 +852,10 @@ fn filter_relevant(
     cwd: Option<&str>,
     query: Option<&str>,
 ) -> Vec<MemoryItem> {
-    let mut items = items
+    rank_memory_items(items, MemoryRankContext::orientation(project, cwd, query))
         .into_iter()
-        .filter(|item| is_relevant(item, project, cwd))
-        .collect::<Vec<_>>();
-    items.sort_by(|left, right| {
-        orientation_score(right, project, cwd, query)
-            .partial_cmp(&orientation_score(left, project, cwd, query))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| right.updated_at.cmp(&left.updated_at))
-    });
-    items
+        .map(|ranked| ranked.item)
+        .collect()
 }
 
 fn resolve_orientation_project(
@@ -1047,104 +1041,12 @@ fn component_names(repository_context: Option<&RepositoryContext>) -> Vec<String
         .unwrap_or_default()
 }
 
+#[cfg(test)]
 fn is_relevant(item: &MemoryItem, project: Option<&str>, cwd: Option<&str>) -> bool {
-    match &item.scope {
-        MemoryScope::Global | MemoryScope::User => true,
-        MemoryScope::Project { project_name, .. } => {
-            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
-        }
-        MemoryScope::Task { project_name, .. } => match (project, project_name) {
-            (Some(project), Some(item_project)) => item_project.eq_ignore_ascii_case(project),
-            _ => false,
-        },
-        MemoryScope::Repository { local_path, .. } => match (cwd, local_path) {
-            (Some(cwd), Some(local_path)) => {
-                let cwd_path = canonical_or_original(Path::new(cwd));
-                let local_path = canonical_or_original(Path::new(local_path));
-                path_starts_with(&cwd_path, &local_path)
-            }
-            _ => false,
-        },
-        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
-            false
-        }
-    }
-}
-
-fn orientation_score(
-    item: &MemoryItem,
-    project: Option<&str>,
-    cwd: Option<&str>,
-    query: Option<&str>,
-) -> f32 {
-    let mut score = 0.0;
-    score += scope_match_score(item, project, cwd);
-    score += keyword_score(item, query);
-    score += recency_score(item.updated_at);
-    score += item.confidence.value() * 0.5;
-    if item.status == MemoryStatus::Active {
-        score += 1.0;
-    }
-    score
-}
-
-fn scope_match_score(item: &MemoryItem, project: Option<&str>, cwd: Option<&str>) -> f32 {
-    match &item.scope {
-        MemoryScope::Project { project_name, .. } => project
-            .filter(|project| project_name.eq_ignore_ascii_case(project))
-            .map(|_| 4.0)
-            .unwrap_or(0.0),
-        MemoryScope::Task { project_name, .. } => match (project, project_name) {
-            (Some(project), Some(item_project)) if item_project.eq_ignore_ascii_case(project) => {
-                3.5
-            }
-            _ => 0.0,
-        },
-        MemoryScope::Repository { local_path, .. } => match (cwd, local_path) {
-            (Some(cwd), Some(local_path)) => {
-                let cwd_path = canonical_or_original(Path::new(cwd));
-                let local_path = canonical_or_original(Path::new(local_path));
-                if path_starts_with(&cwd_path, &local_path) {
-                    3.0
-                } else {
-                    0.0
-                }
-            }
-            _ => 0.0,
-        },
-        MemoryScope::Global | MemoryScope::User => 1.0,
-        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
-            0.0
-        }
-    }
-}
-
-fn keyword_score(item: &MemoryItem, query: Option<&str>) -> f32 {
-    let Some(query) = query.filter(|query| !query.trim().is_empty()) else {
-        return 0.0;
-    };
-    let haystack = format!("{} {}", item.title, item.content).to_lowercase();
-    query
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|term| term.len() >= 3)
-        .map(str::to_lowercase)
-        .filter(|term| haystack.contains(term))
-        .count()
-        .min(5) as f32
-        * 0.7
-}
-
-fn recency_score(updated_at: OffsetDateTime) -> f32 {
-    let age = OffsetDateTime::now_utc() - updated_at;
-    if age < time::Duration::days(7) {
-        1.0
-    } else if age < time::Duration::days(30) {
-        0.7
-    } else if age < time::Duration::days(120) {
-        0.3
-    } else {
-        0.0
-    }
+    crate::memory_ranker::memory_scope_matches(
+        item,
+        MemoryRankContext::orientation(project, cwd, None),
+    )
 }
 
 fn matches_changes_since_filters(item: &MemoryItem, options: &MemoryChangesSinceOptions) -> bool {
@@ -1175,27 +1077,32 @@ fn score_changes_since_items(
     items: &[MemoryItem],
     options: &MemoryChangesSinceOptions,
 ) -> Vec<MemoryChangeRelevance> {
+    let context = MemoryRankContext::changes_since(
+        options.project.as_deref(),
+        options.cwd.as_deref(),
+        options.query.as_deref(),
+    );
     items
         .iter()
         .map(|item| {
-            let mut score = 0.0;
             let mut reasons = Vec::new();
-            let scope_score =
-                scope_match_score(item, options.project.as_deref(), options.cwd.as_deref());
-            if scope_score > 0.0 {
-                score += scope_score;
+            let ranked = rank_memory_item(item.clone(), context);
+            let score = ranked.as_ref().map(|ranked| ranked.score).unwrap_or(0.0);
+
+            if ranked
+                .as_ref()
+                .is_some_and(|ranked| ranked.components.scope > 0.0)
+            {
                 reasons.push("scope_match".to_string());
             }
-            let keyword_score = keyword_score(item, options.query.as_deref());
-            if keyword_score > 0.0 {
-                score += keyword_score;
+            if ranked
+                .as_ref()
+                .is_some_and(|ranked| ranked.components.text > 0.0)
+            {
                 reasons.push("keyword_match".to_string());
             }
-            score += recency_score(item.updated_at);
             reasons.push("recency".to_string());
-            score += item.confidence.value() * 0.5;
             if item.status == MemoryStatus::Active {
-                score += 1.0;
                 reasons.push("active".to_string());
             }
             MemoryChangeRelevance {

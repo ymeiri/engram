@@ -4,12 +4,14 @@
 //! entities, aliases, observations, session events, documents, tool usages, and memory items.
 
 use crate::error::IndexResult;
-use engram_core::memory::{MemoryItem, MemoryScope, MemoryStatus};
+use crate::memory_ranker::{
+    memory_scope_label, rank_memory_items, MemoryRankContext, RankedMemoryItem,
+};
+use engram_core::memory::MemoryStatus;
 use engram_core::search::{SearchLayer, SearchResultSource, UnifiedSearchResult};
 use engram_embed::Embedder;
 use engram_store::{Db, DocumentRepo, EntityRepo, MemoryRepo, SessionRepo, ToolRepo};
 use std::collections::HashMap;
-use std::path::Path;
 use tracing::{debug, info};
 
 /// Truncate a string to at most `max_bytes` bytes at a valid UTF-8 char boundary.
@@ -529,24 +531,22 @@ impl SearchService {
         }
         debug!("Searching memory items: {}", query);
 
-        let mut results = self
-            .memory_repo
-            .list_memory_items(Some(MemoryStatus::Active), None)
-            .await?
-            .into_iter()
-            .filter(|item| memory_scope_matches(item, options))
-            .filter_map(|item| memory_result_for_query(item, query))
-            .collect::<Vec<_>>();
+        let ranked = rank_memory_items(
+            self.memory_repo
+                .list_memory_items(Some(MemoryStatus::Active), None)
+                .await?,
+            MemoryRankContext::search(
+                options.project.as_deref(),
+                options.cwd.as_deref(),
+                Some(query),
+            ),
+        );
 
-        results.sort_by(|left, right| {
-            right
-                .score
-                .partial_cmp(&left.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| left.title.cmp(&right.title))
-        });
-        results.truncate(limit);
-        Ok(results)
+        Ok(ranked
+            .into_iter()
+            .take(limit)
+            .map(memory_result_for_ranked)
+            .collect())
     }
 
     /// Get statistics about what can be searched.
@@ -592,8 +592,8 @@ pub struct SearchStats {
     pub memory_item_count: u64,
 }
 
-fn memory_result_for_query(item: MemoryItem, query: &str) -> Option<UnifiedSearchResult> {
-    let score = memory_text_score(&item, query)?;
+fn memory_result_for_ranked(ranked: RankedMemoryItem) -> UnifiedSearchResult {
+    let item = ranked.item;
     let snippet = truncate_snippet(&item.content, 200);
     let metadata = item.trust_metadata();
     let context = format!(
@@ -608,142 +608,13 @@ fn memory_result_for_query(item: MemoryItem, query: &str) -> Option<UnifiedSearc
         metadata.writer.model
     );
 
-    Some(
-        UnifiedSearchResult::new(
-            SearchResultSource::Memory,
-            score,
-            item.title,
-            snippet,
-            item.id.to_string(),
-        )
-        .with_context(context)
-        .with_memory_metadata(metadata),
+    UnifiedSearchResult::new(
+        SearchResultSource::Memory,
+        ranked.score,
+        item.title,
+        snippet,
+        item.id.to_string(),
     )
-}
-
-fn memory_text_score(item: &MemoryItem, query: &str) -> Option<f32> {
-    let query = query.trim();
-    if query.is_empty() {
-        return None;
-    }
-
-    let query_lower = query.to_lowercase();
-    let title_lower = item.title.to_lowercase();
-    let content_lower = item.content.to_lowercase();
-    let tags_lower = item.tags.join(" ").to_lowercase();
-    let haystack = format!(
-        "{} {} {} {} {}",
-        title_lower,
-        content_lower,
-        tags_lower,
-        item.kind,
-        memory_scope_label(&item.scope).to_lowercase()
-    );
-
-    if title_lower == query_lower {
-        return Some(0.96);
-    }
-    if title_lower.contains(&query_lower) {
-        return Some(0.90);
-    }
-    if content_lower.contains(&query_lower) {
-        return Some(0.84);
-    }
-
-    let terms = query_lower
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|term| term.len() >= 3)
-        .collect::<Vec<_>>();
-    if terms.is_empty() {
-        return None;
-    }
-
-    let matched = terms
-        .iter()
-        .filter(|term| haystack.contains(**term))
-        .count();
-    if matched == 0 {
-        return None;
-    }
-
-    let ratio = matched as f32 / terms.len() as f32;
-    let title_hits = terms
-        .iter()
-        .filter(|term| title_lower.contains(**term))
-        .count();
-    let content_hits = terms
-        .iter()
-        .filter(|term| content_lower.contains(**term))
-        .count();
-    let mut score = 0.48 + ratio * 0.28 + title_hits as f32 * 0.04 + content_hits as f32 * 0.02;
-    score += item.confidence.value() * 0.08;
-    Some(score.min(0.88))
-}
-
-fn memory_scope_matches(item: &MemoryItem, options: &SearchOptions) -> bool {
-    if options.project.is_none() && options.cwd.is_none() {
-        return true;
-    }
-
-    match &item.scope {
-        MemoryScope::Global | MemoryScope::User => true,
-        MemoryScope::Project { project_name, .. } => options
-            .project
-            .as_deref()
-            .is_some_and(|project| project_name.eq_ignore_ascii_case(project)),
-        MemoryScope::Task { project_name, .. } => {
-            match (options.project.as_deref(), project_name) {
-                (Some(project), Some(item_project)) => item_project.eq_ignore_ascii_case(project),
-                _ => false,
-            }
-        }
-        MemoryScope::Repository { local_path, .. } => match (options.cwd.as_deref(), local_path) {
-            (Some(cwd), Some(local_path)) => path_starts_with(
-                &canonical_or_original(Path::new(cwd)),
-                &canonical_or_original(Path::new(local_path)),
-            ),
-            _ => false,
-        },
-        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
-            false
-        }
-    }
-}
-
-fn memory_scope_label(scope: &MemoryScope) -> String {
-    match scope {
-        MemoryScope::Global => "global".to_string(),
-        MemoryScope::User => "user".to_string(),
-        MemoryScope::Project { project_name, .. } => format!("project:{project_name}"),
-        MemoryScope::Task {
-            project_name,
-            task_name,
-            ..
-        } => match project_name {
-            Some(project_name) => format!("task:{project_name}/{task_name}"),
-            None => format!("task:{task_name}"),
-        },
-        MemoryScope::Entity { entity_name, .. } => format!("entity:{entity_name}"),
-        MemoryScope::Repository {
-            remote_url,
-            local_path,
-            ..
-        } => format!(
-            "repository:{}",
-            local_path
-                .as_deref()
-                .or(remote_url.as_deref())
-                .unwrap_or("unknown")
-        ),
-        MemoryScope::Session { session_id } => format!("session:{session_id}"),
-        MemoryScope::Custom { name } => format!("custom:{name}"),
-    }
-}
-
-fn canonical_or_original(path: &Path) -> std::path::PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn path_starts_with(path: &Path, base: &Path) -> bool {
-    path == base || path.starts_with(base)
+    .with_context(context)
+    .with_memory_metadata(metadata)
 }

@@ -37,6 +37,7 @@ pub mod harness;
 pub mod knowledge;
 pub mod lint;
 pub mod memory;
+pub(crate) mod memory_ranker;
 pub mod migration;
 pub mod obligation;
 pub mod parser;

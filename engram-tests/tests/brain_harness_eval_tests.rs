@@ -8,10 +8,12 @@ use engram_core::memory::{
     ClaimOrigin, Harness, MemoryFreshness, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope,
     ModelIdentity, WriterProvenance,
 };
+use engram_core::search::SearchLayer;
 use engram_core::telemetry::{AgentFeedback, BrainHarnessIntent, BrainHarnessOperation};
 use engram_index::ToolIntelService;
 use engram_index::{
-    EntityService, MemoryService, OrientInput, SearchService, SessionService, TelemetryService,
+    EntityService, MemoryService, OrientInput, SearchOptions, SearchService, SessionService,
+    TelemetryService,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde::{Deserialize, Serialize};
@@ -397,4 +399,68 @@ async fn unified_search_should_find_memoryitem_guidance() {
     assert!(results
         .iter()
         .any(|result| result.source.to_string() == "memory"));
+}
+
+#[tokio::test]
+async fn orient_and_memory_search_share_memoryitem_ranking_order() {
+    let (memory_service, search_service) = setup_memory_and_search_services().await;
+    for title in ["Shared ranker first", "Shared ranker second"] {
+        memory_service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Decision,
+                title,
+                "Shared ranker should order MemoryItems consistently for orient and search.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            ))
+            .await
+            .expect("memory should be captured");
+    }
+
+    let query = "shared ranker order MemoryItems consistently";
+    let packet = memory_service
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(query.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::VerifyDecision),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    let search_results = search_service
+        .search_with_options(
+            query,
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("memory search should run");
+
+    let oriented_ids = packet
+        .active_decisions
+        .iter()
+        .map(|item| item.id.to_string())
+        .collect::<Vec<_>>();
+    let searched_ids = search_results
+        .iter()
+        .map(|result| result.id.clone())
+        .collect::<Vec<_>>();
+
+    assert_eq!(oriented_ids, searched_ids);
+    assert!(packet
+        .memory_metadata
+        .iter()
+        .all(|metadata| metadata.review_state == MemoryReviewState::ActiveUnreviewed));
+    assert!(search_results
+        .iter()
+        .all(|result| result.memory_metadata.is_some()));
 }
