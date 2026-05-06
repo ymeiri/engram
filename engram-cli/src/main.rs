@@ -41,15 +41,15 @@ use engram_index::{
     DocumentReindexExecutionOptions, DocumentReindexExecutionReport,
     DocumentReindexExecutionStatus, DocumentReindexPlan, DocumentService, EntityService,
     GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
-    HarnessService, KnowledgeService, LintOptions, LintService, MemoryChanges,
-    MemoryChangesSinceOptions, MemoryService, MigrationInventory, MigrationInventoryOptions,
-    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
-    MigrationReviewStatus, ObligationDetectOptions, ObligationDetection, ObligationDoctorReport,
-    ObligationService, OrientInput, OrientationPacket, Pipeline, PipelineConfig,
-    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
-    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport,
-    RepositoryMigrationReviewStatus, RepositoryService, SearchService, SessionService,
-    TelemetryService, ToolIntelService, WorkService,
+    HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
+    MemoryChanges, MemoryChangesSinceOptions, MemoryService, MigrationInventory,
+    MigrationInventoryOptions, MigrationReviewApply, MigrationReviewApplyOptions,
+    MigrationReviewExport, MigrationReviewStatus, ObligationDetectOptions, ObligationDetection,
+    ObligationDoctorReport, ObligationService, OrientInput, OrientationPacket, Pipeline,
+    PipelineConfig, RepositoryMigrationInventory, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
+    RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus, RepositoryService,
+    SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -1920,6 +1920,10 @@ impl From<HarnessKindArg> for HarnessKind {
     }
 }
 
+fn parse_harness_settings_target(value: &str) -> Result<HarnessSettingsTarget, String> {
+    HarnessSettingsTarget::parse(value)
+}
+
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum HarnessCommands {
@@ -1985,6 +1989,10 @@ enum HarnessCommands {
         /// Back up and replace user-owned adapters; only active with --write
         #[arg(long)]
         adopt_user_owned: bool,
+
+        /// Claude settings target: settings.json, settings.local.json, or snippet-only
+        #[arg(long, default_value = "settings.json", value_parser = parse_harness_settings_target)]
+        settings_target: HarnessSettingsTarget,
 
         /// Print report as JSON
         #[arg(long)]
@@ -2926,6 +2934,17 @@ fn print_harness_status(report: &HarnessStatusReport) {
     }
     if !report.missing_mcp_tools.is_empty() {
         println!("Missing MCP tools: {}", report.missing_mcp_tools.join(", "));
+    }
+    if !report.settings.is_empty() {
+        println!("Settings:");
+        for check in &report.settings {
+            let locations = if check.locations.is_empty() {
+                "missing".to_string()
+            } else {
+                check.locations.join(", ")
+            };
+            println!("  - {} [{}] {}", check.name, check.kind, locations);
+        }
     }
     if !report.warnings.is_empty() {
         println!("Warnings:");
@@ -7738,6 +7757,7 @@ async fn main() -> Result<()> {
                     root,
                     write,
                     adopt_user_owned,
+                    settings_target,
                     json,
                 } => {
                     let report = service.install_with_options(
@@ -7746,6 +7766,7 @@ async fn main() -> Result<()> {
                         HarnessInstallOptions {
                             write,
                             adopt_user_owned,
+                            settings_target,
                         },
                     )?;
                     if json {

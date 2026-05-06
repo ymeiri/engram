@@ -67,7 +67,7 @@ pub use graph::GraphService;
 pub use handoff::{HandoffCompile, HandoffGet, HandoffService, HandoffUpdate};
 pub use harness::{
     HarnessHookEvent, HarnessHookEventOutcome, HarnessHookServices, HarnessInstallOptions,
-    HarnessService,
+    HarnessService, HarnessSettingsTarget,
 };
 pub use knowledge::{
     DuplicateGroup, KnowledgeConfig, KnowledgeService, KnowledgeStats, ScanResult, VersionChain,

@@ -186,10 +186,27 @@ pub struct HarnessStatusReport {
     pub adapters: Vec<HarnessAdapterCheck>,
     /// Missing required MCP tools, if the caller provided observed tool names.
     pub missing_mcp_tools: Vec<String>,
+    /// Settings checks for harness-specific configuration files.
+    pub settings: Vec<HarnessSettingsCheck>,
     /// Soft warnings for incomplete lifecycle integration.
     pub warnings: Vec<String>,
-    /// True when every required adapter is installed and required MCP tools are present.
+    /// True when every required adapter, MCP tool, and settings entry is present.
     pub ready: bool,
+}
+
+/// Verification result for one settings entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessSettingsCheck {
+    /// Stable settings entry name.
+    pub name: String,
+    /// Entry kind, for example permission or hook.
+    pub kind: String,
+    /// Whether this entry is required for first-class harness integration.
+    pub required: bool,
+    /// Settings files where the entry was found.
+    pub locations: Vec<String>,
+    /// Explanation for humans and agents.
+    pub message: String,
 }
 
 /// Rendered adapter payload.

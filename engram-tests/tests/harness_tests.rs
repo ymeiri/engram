@@ -40,6 +40,7 @@ fn request(action: &str) -> HarnessRequest {
         adapter: None,
         write: None,
         adopt_user_owned: None,
+        settings_target: None,
         observed_mcp_tools: Vec::new(),
         hook_event_name: None,
         session_id: None,

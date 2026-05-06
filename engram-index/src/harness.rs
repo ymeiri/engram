@@ -8,7 +8,7 @@ use crate::error::{IndexError, IndexResult};
 use engram_core::harness::{
     HarnessAdapterCheck, HarnessAdapterKind, HarnessAdapterSpec, HarnessAdapterStatus,
     HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleTrigger, HarnessPolicy,
-    HarnessRenderedAdapter, HarnessStatusReport,
+    HarnessRenderedAdapter, HarnessSettingsCheck, HarnessStatusReport,
 };
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
@@ -16,6 +16,7 @@ use engram_core::memory::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -33,6 +34,60 @@ pub struct HarnessInstallOptions {
     pub write: bool,
     /// Back up and replace user-owned adapter files.
     pub adopt_user_owned: bool,
+    /// Claude Code settings target for generated permissions and hooks.
+    pub settings_target: HarnessSettingsTarget,
+}
+
+/// Claude Code settings target for harness installation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HarnessSettingsTarget {
+    /// Merge into project-shared `.claude/settings.json`.
+    #[default]
+    Project,
+    /// Merge into local, gitignored `.claude/settings.local.json`.
+    Local,
+    /// Do not merge settings; generate the snippet only.
+    SnippetOnly,
+}
+
+impl HarnessSettingsTarget {
+    /// Parse a settings target.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.to_lowercase().replace('-', "_").as_str() {
+            "settings.json" | "settings_json" | "project" | "project_settings" => {
+                Ok(Self::Project)
+            }
+            "settings.local.json" | "settings_local_json" | "local" | "local_settings" => {
+                Ok(Self::Local)
+            }
+            "snippet" | "snippet_only" | "none" => Ok(Self::SnippetOnly),
+            _ => Err(format!(
+                "invalid settings target '{value}'; expected settings.json, settings.local.json, or snippet-only"
+            )),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Project => "settings.json",
+            Self::Local => "settings.local.json",
+            Self::SnippetOnly => "snippet-only",
+        }
+    }
+
+    fn path(self, root: &Path) -> Option<PathBuf> {
+        match self {
+            Self::Project => Some(claude_project_settings_path(root)),
+            Self::Local => Some(claude_local_settings_path(root)),
+            Self::SnippetOnly => None,
+        }
+    }
+}
+
+impl std::fmt::Display for HarnessSettingsTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
 }
 
 /// A Claude Code hook event routed through the Engram harness.
@@ -194,12 +249,14 @@ impl HarnessService {
             .all(|check| check.status == HarnessAdapterStatus::Installed)
             && missing_mcp_tools.is_empty();
 
+        let mut settings = Vec::new();
         if harness == HarnessKind::ClaudeCode {
-            let settings_warnings = claude_settings_warnings(&root)?;
-            if !settings_warnings.is_empty() {
+            let settings_status = claude_settings_status(&root)?;
+            if settings_status.has_missing_required() {
                 ready = false;
-                warnings.extend(settings_warnings);
             }
+            warnings.extend(settings_status.warnings);
+            settings = settings_status.checks;
         }
 
         Ok(HarnessStatusReport {
@@ -208,6 +265,7 @@ impl HarnessService {
             policy,
             adapters,
             missing_mcp_tools,
+            settings,
             warnings,
             ready,
         })
@@ -277,6 +335,7 @@ impl HarnessService {
             HarnessInstallOptions {
                 write,
                 adopt_user_owned: false,
+                settings_target: HarnessSettingsTarget::default(),
             },
         )
     }
@@ -374,10 +433,12 @@ impl HarnessService {
         if harness == HarnessKind::ClaudeCode {
             merge_claude_settings(
                 &root,
+                options.settings_target,
                 options.write,
                 &mut planned,
                 &mut written,
                 &mut skipped,
+                &mut warnings,
             )?;
         }
 
@@ -1237,57 +1298,230 @@ fn backup_path(path: &Path) -> PathBuf {
     unreachable!("infinite backup path search should always return")
 }
 
-fn claude_settings_path(root: &Path) -> PathBuf {
+struct ClaudeSettingsSource {
+    label: &'static str,
+    path: PathBuf,
+    settings: Option<Value>,
+}
+
+struct ClaudeSettingsStatus {
+    checks: Vec<HarnessSettingsCheck>,
+    warnings: Vec<String>,
+}
+
+impl ClaudeSettingsStatus {
+    fn has_missing_required(&self) -> bool {
+        self.checks
+            .iter()
+            .any(|check| check.required && check.locations.is_empty())
+    }
+}
+
+fn claude_project_settings_path(root: &Path) -> PathBuf {
     root.join(".claude/settings.json")
 }
 
-fn claude_settings_warnings(root: &Path) -> IndexResult<Vec<String>> {
-    let path = claude_settings_path(root);
+fn claude_local_settings_path(root: &Path) -> PathBuf {
+    root.join(".claude/settings.local.json")
+}
+
+fn claude_settings_snippet_path(root: &Path) -> PathBuf {
+    root.join(".claude/engram-settings-snippet.json")
+}
+
+fn read_claude_settings_source(
+    label: &'static str,
+    path: PathBuf,
+) -> IndexResult<ClaudeSettingsSource> {
     let contents = match fs::read_to_string(&path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(vec![format!(
-                "Claude settings are missing at {}; run harness install --write to add Engram hooks and permissions.",
-                path.display()
-            )]);
+            return Ok(ClaudeSettingsSource {
+                label,
+                path,
+                settings: None,
+            });
         }
         Err(error) => return Err(error.into()),
     };
-    let settings: Value = serde_json::from_str(&contents)
-        .map_err(|e| IndexError::Parse(format!("failed to parse Claude settings: {e}")))?;
+    let settings: Value = serde_json::from_str(&contents).map_err(|e| {
+        IndexError::Parse(format!(
+            "failed to parse Claude settings at {}: {e}",
+            path.display()
+        ))
+    })?;
+    Ok(ClaudeSettingsSource {
+        label,
+        path,
+        settings: Some(settings),
+    })
+}
+
+fn read_claude_settings_sources(root: &Path) -> IndexResult<Vec<ClaudeSettingsSource>> {
+    Ok(vec![
+        read_claude_settings_source("settings.json", claude_project_settings_path(root))?,
+        read_claude_settings_source("settings.local.json", claude_local_settings_path(root))?,
+    ])
+}
+
+fn claude_settings_status(root: &Path) -> IndexResult<ClaudeSettingsStatus> {
+    let sources = read_claude_settings_sources(root)?;
+    let present_sources: Vec<_> = sources
+        .iter()
+        .filter(|source| source.settings.is_some())
+        .collect();
 
     let mut warnings = Vec::new();
-    let allow = settings
-        .pointer("/permissions/allow")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
+    if present_sources.is_empty() {
+        warnings.push(format!(
+            "Claude settings are missing at {} and {}; run harness install --write --settings-target settings.json for shared setup or --settings-target settings.local.json for local setup.",
+            claude_project_settings_path(root).display(),
+            claude_local_settings_path(root).display()
+        ));
+    }
+
+    let mut checks = Vec::new();
     for permission in claude_required_permissions() {
-        if !allow.iter().any(|value| value.as_str() == Some(permission)) {
+        let locations = sources
+            .iter()
+            .filter(|source| {
+                source
+                    .settings
+                    .as_ref()
+                    .map(|settings| claude_settings_has_permission(settings, permission))
+                    .unwrap_or(false)
+            })
+            .map(|source| source.label.to_string())
+            .collect::<Vec<_>>();
+        if locations.is_empty() {
             warnings.push(format!(
-                "Claude settings are missing permission allow entry '{permission}'."
+                "Claude settings are missing permission allow entry '{permission}' in both settings.json and settings.local.json."
             ));
         }
+        checks.push(HarnessSettingsCheck {
+            name: permission.to_string(),
+            kind: "permission".to_string(),
+            required: true,
+            message: settings_check_message(&locations),
+            locations,
+        });
     }
 
     for (event, matcher) in claude_required_hook_events() {
-        if !claude_settings_has_hook(&settings, event, matcher) {
+        let name = match matcher {
+            Some(matcher) => format!("{event}:{matcher}"),
+            None => event.to_string(),
+        };
+        let locations = sources
+            .iter()
+            .filter(|source| {
+                source
+                    .settings
+                    .as_ref()
+                    .map(|settings| claude_settings_has_hook(settings, event, matcher))
+                    .unwrap_or(false)
+            })
+            .map(|source| source.label.to_string())
+            .collect::<Vec<_>>();
+        if locations.is_empty() {
             warnings.push(format!(
-                "Claude settings are missing Engram hook registration for {event}."
+                "Claude settings are missing Engram hook registration for {event} in both settings.json and settings.local.json."
+            ));
+        }
+        checks.push(HarnessSettingsCheck {
+            name,
+            kind: "hook".to_string(),
+            required: true,
+            message: settings_check_message(&locations),
+            locations,
+        });
+    }
+
+    warn_for_stale_engram_permissions(&sources, &mut warnings);
+    warn_for_split_settings(&checks, &mut warnings);
+
+    Ok(ClaudeSettingsStatus { checks, warnings })
+}
+
+fn settings_check_message(locations: &[String]) -> String {
+    if locations.is_empty() {
+        "missing from Claude settings".to_string()
+    } else {
+        format!("found in {}", locations.join(", "))
+    }
+}
+
+fn warn_for_stale_engram_permissions(sources: &[ClaudeSettingsSource], warnings: &mut Vec<String>) {
+    let required: BTreeSet<_> = claude_required_permissions().iter().copied().collect();
+    for source in sources {
+        let Some(settings) = &source.settings else {
+            continue;
+        };
+        let stale = claude_engram_permissions(settings)
+            .into_iter()
+            .filter(|permission| !required.contains(permission.as_str()))
+            .collect::<Vec<_>>();
+        if !stale.is_empty() {
+            warnings.push(format!(
+                "{} contains Engram permission entries that are not part of the current Claude harness contract: {}.",
+                source.label,
+                stale.join(", ")
             ));
         }
     }
-    Ok(warnings)
+}
+
+fn warn_for_split_settings(checks: &[HarnessSettingsCheck], warnings: &mut Vec<String>) {
+    let mut locations = BTreeSet::new();
+    for check in checks {
+        for location in &check.locations {
+            locations.insert(location.as_str());
+        }
+    }
+    if locations.len() > 1 {
+        warnings.push(format!(
+            "Engram Claude settings are split across {}; verify effective hook configuration with Claude Code /hooks.",
+            locations.into_iter().collect::<Vec<_>>().join(" and ")
+        ));
+    }
+}
+
+fn claude_engram_permissions(settings: &Value) -> Vec<String> {
+    settings
+        .pointer("/permissions/allow")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|permission| permission.starts_with("mcp__engram__"))
+        .map(str::to_string)
+        .collect()
 }
 
 fn merge_claude_settings(
     root: &Path,
+    target: HarnessSettingsTarget,
     write: bool,
     planned: &mut Vec<HarnessInstallFile>,
     written: &mut Vec<HarnessInstallFile>,
     skipped: &mut Vec<HarnessInstallFile>,
+    warnings: &mut Vec<String>,
 ) -> IndexResult<()> {
-    let path = claude_settings_path(root);
+    let Some(path) = target.path(root) else {
+        skipped.push(HarnessInstallFile {
+            name: "claude-settings-merge".to_string(),
+            path: claude_settings_snippet_path(root).display().to_string(),
+            written: false,
+            message: "settings target is snippet-only; no Claude settings file will be modified"
+                .to_string(),
+        });
+        warnings.push(
+            "Claude settings were not modified because settings target is snippet-only; merge .claude/engram-settings-snippet.json manually or rerun with --settings-target settings.json."
+                .to_string(),
+        );
+        return Ok(());
+    };
+    warn_for_settings_target(target, root, warnings)?;
     let mut settings = match fs::read_to_string(&path) {
         Ok(contents) => serde_json::from_str::<Value>(&contents)
             .map_err(|e| IndexError::Parse(format!("failed to parse Claude settings: {e}")))?,
@@ -1304,7 +1538,10 @@ fn merge_claude_settings(
             name: "claude-settings-merge".to_string(),
             path: path_string.clone(),
             written: false,
-            message: "will merge Engram MCP permissions and lifecycle hooks".to_string(),
+            message: format!(
+                "will merge Engram MCP permissions and lifecycle hooks into {}",
+                target
+            ),
         });
         if write {
             if let Some(parent) = path.parent() {
@@ -1317,7 +1554,10 @@ fn merge_claude_settings(
                 name: "claude-settings-merge".to_string(),
                 path: path_string,
                 written: true,
-                message: "merged Engram MCP permissions and lifecycle hooks".to_string(),
+                message: format!(
+                    "merged Engram MCP permissions and lifecycle hooks into {}",
+                    target
+                ),
             });
         }
     } else {
@@ -1325,8 +1565,41 @@ fn merge_claude_settings(
             name: "claude-settings-merge".to_string(),
             path: path_string,
             written: false,
-            message: "Claude settings already include Engram permissions and hooks".to_string(),
+            message: format!("{} already includes Engram permissions and hooks", target),
         });
+    }
+    Ok(())
+}
+
+fn warn_for_settings_target(
+    target: HarnessSettingsTarget,
+    root: &Path,
+    warnings: &mut Vec<String>,
+) -> IndexResult<()> {
+    match target {
+        HarnessSettingsTarget::Project => {
+            let local = read_claude_settings_source(
+                "settings.local.json",
+                claude_local_settings_path(root),
+            )?;
+            if let Some(settings) = local.settings {
+                let permissions = claude_engram_permissions(&settings);
+                let has_hooks = claude_required_hook_events().into_iter().any(|(event, matcher)| {
+                    claude_settings_has_hook(&settings, event, matcher)
+                });
+                if !permissions.is_empty() || has_hooks {
+                    warnings.push(format!(
+                        "{} already contains Engram entries; project settings will be written to settings.json, while local settings remain personal and have higher precedence.",
+                        local.path.display()
+                    ));
+                }
+            }
+        }
+        HarnessSettingsTarget::Local => warnings.push(
+            "Writing Claude settings to settings.local.json; this is personal, gitignored configuration and will not make the repo agent-ready for collaborators."
+                .to_string(),
+        ),
+        HarnessSettingsTarget::SnippetOnly => {}
     }
     Ok(())
 }
@@ -1492,6 +1765,15 @@ fn claude_settings_has_hook(settings: &Value, event: &str, matcher: Option<&str>
         .pointer(&format!("/hooks/{event}"))
         .map(|entry| claude_event_has_handler(entry, matcher, &claude_expected_handler(event)))
         .unwrap_or(false)
+}
+
+fn claude_settings_has_permission(settings: &Value, permission: &str) -> bool {
+    settings
+        .pointer("/permissions/allow")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .any(|value| value.as_str() == Some(permission))
 }
 
 fn claude_expected_handler(event: &str) -> Value {
@@ -2443,6 +2725,7 @@ mod tests {
                 HarnessInstallOptions {
                     write: true,
                     adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::default(),
                 },
             )
             .unwrap();
@@ -2509,6 +2792,7 @@ mod tests {
                 HarnessInstallOptions {
                     write: true,
                     adopt_user_owned: true,
+                    settings_target: HarnessSettingsTarget::default(),
                 },
             )
             .unwrap();
@@ -2521,6 +2805,110 @@ mod tests {
             .path()
             .join(".claude/hooks/engram-session-start.sh.engram-backup")
             .exists());
+    }
+
+    #[test]
+    fn claude_install_can_target_local_settings_explicitly() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+
+        service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::Local,
+                },
+            )
+            .unwrap();
+
+        assert!(root.path().join(".claude/settings.local.json").exists());
+        assert!(!root.path().join(".claude/settings.json").exists());
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+        assert!(status.ready, "{:?}", status.warnings);
+        assert!(status
+            .settings
+            .iter()
+            .filter(|check| check.required)
+            .all(|check| check.locations == vec!["settings.local.json".to_string()]));
+    }
+
+    #[test]
+    fn claude_install_snippet_only_does_not_modify_settings_files() {
+        let root = tempfile::tempdir().unwrap();
+        let report = HarnessService::new()
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::SnippetOnly,
+                },
+            )
+            .unwrap();
+
+        assert!(!root.path().join(".claude/settings.json").exists());
+        assert!(!root.path().join(".claude/settings.local.json").exists());
+        assert!(root
+            .path()
+            .join(".claude/engram-settings-snippet.json")
+            .exists());
+        assert!(report
+            .skipped
+            .iter()
+            .any(|file| file.name == "claude-settings-merge"
+                && file.message.contains("snippet-only")));
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("settings target is snippet-only")));
+    }
+
+    #[test]
+    fn claude_project_settings_target_warns_about_existing_local_engram_entries() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir_all(root.path().join(".claude")).unwrap();
+        fs::write(
+            root.path().join(".claude/settings.local.json"),
+            serde_json::to_string(&serde_json::json!({
+                "permissions": {
+                    "allow": ["mcp__engram__entity_get"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let service = HarnessService::new();
+        let report = service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: false,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::Project,
+                },
+            )
+            .unwrap();
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("settings.local.json")
+                && warning.contains("already contains Engram entries")));
+
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+        assert!(status
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not part of the current Claude harness contract")));
     }
 
     #[tokio::test]

@@ -30,11 +30,11 @@ use engram_index::{
     DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
     DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
     GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
-    HarnessService, KnowledgeService, LintOptions, LintService, MemoryChangesSinceOptions,
-    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, ObligationDetectOptions,
-    ObligationService, OrientInput, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
-    SessionService, TelemetryService, ToolIntelService, WorkService,
+    HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
+    MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
+    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService, OrientInput,
+    RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions, RepositoryService,
+    SearchOptions, SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7280,6 +7280,8 @@ pub struct HarnessRequest {
     pub write: Option<bool>,
     /// Back up and replace user-owned adapters when write=true.
     pub adopt_user_owned: Option<bool>,
+    /// Claude settings target for install: settings.json, settings.local.json, or snippet-only.
+    pub settings_target: Option<String>,
     /// MCP tool names observed by the client for doctor/status checks.
     #[serde(default)]
     pub observed_mcp_tools: Vec<String>,
@@ -7367,6 +7369,7 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                     HarnessInstallOptions {
                         write: request.write.unwrap_or(false),
                         adopt_user_owned: request.adopt_user_owned.unwrap_or(false),
+                        settings_target: parse_optional_settings_target(&request.settings_target)?,
                     },
                 )
                 .map_err(|e| e.to_string())?;
@@ -7430,6 +7433,14 @@ fn clean_hook_string(value: Option<String>) -> Option<String> {
     value.map(|value| value.trim().to_string()).filter(|value| {
         !value.is_empty() && value != "null" && !(value.starts_with("${") && value.ends_with('}'))
     })
+}
+
+fn parse_optional_settings_target(value: &Option<String>) -> Result<HarnessSettingsTarget, String> {
+    value
+        .as_deref()
+        .map(HarnessSettingsTarget::parse)
+        .transpose()
+        .map(|target| target.unwrap_or_default())
 }
 
 // =============================================================================
