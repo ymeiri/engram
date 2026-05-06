@@ -646,6 +646,12 @@ expected context, repeated context questions, and retrieval precision by arm.
 - Require evidence/provenance for durable guidance.
 - Keep ephemeral observations low-friction.
 
+Status: initial capture policy exists in `MemoryService::capture_memory`. Active preferences are
+allowed without extra evidence only for user-stated/user-corrected origins. Active decisions,
+rules, and limitations without evidence are downgraded to `needs_review`; review-origin writes stay
+gated unless manually reviewed; and low-friction facts, session insights, and handoffs can still be
+captured without evidence.
+
 ### M5: Promotion And Retirement
 
 - Implement observation graduation.
