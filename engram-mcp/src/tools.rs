@@ -21,6 +21,7 @@ use engram_core::telemetry::{
     AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
 };
 use engram_core::tool::ToolOutcome;
+use engram_core::Id;
 use engram_index::{
     CoordinationService, DigestExtractionOptions, DigestExtractionReviewApplyOptions,
     DigestInventoryOptions, DigestService, DigestSourceIndexOptions,
@@ -33,7 +34,7 @@ use engram_index::{
     HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
     MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
     MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService,
-    ObservationPromotionInput, OrientInput, RepositoryMigrationOptions,
+    ObservationPromotionInput, OrientInput, OrientationPacket, RepositoryMigrationOptions,
     RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
     SessionService, TelemetryService, ToolIntelService, WorkService,
 };
@@ -7235,6 +7236,36 @@ pub struct OrientRequest {
     pub limit: Option<usize>,
 }
 
+const ORIENT_OPEN_OBLIGATION_LIMIT: usize = 5;
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientResponse {
+    #[serde(flatten)]
+    packet: OrientationPacket,
+    obligation_summary: OrientObligationSummary,
+    open_obligations: Vec<OrientOpenObligation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientObligationSummary {
+    available: bool,
+    returned_count: usize,
+    has_more: bool,
+    message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientOpenObligation {
+    id: Id,
+    kind: String,
+    title: String,
+    description: String,
+    trigger_kind: String,
+    trigger_target: Option<String>,
+    trigger_summary: String,
+    required_resolutions: Vec<String>,
+}
+
 /// Build an orientation context packet.
 pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String, String> {
     debug!(
@@ -7242,25 +7273,163 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         request.project, request.cwd
     );
 
-    let service_guard = state.memory_service.read().await;
-    let service = service_guard
-        .as_ref()
-        .ok_or_else(|| "Memory service not initialized".to_string())?;
+    let cwd = request.cwd;
+    let project = request.project;
+    let mut packet = {
+        let service_guard = state.memory_service.read().await;
+        let service = service_guard
+            .as_ref()
+            .ok_or_else(|| "Memory service not initialized".to_string())?;
 
-    let packet = service
-        .orient(OrientInput {
-            cwd: request.cwd,
-            prompt: request.prompt,
-            project: request.project,
-            agent: request.agent,
-            intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
-            include_recent_commits: request.include_recent_commits.unwrap_or(true),
-            limit: request.limit,
-        })
+        service
+            .orient(OrientInput {
+                cwd: cwd.clone(),
+                prompt: request.prompt,
+                project: project.clone(),
+                agent: request.agent,
+                intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
+                include_recent_commits: request.include_recent_commits.unwrap_or(true),
+                limit: request.limit,
+            })
+            .await
+            .map_err(|e| e.to_string())?
+    };
+    let (obligation_summary, open_obligations) =
+        orient_open_obligations(state, project.as_deref(), cwd.as_deref()).await?;
+    apply_obligation_summary_to_packet(&mut packet, &obligation_summary, &open_obligations);
+
+    let response = OrientResponse {
+        packet,
+        obligation_summary,
+        open_obligations,
+    };
+    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+}
+
+async fn orient_open_obligations(
+    state: &ToolState,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> Result<(OrientObligationSummary, Vec<OrientOpenObligation>), String> {
+    let service_guard = state.obligation_service.read().await;
+    let Some(service) = service_guard.as_ref() else {
+        return Ok((
+            OrientObligationSummary {
+                available: false,
+                returned_count: 0,
+                has_more: false,
+                message: None,
+            },
+            Vec::new(),
+        ));
+    };
+
+    let mut obligations = service
+        .list(Some(AgentObligationStatus::Open), None)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|obligation| obligation_applies_to_orient(obligation, project, cwd))
+        .collect::<Vec<_>>();
+    obligations.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.title.cmp(&right.title))
+    });
+    let has_more = obligations.len() > ORIENT_OPEN_OBLIGATION_LIMIT;
+    let open_obligations = obligations
+        .into_iter()
+        .take(ORIENT_OPEN_OBLIGATION_LIMIT)
+        .map(OrientOpenObligation::from)
+        .collect::<Vec<_>>();
+    let message = if open_obligations.is_empty() {
+        None
+    } else {
+        let count = if has_more {
+            format!("{}+", open_obligations.len())
+        } else {
+            open_obligations.len().to_string()
+        };
+        Some(format!(
+            "{count} open obligation(s) should be resolved or explicitly skipped before final response."
+        ))
+    };
 
-    serde_json::to_string_pretty(&packet).map_err(|e| e.to_string())
+    Ok((
+        OrientObligationSummary {
+            available: true,
+            returned_count: open_obligations.len(),
+            has_more,
+            message,
+        },
+        open_obligations,
+    ))
+}
+
+fn obligation_applies_to_orient(
+    obligation: &AgentObligation,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match &obligation.scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project { project_name, .. } => {
+            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
+        }
+        MemoryScope::Task { project_name, .. } => project_name
+            .as_deref()
+            .zip(project)
+            .is_some_and(|(item_project, project)| item_project.eq_ignore_ascii_case(project)),
+        MemoryScope::Repository { local_path, .. } => {
+            let Some(cwd) = cwd else {
+                return false;
+            };
+            local_path
+                .as_deref()
+                .is_some_and(|local_path| Path::new(cwd).starts_with(Path::new(local_path)))
+        }
+        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
+            false
+        }
+    }
+}
+
+fn apply_obligation_summary_to_packet(
+    packet: &mut OrientationPacket,
+    summary: &OrientObligationSummary,
+    obligations: &[OrientOpenObligation],
+) {
+    let Some(message) = &summary.message else {
+        return;
+    };
+    packet.recommended_actions.push(message.clone());
+    packet.context_pack.push_str("\n\n## Open Obligations\n");
+    for obligation in obligations {
+        packet.context_pack.push_str(&format!(
+            "- {}: {}\n",
+            obligation.title, obligation.description
+        ));
+    }
+}
+
+impl From<AgentObligation> for OrientOpenObligation {
+    fn from(obligation: AgentObligation) -> Self {
+        Self {
+            id: obligation.id,
+            kind: obligation.kind.to_string(),
+            title: obligation.title,
+            description: obligation.description,
+            trigger_kind: obligation.trigger.kind,
+            trigger_target: obligation.trigger.target,
+            trigger_summary: obligation.trigger.summary,
+            required_resolutions: obligation
+                .required_resolution
+                .into_iter()
+                .map(|resolution| resolution.to_string())
+                .collect(),
+        }
+    }
 }
 
 // =============================================================================

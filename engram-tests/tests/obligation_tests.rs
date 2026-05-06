@@ -1,21 +1,27 @@
 //! Integration tests for agent obligation MCP tooling.
 
-use engram_index::ObligationService;
-use engram_mcp::tools::{self, MemoryEvidenceRequest, ObligationRequest, ToolState};
+use engram_index::{MemoryService, ObligationService};
+use engram_mcp::tools::{self, MemoryEvidenceRequest, ObligationRequest, OrientRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
 
 async fn setup_tool_state() -> ToolState {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config).await.expect("Failed to connect");
-    let service = ObligationService::new(db);
-    service
+    let memory_service = MemoryService::new(db.clone());
+    memory_service
+        .init_schema()
+        .await
+        .expect("Failed to initialize memory schema");
+    let obligation_service = ObligationService::new(db);
+    obligation_service
         .init_schema()
         .await
         .expect("Failed to initialize obligation schema");
 
     let state = ToolState::new();
-    state.init_obligation(service).await;
+    state.init_memory(memory_service).await;
+    state.init_obligation(obligation_service).await;
     state
 }
 
@@ -172,4 +178,62 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
     let skipped = parse_json(&skip_response);
     assert_eq!(skipped["status"], "skipped");
     assert_eq!(skipped["resolution"]["kind"], "skipped_with_reason");
+}
+
+#[tokio::test]
+async fn test_mcp_orient_surfaces_open_obligations() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.project = Some("engram".to_string());
+    add.kind = Some("document_disposition".to_string());
+    add.title = Some("Review generated design note".to_string());
+    add.description =
+        Some("A durable design note needs ingestion or an explicit skip.".to_string());
+    add.trigger_kind = Some("test".to_string());
+    add.trigger_target = Some("docs/design.md".to_string());
+    add.trigger_summary = Some("design note changed".to_string());
+    add.required_resolutions = vec![
+        "indexed_document".to_string(),
+        "memory_recorded".to_string(),
+        "skipped_with_reason".to_string(),
+    ];
+    tools::obligations_new(&state, add)
+        .await
+        .expect("add should work");
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("continue the Engram brain harness work".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("plan_work".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+    let orient = parse_json(&response);
+
+    assert_eq!(orient["obligation_summary"]["available"], true);
+    assert_eq!(orient["obligation_summary"]["returned_count"], 1);
+    assert_eq!(
+        orient["open_obligations"][0]["title"],
+        "Review generated design note"
+    );
+    assert!(orient["recommended_actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|action| action
+            .as_str()
+            .unwrap()
+            .contains("open obligation(s) should be resolved")));
+    assert!(orient["context_pack"]
+        .as_str()
+        .unwrap()
+        .contains("## Open Obligations"));
 }

@@ -19,6 +19,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       memory, with graph/obligations/lint kept out of the hot path.
 - [x] Prompt-aware Brain Loop top-item calibration; buckets stay balanced, but a strongly
       prompt-matched reviewed decision can lead the bounded context.
+- [x] MCP `orient` surfaces already-open agent obligations as a compact summary and recommended
+      action without running obligation detection in the hot path.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.

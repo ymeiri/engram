@@ -720,6 +720,10 @@ the highest prompt-specific ranked top item lead the bounded context. This prese
 without burying a reviewed decision behind a generic limitation when the prompt directly asks about
 that decision.
 
+Next hot-path checkpoint: `orient` should also surface already-open agent obligations as a compact
+summary and recommended action. This closes the "what the agent owes" visibility gap without
+running obligation detection, graph traversal, or lint inside normal orientation.
+
 ---
 
 ## 17. Open Questions
