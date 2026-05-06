@@ -673,6 +673,13 @@ reviewer/rationale fields.
 - Apply accepted candidates through KnowledgeCommits.
 - Start deprecating direct agent-facing use of migrated legacy paths.
 
+Status: initial migration viability gate exists. The executable test covers one legacy project
+observation moving through inventory, generated review batch, accepted candidate apply,
+KnowledgeCommit creation, active reviewed `MemoryItem` retrieval through `orient`, memory-layer
+unified search visibility, and duplicate-safe re-apply behavior. This proves the first legacy
+observation path but does not yet justify broad legacy deletion; the next confidence step is a real
+migration completion run against current data.
+
 ### M7: Tool Tiering
 
 - Keep the full specialist surface.
