@@ -3,6 +3,7 @@
 //! Provides types for the unified search tool that searches
 //! across all knowledge layers with a single query.
 
+use crate::memory::MemoryTrustMetadata;
 use serde::{Deserialize, Serialize};
 
 /// Source layer for a search result.
@@ -54,6 +55,9 @@ pub struct UnifiedSearchResult {
     pub context: Option<String>,
     /// ID for follow-up queries
     pub id: String,
+    /// Memory trust metadata when this result is a MemoryItem.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_metadata: Option<MemoryTrustMetadata>,
 }
 
 impl UnifiedSearchResult {
@@ -72,12 +76,19 @@ impl UnifiedSearchResult {
             content: content.into(),
             context: None,
             id: id.into(),
+            memory_metadata: None,
         }
     }
 
     /// Add context to the result.
     pub fn with_context(mut self, context: impl Into<String>) -> Self {
         self.context = Some(context.into());
+        self
+    }
+
+    /// Add MemoryItem trust metadata to the result.
+    pub fn with_memory_metadata(mut self, metadata: MemoryTrustMetadata) -> Self {
+        self.memory_metadata = Some(metadata);
         self
     }
 }

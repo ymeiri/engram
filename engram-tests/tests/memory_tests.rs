@@ -492,9 +492,25 @@ async fn test_mcp_orient_returns_context_packet() {
         json["active_decisions"][0]["title"],
         "Orient through memory"
     );
+    assert_eq!(
+        json["memory_metadata"][0]["memory_id"],
+        json["active_decisions"][0]["id"]
+    );
+    assert_eq!(json["memory_metadata"][0]["status"], "active");
+    assert_eq!(
+        json["memory_metadata"][0]["review_state"],
+        "active_unreviewed"
+    );
+    assert_eq!(json["memory_metadata"][0]["freshness"], "unscheduled");
+    assert_eq!(json["memory_metadata"][0]["claim_origin"], "user_stated");
+    assert_eq!(json["memory_metadata"][0]["writer"]["harness"], "codex");
     assert!(json["context_pack"]
         .as_str()
         .unwrap()
         .contains("Memory cursor timestamp"));
+    assert!(json["context_pack"]
+        .as_str()
+        .unwrap()
+        .contains("Trust: status=active, review_state=active_unreviewed"));
     assert!(json["memory_cursor"]["timestamp"].is_string());
 }

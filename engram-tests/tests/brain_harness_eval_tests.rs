@@ -5,7 +5,8 @@
 //! orientation behavior that works today, and one ignored target-state gap.
 
 use engram_core::memory::{
-    ClaimOrigin, Harness, MemoryItem, MemoryKind, MemoryScope, ModelIdentity, WriterProvenance,
+    ClaimOrigin, Harness, MemoryFreshness, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope,
+    ModelIdentity, WriterProvenance,
 };
 use engram_core::telemetry::{AgentFeedback, BrainHarnessIntent, BrainHarnessOperation};
 use engram_index::ToolIntelService;
@@ -250,6 +251,18 @@ async fn memoryitem_eval_trace_records_orient_feedback_and_intent_stats() {
     assert!(stored_trace
         .returned_memory_ids
         .contains(&unrelated_guidance.id));
+    let preference_metadata = packet
+        .memory_metadata
+        .iter()
+        .find(|metadata| metadata.memory_id == commit_preference.id)
+        .expect("preference trust metadata should be returned");
+    assert_eq!(
+        preference_metadata.review_state,
+        MemoryReviewState::ActiveUnreviewed
+    );
+    assert_eq!(preference_metadata.freshness, MemoryFreshness::Unscheduled);
+    assert_eq!(preference_metadata.claim_origin, ClaimOrigin::UserStated);
+    assert_eq!(preference_metadata.writer.harness, Harness::Codex);
 
     let returned_item_ids = stored_trace
         .returned_memory_ids

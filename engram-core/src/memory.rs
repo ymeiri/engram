@@ -338,6 +338,22 @@ impl ClaimOrigin {
     }
 }
 
+impl std::fmt::Display for ClaimOrigin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UserStated => write!(f, "user_stated"),
+            Self::UserCorrected => write!(f, "user_corrected"),
+            Self::AgentObserved => write!(f, "agent_observed"),
+            Self::AgentInferred => write!(f, "agent_inferred"),
+            Self::ToolResult => write!(f, "tool_result"),
+            Self::Imported => write!(f, "imported"),
+            Self::Migrated => write!(f, "migrated"),
+            Self::GeneratedSummary => write!(f, "generated_summary"),
+            Self::Custom(value) => write!(f, "{value}"),
+        }
+    }
+}
+
 /// Lifecycle status of a memory item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -402,6 +418,71 @@ impl MemoryStatus {
             "archived" => Self::Archived,
             "rejected" => Self::Rejected,
             _ => Self::NeedsReview,
+        }
+    }
+}
+
+/// Review state derived from lifecycle status and available evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryReviewState {
+    /// Active memory with explicit manual-review evidence.
+    Reviewed,
+    /// Active memory without explicit manual-review evidence.
+    ActiveUnreviewed,
+    /// Memory captured but awaiting review.
+    NeedsReview,
+    /// Memory has been replaced by newer memory.
+    Superseded,
+    /// Memory is archived and hidden from normal retrieval.
+    Archived,
+    /// Memory was rejected during review.
+    Rejected,
+}
+
+impl std::fmt::Display for MemoryReviewState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Reviewed => write!(f, "reviewed"),
+            Self::ActiveUnreviewed => write!(f, "active_unreviewed"),
+            Self::NeedsReview => write!(f, "needs_review"),
+            Self::Superseded => write!(f, "superseded"),
+            Self::Archived => write!(f, "archived"),
+            Self::Rejected => write!(f, "rejected"),
+        }
+    }
+}
+
+/// Freshness signal derived from review scheduling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryFreshness {
+    /// No review deadline has been scheduled.
+    Unscheduled,
+    /// A future review is scheduled.
+    ReviewScheduled,
+    /// The memory is due for review.
+    ReviewDue,
+}
+
+impl std::fmt::Display for MemoryFreshness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unscheduled => write!(f, "unscheduled"),
+            Self::ReviewScheduled => write!(f, "review_scheduled"),
+            Self::ReviewDue => write!(f, "review_due"),
+        }
+    }
+}
+
+impl MemoryFreshness {
+    /// Derive freshness from an optional review deadline.
+    #[must_use]
+    pub fn from_review_after(review_after: Option<OffsetDateTime>, now: OffsetDateTime) -> Self {
+        match review_after {
+            Some(review_after) if review_after <= now => Self::ReviewDue,
+            Some(_) => Self::ReviewScheduled,
+            None => Self::Unscheduled,
         }
     }
 }
@@ -501,6 +582,125 @@ impl EvidenceRef {
     pub fn with_excerpt(mut self, excerpt: impl Into<String>) -> Self {
         self.excerpt = Some(excerpt.into());
         self
+    }
+}
+
+/// Compact writer metadata surfaced with trust metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryWriterMetadata {
+    /// Harness/interface that wrote the item.
+    pub harness: Harness,
+    /// Optional harness version.
+    pub harness_version: Option<String>,
+    /// Model provider.
+    pub model_provider: String,
+    /// Model name.
+    pub model: String,
+    /// Optional model version or alias.
+    pub model_version: Option<String>,
+    /// Human-facing surface, such as "desktop", "cli", or "mcp".
+    pub surface: Option<String>,
+    /// Actor label, such as "agent", "user", or "importer".
+    pub actor: String,
+}
+
+impl From<&WriterProvenance> for MemoryWriterMetadata {
+    fn from(writer: &WriterProvenance) -> Self {
+        Self {
+            harness: writer.harness.clone(),
+            harness_version: writer.harness_version.clone(),
+            model_provider: writer.model.provider.clone(),
+            model: writer.model.model.clone(),
+            model_version: writer.model.version.clone(),
+            surface: writer.surface.clone(),
+            actor: writer.actor.clone(),
+        }
+    }
+}
+
+/// Derived trust metadata surfaced to agents alongside MemoryItems.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MemoryTrustMetadata {
+    /// Memory item ID this metadata describes.
+    pub memory_id: Id,
+    /// Memory kind.
+    pub kind: MemoryKind,
+    /// Scope where this memory applies.
+    pub scope: MemoryScope,
+    /// Lifecycle status.
+    pub status: MemoryStatus,
+    /// Review state derived from status and manual-review evidence.
+    pub review_state: MemoryReviewState,
+    /// Freshness signal derived from review_after.
+    pub freshness: MemoryFreshness,
+    /// Where the claim came from.
+    pub claim_origin: ClaimOrigin,
+    /// Confidence score.
+    pub confidence: f32,
+    /// Number of evidence records attached to the memory.
+    pub evidence_count: usize,
+    /// Whether the memory has at least one evidence record.
+    pub has_evidence: bool,
+    /// Evidence kinds attached to the memory.
+    pub evidence_kinds: Vec<EvidenceKind>,
+    /// Whether the memory has manual-review evidence.
+    pub reviewed: bool,
+    /// Whether review_after is due.
+    pub review_due: bool,
+    /// Last update timestamp.
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
+    /// Optional last retrieval/application timestamp.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub last_used_at: Option<OffsetDateTime>,
+    /// Optional scheduled review timestamp.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub review_after: Option<OffsetDateTime>,
+    /// Writer metadata.
+    pub writer: MemoryWriterMetadata,
+}
+
+impl MemoryTrustMetadata {
+    /// Build metadata for a memory item using a supplied current timestamp.
+    #[must_use]
+    pub fn from_item(item: &MemoryItem, now: OffsetDateTime) -> Self {
+        let reviewed = item
+            .evidence
+            .iter()
+            .any(|evidence| matches!(&evidence.kind, EvidenceKind::ManualReview));
+        let review_state = match item.status {
+            MemoryStatus::Active if reviewed => MemoryReviewState::Reviewed,
+            MemoryStatus::Active => MemoryReviewState::ActiveUnreviewed,
+            MemoryStatus::NeedsReview => MemoryReviewState::NeedsReview,
+            MemoryStatus::Superseded => MemoryReviewState::Superseded,
+            MemoryStatus::Archived => MemoryReviewState::Archived,
+            MemoryStatus::Rejected => MemoryReviewState::Rejected,
+        };
+        let freshness = MemoryFreshness::from_review_after(item.review_after, now);
+
+        Self {
+            memory_id: item.id,
+            kind: item.kind.clone(),
+            scope: item.scope.clone(),
+            status: item.status,
+            review_state,
+            freshness,
+            claim_origin: item.origin.clone(),
+            confidence: item.confidence.value(),
+            evidence_count: item.evidence.len(),
+            has_evidence: !item.evidence.is_empty(),
+            evidence_kinds: item
+                .evidence
+                .iter()
+                .map(|evidence| evidence.kind.clone())
+                .collect(),
+            reviewed,
+            review_due: freshness == MemoryFreshness::ReviewDue,
+            updated_at: item.updated_at,
+            last_used_at: item.last_used_at,
+            review_after: item.review_after,
+            writer: MemoryWriterMetadata::from(&item.writer),
+        }
     }
 }
 
@@ -663,6 +863,12 @@ impl MemoryItem {
             || self
                 .review_after
                 .is_some_and(|review_after| review_after <= now)
+    }
+
+    /// Return derived trust metadata for agent-facing retrieval surfaces.
+    #[must_use]
+    pub fn trust_metadata(&self) -> MemoryTrustMetadata {
+        MemoryTrustMetadata::from_item(self, OffsetDateTime::now_utc())
     }
 }
 

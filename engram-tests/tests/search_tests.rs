@@ -5,8 +5,8 @@
 
 use engram_core::entity::EntityType;
 use engram_core::memory::{
-    ClaimOrigin, Harness, MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity,
-    WriterProvenance,
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryFreshness, MemoryItem, MemoryKind,
+    MemoryReviewState, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
 };
 use engram_core::search::SearchLayer;
 use engram_core::session::EventType;
@@ -357,6 +357,65 @@ async fn test_search_finds_active_memory_items() {
     assert!(results
         .iter()
         .all(|result| result.source.to_string() == "memory"));
+    let result = results
+        .iter()
+        .find(|result| result.id == item.id.to_string())
+        .expect("matching memory result should be present");
+    let metadata = result
+        .memory_metadata
+        .as_ref()
+        .expect("memory result should carry trust metadata");
+    assert_eq!(metadata.memory_id, item.id);
+    assert_eq!(metadata.status, MemoryStatus::Active);
+    assert_eq!(metadata.review_state, MemoryReviewState::ActiveUnreviewed);
+    assert_eq!(metadata.freshness, MemoryFreshness::Unscheduled);
+    assert_eq!(metadata.claim_origin, ClaimOrigin::UserStated);
+    assert_eq!(metadata.evidence_count, 0);
+    assert_eq!(metadata.writer.harness, Harness::Codex);
+    assert!(result
+        .context
+        .as_deref()
+        .unwrap()
+        .contains("review_state: active_unreviewed"));
+}
+
+#[tokio::test]
+async fn test_memory_search_metadata_reports_review_and_evidence() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let item = MemoryItem::new(
+        MemoryKind::Decision,
+        "Reviewed memory metadata",
+        "Unified search should expose reviewed evidence-backed trust metadata.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "unit-test-review",
+    ));
+    let item = memory_service.capture_memory(item).await.unwrap();
+
+    let results = search_service
+        .search(
+            "reviewed evidence-backed trust metadata",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+        )
+        .await
+        .expect("Failed to search");
+
+    let metadata = results
+        .iter()
+        .find(|result| result.id == item.id.to_string())
+        .and_then(|result| result.memory_metadata.as_ref())
+        .expect("memory result should carry trust metadata");
+    assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
+    assert!(metadata.reviewed);
+    assert!(metadata.has_evidence);
+    assert_eq!(metadata.evidence_count, 1);
+    assert_eq!(metadata.evidence_kinds, vec![EvidenceKind::ManualReview]);
 }
 
 #[tokio::test]

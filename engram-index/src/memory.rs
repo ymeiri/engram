@@ -21,7 +21,7 @@ use crate::vault::{
 use engram_core::id::Id;
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange, MemoryCursor,
-    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, WriterProvenance,
+    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, MemoryTrustMetadata, WriterProvenance,
 };
 use engram_core::repository::{MonorepoComponent, ProjectRepositoryLink, RepositoryContext};
 use engram_core::session::{Event, EventType};
@@ -238,6 +238,8 @@ pub struct OrientationPacket {
     pub limitations: Vec<MemoryItem>,
     /// Review-needed memory relevant to this scope.
     pub review_needed: Vec<MemoryItem>,
+    /// Trust metadata for memory returned in the orientation packet.
+    pub memory_metadata: Vec<MemoryTrustMetadata>,
     /// Recent knowledge commits, if requested.
     pub recent_knowledge_commits: Vec<KnowledgeCommit>,
     /// Recommended next actions for the caller.
@@ -716,6 +718,13 @@ impl MemoryService {
             &limitations,
             &relevant_review,
         ]);
+        let memory_metadata = orientation_memory_metadata(&[
+            &active_decisions,
+            &active_rules,
+            &preferences,
+            &limitations,
+            &relevant_review,
+        ]);
         let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
             .with_agent(input.agent.clone())
             .with_intent(input.intent.clone())
@@ -748,6 +757,7 @@ impl MemoryService {
             preferences,
             limitations,
             review_needed: relevant_review,
+            memory_metadata,
             recent_knowledge_commits: recent_commits,
             recommended_actions,
             ambiguities,
@@ -1380,7 +1390,19 @@ fn append_memory_section(lines: &mut Vec<String>, title: &str, items: &[MemoryIt
         lines.push("- None".to_string());
     } else {
         for item in items {
+            let metadata = item.trust_metadata();
             lines.push(format!("- {}: {}", item.title, item.content));
+            lines.push(format!(
+                "  - Trust: status={}, review_state={}, freshness={}, origin={}, confidence={:.2}, evidence_count={}, writer={}/{}",
+                metadata.status,
+                metadata.review_state,
+                metadata.freshness,
+                metadata.claim_origin,
+                metadata.confidence,
+                metadata.evidence_count,
+                metadata.writer.harness,
+                metadata.writer.model
+            ));
         }
     }
 }
@@ -1389,6 +1411,13 @@ fn returned_orientation_memory_ids(groups: &[&[MemoryItem]]) -> Vec<Id> {
     groups
         .iter()
         .flat_map(|items| items.iter().map(|item| item.id))
+        .collect()
+}
+
+fn orientation_memory_metadata(groups: &[&[MemoryItem]]) -> Vec<MemoryTrustMetadata> {
+    groups
+        .iter()
+        .flat_map(|items| items.iter().map(MemoryItem::trust_metadata))
         .collect()
 }
 

@@ -307,6 +307,22 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         .init_schema()
         .await
         .expect("failed to initialize telemetry schema");
+    let memory = MemoryService::new(db.clone());
+    memory
+        .init_schema()
+        .await
+        .expect("failed to initialize memory schema");
+    let memory_item = memory
+        .capture_memory(MemoryItem::new(
+            MemoryKind::Decision,
+            "Intent aware telemetry",
+            "MCP search should expose MemoryItem trust metadata.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::UserStated,
+            writer(),
+        ))
+        .await
+        .expect("memory should be captured");
     let state = ToolState::new();
     state.init_search(SearchService::new(db)).await;
     state.init_telemetry(telemetry.clone()).await;
@@ -329,6 +345,25 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     .expect("search should work");
 
     let json = parse_json(&response);
+    let memory_result = json["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|result| result["id"] == memory_item.id.to_string())
+        .expect("memory result should be returned");
+    assert_eq!(memory_result["source"], "memory");
+    assert_eq!(
+        memory_result["memory_metadata"]["memory_id"],
+        memory_item.id.to_string()
+    );
+    assert_eq!(
+        memory_result["memory_metadata"]["review_state"],
+        "active_unreviewed"
+    );
+    assert_eq!(
+        memory_result["memory_metadata"]["writer"]["harness"],
+        "codex"
+    );
     let trace_id = json["trace_id"].as_str().expect("trace_id should be set");
     let trace = telemetry
         .get_trace(&engram_core::Id::parse(trace_id).unwrap())

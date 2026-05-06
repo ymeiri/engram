@@ -595,11 +595,17 @@ pub struct SearchStats {
 fn memory_result_for_query(item: MemoryItem, query: &str) -> Option<UnifiedSearchResult> {
     let score = memory_text_score(&item, query)?;
     let snippet = truncate_snippet(&item.content, 200);
+    let metadata = item.trust_metadata();
     let context = format!(
-        "memory: {}, status: {}, scope: {}",
+        "memory: {}, status: {}, review_state: {}, freshness: {}, scope: {}, evidence_count: {}, writer: {}/{}",
         item.kind,
-        item.status,
-        memory_scope_label(&item.scope)
+        metadata.status,
+        metadata.review_state,
+        metadata.freshness,
+        memory_scope_label(&item.scope),
+        metadata.evidence_count,
+        metadata.writer.harness,
+        metadata.writer.model
     );
 
     Some(
@@ -610,7 +616,8 @@ fn memory_result_for_query(item: MemoryItem, query: &str) -> Option<UnifiedSearc
             snippet,
             item.id.to_string(),
         )
-        .with_context(context),
+        .with_context(context)
+        .with_memory_metadata(metadata),
     )
 }
 

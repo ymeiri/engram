@@ -38,6 +38,7 @@ use engram_index::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -3222,6 +3223,8 @@ pub struct UnifiedSearchResultInfo {
     pub context: Option<String>,
     /// ID for follow-up queries.
     pub id: String,
+    /// Memory trust metadata when this result is a MemoryItem.
+    pub memory_metadata: Option<Value>,
 }
 
 /// Response from unified search.
@@ -3310,6 +3313,9 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
                 content: r.content,
                 context: r.context,
                 id: r.id,
+                memory_metadata: r
+                    .memory_metadata
+                    .and_then(|metadata| serde_json::to_value(metadata).ok()),
             })
             .collect(),
         by_layer,
