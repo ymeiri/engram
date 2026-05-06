@@ -35,6 +35,9 @@ use std::time::Instant;
 use time::OffsetDateTime;
 use tracing::info;
 
+const BRAIN_LOOP_TOP_ITEM_LIMIT: usize = 5;
+const BRAIN_LOOP_SUMMARY_CHAR_LIMIT: usize = 240;
+
 /// Relevance score for a memory item returned by changes_since.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryChangeRelevance {
@@ -204,6 +207,34 @@ impl OrientationResolution {
     }
 }
 
+/// Frictionless task-boundary context compiled by orient.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrainLoop {
+    /// Short scoped narrative for the current task.
+    pub compiled_context: String,
+    /// Highest-priority memory signals used to compile the context.
+    pub top_items: Vec<BrainLoopItem>,
+    /// Whether orient had to return a partial brain-loop projection.
+    pub degraded: bool,
+}
+
+/// Auditable memory signal included in a brain-loop projection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrainLoopItem {
+    /// Memory item ID.
+    pub id: Id,
+    /// Memory kind.
+    pub kind: MemoryKind,
+    /// Memory title.
+    pub title: String,
+    /// Compact one-line memory summary.
+    pub summary: String,
+    /// Trust metadata for the memory item.
+    pub trust: MemoryTrustMetadata,
+    /// Why this memory was selected for the brain loop.
+    pub why_relevant: String,
+}
+
 /// Orientation context packet.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationPacket {
@@ -229,6 +260,8 @@ pub struct OrientationPacket {
     pub memory_cursor: MemoryCursor,
     /// Markdown context pack.
     pub context_pack: String,
+    /// Brain Loop v1 projection generated from the scoped orient result.
+    pub brain_loop: BrainLoop,
     /// Active decisions relevant to this scope.
     pub active_decisions: Vec<MemoryItem>,
     /// Active rules relevant to this scope.
@@ -817,6 +850,16 @@ impl MemoryService {
             ambiguities: &ambiguities,
             recommended_actions: &recommended_actions,
         });
+        let brain_loop = build_brain_loop(BrainLoopParts {
+            scope: &scope,
+            resolution: &resolution,
+            decisions: &active_decisions,
+            rules: &active_rules,
+            preferences: &preferences,
+            limitations: &limitations,
+            review_needed: &relevant_review,
+            ambiguities: &ambiguities,
+        });
 
         let returned_memory_ids = returned_orientation_memory_ids(&[
             &active_decisions,
@@ -859,6 +902,7 @@ impl MemoryService {
             repository_context,
             memory_cursor: cursor,
             context_pack,
+            brain_loop,
             active_decisions,
             active_rules,
             preferences,
@@ -1292,6 +1336,134 @@ struct ContextPackParts<'a> {
     commits: &'a [KnowledgeCommit],
     ambiguities: &'a [String],
     recommended_actions: &'a [String],
+}
+
+struct BrainLoopParts<'a> {
+    scope: &'a str,
+    resolution: &'a OrientationResolution,
+    decisions: &'a [MemoryItem],
+    rules: &'a [MemoryItem],
+    preferences: &'a [MemoryItem],
+    limitations: &'a [MemoryItem],
+    review_needed: &'a [MemoryItem],
+    ambiguities: &'a [String],
+}
+
+fn build_brain_loop(parts: BrainLoopParts<'_>) -> BrainLoop {
+    let top_items = brain_loop_top_items(&parts);
+    let compiled_context =
+        brain_loop_compiled_context(parts.scope, parts.resolution, &top_items, parts.ambiguities);
+
+    BrainLoop {
+        compiled_context,
+        top_items,
+        degraded: false,
+    }
+}
+
+fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
+    let mut items = Vec::new();
+    let groups = [
+        (parts.rules, "Active rule matched the orientation scope."),
+        (
+            parts.preferences,
+            "Preference matched the orientation scope.",
+        ),
+        (
+            parts.limitations,
+            "Known limitation matched the orientation scope.",
+        ),
+        (
+            parts.decisions,
+            "Active decision matched the orientation scope.",
+        ),
+        (
+            parts.review_needed,
+            "Review-needed memory matched the orientation scope.",
+        ),
+    ];
+    let mut offsets = [0usize; 5];
+
+    loop {
+        let mut added = false;
+        for (index, (memory, reason)) in groups.iter().enumerate() {
+            if items.len() == BRAIN_LOOP_TOP_ITEM_LIMIT {
+                return items;
+            }
+            if let Some(item) = memory.get(offsets[index]) {
+                items.push(brain_loop_item(item, reason));
+                offsets[index] += 1;
+                added = true;
+            }
+        }
+        if !added {
+            return items;
+        }
+    }
+}
+
+fn brain_loop_item(item: &MemoryItem, reason: &str) -> BrainLoopItem {
+    BrainLoopItem {
+        id: item.id,
+        kind: item.kind.clone(),
+        title: item.title.clone(),
+        summary: compact_brain_loop_summary(&item.content),
+        trust: item.trust_metadata(),
+        why_relevant: reason.to_string(),
+    }
+}
+
+fn brain_loop_compiled_context(
+    scope: &str,
+    resolution: &OrientationResolution,
+    top_items: &[BrainLoopItem],
+    ambiguities: &[String],
+) -> String {
+    let mut parts = vec![format!("Brain Loop v1 orientation for {scope}.")];
+    if let Some(project) = &resolution.selected_project {
+        let source = match resolution.source {
+            OrientationResolutionSource::ExplicitProject => "explicit project",
+            OrientationResolutionSource::ComponentLink => "component link",
+            OrientationResolutionSource::RepositoryLink => "repository link",
+            OrientationResolutionSource::Unresolved => "unresolved scope",
+        };
+        parts.push(format!(
+            "Using project-scoped memory for {project} ({source})."
+        ));
+    } else {
+        parts.push("No project scope was selected.".to_string());
+    }
+
+    if top_items.is_empty() {
+        parts.push("No scoped memory signals were selected.".to_string());
+    } else {
+        let signals = top_items
+            .iter()
+            .map(|item| format!("{}: {}", item.kind, item.title))
+            .collect::<Vec<_>>()
+            .join("; ");
+        parts.push(format!("Top signals: {signals}."));
+    }
+
+    if !ambiguities.is_empty() {
+        parts.push(format!("Ambiguities: {}.", ambiguities.join("; ")));
+    }
+
+    parts.join(" ")
+}
+
+fn compact_brain_loop_summary(content: &str) -> String {
+    let normalized = content.split_whitespace().collect::<Vec<_>>().join(" ");
+    let char_count = normalized.chars().count();
+    if char_count <= BRAIN_LOOP_SUMMARY_CHAR_LIMIT {
+        return normalized;
+    }
+
+    let summary = normalized
+        .chars()
+        .take(BRAIN_LOOP_SUMMARY_CHAR_LIMIT)
+        .collect::<String>();
+    format!("{summary}...")
 }
 
 fn build_context_pack(parts: ContextPackParts<'_>) -> String {
@@ -2474,6 +2646,98 @@ mod tests {
         assert_eq!(packet.preferences.len(), 1);
         assert!(packet.context_pack.contains("Project decision"));
         assert!(packet.context_pack.contains("Memory cursor timestamp"));
+        assert!(!packet.brain_loop.degraded);
+        assert!(packet.brain_loop.top_items.len() <= BRAIN_LOOP_TOP_ITEM_LIMIT);
+        assert!(packet
+            .brain_loop
+            .compiled_context
+            .contains("Project decision"));
+        assert!(packet
+            .brain_loop
+            .compiled_context
+            .contains("Global preference"));
+        assert!(packet.brain_loop.top_items.iter().any(|item| {
+            item.kind == MemoryKind::Preference
+                && item.title == "Global preference"
+                && item.trust.memory_id == item.id
+        }));
+    }
+
+    #[tokio::test]
+    async fn orient_brain_loop_keeps_top_items_bounded() {
+        let service = setup_service().await;
+        for index in 0..8 {
+            service
+                .capture_memory(MemoryItem::new(
+                    MemoryKind::Preference,
+                    format!("Preference {index}"),
+                    "Bounded brain loop context should not grow with every matching memory item.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                ))
+                .await
+                .unwrap();
+        }
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(packet.preferences.len(), 8);
+        assert_eq!(packet.brain_loop.top_items.len(), BRAIN_LOOP_TOP_ITEM_LIMIT);
+        assert!(packet
+            .brain_loop
+            .top_items
+            .iter()
+            .all(|item| item.kind == MemoryKind::Preference));
+        assert!(packet.brain_loop.compiled_context.contains("Brain Loop v1"));
+    }
+
+    #[tokio::test]
+    async fn orient_brain_loop_balances_memory_buckets() {
+        let service = setup_service().await;
+        for index in 0..8 {
+            service
+                .capture_memory(MemoryItem::new(
+                    MemoryKind::Preference,
+                    format!("Preference {index}"),
+                    "Repeated preferences should not starve other relevant memory buckets.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                ))
+                .await
+                .unwrap();
+        }
+        service
+            .capture_memory(memory_item("Architecture decision"))
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(packet.brain_loop.top_items.len(), BRAIN_LOOP_TOP_ITEM_LIMIT);
+        assert!(
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .any(|item| item.kind == MemoryKind::Decision
+                    && item.title == "Architecture decision")
+        );
     }
 
     #[tokio::test]

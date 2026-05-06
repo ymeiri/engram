@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-04-28
+Last Updated: 2026-05-06
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -15,6 +15,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] CLI `engram memory log`, `engram memory diff`, `engram memory changes-since`, `engram memory writer-stats`, and archive UX.
 - [x] Generated Markdown vault with generated-file marker and Obsidian backlinks.
 - [x] Orientation packet with repository/project resolution and deterministic relevance ordering.
+- [x] Brain Loop v1 projection inside `orient`; bounded compiled context from already selected
+      memory, with graph/obligations/lint kept out of the hot path.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
 - [x] Agent harness layer: MCP `harness`, CLI `engram harness`, Claude Code adapter rendering, Codex skill rendering, Gemini CLI custom command/context rendering, Cursor Agent skill rendering, dry-run install by default.
 - [x] Agent-native obligations layer: MCP `obligations`, CLI `engram obligations`, lifecycle detection for document disposition, source/design context reading, failed tool-call recovery, tests, handoffs, and commit preference checks.
@@ -2176,11 +2178,20 @@ Response:
   "project": "Engram",
   "scope": "Engram / Memory OS",
   "context_pack": "...",
-  "context_pack_path": "...",
+  "brain_loop": {
+    "compiled_context": "...",
+    "top_items": [],
+    "degraded": false
+  },
+  "active_decisions": [],
   "active_rules": [],
   "preferences": [],
   "limitations": [],
-  "open_questions": [],
+  "review_needed": [],
+  "memory_cursor": {
+    "timestamp": "...",
+    "commit_id": "..."
+  },
   "ambiguities": []
 }
 ```

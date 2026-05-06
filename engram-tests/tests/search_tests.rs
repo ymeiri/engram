@@ -338,7 +338,8 @@ async fn test_search_finds_active_memory_items() {
         MemoryScope::project("engram"),
         ClaimOrigin::UserStated,
         writer(),
-    );
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "search-test"));
     let item = memory_service.capture_memory(item).await.unwrap();
 
     let results = search_service
@@ -367,16 +368,16 @@ async fn test_search_finds_active_memory_items() {
         .expect("memory result should carry trust metadata");
     assert_eq!(metadata.memory_id, item.id);
     assert_eq!(metadata.status, MemoryStatus::Active);
-    assert_eq!(metadata.review_state, MemoryReviewState::ActiveUnreviewed);
+    assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
     assert_eq!(metadata.freshness, MemoryFreshness::Unscheduled);
     assert_eq!(metadata.claim_origin, ClaimOrigin::UserStated);
-    assert_eq!(metadata.evidence_count, 0);
+    assert_eq!(metadata.evidence_count, 1);
     assert_eq!(metadata.writer.harness, Harness::Codex);
     assert!(result
         .context
         .as_deref()
         .unwrap()
-        .contains("review_state: active_unreviewed"));
+        .contains("review_state: reviewed"));
 }
 
 #[tokio::test]
@@ -456,25 +457,31 @@ async fn test_memory_search_filters_non_active_items() {
 async fn test_memory_search_respects_project_scope_when_provided() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     memory_service
-        .capture_memory(MemoryItem::new(
-            MemoryKind::Decision,
-            "Engram telemetry policy",
-            "Telemetry retrieval policy belongs to Engram.",
-            MemoryScope::project("engram"),
-            ClaimOrigin::UserStated,
-            writer(),
-        ))
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Engram telemetry policy",
+                "Telemetry retrieval policy belongs to Engram.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "search-test")),
+        )
         .await
         .unwrap();
     memory_service
-        .capture_memory(MemoryItem::new(
-            MemoryKind::Decision,
-            "Other telemetry policy",
-            "Telemetry retrieval policy belongs to another project.",
-            MemoryScope::project("other"),
-            ClaimOrigin::UserStated,
-            writer(),
-        ))
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Other telemetry policy",
+                "Telemetry retrieval policy belongs to another project.",
+                MemoryScope::project("other"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "search-test")),
+        )
         .await
         .unwrap();
 

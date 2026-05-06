@@ -1,7 +1,7 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC
-Date: 2026-05-05
+Status: Draft RFC with Brain Loop v1 implementation checkpoint
+Date: 2026-05-06
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
 
@@ -69,6 +69,14 @@ Memory OS adds the richer cognitive model:
 - review-gated migration and digest flows
 
 The current gap is not primarily ontology. The core gap is retrieval and lifecycle unification.
+
+Implementation checkpoint, 2026-05-06:
+
+- `orient` is the single frictionless entrypoint for task-boundary context.
+- Brain Loop v1 is additive: `orient` returns a nested `brain_loop` projection generated from the
+  memory already selected by orientation.
+- Graph, obligations, lint, and `changes_since` remain specialist paths. They are not called inside
+  the hot orientation path until their signal quality and scoped retrieval behavior are proven.
 
 ---
 
@@ -257,37 +265,45 @@ Target response shape:
 
 ```json
 {
-  "compiled_context": "Short scoped narrative for the current task.",
-  "raw_items": [
-    {
-      "id": "memory-id",
-      "kind": "decision",
-      "title": "Use repository topology for project resolution",
-      "content": "...",
-      "trust": {
-        "status": "active",
-        "origin": "user_stated",
-        "review_state": "reviewed",
-        "evidence_count": 2,
-        "freshness": "current"
-      },
-      "evidence": [
-        {
-          "kind": "file",
-          "target": "docs/BRAIN_HARNESS_ARCHITECTURE.md"
-        }
-      ]
-    }
-  ],
+  "project": "Engram",
+  "scope": "Engram",
+  "context_pack": "...",
+  "brain_loop": {
+    "compiled_context": "Short scoped narrative for the current task.",
+    "top_items": [
+      {
+        "id": "memory-id",
+        "kind": "decision",
+        "title": "Use repository topology for project resolution",
+        "summary": "...",
+        "trust": {
+          "status": "active",
+          "origin": "user_stated",
+          "review_state": "reviewed",
+          "evidence_count": 2,
+          "freshness": "current"
+        },
+        "why_relevant": "Active decision matched the orientation scope."
+      }
+    ],
+    "degraded": false
+  },
+  "active_decisions": [],
+  "active_rules": [],
+  "preferences": [],
+  "limitations": [],
+  "review_needed": [],
   "ambiguities": [],
   "recommended_actions": [],
-  "cursor": {
+  "memory_cursor": {
     "timestamp": "...",
     "commit_id": "..."
-  },
-  "degraded": false
+  }
 }
 ```
+
+Brain Loop v1 deliberately does not replace the raw memory arrays. The compiled context reduces
+cognitive load; the raw arrays and trust metadata keep the result auditable.
 
 Orientation must be:
 
@@ -685,6 +701,10 @@ migration completion run against current data.
 - Keep the full specialist surface.
 - Introduce a lifecycle-first agent-facing surface.
 - Test whether tool selection improves in agentic evals.
+
+Status: first checkpoint implemented. `orient` now returns `brain_loop` with a bounded compiled
+context and top memory signals. Specialist graph, obligation, lint, and change polling tools remain
+available but are not part of the normal orientation hot path.
 
 ---
 

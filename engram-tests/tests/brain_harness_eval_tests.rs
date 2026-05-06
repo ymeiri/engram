@@ -1893,6 +1893,16 @@ async fn orient_surfaces_user_preference_as_raw_and_compiled_context() {
     assert!(packet
         .context_pack
         .contains("User prefers concise implementation updates"));
+    assert!(!packet.brain_loop.degraded);
+    assert!(packet
+        .brain_loop
+        .compiled_context
+        .contains("Use concise status updates"));
+    assert!(packet
+        .brain_loop
+        .top_items
+        .iter()
+        .any(|item| { item.id == captured.id && item.trust.memory_id == captured.id }));
     assert!(packet.review_needed.is_empty());
 }
 

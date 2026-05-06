@@ -678,5 +678,14 @@ async fn test_mcp_orient_returns_context_packet() {
         .as_str()
         .unwrap()
         .contains("Trust: status=active, review_state=reviewed"));
+    assert_eq!(json["brain_loop"]["degraded"], false);
+    assert!(json["brain_loop"]["compiled_context"]
+        .as_str()
+        .unwrap()
+        .contains("Orient through memory"));
+    assert_eq!(
+        json["brain_loop"]["top_items"][0]["trust"]["memory_id"],
+        json["active_decisions"][0]["id"]
+    );
     assert!(json["memory_cursor"]["timestamp"].is_string());
 }

@@ -1,7 +1,8 @@
 //! Integration tests for brain-harness telemetry and agent feedback.
 
 use engram_core::memory::{
-    ClaimOrigin, Harness, MemoryItem, MemoryKind, MemoryScope, ModelIdentity, WriterProvenance,
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
+    ModelIdentity, WriterProvenance,
 };
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
@@ -313,14 +314,20 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         .await
         .expect("failed to initialize memory schema");
     let memory_item = memory
-        .capture_memory(MemoryItem::new(
-            MemoryKind::Decision,
-            "Intent aware telemetry",
-            "MCP search should expose MemoryItem trust metadata.",
-            MemoryScope::project("engram"),
-            ClaimOrigin::UserStated,
-            writer(),
-        ))
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Intent aware telemetry",
+                "MCP search should expose MemoryItem trust metadata.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "telemetry-test",
+            )),
+        )
         .await
         .expect("memory should be captured");
     let state = ToolState::new();
@@ -356,10 +363,7 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         memory_result["memory_metadata"]["memory_id"],
         memory_item.id.to_string()
     );
-    assert_eq!(
-        memory_result["memory_metadata"]["review_state"],
-        "active_unreviewed"
-    );
+    assert_eq!(memory_result["memory_metadata"]["review_state"], "reviewed");
     assert_eq!(
         memory_result["memory_metadata"]["writer"]["harness"],
         "codex"
