@@ -70,6 +70,44 @@ fn parse_json(response: &str) -> Value {
 }
 
 #[tokio::test]
+async fn test_mcp_harness_render_policy_requires_telemetry() {
+    let state = ToolState::new();
+    let mut render = request("render_policy");
+    render.harness = Some("codex".to_string());
+
+    let response = tools::harness_new(&state, render)
+        .await
+        .expect("render_policy should work");
+    let json = parse_json(&response);
+    let tools = json["required_mcp_tools"]
+        .as_array()
+        .expect("required_mcp_tools should be an array");
+
+    assert!(tools.iter().any(|tool| tool.as_str() == Some("telemetry")));
+}
+
+#[tokio::test]
+async fn test_mcp_harness_render_adapter_mentions_feedback_trace_id() {
+    let state = ToolState::new();
+    let mut render = request("render_adapter");
+    render.harness = Some("codex".to_string());
+    render.adapter = Some("codex-memory-session-skill".to_string());
+
+    let response = tools::harness_new(&state, render)
+        .await
+        .expect("render_adapter should work");
+    let json = parse_json(&response);
+
+    assert_eq!(json["count"], 1);
+    let contents = json["adapters"][0]["contents"]
+        .as_str()
+        .expect("rendered adapter should include contents");
+    assert!(contents.contains("trace_id"));
+    assert!(contents.contains("telemetry(action=submit_feedback)"));
+    assert!(contents.contains("task success"));
+}
+
+#[tokio::test]
 async fn test_mcp_harness_hook_event_returns_claude_hook_json() {
     let state = setup_tool_state().await;
 
