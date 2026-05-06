@@ -22,7 +22,7 @@ use engram_index::{
 use engram_store::{connect_and_init, StoreConfig};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum EvalArm {
     NoMemory,
@@ -78,6 +78,142 @@ impl BrainHarnessEvalTrace {
         }
 
         self.useful_memory_count() as f32 / self.retrieved_item_ids.len() as f32
+    }
+}
+
+#[derive(Debug, Clone)]
+struct EvalArmSummary {
+    arm: EvalArm,
+    trace_count: usize,
+    success_count: usize,
+    bad_memory_count: usize,
+    missing_expected_count: usize,
+    repeated_context_questions: u32,
+    avg_quality_score: f32,
+    avg_retrieval_precision: f32,
+}
+
+#[derive(Debug, Clone)]
+struct BrainHarnessEvalReport {
+    traces: Vec<BrainHarnessEvalTrace>,
+}
+
+impl BrainHarnessEvalReport {
+    fn new(traces: Vec<BrainHarnessEvalTrace>) -> Self {
+        Self { traces }
+    }
+
+    fn scenarios(&self) -> Vec<&str> {
+        let mut scenarios = Vec::new();
+        for trace in &self.traces {
+            let scenario = trace.scenario.as_str();
+            if !scenarios.contains(&scenario) {
+                scenarios.push(scenario);
+            }
+        }
+        scenarios
+    }
+
+    fn trace(&self, scenario: &str, arm: EvalArm) -> Option<&BrainHarnessEvalTrace> {
+        self.traces
+            .iter()
+            .find(|trace| trace.scenario == scenario && trace.arm == arm)
+    }
+
+    fn arm_summary(&self, arm: EvalArm) -> EvalArmSummary {
+        let traces = self
+            .traces
+            .iter()
+            .filter(|trace| trace.arm == arm)
+            .collect::<Vec<_>>();
+        let trace_count = traces.len();
+        let quality_sum = traces
+            .iter()
+            .map(|trace| trace.outcome.quality_score)
+            .sum::<f32>();
+        let precision_sum = traces
+            .iter()
+            .map(|trace| trace.retrieval_precision())
+            .sum::<f32>();
+
+        EvalArmSummary {
+            arm,
+            trace_count,
+            success_count: traces.iter().filter(|trace| trace.outcome.success).count(),
+            bad_memory_count: traces
+                .iter()
+                .filter(|trace| trace.outcome.bad_memory_used)
+                .count(),
+            missing_expected_count: traces
+                .iter()
+                .flat_map(|trace| &trace.memory_calls)
+                .map(|call| call.missing_expected_item_ids.len())
+                .sum(),
+            repeated_context_questions: traces
+                .iter()
+                .map(|trace| trace.outcome.repeated_context_questions)
+                .sum(),
+            avg_quality_score: if trace_count == 0 {
+                0.0
+            } else {
+                quality_sum / trace_count as f32
+            },
+            avg_retrieval_precision: if trace_count == 0 {
+                0.0
+            } else {
+                precision_sum / trace_count as f32
+            },
+        }
+    }
+
+    fn memory_items_outperform_legacy(&self) -> bool {
+        self.scenarios().iter().all(|scenario| {
+            let Some(memory_items) = self.trace(scenario, EvalArm::MemoryItems) else {
+                return false;
+            };
+            let Some(legacy) = self.trace(scenario, EvalArm::LegacyObservations) else {
+                return false;
+            };
+
+            memory_items.outcome.success
+                && memory_items.outcome.quality_score > legacy.outcome.quality_score
+                && !memory_items.outcome.bad_memory_used
+        })
+    }
+
+    fn hybrid_preserves_legacy_and_memory_evidence(&self) -> bool {
+        self.scenarios().iter().all(|scenario| {
+            let Some(hybrid) = self.trace(scenario, EvalArm::Hybrid) else {
+                return false;
+            };
+            let Some(legacy) = self.trace(scenario, EvalArm::LegacyObservations) else {
+                return false;
+            };
+            let Some(memory_items) = self.trace(scenario, EvalArm::MemoryItems) else {
+                return false;
+            };
+
+            hybrid
+                .retrieved_item_ids
+                .iter()
+                .any(|id| legacy.retrieved_item_ids.contains(id))
+                && hybrid
+                    .retrieved_item_ids
+                    .iter()
+                    .any(|id| memory_items.retrieved_item_ids.contains(id))
+        })
+    }
+
+    fn no_memory_records_missing_expected_context(&self) -> bool {
+        self.traces
+            .iter()
+            .filter(|trace| trace.arm == EvalArm::NoMemory)
+            .all(|trace| {
+                trace
+                    .memory_calls
+                    .iter()
+                    .any(|call| !call.missing_expected_item_ids.is_empty())
+            })
     }
 }
 
@@ -1096,6 +1232,7 @@ async fn confidence_scenario_memoryitems_preserve_decision_continuity() {
 #[tokio::test]
 async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
     let services = setup_brain_harness_eval_services().await;
+    let mut report_traces = Vec::new();
     services
         .entity
         .create_entity("engram", EntityType::Repo, Some("Engram repository"))
@@ -1258,6 +1395,12 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
         comparison.no_memory.memory_calls[0].missing_expected_item_ids,
         vec![preference.id.to_string()]
     );
+    report_traces.extend([
+        comparison.no_memory.clone(),
+        comparison.legacy.clone(),
+        comparison.memory_items.clone(),
+        comparison.hybrid.clone(),
+    ]);
 
     let current_legacy_rule = services
         .work
@@ -1466,6 +1609,12 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
         .memory_items
         .retrieved_item_ids
         .contains(&wrong_scope_rule.id.to_string()));
+    report_traces.extend([
+        comparison.no_memory.clone(),
+        comparison.legacy.clone(),
+        comparison.memory_items.clone(),
+        comparison.hybrid.clone(),
+    ]);
 
     let session = services
         .session
@@ -1663,6 +1812,50 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
     assert!(comparison.memory_items_outperform_legacy());
     assert!(comparison.hybrid_preserves_legacy_evidence());
     assert_eq!(comparison.memory_items.useful_memory_count(), 2);
+    report_traces.extend([
+        comparison.no_memory.clone(),
+        comparison.legacy.clone(),
+        comparison.memory_items.clone(),
+        comparison.hybrid.clone(),
+    ]);
+
+    let report = BrainHarnessEvalReport::new(report_traces);
+    assert_eq!(report.scenarios().len(), 3);
+    assert!(report.memory_items_outperform_legacy());
+    assert!(report.hybrid_preserves_legacy_and_memory_evidence());
+    assert!(report.no_memory_records_missing_expected_context());
+
+    let no_memory_summary = report.arm_summary(EvalArm::NoMemory);
+    assert_eq!(no_memory_summary.arm, EvalArm::NoMemory);
+    assert_eq!(no_memory_summary.trace_count, 3);
+    assert_eq!(no_memory_summary.success_count, 0);
+    assert_eq!(no_memory_summary.bad_memory_count, 0);
+    assert_eq!(no_memory_summary.missing_expected_count, 4);
+    assert_eq!(no_memory_summary.repeated_context_questions, 4);
+    assert_eq!(no_memory_summary.avg_retrieval_precision, 0.0);
+
+    let legacy_summary = report.arm_summary(EvalArm::LegacyObservations);
+    assert_eq!(legacy_summary.arm, EvalArm::LegacyObservations);
+    assert_eq!(legacy_summary.trace_count, 3);
+    assert_eq!(legacy_summary.success_count, 3);
+    assert_eq!(legacy_summary.bad_memory_count, 1);
+    assert!(legacy_summary.avg_quality_score > no_memory_summary.avg_quality_score);
+
+    let memory_summary = report.arm_summary(EvalArm::MemoryItems);
+    assert_eq!(memory_summary.arm, EvalArm::MemoryItems);
+    assert_eq!(memory_summary.trace_count, 3);
+    assert_eq!(memory_summary.success_count, 3);
+    assert_eq!(memory_summary.bad_memory_count, 0);
+    assert_eq!(memory_summary.repeated_context_questions, 0);
+    assert!(memory_summary.avg_quality_score > legacy_summary.avg_quality_score);
+    assert!(memory_summary.avg_retrieval_precision > 0.0);
+
+    let hybrid_summary = report.arm_summary(EvalArm::Hybrid);
+    assert_eq!(hybrid_summary.arm, EvalArm::Hybrid);
+    assert_eq!(hybrid_summary.trace_count, 3);
+    assert_eq!(hybrid_summary.success_count, 3);
+    assert_eq!(hybrid_summary.bad_memory_count, 0);
+    assert!(hybrid_summary.avg_quality_score >= memory_summary.avg_quality_score);
 }
 
 #[tokio::test]

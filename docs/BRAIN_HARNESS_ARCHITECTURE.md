@@ -635,6 +635,11 @@ Status: initial MemoryItem unified-search layer exists. It searches active `Memo
 - Compare no memory, legacy, and MemoryItem modes.
 - Track task success, retrieval usefulness, continuity, and latency.
 
+Status: deterministic confidence scenarios now compare no-memory, legacy, MemoryItem, and
+hybrid arms for preference continuity, stale/wrong-scope rejection, and decision continuity. The
+eval suite includes a report gate that aggregates quality, task success, bad-memory use, missing
+expected context, repeated context questions, and retrieval precision by arm.
+
 ### M4: Tiered Capture Policy
 
 - Implement per-kind validation in `capture_memory`.
