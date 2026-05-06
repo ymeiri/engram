@@ -966,6 +966,9 @@ impl MemoryService {
         let brain_loop = build_brain_loop(BrainLoopParts {
             scope: &scope,
             resolution: &resolution,
+            project: effective_project,
+            cwd: input.cwd.as_deref(),
+            query: input.prompt.as_deref(),
             decisions: &active_decisions,
             rules: &active_rules,
             preferences: &preferences,
@@ -1454,12 +1457,22 @@ struct ContextPackParts<'a> {
 struct BrainLoopParts<'a> {
     scope: &'a str,
     resolution: &'a OrientationResolution,
+    project: Option<&'a str>,
+    cwd: Option<&'a str>,
+    query: Option<&'a str>,
     decisions: &'a [MemoryItem],
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
     limitations: &'a [MemoryItem],
     review_needed: &'a [MemoryItem],
     ambiguities: &'a [String],
+}
+
+struct BrainLoopGroup<'a> {
+    items: &'a [MemoryItem],
+    reason: &'static str,
+    original_index: usize,
+    score: f32,
 }
 
 fn build_brain_loop(parts: BrainLoopParts<'_>) -> BrainLoop {
@@ -1476,35 +1489,67 @@ fn build_brain_loop(parts: BrainLoopParts<'_>) -> BrainLoop {
 
 fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
     let mut items = Vec::new();
-    let groups = [
-        (parts.rules, "Active rule matched the orientation scope."),
-        (
-            parts.preferences,
-            "Preference matched the orientation scope.",
-        ),
-        (
-            parts.limitations,
-            "Known limitation matched the orientation scope.",
-        ),
-        (
-            parts.decisions,
-            "Active decision matched the orientation scope.",
-        ),
-        (
-            parts.review_needed,
-            "Review-needed memory matched the orientation scope.",
-        ),
+    let mut groups = [
+        BrainLoopGroup {
+            items: parts.rules,
+            reason: "Active rule matched the orientation scope.",
+            original_index: 0,
+            score: 0.0,
+        },
+        BrainLoopGroup {
+            items: parts.preferences,
+            reason: "Preference matched the orientation scope.",
+            original_index: 1,
+            score: 0.0,
+        },
+        BrainLoopGroup {
+            items: parts.limitations,
+            reason: "Known limitation matched the orientation scope.",
+            original_index: 2,
+            score: 0.0,
+        },
+        BrainLoopGroup {
+            items: parts.decisions,
+            reason: "Active decision matched the orientation scope.",
+            original_index: 3,
+            score: 0.0,
+        },
+        BrainLoopGroup {
+            items: parts.review_needed,
+            reason: "Review-needed memory matched the orientation scope.",
+            original_index: 4,
+            score: 0.0,
+        },
     ];
+    if parts.query.is_some_and(|query| !query.trim().is_empty()) {
+        let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
+        for group in &mut groups {
+            group.score = group
+                .items
+                .first()
+                .and_then(|item| rank_memory_item(item.clone(), context))
+                .filter(|ranked| ranked.components.text > 0.0)
+                .map(|ranked| ranked.score)
+                .unwrap_or(0.0);
+        }
+        groups.sort_by(|left, right| {
+            right
+                .score
+                .partial_cmp(&left.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.original_index.cmp(&right.original_index))
+        });
+    }
     let mut offsets = [0usize; 5];
 
     loop {
         let mut added = false;
-        for (index, (memory, reason)) in groups.iter().enumerate() {
+        for (index, group) in groups.iter().enumerate() {
             if items.len() == BRAIN_LOOP_TOP_ITEM_LIMIT {
                 return items;
             }
-            if let Some(item) = memory.get(offsets[index]) {
-                items.push(brain_loop_item(item, reason));
+            if let Some(item) = group.items.get(offsets[index]) {
+                items.push(brain_loop_item(item, group.reason));
                 offsets[index] += 1;
                 added = true;
             }
@@ -2947,6 +2992,80 @@ mod tests {
                 .any(|item| item.kind == MemoryKind::Decision
                     && item.title == "Architecture decision")
         );
+    }
+
+    #[tokio::test]
+    async fn orient_brain_loop_prioritizes_prompt_specific_reviewed_decision() {
+        let service = setup_service().await;
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "Daemon command routing limitation",
+                    "Known operational limitation for daemon startup and direct command routing.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "daemon smoke")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Promote durable observations into MemoryItems",
+                    "Use promote_observation to graduate keyed entity observations into reviewed \
+                     MemoryItems when they should affect orient or Brain Loop output. Do not put \
+                     raw entity observations directly in the hot orientation path.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::Observation,
+                    "architecture.observation-promotion-memoryitems",
+                ))
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "When should Engram promote keyed entity observations into durable \
+                     MemoryItems instead of adding raw observations to orient Brain Loop?"
+                        .to_string(),
+                ),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet
+                .active_decisions
+                .first()
+                .map(|item| item.title.as_str()),
+            Some("Promote durable observations into MemoryItems")
+        );
+        assert_eq!(
+            packet
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.title.as_str()),
+            Some("Promote durable observations into MemoryItems")
+        );
+        assert!(packet
+            .brain_loop
+            .top_items
+            .iter()
+            .any(|item| item.title == "Daemon command routing limitation"));
     }
 
     #[tokio::test]

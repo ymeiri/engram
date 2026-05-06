@@ -17,6 +17,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Orientation packet with repository/project resolution and deterministic relevance ordering.
 - [x] Brain Loop v1 projection inside `orient`; bounded compiled context from already selected
       memory, with graph/obligations/lint kept out of the hot path.
+- [x] Prompt-aware Brain Loop top-item calibration; buckets stay balanced, but a strongly
+      prompt-matched reviewed decision can lead the bounded context.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.

@@ -715,6 +715,11 @@ observations. The chosen fix is write-path curation: promote high-signal keyed o
 reviewed `MemoryItem` records when they should influence future orientation, rather than making
 `orient` retrieve raw observations directly.
 
+Follow-up calibration keeps Brain Loop balanced across memory buckets while letting the bucket with
+the highest prompt-specific ranked top item lead the bounded context. This preserves diversity
+without burying a reviewed decision behind a generic limitation when the prompt directly asks about
+that decision.
+
 ---
 
 ## 17. Open Questions
