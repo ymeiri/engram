@@ -3350,9 +3350,9 @@ async fn record_optional_trace(
 /// Request for brain-harness telemetry and agent feedback.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TelemetryRequest {
-    /// Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent
+    /// Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval
     #[schemars(
-        description = "Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent"
+        description = "Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval"
     )]
     pub action: String,
     /// Trace ID for get_trace, submit_feedback, or list_feedback.
@@ -3535,8 +3535,16 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             }))
             .map_err(|e| e.to_string())
         }
+        "real_session_eval" | "eval_report" => {
+            let report = service
+                .real_session_eval_report(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "report": report }))
+                .map_err(|e| e.to_string())
+        }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent",
+            "Unknown action: '{}'. Valid actions: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval",
             request.action
         )),
     }

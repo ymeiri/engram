@@ -555,6 +555,9 @@ Implemented spike:
 - `AgentFeedback` links back to a trace and records used/rejected memory IDs, used/rejected generic result IDs, stale or wrong-scope memory IDs, missing context, usefulness/correctness/noise scores, suggested memory changes, and a note.
 - `orient`, `search`, and `changes_since` can produce trace IDs.
 - The MCP `telemetry` tool can record traces, submit feedback, list records, and aggregate stats by intent.
+- `telemetry(action=real_session_eval)` returns a read-only report over persisted traces and
+  feedback, including coverage, per-intent quality signals, warnings, and a conservative confidence
+  gate. The gate is evidence only; migration writes still require explicit user approval.
 
 Agent feedback is not ground truth. It should be treated as a weak signal and correlated with:
 
@@ -663,7 +666,9 @@ Status: deterministic confidence scenarios now compare no-memory, legacy, Memory
 hybrid arms for preference continuity, stale/wrong-scope rejection, and decision continuity. The
 eval suite includes a report gate that aggregates quality, task success, bad-memory use, missing
 expected context, repeated context questions, and retrieval precision by arm. These are synthetic
-deterministic scenarios, not yet real multi-session behavioral evals.
+deterministic scenarios, not yet real multi-session behavioral evals. A first real-session telemetry
+report now summarizes persisted traces and agent feedback as non-destructive evidence, but it is
+not a substitute for a real multi-session comparative eval.
 
 ### M4: Tiered Capture Policy
 

@@ -155,6 +155,103 @@ async fn feedback_rejects_scores_outside_one_to_five() {
 }
 
 #[tokio::test]
+async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons() {
+    let (telemetry, _) = setup_services().await;
+    let used_memory_id = engram_core::Id::new();
+    let rejected_memory_id = engram_core::Id::new();
+    let stale_memory_id = engram_core::Id::new();
+    let wrong_scope_memory_id = engram_core::Id::new();
+
+    let orient_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_agent(Some("codex".to_string()))
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_query(Some("continue the telemetry report work".to_string()))
+                .with_project(Some("engram".to_string()))
+                .with_returned_memory_ids(vec![used_memory_id, rejected_memory_id])
+                .with_latency_ms(120)
+                .with_warning("memory result set was truncated"),
+        )
+        .await
+        .expect("orient trace should be recorded");
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_agent(Some("codex".to_string()))
+                .with_intent(Some(BrainHarnessIntent::AnswerQuestion))
+                .with_query(Some("telemetry report".to_string()))
+                .with_project(Some("engram".to_string()))
+                .with_returned_result_ids(vec!["legacy:entity:telemetry".to_string()]),
+        )
+        .await
+        .expect("search trace should be recorded");
+
+    let mut feedback = AgentFeedback::new(orient_trace.id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = vec![used_memory_id];
+    feedback.rejected_memory_ids = vec![rejected_memory_id];
+    feedback.stale_memory_ids = vec![stale_memory_id];
+    feedback.wrong_scope_memory_ids = vec![wrong_scope_memory_id];
+    feedback.missing_context = Some("Expected the current M3/M6 gate decision.".to_string());
+    feedback.suggested_memory_changes =
+        Some("Record the real-session report as the next M3 evidence step.".to_string());
+    feedback.usefulness_score = Some(4);
+    feedback.correctness_score = Some(5);
+    feedback.noise_score = Some(2);
+    telemetry
+        .submit_feedback(feedback)
+        .await
+        .expect("feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(100))
+        .await
+        .expect("real-session report should build");
+    assert_eq!(report.sample_limit, 100);
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 1);
+    assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.operation_counts["orient"], 1);
+    assert_eq!(report.operation_counts["search"], 1);
+    assert_eq!(report.warning_count, 1);
+    assert_eq!(report.returned_memory_count, 2);
+    assert_eq!(report.returned_result_count, 1);
+    assert_eq!(report.used_memory_count, 1);
+    assert_eq!(report.rejected_memory_count, 1);
+    assert_eq!(report.stale_memory_count, 1);
+    assert_eq!(report.wrong_scope_memory_count, 1);
+    assert_eq!(report.missing_context_count, 1);
+    assert_eq!(report.suggested_change_count, 1);
+    assert_eq!(report.scored_feedback_count, 1);
+
+    let implement_row = report
+        .intents
+        .iter()
+        .find(|row| row.intent == "implement_change")
+        .expect("implement_change row should exist");
+    assert_eq!(implement_row.trace_count, 1);
+    assert_eq!(implement_row.feedback_count, 1);
+    assert_eq!(implement_row.feedback_coverage, 1.0);
+    assert_eq!(implement_row.avg_latency_ms, Some(120.0));
+    assert_eq!(implement_row.avg_usefulness_score, Some(4.0));
+    assert_eq!(implement_row.avg_correctness_score, Some(5.0));
+    assert_eq!(implement_row.avg_noise_score, Some(2.0));
+    assert_eq!(implement_row.warning_count, 1);
+
+    assert!(!report.confidence_gate.passed);
+    assert!(report
+        .confidence_gate
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("20 real-session traces")));
+    assert!(report
+        .recommendations
+        .iter()
+        .any(|recommendation| recommendation.contains("Keep M6 write-apply blocked")));
+}
+
+#[tokio::test]
 async fn orient_with_intent_emits_trace_for_agent_feedback() {
     let (telemetry, memory) = setup_services().await;
     let preference = MemoryItem::new(
@@ -295,6 +392,15 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
     assert_eq!(stats_json["stats"][0]["intent"], "answer_question");
     assert_eq!(stats_json["stats"][0]["trace_count"], 1);
     assert_eq!(stats_json["stats"][0]["feedback_count"], 1);
+
+    let report_response = tools::telemetry_new(&state, telemetry_request("real_session_eval"))
+        .await
+        .expect("real-session eval report should work");
+    let report_json = parse_json(&report_response);
+    assert_eq!(report_json["report"]["trace_count"], 1);
+    assert_eq!(report_json["report"]["feedback_count"], 1);
+    assert_eq!(report_json["report"]["operation_counts"]["search"], 1);
+    assert_eq!(report_json["report"]["confidence_gate"]["passed"], false);
 }
 
 #[tokio::test]

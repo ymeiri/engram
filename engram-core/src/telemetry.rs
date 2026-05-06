@@ -6,6 +6,7 @@
 
 use crate::id::Id;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use time::OffsetDateTime;
 
@@ -325,4 +326,122 @@ pub struct IntentTelemetryStats {
     pub used_memory_count: usize,
     /// Number of memory IDs reported rejected.
     pub rejected_memory_count: usize,
+}
+
+/// Read-only report over persisted real-session traces and feedback.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RealSessionEvalReport {
+    /// Report creation timestamp.
+    #[serde(with = "time::serde::rfc3339")]
+    pub generated_at: OffsetDateTime,
+    /// Maximum recent traces and feedback rows considered.
+    pub sample_limit: usize,
+    /// Number of traces in the sample.
+    pub trace_count: usize,
+    /// Number of feedback records in the sample.
+    pub feedback_count: usize,
+    /// Feedback records divided by traces.
+    pub feedback_coverage: f32,
+    /// Number of distinct intent buckets in the sample.
+    pub distinct_intent_count: usize,
+    /// Number of distinct operations in the sample.
+    pub distinct_operation_count: usize,
+    /// Traces that did not provide an intent.
+    pub unspecified_intent_trace_count: usize,
+    /// Trace counts grouped by operation.
+    pub operation_counts: BTreeMap<String, usize>,
+    /// Total warnings recorded on traces.
+    pub warning_count: usize,
+    /// Total memory IDs returned by traces.
+    pub returned_memory_count: usize,
+    /// Total generic result IDs returned by traces.
+    pub returned_result_count: usize,
+    /// Total memory IDs reported used by feedback.
+    pub used_memory_count: usize,
+    /// Total memory IDs reported rejected by feedback.
+    pub rejected_memory_count: usize,
+    /// Total memory IDs reported stale by feedback.
+    pub stale_memory_count: usize,
+    /// Total memory IDs reported wrong-scope by feedback.
+    pub wrong_scope_memory_count: usize,
+    /// Total generic result IDs reported used by feedback.
+    pub used_result_count: usize,
+    /// Total generic result IDs reported rejected by feedback.
+    pub rejected_result_count: usize,
+    /// Feedback records that reported missing context.
+    pub missing_context_count: usize,
+    /// Feedback records that suggested memory changes.
+    pub suggested_change_count: usize,
+    /// Feedback records with at least one score.
+    pub scored_feedback_count: usize,
+    /// Per-intent real-session evidence rows.
+    pub intents: Vec<RealSessionEvalIntentRow>,
+    /// Conservative confidence gate for migration write readiness.
+    pub confidence_gate: RealSessionConfidenceGate,
+    /// Operator-facing follow-up recommendations.
+    pub recommendations: Vec<String>,
+}
+
+/// Per-intent row in a real-session telemetry eval report.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RealSessionEvalIntentRow {
+    /// Intent label.
+    pub intent: String,
+    /// Number of traces for this intent.
+    pub trace_count: usize,
+    /// Number of feedback records linked to this intent.
+    pub feedback_count: usize,
+    /// Feedback records divided by traces for this intent.
+    pub feedback_coverage: f32,
+    /// Average latency, when any traces recorded latency.
+    pub avg_latency_ms: Option<f32>,
+    /// Average usefulness score, when feedback included one.
+    pub avg_usefulness_score: Option<f32>,
+    /// Average correctness score, when feedback included one.
+    pub avg_correctness_score: Option<f32>,
+    /// Average noise score, when feedback included one.
+    pub avg_noise_score: Option<f32>,
+    /// Trace warnings for this intent.
+    pub warning_count: usize,
+    /// Memory IDs returned for this intent.
+    pub returned_memory_count: usize,
+    /// Generic result IDs returned for this intent.
+    pub returned_result_count: usize,
+    /// Memory IDs reported used for this intent.
+    pub used_memory_count: usize,
+    /// Memory IDs reported rejected for this intent.
+    pub rejected_memory_count: usize,
+    /// Memory IDs reported stale for this intent.
+    pub stale_memory_count: usize,
+    /// Memory IDs reported wrong-scope for this intent.
+    pub wrong_scope_memory_count: usize,
+    /// Generic result IDs reported used for this intent.
+    pub used_result_count: usize,
+    /// Generic result IDs reported rejected for this intent.
+    pub rejected_result_count: usize,
+    /// Feedback records that reported missing context for this intent.
+    pub missing_context_count: usize,
+    /// Feedback records that suggested memory changes for this intent.
+    pub suggested_change_count: usize,
+    /// Feedback records with at least one score for this intent.
+    pub scored_feedback_count: usize,
+}
+
+/// Conservative, evidence-only confidence gate for migration write readiness.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RealSessionConfidenceGate {
+    /// Whether the current telemetry sample passes the configured gate.
+    pub passed: bool,
+    /// Minimum trace count used by the gate.
+    pub min_trace_count: usize,
+    /// Minimum feedback count used by the gate.
+    pub min_feedback_count: usize,
+    /// Minimum feedback coverage used by the gate.
+    pub min_feedback_coverage: f32,
+    /// Minimum number of intents with feedback used by the gate.
+    pub min_intents_with_feedback: usize,
+    /// Migration writes still require explicit user approval, even if this passes.
+    pub requires_user_approval: bool,
+    /// Concrete reasons the gate did not pass.
+    pub reasons: Vec<String>,
 }
