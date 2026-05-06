@@ -1574,15 +1574,20 @@ fn validate_knowledge_commit(commit: &KnowledgeCommit) -> IndexResult<()> {
 mod tests {
     use super::*;
     use crate::digest::{DigestExtractionOptions, DigestInventoryOptions, DigestService};
+    use crate::search::{SearchOptions, SearchService};
     use engram_core::memory::{
-        ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChangeType, MemoryKind, MemoryScope,
-        ModelIdentity,
+        ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChangeType, MemoryKind,
+        MemoryReviewState, MemoryScope, ModelIdentity,
     };
     use engram_core::repository::{
         GitRepository, LocalCheckout, MonorepoComponent, ProjectRepositoryLink,
         ProjectRepositoryRole,
     };
-    use engram_store::RepositoryRepo;
+    use engram_core::search::SearchLayer;
+    use engram_core::work::{Project, ProjectObservation};
+    use engram_store::{RepositoryRepo, WorkRepo};
+    use std::fs;
+    use std::path::Path;
     use std::process::Command;
     use tempfile::tempdir;
 
@@ -1602,6 +1607,18 @@ mod tests {
         let repo = RepositoryRepo::new(db);
         repo.init_schema().await.unwrap();
         (service, repo)
+    }
+
+    async fn setup_migration_viability_services() -> (MemoryService, SearchService, WorkRepo) {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        engram_store::init_schema(&db).await.unwrap();
+
+        (
+            MemoryService::new(db.clone()),
+            SearchService::new(db.clone()),
+            WorkRepo::new(db),
+        )
     }
 
     fn writer() -> WriterProvenance {
@@ -1685,6 +1702,28 @@ mod tests {
             .output()
             .map(|output| output.status.success())
             .unwrap_or(false)
+    }
+
+    fn accept_first_migration_candidate(root: &Path, export: &MigrationReviewExport) -> String {
+        let mut candidate_paths = export
+            .files_written
+            .iter()
+            .filter(|path| path.starts_with("candidates/"))
+            .cloned()
+            .collect::<Vec<_>>();
+        candidate_paths.sort();
+        let candidate_path = candidate_paths
+            .into_iter()
+            .next()
+            .expect("review export should include a candidate");
+        let path = root.join(&candidate_path);
+        let contents = fs::read_to_string(&path).expect("candidate page should be readable");
+        fs::write(
+            &path,
+            contents.replace("- [ ] Accept for migration", "- [x] Accept for migration"),
+        )
+        .expect("candidate page should be writable");
+        candidate_path
     }
 
     #[tokio::test]
@@ -2133,6 +2172,147 @@ mod tests {
             Some("yuval")
         );
         assert!(service.list_active_memory(None).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn migration_viability_surfaces_reviewed_memory_in_orient_and_search() {
+        let (memory_service, search_service, work_repo) =
+            setup_migration_viability_services().await;
+        let project = Project::new("engram");
+        work_repo.create_project(&project).await.unwrap();
+        work_repo
+            .add_project_observation(
+                &ProjectObservation::new(
+                    project.id,
+                    "Agents should request Memory OS orientation before substantial Engram implementation work.",
+                )
+                .with_key("decisions.memory-orientation"),
+            )
+            .await
+            .unwrap();
+
+        let inventory = memory_service
+            .migration_inventory(MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        assert_eq!(inventory.sources_scanned, 1);
+        assert_eq!(inventory.returned_candidates, 1);
+
+        let review_dir = tempdir().unwrap();
+        let export = memory_service
+            .export_migration_review(review_dir.path(), MigrationInventoryOptions::all())
+            .await
+            .unwrap();
+        let accepted_path = accept_first_migration_candidate(review_dir.path(), &export);
+        let status = memory_service
+            .migration_review_status(review_dir.path())
+            .await
+            .unwrap();
+        assert!(status.ready_to_apply);
+        assert_eq!(status.planned_count, 1);
+        assert_eq!(status.accepted_files, vec![accepted_path.clone()]);
+
+        let apply = memory_service
+            .apply_migration_review(
+                review_dir.path(),
+                MigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(apply.planned_count(), 1);
+        assert_eq!(apply.written_count(), 1);
+        assert!(apply.commit.is_some());
+        let migrated = apply.written_items[0].clone();
+        assert_eq!(migrated.status, MemoryStatus::Active);
+        assert_eq!(migrated.kind, MemoryKind::Decision);
+        assert_eq!(migrated.origin, ClaimOrigin::Migrated);
+        assert!(migrated.tags.iter().any(|tag| tag == "migration"));
+        assert!(migrated.tags.iter().any(|tag| tag == "migration-reviewed"));
+        assert!(migrated
+            .tags
+            .iter()
+            .any(|tag| tag.starts_with("migration-source:project_observation:")));
+        assert!(migrated
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::Observation));
+        assert!(migrated
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ManualReview
+                && evidence.target == accepted_path));
+        let metadata = migrated.trust_metadata();
+        assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
+        assert_eq!(metadata.evidence_count, 2);
+
+        let packet = memory_service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some("continue substantial implementation work".to_string()),
+                include_recent_commits: false,
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert!(packet
+            .active_decisions
+            .iter()
+            .any(|item| item.id == migrated.id));
+        assert!(packet
+            .memory_metadata
+            .iter()
+            .any(|metadata| metadata.memory_id == migrated.id
+                && metadata.review_state == MemoryReviewState::Reviewed));
+        assert!(packet.context_pack.contains("Memory OS orientation"));
+
+        let search_results = search_service
+            .search_with_options(
+                "Memory OS orientation substantial implementation",
+                10,
+                Some(0.0),
+                Some(&[SearchLayer::Memory]),
+                SearchOptions {
+                    project: Some("engram".to_string()),
+                    cwd: None,
+                },
+            )
+            .await
+            .unwrap();
+        let migrated_result = search_results
+            .iter()
+            .find(|result| result.id == migrated.id.to_string())
+            .expect("migrated memory should be searchable");
+        assert_eq!(
+            migrated_result
+                .memory_metadata
+                .as_ref()
+                .map(|metadata| metadata.review_state),
+            Some(MemoryReviewState::Reviewed)
+        );
+
+        let second_apply = memory_service
+            .apply_migration_review(
+                review_dir.path(),
+                MigrationReviewApplyOptions {
+                    dry_run: false,
+                    writer: writer(),
+                    create_commit: true,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(second_apply.planned_count(), 0);
+        assert_eq!(second_apply.duplicate_count, 1);
+        assert_eq!(
+            memory_service.list_memory(None, None).await.unwrap().len(),
+            1
+        );
     }
 
     #[tokio::test]
