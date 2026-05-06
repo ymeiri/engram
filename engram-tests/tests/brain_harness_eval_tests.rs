@@ -2,14 +2,17 @@
 //!
 //! These tests keep the proposed brain-harness direction executable while the
 //! RFC is still forming. They intentionally cover a small slice: trace capture,
-//! orientation behavior that works today, and one ignored target-state gap.
+//! orientation behavior, shared retrieval ranking, and deterministic confidence
+//! scenarios.
 
 use engram_core::memory::{
-    ClaimOrigin, Harness, MemoryFreshness, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope,
-    ModelIdentity, WriterProvenance,
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryFreshness, MemoryItem, MemoryKind,
+    MemoryReviewState, MemoryScope, ModelIdentity, WriterProvenance,
 };
 use engram_core::search::SearchLayer;
-use engram_core::telemetry::{AgentFeedback, BrainHarnessIntent, BrainHarnessOperation};
+use engram_core::telemetry::{
+    AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
+};
 use engram_index::ToolIntelService;
 use engram_index::{
     EntityService, MemoryService, OrientInput, SearchOptions, SearchService, SessionService,
@@ -73,6 +76,25 @@ impl BrainHarnessEvalTrace {
         }
 
         self.useful_memory_count() as f32 / self.retrieved_item_ids.len() as f32
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ConfidenceScenarioComparison {
+    scenario: String,
+    no_memory: BrainHarnessEvalTrace,
+    memory_items: BrainHarnessEvalTrace,
+}
+
+impl ConfidenceScenarioComparison {
+    fn memory_items_improved(&self) -> bool {
+        self.no_memory.scenario == self.scenario
+            && self.memory_items.scenario == self.scenario
+            && self.memory_items.outcome.success
+            && self.memory_items.outcome.quality_score > self.no_memory.outcome.quality_score
+            && self.memory_items.outcome.repeated_context_questions
+                <= self.no_memory.outcome.repeated_context_questions
+            && !self.memory_items.outcome.bad_memory_used
     }
 }
 
@@ -144,6 +166,96 @@ async fn setup_memory_and_telemetry_services() -> (MemoryService, TelemetryServi
 fn writer() -> WriterProvenance {
     WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-5.5"))
         .with_surface("brain-harness-eval")
+}
+
+fn reviewed_evidence(summary: &str) -> EvidenceRef {
+    EvidenceRef::new(EvidenceKind::ManualReview, "brain-harness-eval")
+        .with_summary(summary)
+        .with_excerpt("accepted by deterministic eval fixture")
+}
+
+fn trace_returned_item_ids(trace: &BrainHarnessTrace) -> Vec<String> {
+    trace
+        .returned_memory_ids
+        .iter()
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn eval_trace_from_operation(
+    scenario: &str,
+    arm: EvalArm,
+    prompt: &str,
+    trace: &BrainHarnessTrace,
+    used_item_ids: Vec<String>,
+    missing_expected_item_ids: Vec<String>,
+    outcome: EvalOutcome,
+) -> BrainHarnessEvalTrace {
+    let returned_item_ids = trace_returned_item_ids(trace);
+
+    BrainHarnessEvalTrace {
+        trace_id: trace.id.to_string(),
+        scenario: scenario.to_string(),
+        arm,
+        prompt: prompt.to_string(),
+        memory_calls: vec![MemoryCallTrace {
+            tool: trace.operation.to_string(),
+            query: trace.query.clone().unwrap_or_default(),
+            latency_ms: trace.latency_ms,
+            degraded: !trace.warnings.is_empty(),
+            returned_item_ids: returned_item_ids.clone(),
+            used_item_ids: used_item_ids.clone(),
+            missing_expected_item_ids,
+        }],
+        retrieved_item_ids: returned_item_ids,
+        used_item_ids,
+        outcome,
+    }
+}
+
+async fn record_no_memory_baseline(
+    telemetry_service: &TelemetryService,
+    scenario: &str,
+    prompt: &str,
+    intent: BrainHarnessIntent,
+    expected_item_ids: Vec<String>,
+    missing_context: &str,
+    outcome: EvalOutcome,
+) -> BrainHarnessEvalTrace {
+    let trace = telemetry_service
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Custom(
+                "no_memory_baseline".to_string(),
+            ))
+            .with_agent(Some("codex".to_string()))
+            .with_intent(Some(intent))
+            .with_query(Some(prompt.to_string()))
+            .with_project(Some("engram".to_string()))
+            .with_latency_ms(0),
+        )
+        .await
+        .expect("no-memory baseline trace should be recorded");
+
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.agent = Some("codex".to_string());
+    feedback.missing_context = Some(missing_context.to_string());
+    feedback.usefulness_score = Some(1);
+    feedback.correctness_score = Some(2);
+    feedback.noise_score = Some(1);
+    telemetry_service
+        .submit_feedback(feedback)
+        .await
+        .expect("no-memory baseline feedback should be recorded");
+
+    eval_trace_from_operation(
+        scenario,
+        EvalArm::NoMemory,
+        prompt,
+        &trace,
+        Vec::new(),
+        expected_item_ids,
+        outcome,
+    )
 }
 
 #[test]
@@ -329,6 +441,404 @@ async fn memoryitem_eval_trace_records_orient_feedback_and_intent_stats() {
     assert_eq!(preference_stats.avg_usefulness_score, Some(5.0));
     assert_eq!(preference_stats.avg_correctness_score, Some(5.0));
     assert_eq!(preference_stats.avg_noise_score, Some(2.0));
+}
+
+#[tokio::test]
+async fn confidence_scenario_memoryitems_improve_preference_continuity_over_no_memory() {
+    let (memory_service, telemetry_service) = setup_memory_and_telemetry_services().await;
+    let preference = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Preference,
+                "Commit every completed step",
+                "The user wants each successful implementation checkpoint committed before continuing.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence("User explicitly confirmed commit-every-step policy.")),
+        )
+        .await
+        .expect("preference should be captured");
+    let distractor = memory_service
+        .capture_memory(MemoryItem::new(
+            MemoryKind::Decision,
+            "Keep Claude snippet-only install mode",
+            "Claude harness installation should support a no-settings-write snippet-only mode.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        ))
+        .await
+        .expect("distractor should be captured");
+
+    let scenario = "preference_continuity";
+    let prompt = "Continue Engram implementation and finish a checkpoint.";
+    let no_memory = record_no_memory_baseline(
+        &telemetry_service,
+        scenario,
+        prompt,
+        BrainHarnessIntent::FollowUserPreference,
+        vec![preference.id.to_string()],
+        "Expected the user preference requiring commits after completed checkpoints.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.35,
+        },
+    )
+    .await;
+
+    let packet = memory_service
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(prompt.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::FollowUserPreference),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    assert!(packet
+        .preferences
+        .iter()
+        .any(|item| item.id == preference.id));
+
+    let memory_trace_id = packet.trace_id.expect("orient should return a trace id");
+    let memory_trace = telemetry_service
+        .get_trace(&memory_trace_id)
+        .await
+        .expect("trace lookup should run")
+        .expect("memory trace should exist");
+    let memory_items = eval_trace_from_operation(
+        scenario,
+        EvalArm::MemoryItems,
+        prompt,
+        &memory_trace,
+        vec![preference.id.to_string()],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.9,
+        },
+    );
+
+    let mut feedback = AgentFeedback::new(memory_trace_id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = vec![preference.id];
+    feedback.rejected_memory_ids = vec![distractor.id];
+    feedback.usefulness_score = Some(5);
+    feedback.correctness_score = Some(5);
+    feedback.noise_score = Some(2);
+    feedback.note = Some("Preference was retrieved and applied without asking again.".to_string());
+    telemetry_service
+        .submit_feedback(feedback)
+        .await
+        .expect("memory feedback should be recorded");
+
+    let comparison = ConfidenceScenarioComparison {
+        scenario: scenario.to_string(),
+        no_memory,
+        memory_items,
+    };
+    assert!(comparison.memory_items_improved());
+    assert_eq!(
+        comparison.no_memory.memory_calls[0].missing_expected_item_ids,
+        vec![preference.id.to_string()]
+    );
+    assert_eq!(comparison.memory_items.useful_memory_count(), 1);
+
+    let stats = telemetry_service
+        .stats_by_intent()
+        .await
+        .expect("intent stats should aggregate");
+    let preference_stats = stats
+        .iter()
+        .find(|item| item.intent == "follow_user_preference")
+        .expect("follow_user_preference stats should exist");
+    assert_eq!(preference_stats.trace_count, 2);
+    assert_eq!(preference_stats.feedback_count, 2);
+    assert_eq!(preference_stats.missing_context_count, 1);
+    assert_eq!(preference_stats.used_memory_count, 1);
+    assert_eq!(preference_stats.rejected_memory_count, 1);
+}
+
+#[tokio::test]
+async fn confidence_scenario_memoryitems_reject_stale_and_exclude_wrong_scope_memory() {
+    let (memory_service, telemetry_service) = setup_memory_and_telemetry_services().await;
+    let current_rule = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Run relevant tests after code changes",
+                "After modifying Engram code, run the focused test command that covers the change.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence(
+                "Project instruction requires verification after edits.",
+            )),
+        )
+        .await
+        .expect("current rule should be captured");
+    let stale_rule = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Skip tests for documentation-era spikes",
+                "Old spike workflow said tests could be skipped when changing brain-harness experiments.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_review_after(time::OffsetDateTime::now_utc() - time::Duration::days(1)),
+        )
+        .await
+        .expect("stale rule should be captured");
+    let wrong_scope_rule = memory_service
+        .capture_memory(MemoryItem::new(
+            MemoryKind::Rule,
+            "Skip tests in unrelated prototype",
+            "The unrelated prototype can skip tests for exploratory changes.",
+            MemoryScope::project("other-project"),
+            ClaimOrigin::UserStated,
+            writer(),
+        ))
+        .await
+        .expect("wrong-scope rule should be captured");
+
+    let scenario = "stale_and_wrong_scope_rejection";
+    let prompt = "Modify Engram code and verify the change.";
+    let no_memory = record_no_memory_baseline(
+        &telemetry_service,
+        scenario,
+        prompt,
+        BrainHarnessIntent::ImplementChange,
+        vec![current_rule.id.to_string()],
+        "Expected Engram verification policy before finishing the implementation.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: false,
+            quality_score: 0.4,
+        },
+    )
+    .await;
+
+    let packet = memory_service
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(prompt.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::ImplementChange),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    let returned_ids = packet
+        .memory_metadata
+        .iter()
+        .map(|metadata| metadata.memory_id)
+        .collect::<Vec<_>>();
+    assert!(returned_ids.contains(&current_rule.id));
+    assert!(returned_ids.contains(&stale_rule.id));
+    assert!(!returned_ids.contains(&wrong_scope_rule.id));
+    let stale_metadata = packet
+        .memory_metadata
+        .iter()
+        .find(|metadata| metadata.memory_id == stale_rule.id)
+        .expect("stale rule metadata should be surfaced");
+    assert_eq!(stale_metadata.freshness, MemoryFreshness::ReviewDue);
+    assert!(stale_metadata.review_due);
+
+    let trace_id = packet.trace_id.expect("orient should return a trace id");
+    let trace = telemetry_service
+        .get_trace(&trace_id)
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+    let memory_items = eval_trace_from_operation(
+        scenario,
+        EvalArm::MemoryItems,
+        prompt,
+        &trace,
+        vec![current_rule.id.to_string()],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.86,
+        },
+    );
+
+    let mut feedback = AgentFeedback::new(trace_id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = vec![current_rule.id];
+    feedback.rejected_memory_ids = vec![stale_rule.id];
+    feedback.stale_memory_ids = vec![stale_rule.id];
+    feedback.usefulness_score = Some(4);
+    feedback.correctness_score = Some(5);
+    feedback.noise_score = Some(2);
+    feedback.note =
+        Some("Used current verification rule and rejected review-due guidance.".to_string());
+    telemetry_service
+        .submit_feedback(feedback)
+        .await
+        .expect("feedback should be recorded");
+
+    let comparison = ConfidenceScenarioComparison {
+        scenario: scenario.to_string(),
+        no_memory,
+        memory_items,
+    };
+    assert!(comparison.memory_items_improved());
+    assert!(!comparison
+        .memory_items
+        .retrieved_item_ids
+        .contains(&wrong_scope_rule.id.to_string()));
+    assert!(comparison
+        .memory_items
+        .retrieved_item_ids
+        .contains(&stale_rule.id.to_string()));
+}
+
+#[tokio::test]
+async fn confidence_scenario_memoryitems_preserve_decision_continuity() {
+    let (memory_service, telemetry_service) = setup_memory_and_telemetry_services().await;
+    let next_step = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Next step is confidence scenarios",
+                "After shared MemoryItem ranking and trust metadata, build deterministic brain-harness confidence scenarios before legacy migration.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence("Architecture plan gates migration on eval confidence.")),
+        )
+        .await
+        .expect("next-step decision should be captured");
+    let guardrail = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Do not migrate legacy layers before eval evidence",
+                "Legacy entity/session/work layers should remain until MemoryItems show better agent outcomes and migration preserves important knowledge.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence("Brain harness RFC says canonicality must be proven.")),
+        )
+        .await
+        .expect("guardrail should be captured");
+
+    let scenario = "decision_continuity";
+    let prompt = "What is the correct next implementation step for Engram after the shared ranker?";
+    let no_memory = record_no_memory_baseline(
+        &telemetry_service,
+        scenario,
+        prompt,
+        BrainHarnessIntent::PlanWork,
+        vec![next_step.id.to_string(), guardrail.id.to_string()],
+        "Expected the recent decision to run confidence scenarios before migration.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 2,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: false,
+            quality_score: 0.3,
+        },
+    )
+    .await;
+
+    let packet = memory_service
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(prompt.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::PlanWork),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    assert!(packet
+        .active_decisions
+        .iter()
+        .any(|item| item.id == next_step.id));
+    assert!(packet
+        .active_rules
+        .iter()
+        .any(|item| item.id == guardrail.id));
+
+    let trace_id = packet.trace_id.expect("orient should return a trace id");
+    let trace = telemetry_service
+        .get_trace(&trace_id)
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+    let memory_items = eval_trace_from_operation(
+        scenario,
+        EvalArm::MemoryItems,
+        prompt,
+        &trace,
+        vec![next_step.id.to_string(), guardrail.id.to_string()],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.92,
+        },
+    );
+
+    let mut feedback = AgentFeedback::new(trace_id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = vec![next_step.id, guardrail.id];
+    feedback.usefulness_score = Some(5);
+    feedback.correctness_score = Some(5);
+    feedback.noise_score = Some(1);
+    feedback.note =
+        Some("Recent roadmap decision and migration guardrail preserved continuity.".to_string());
+    telemetry_service
+        .submit_feedback(feedback)
+        .await
+        .expect("feedback should be recorded");
+
+    let comparison = ConfidenceScenarioComparison {
+        scenario: scenario.to_string(),
+        no_memory,
+        memory_items,
+    };
+    assert!(comparison.memory_items_improved());
+    assert_eq!(comparison.memory_items.useful_memory_count(), 2);
+    assert_eq!(
+        comparison.memory_items.outcome.conflict_resolution_correct,
+        Some(true)
+    );
 }
 
 #[tokio::test]
