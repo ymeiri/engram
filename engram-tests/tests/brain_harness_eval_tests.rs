@@ -13,10 +13,11 @@ use engram_core::search::SearchLayer;
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
 };
+use engram_core::{entity::EntityType, session::EventType};
 use engram_index::ToolIntelService;
 use engram_index::{
     EntityService, MemoryService, OrientInput, SearchOptions, SearchService, SessionService,
-    TelemetryService,
+    TelemetryService, WorkService,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,7 @@ enum EvalArm {
     NoMemory,
     LegacyObservations,
     MemoryItems,
+    Hybrid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +100,51 @@ impl ConfidenceScenarioComparison {
     }
 }
 
+#[derive(Debug, Clone)]
+struct FullScenarioComparison {
+    scenario: String,
+    no_memory: BrainHarnessEvalTrace,
+    legacy: BrainHarnessEvalTrace,
+    memory_items: BrainHarnessEvalTrace,
+    hybrid: BrainHarnessEvalTrace,
+}
+
+impl FullScenarioComparison {
+    fn memory_items_outperform_legacy(&self) -> bool {
+        self.no_memory.scenario == self.scenario
+            && self.legacy.scenario == self.scenario
+            && self.memory_items.scenario == self.scenario
+            && self.memory_items.outcome.success
+            && self.memory_items.outcome.quality_score > self.legacy.outcome.quality_score
+            && !self.memory_items.outcome.bad_memory_used
+    }
+
+    fn hybrid_preserves_legacy_evidence(&self) -> bool {
+        self.hybrid.scenario == self.scenario
+            && self.hybrid.outcome.success
+            && self
+                .hybrid
+                .retrieved_item_ids
+                .iter()
+                .any(|id| self.legacy.retrieved_item_ids.contains(id))
+            && self
+                .hybrid
+                .retrieved_item_ids
+                .iter()
+                .any(|id| self.memory_items.retrieved_item_ids.contains(id))
+    }
+}
+
+#[derive(Clone)]
+struct BrainHarnessEvalServices {
+    memory: MemoryService,
+    telemetry: TelemetryService,
+    entity: EntityService,
+    session: SessionService,
+    work: WorkService,
+    search: SearchService,
+}
+
 async fn setup_memory_service() -> MemoryService {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)
@@ -163,6 +210,47 @@ async fn setup_memory_and_telemetry_services() -> (MemoryService, TelemetryServi
     (memory_service, telemetry_service)
 }
 
+async fn setup_brain_harness_eval_services() -> BrainHarnessEvalServices {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+
+    let entity = EntityService::new(db.clone());
+    entity
+        .init()
+        .await
+        .expect("failed to initialize entity service");
+    let session = SessionService::new(db.clone());
+    session
+        .init()
+        .await
+        .expect("failed to initialize session service");
+    let work = WorkService::new(db.clone());
+    work.init()
+        .await
+        .expect("failed to initialize work service");
+    let memory = MemoryService::new(db.clone());
+    memory
+        .init_schema()
+        .await
+        .expect("failed to initialize memory schema");
+    let telemetry = TelemetryService::new(db.clone());
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+
+    BrainHarnessEvalServices {
+        memory,
+        telemetry,
+        entity,
+        session,
+        work,
+        search: SearchService::new(db),
+    }
+}
+
 fn writer() -> WriterProvenance {
     WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-5.5"))
         .with_surface("brain-harness-eval")
@@ -175,11 +263,17 @@ fn reviewed_evidence(summary: &str) -> EvidenceRef {
 }
 
 fn trace_returned_item_ids(trace: &BrainHarnessTrace) -> Vec<String> {
-    trace
+    let mut ids = trace
         .returned_memory_ids
         .iter()
         .map(ToString::to_string)
-        .collect()
+        .collect::<Vec<_>>();
+    for id in &trace.returned_result_ids {
+        if !ids.contains(id) {
+            ids.push(id.clone());
+        }
+    }
+    ids
 }
 
 fn eval_trace_from_operation(
@@ -254,6 +348,164 @@ async fn record_no_memory_baseline(
         &trace,
         Vec::new(),
         expected_item_ids,
+        outcome,
+    )
+}
+
+async fn record_legacy_trace(
+    services: &BrainHarnessEvalServices,
+    scenario: &str,
+    prompt: &str,
+    intent: BrainHarnessIntent,
+    returned_result_ids: Vec<String>,
+    used_result_ids: Vec<String>,
+    outcome: EvalOutcome,
+) -> BrainHarnessEvalTrace {
+    let trace = services
+        .telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Custom(
+                "legacy_retrieval".to_string(),
+            ))
+            .with_agent(Some("codex".to_string()))
+            .with_intent(Some(intent))
+            .with_query(Some(prompt.to_string()))
+            .with_project(Some("engram".to_string()))
+            .with_returned_result_ids(returned_result_ids)
+            .with_latency_ms(0),
+        )
+        .await
+        .expect("legacy trace should be recorded");
+
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_result_ids = used_result_ids.clone();
+    feedback.usefulness_score = Some(if outcome.success { 3 } else { 2 });
+    feedback.correctness_score = Some(if outcome.bad_memory_used { 2 } else { 4 });
+    feedback.noise_score = Some(if outcome.bad_memory_used { 4 } else { 3 });
+    feedback.note =
+        Some("Legacy retrieval returned usable context without trust metadata.".to_string());
+    services
+        .telemetry
+        .submit_feedback(feedback)
+        .await
+        .expect("legacy feedback should be recorded");
+
+    eval_trace_from_operation(
+        scenario,
+        EvalArm::LegacyObservations,
+        prompt,
+        &trace,
+        used_result_ids,
+        Vec::new(),
+        outcome,
+    )
+}
+
+async fn record_hybrid_trace(
+    services: &BrainHarnessEvalServices,
+    scenario: &str,
+    prompt: &str,
+    intent: BrainHarnessIntent,
+    returned_memory_ids: Vec<engram_core::id::Id>,
+    returned_result_ids: Vec<String>,
+    used_item_ids: Vec<String>,
+    outcome: EvalOutcome,
+) -> BrainHarnessEvalTrace {
+    let trace = services
+        .telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Custom(
+                "hybrid_retrieval".to_string(),
+            ))
+            .with_agent(Some("codex".to_string()))
+            .with_intent(Some(intent))
+            .with_query(Some(prompt.to_string()))
+            .with_project(Some("engram".to_string()))
+            .with_returned_memory_ids(returned_memory_ids)
+            .with_returned_result_ids(returned_result_ids)
+            .with_latency_ms(0),
+        )
+        .await
+        .expect("hybrid trace should be recorded");
+
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = trace
+        .returned_memory_ids
+        .iter()
+        .copied()
+        .filter(|id| used_item_ids.contains(&id.to_string()))
+        .collect();
+    feedback.used_result_ids = trace
+        .returned_result_ids
+        .iter()
+        .filter(|id| used_item_ids.contains(id))
+        .cloned()
+        .collect();
+    feedback.usefulness_score = Some(5);
+    feedback.correctness_score = Some(5);
+    feedback.noise_score = Some(1);
+    feedback.note =
+        Some("Hybrid retrieval used MemoryItems while preserving legacy evidence ids.".to_string());
+    services
+        .telemetry
+        .submit_feedback(feedback)
+        .await
+        .expect("hybrid feedback should be recorded");
+
+    eval_trace_from_operation(
+        scenario,
+        EvalArm::Hybrid,
+        prompt,
+        &trace,
+        used_item_ids,
+        Vec::new(),
+        outcome,
+    )
+}
+
+async fn memoryitem_trace_from_orient(
+    services: &BrainHarnessEvalServices,
+    scenario: &str,
+    prompt: &str,
+    packet_trace_id: engram_core::id::Id,
+    used_memory_ids: Vec<engram_core::id::Id>,
+    rejected_memory_ids: Vec<engram_core::id::Id>,
+    outcome: EvalOutcome,
+) -> BrainHarnessEvalTrace {
+    let trace = services
+        .telemetry
+        .get_trace(&packet_trace_id)
+        .await
+        .expect("trace lookup should run")
+        .expect("memory trace should exist");
+    let used_item_ids = used_memory_ids
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    let mut feedback = AgentFeedback::new(packet_trace_id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_memory_ids = used_memory_ids;
+    feedback.rejected_memory_ids = rejected_memory_ids;
+    feedback.usefulness_score = Some(5);
+    feedback.correctness_score = Some(5);
+    feedback.noise_score = Some(1);
+    feedback.note = Some("MemoryItem retrieval supplied scoped trust-bearing context.".to_string());
+    services
+        .telemetry
+        .submit_feedback(feedback)
+        .await
+        .expect("memory feedback should be recorded");
+
+    eval_trace_from_operation(
+        scenario,
+        EvalArm::MemoryItems,
+        prompt,
+        &trace,
+        used_item_ids,
+        Vec::new(),
         outcome,
     )
 }
@@ -839,6 +1091,578 @@ async fn confidence_scenario_memoryitems_preserve_decision_continuity() {
         comparison.memory_items.outcome.conflict_resolution_correct,
         Some(true)
     );
+}
+
+#[tokio::test]
+async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
+    let services = setup_brain_harness_eval_services().await;
+    services
+        .entity
+        .create_entity("engram", EntityType::Repo, Some("Engram repository"))
+        .await
+        .expect("engram entity should be created");
+    let _engram_project = services
+        .work
+        .create_project("engram", Some("Engram project"))
+        .await
+        .expect("engram project should be created");
+    let _other_project = services
+        .work
+        .create_project("other-project", Some("Unrelated prototype"))
+        .await
+        .expect("other project should be created");
+
+    let (legacy_preference, _) = services
+        .entity
+        .add_observation(
+            "engram",
+            "The user wants each successful implementation checkpoint committed before continuing.",
+            Some("preferences.commit-workflow"),
+            Some("legacy-eval"),
+        )
+        .await
+        .expect("legacy preference should be recorded");
+    let preference = services
+        .memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Preference,
+                "Commit every completed step",
+                "The user wants each successful implementation checkpoint committed before continuing.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence(
+                "User explicitly confirmed commit-every-step policy.",
+            )),
+        )
+        .await
+        .expect("preference should be captured");
+
+    let scenario = "preference_continuity";
+    let prompt = "Continue Engram implementation and finish a checkpoint.";
+    let no_memory = record_no_memory_baseline(
+        &services.telemetry,
+        scenario,
+        prompt,
+        BrainHarnessIntent::FollowUserPreference,
+        vec![preference.id.to_string()],
+        "Expected the user preference requiring commits after completed checkpoints.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.35,
+        },
+    )
+    .await;
+    let legacy_search_results = services
+        .search
+        .search_with_options(
+            "successful implementation checkpoint committed before continuing",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Observation]),
+            SearchOptions::default(),
+        )
+        .await
+        .expect("legacy observation search should run");
+    let legacy_preference_ids = legacy_search_results
+        .iter()
+        .map(|result| result.id.clone())
+        .collect::<Vec<_>>();
+    assert!(legacy_preference_ids.contains(&legacy_preference.id.to_string()));
+    let legacy = record_legacy_trace(
+        &services,
+        scenario,
+        prompt,
+        BrainHarnessIntent::FollowUserPreference,
+        legacy_preference_ids.clone(),
+        vec![legacy_preference.id.to_string()],
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.72,
+        },
+    )
+    .await;
+    let packet = services
+        .memory
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(prompt.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::FollowUserPreference),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    assert!(packet
+        .preferences
+        .iter()
+        .any(|item| item.id == preference.id));
+    let memory_items = memoryitem_trace_from_orient(
+        &services,
+        scenario,
+        prompt,
+        packet.trace_id.expect("orient should return a trace id"),
+        vec![preference.id],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.9,
+        },
+    )
+    .await;
+    let hybrid = record_hybrid_trace(
+        &services,
+        scenario,
+        prompt,
+        BrainHarnessIntent::FollowUserPreference,
+        vec![preference.id],
+        legacy_preference_ids,
+        vec![preference.id.to_string(), legacy_preference.id.to_string()],
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.94,
+        },
+    )
+    .await;
+    let comparison = FullScenarioComparison {
+        scenario: scenario.to_string(),
+        no_memory,
+        legacy,
+        memory_items,
+        hybrid,
+    };
+    assert!(comparison.memory_items_outperform_legacy());
+    assert!(comparison.hybrid_preserves_legacy_evidence());
+    assert_eq!(comparison.memory_items.useful_memory_count(), 1);
+    assert_eq!(
+        comparison.no_memory.memory_calls[0].missing_expected_item_ids,
+        vec![preference.id.to_string()]
+    );
+
+    let current_legacy_rule = services
+        .work
+        .add_project_observation(
+            "engram",
+            "After modifying Engram code, run the focused test command that covers the change.",
+            Some("testing.verification.current"),
+        )
+        .await
+        .expect("current project observation should be recorded");
+    let stale_legacy_rule = services
+        .work
+        .add_project_observation(
+            "engram",
+            "Old spike workflow said tests could be skipped when changing brain-harness experiments.",
+            Some("testing.verification.stale"),
+        )
+        .await
+        .expect("stale project observation should be recorded");
+    let wrong_scope_legacy_rule = services
+        .work
+        .add_project_observation(
+            "other-project",
+            "The unrelated prototype can skip tests for exploratory changes.",
+            Some("testing.verification.wrong-scope"),
+        )
+        .await
+        .expect("wrong-scope project observation should be recorded");
+    let current_rule = services
+        .memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Run relevant tests after code changes",
+                "After modifying Engram code, run the focused test command that covers the change.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence(
+                "Project instruction requires verification after edits.",
+            )),
+        )
+        .await
+        .expect("current rule should be captured");
+    let stale_rule = services
+        .memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Skip tests for documentation-era spikes",
+                "Old spike workflow said tests could be skipped when changing brain-harness experiments.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_review_after(time::OffsetDateTime::now_utc() - time::Duration::days(1)),
+        )
+        .await
+        .expect("stale rule should be captured");
+    let wrong_scope_rule = services
+        .memory
+        .capture_memory(MemoryItem::new(
+            MemoryKind::Rule,
+            "Skip tests in unrelated prototype",
+            "The unrelated prototype can skip tests for exploratory changes.",
+            MemoryScope::project("other-project"),
+            ClaimOrigin::UserStated,
+            writer(),
+        ))
+        .await
+        .expect("wrong-scope rule should be captured");
+
+    let scenario = "stale_and_wrong_scope_rejection";
+    let prompt = "Modify Engram code and verify the change.";
+    let no_memory = record_no_memory_baseline(
+        &services.telemetry,
+        scenario,
+        prompt,
+        BrainHarnessIntent::ImplementChange,
+        vec![current_rule.id.to_string()],
+        "Expected Engram verification policy before finishing the implementation.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: false,
+            quality_score: 0.4,
+        },
+    )
+    .await;
+    let work_context = services
+        .work
+        .get_full_context("engram", None)
+        .await
+        .expect("work context should be retrieved");
+    let legacy_rule_ids = work_context
+        .project_observations
+        .iter()
+        .map(|observation| observation.id.to_string())
+        .collect::<Vec<_>>();
+    assert!(legacy_rule_ids.contains(&current_legacy_rule.id.to_string()));
+    assert!(legacy_rule_ids.contains(&stale_legacy_rule.id.to_string()));
+    assert!(!legacy_rule_ids.contains(&wrong_scope_legacy_rule.id.to_string()));
+    let legacy = record_legacy_trace(
+        &services,
+        scenario,
+        prompt,
+        BrainHarnessIntent::ImplementChange,
+        legacy_rule_ids.clone(),
+        vec![
+            current_legacy_rule.id.to_string(),
+            stale_legacy_rule.id.to_string(),
+        ],
+        EvalOutcome {
+            success: true,
+            preference_adhered: false,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: true,
+            quality_score: 0.58,
+        },
+    )
+    .await;
+    let packet = services
+        .memory
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(prompt.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::ImplementChange),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    let returned_rule_ids = packet
+        .memory_metadata
+        .iter()
+        .map(|metadata| metadata.memory_id)
+        .collect::<Vec<_>>();
+    assert!(returned_rule_ids.contains(&current_rule.id));
+    assert!(returned_rule_ids.contains(&stale_rule.id));
+    assert!(!returned_rule_ids.contains(&wrong_scope_rule.id));
+    let stale_metadata = packet
+        .memory_metadata
+        .iter()
+        .find(|metadata| metadata.memory_id == stale_rule.id)
+        .expect("stale rule metadata should be surfaced");
+    assert_eq!(stale_metadata.freshness, MemoryFreshness::ReviewDue);
+    assert!(stale_metadata.review_due);
+    let memory_items = memoryitem_trace_from_orient(
+        &services,
+        scenario,
+        prompt,
+        packet.trace_id.expect("orient should return a trace id"),
+        vec![current_rule.id],
+        vec![stale_rule.id],
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.86,
+        },
+    )
+    .await;
+    let hybrid = record_hybrid_trace(
+        &services,
+        scenario,
+        prompt,
+        BrainHarnessIntent::ImplementChange,
+        returned_rule_ids,
+        legacy_rule_ids,
+        vec![
+            current_rule.id.to_string(),
+            current_legacy_rule.id.to_string(),
+        ],
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.88,
+        },
+    )
+    .await;
+    let comparison = FullScenarioComparison {
+        scenario: scenario.to_string(),
+        no_memory,
+        legacy,
+        memory_items,
+        hybrid,
+    };
+    assert!(comparison.memory_items_outperform_legacy());
+    assert!(comparison.hybrid_preserves_legacy_evidence());
+    assert!(comparison
+        .legacy
+        .retrieved_item_ids
+        .contains(&stale_legacy_rule.id.to_string()));
+    assert!(!comparison
+        .memory_items
+        .retrieved_item_ids
+        .contains(&wrong_scope_rule.id.to_string()));
+
+    let session = services
+        .session
+        .start_session(
+            Some("codex"),
+            Some("engram"),
+            Some("Brain harness planning"),
+        )
+        .await
+        .expect("session should start");
+    let legacy_decision = services
+        .session
+        .log_decision(
+            &session.id,
+            "After shared MemoryItem ranking and trust metadata, build deterministic brain-harness confidence scenarios before legacy migration.",
+            Some("Architecture plan gates migration on eval evidence."),
+        )
+        .await
+        .expect("legacy decision should be recorded");
+    let legacy_guardrail = services
+        .session
+        .log_event(
+            &session.id,
+            EventType::Rule,
+            "Legacy entity/session/work layers should remain until MemoryItems show better agent outcomes and migration preserves important knowledge.",
+            Some("Brain harness RFC says canonicality must be proven."),
+            Some("legacy-eval"),
+        )
+        .await
+        .expect("legacy guardrail should be recorded");
+    let next_step = services
+        .memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Next step is confidence scenarios",
+                "After shared MemoryItem ranking and trust metadata, build deterministic brain-harness confidence scenarios before legacy migration.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence(
+                "Architecture plan gates migration on eval confidence.",
+            )),
+        )
+        .await
+        .expect("next-step decision should be captured");
+    let guardrail = services
+        .memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Do not migrate legacy layers before eval evidence",
+                "Legacy entity/session/work layers should remain until MemoryItems show better agent outcomes and migration preserves important knowledge.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence(
+                "Brain harness RFC says canonicality must be proven.",
+            )),
+        )
+        .await
+        .expect("guardrail should be captured");
+
+    let scenario = "decision_continuity";
+    let prompt = "What is the correct next implementation step for Engram after the shared ranker?";
+    let no_memory = record_no_memory_baseline(
+        &services.telemetry,
+        scenario,
+        prompt,
+        BrainHarnessIntent::PlanWork,
+        vec![next_step.id.to_string(), guardrail.id.to_string()],
+        "Expected the recent decision to run confidence scenarios before migration.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 2,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: false,
+            quality_score: 0.3,
+        },
+    )
+    .await;
+    let legacy_decision_results = services
+        .search
+        .search_with_options(
+            "build deterministic brain-harness confidence scenarios before legacy migration",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::SessionEvent]),
+            SearchOptions::default(),
+        )
+        .await
+        .expect("legacy session search should run");
+    let mut legacy_decision_ids = legacy_decision_results
+        .iter()
+        .map(|result| result.id.clone())
+        .collect::<Vec<_>>();
+    assert!(legacy_decision_ids.contains(&legacy_decision.id.to_string()));
+    legacy_decision_ids.push(legacy_guardrail.id.to_string());
+    let legacy = record_legacy_trace(
+        &services,
+        scenario,
+        prompt,
+        BrainHarnessIntent::PlanWork,
+        legacy_decision_ids.clone(),
+        vec![
+            legacy_decision.id.to_string(),
+            legacy_guardrail.id.to_string(),
+        ],
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.7,
+        },
+    )
+    .await;
+    let packet = services
+        .memory
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(prompt.to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some(BrainHarnessIntent::PlanWork),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("orient should return a packet");
+    assert!(packet
+        .active_decisions
+        .iter()
+        .any(|item| item.id == next_step.id));
+    assert!(packet
+        .active_rules
+        .iter()
+        .any(|item| item.id == guardrail.id));
+    let returned_decision_ids = packet
+        .memory_metadata
+        .iter()
+        .map(|metadata| metadata.memory_id)
+        .collect::<Vec<_>>();
+    let memory_items = memoryitem_trace_from_orient(
+        &services,
+        scenario,
+        prompt,
+        packet.trace_id.expect("orient should return a trace id"),
+        vec![next_step.id, guardrail.id],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.92,
+        },
+    )
+    .await;
+    let hybrid = record_hybrid_trace(
+        &services,
+        scenario,
+        prompt,
+        BrainHarnessIntent::PlanWork,
+        returned_decision_ids,
+        legacy_decision_ids,
+        vec![
+            next_step.id.to_string(),
+            guardrail.id.to_string(),
+            legacy_decision.id.to_string(),
+            legacy_guardrail.id.to_string(),
+        ],
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.95,
+        },
+    )
+    .await;
+    let comparison = FullScenarioComparison {
+        scenario: scenario.to_string(),
+        no_memory,
+        legacy,
+        memory_items,
+        hybrid,
+    };
+    assert!(comparison.memory_items_outperform_legacy());
+    assert!(comparison.hybrid_preserves_legacy_evidence());
+    assert_eq!(comparison.memory_items.useful_memory_count(), 2);
 }
 
 #[tokio::test]
