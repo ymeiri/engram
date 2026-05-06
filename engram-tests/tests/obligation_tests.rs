@@ -296,6 +296,51 @@ async fn test_mcp_orient_surfaces_open_obligations() {
 }
 
 #[tokio::test]
+async fn test_mcp_orient_caps_open_obligations_and_marks_has_more() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+
+    for index in 0..7 {
+        let mut add = with_writer(request("add"));
+        add.project = Some("engram".to_string());
+        add.kind = Some("document_disposition".to_string());
+        add.title = Some(format!("Review generated note {index}"));
+        add.description = Some("A generated note needs a disposition.".to_string());
+        add.trigger_kind = Some("test".to_string());
+        add.trigger_target = Some(format!("docs/generated-{index}.md"));
+        add.trigger_summary = Some("generated note changed".to_string());
+        add.required_resolutions = vec![
+            "indexed_document".to_string(),
+            "memory_recorded".to_string(),
+            "skipped_with_reason".to_string(),
+        ];
+        tools::obligations_new(&state, add)
+            .await
+            .expect("add should work");
+    }
+
+    let orient = orient_for_project(&state, repo.path().to_str().unwrap()).await;
+
+    assert_eq!(orient["obligation_summary"]["available"], true);
+    assert_eq!(orient["obligation_summary"]["returned_count"], 5);
+    assert_eq!(orient["obligation_summary"]["has_more"], true);
+    assert_eq!(orient["open_obligations"].as_array().unwrap().len(), 5);
+    assert!(orient["obligation_summary"]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("5+ open obligation(s)"));
+    assert!(orient["recommended_actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|action| action
+            .as_str()
+            .unwrap()
+            .starts_with("5+ open obligation(s)")));
+}
+
+#[tokio::test]
 async fn test_mcp_orient_surfaces_current_git_status_document_obligation() {
     let state = setup_tool_state().await;
     let repo = tempdir().expect("temp repo should be created");

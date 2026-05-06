@@ -105,6 +105,15 @@ fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
 }
 
+fn manual_review_evidence(summary: &str) -> Vec<MemoryEvidenceRequest> {
+    vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "memory_tests".to_string(),
+        summary: Some(summary.to_string()),
+        excerpt: None,
+    }]
+}
+
 fn vault_request(action: &str, path: &str) -> VaultRequest {
     VaultRequest {
         action: action.to_string(),
@@ -757,12 +766,7 @@ async fn test_mcp_orient_returns_context_packet() {
     add.origin = Some("user_stated".to_string());
     add.scope_type = Some("project".to_string());
     add.project_name = Some("engram".to_string());
-    add.evidence = vec![MemoryEvidenceRequest {
-        kind: "manual_review".to_string(),
-        target: "memory_tests".to_string(),
-        summary: Some("Orient test expects active durable guidance.".to_string()),
-        excerpt: None,
-    }];
+    add.evidence = manual_review_evidence("Orient test expects active durable guidance.");
     tools::memory_new(&state, add)
         .await
         .expect("add should work");
@@ -815,4 +819,134 @@ async fn test_mcp_orient_returns_context_packet() {
         json["active_decisions"][0]["id"]
     );
     assert!(json["memory_cursor"]["timestamp"].is_string());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_routes_inferred_memory_to_review_needed() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.kind = Some("decision".to_string());
+    add.title = Some("Inferred branch policy".to_string());
+    add.content =
+        Some("Agents inferred that feature branches should be rebased daily.".to_string());
+    add.origin = Some("agent_inferred".to_string());
+    add.scope_type = Some("project".to_string());
+    add.project_name = Some("engram".to_string());
+    tools::memory_new(&state, add)
+        .await
+        .expect("add should work");
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("continue branch policy work".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("plan_work".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+
+    let json = parse_json(&response);
+    assert!(json["active_decisions"].as_array().unwrap().is_empty());
+    assert_eq!(json["review_needed"][0]["title"], "Inferred branch policy");
+    assert_eq!(json["review_needed"][0]["status"], "needs_review");
+    assert!(json["recommended_actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|action| action
+            .as_str()
+            .unwrap()
+            .contains("Review needs_review memory")));
+}
+
+#[tokio::test]
+async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
+    let state = setup_tool_state().await;
+
+    let mut throttling = with_writer(request("add"));
+    throttling.kind = Some("decision".to_string());
+    throttling.title = Some("Prefer token bucket throttling".to_string());
+    throttling.content = Some(
+        "Request throttling work should use a token bucket limiter before adding new queues."
+            .to_string(),
+    );
+    throttling.origin = Some("user_stated".to_string());
+    throttling.scope_type = Some("project".to_string());
+    throttling.project_name = Some("engram".to_string());
+    throttling.tags = vec!["throttling".to_string(), "requests".to_string()];
+    throttling.evidence = manual_review_evidence("Reviewed throttling guidance.");
+    tools::memory_new(&state, throttling)
+        .await
+        .expect("throttling add should work");
+
+    let mut migration = with_writer(request("add"));
+    migration.kind = Some("decision".to_string());
+    migration.title = Some("Prefer write-ahead schema migration".to_string());
+    migration.content = Some(
+        "Schema migration work should write an append-only migration log before changing tables."
+            .to_string(),
+    );
+    migration.origin = Some("user_stated".to_string());
+    migration.scope_type = Some("project".to_string());
+    migration.project_name = Some("engram".to_string());
+    migration.tags = vec!["schema".to_string(), "migration".to_string()];
+    migration.evidence = manual_review_evidence("Reviewed schema migration guidance.");
+    tools::memory_new(&state, migration)
+        .await
+        .expect("migration add should work");
+
+    let throttling_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("implement request throttling".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("plan_work".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+    let throttling_json = parse_json(&throttling_response);
+    assert_eq!(
+        throttling_json["active_decisions"][0]["title"],
+        "Prefer token bucket throttling"
+    );
+    assert_eq!(
+        throttling_json["brain_loop"]["top_items"][0]["title"],
+        "Prefer token bucket throttling"
+    );
+
+    let migration_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("plan schema migration".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("plan_work".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+    let migration_json = parse_json(&migration_response);
+    assert_eq!(
+        migration_json["active_decisions"][0]["title"],
+        "Prefer write-ahead schema migration"
+    );
+    assert_eq!(
+        migration_json["brain_loop"]["top_items"][0]["title"],
+        "Prefer write-ahead schema migration"
+    );
 }

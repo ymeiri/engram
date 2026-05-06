@@ -23,6 +23,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       action without running obligation detection in the hot path.
 - [x] `orient` filters stale git-status document obligations and untracked root instruction files
       from its open-obligation summary, while leaving stored obligation lifecycle explicit.
+- [x] `orient` contract checkpoint documented and covered at the MCP boundary for review gating,
+      prompt-specific ranking, obligation bounds, and stale-obligation suppression.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
