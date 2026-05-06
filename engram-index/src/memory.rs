@@ -293,6 +293,108 @@ impl MemoryService {
         Ok(self.repo.get_memory_item(id).await?)
     }
 
+    /// Promote a review candidate into active memory with reviewer evidence.
+    pub async fn promote_memory(
+        &self,
+        id: &Id,
+        reviewer: impl Into<String>,
+        rationale: impl Into<String>,
+    ) -> IndexResult<MemoryItem> {
+        let item = self.get_required_memory(id).await?;
+        if item.status != MemoryStatus::NeedsReview {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {id} is not needs_review (status: {})",
+                item.status
+            )));
+        }
+
+        let item = item
+            .with_status(MemoryStatus::Active)
+            .with_evidence(review_evidence(reviewer, rationale)?);
+        self.repo.save_memory_item(&item).await?;
+        Ok(item)
+    }
+
+    /// Reject a review candidate while keeping it auditable.
+    pub async fn reject_memory(
+        &self,
+        id: &Id,
+        reviewer: impl Into<String>,
+        rationale: impl Into<String>,
+    ) -> IndexResult<MemoryItem> {
+        let item = self.get_required_memory(id).await?;
+        if item.status != MemoryStatus::NeedsReview {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {id} is not needs_review (status: {})",
+                item.status
+            )));
+        }
+
+        let item = item
+            .with_status(MemoryStatus::Rejected)
+            .with_evidence(review_evidence(reviewer, rationale)?);
+        self.repo.save_memory_item(&item).await?;
+        Ok(item)
+    }
+
+    /// Promote a replacement memory item and mark the replaced item as superseded.
+    pub async fn supersede_memory(
+        &self,
+        new_id: &Id,
+        old_id: &Id,
+        reviewer: impl Into<String>,
+        rationale: impl Into<String>,
+    ) -> IndexResult<(MemoryItem, MemoryItem)> {
+        if new_id == old_id {
+            return Err(IndexError::InvalidState(
+                "memory item cannot supersede itself".to_string(),
+            ));
+        }
+
+        let reviewer = reviewer.into();
+        let rationale = rationale.into();
+        let mut new_item = self.get_required_memory(new_id).await?;
+        let mut old_item = self.get_required_memory(old_id).await?;
+        if matches!(
+            old_item.status,
+            MemoryStatus::Archived | MemoryStatus::Rejected | MemoryStatus::Superseded
+        ) {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {old_id} cannot be superseded from status {}",
+                old_item.status
+            )));
+        }
+        if matches!(
+            new_item.status,
+            MemoryStatus::Archived | MemoryStatus::Rejected
+        ) {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {new_id} cannot supersede from status {}",
+                new_item.status
+            )));
+        }
+
+        if !new_item.supersedes.contains(old_id) {
+            new_item = new_item.with_superseded_item(*old_id);
+        }
+        new_item = new_item
+            .with_status(MemoryStatus::Active)
+            .with_evidence(review_evidence(
+                reviewer.clone(),
+                format!("Supersedes {old_id}: {rationale}"),
+            )?);
+        old_item = old_item
+            .with_status(MemoryStatus::Superseded)
+            .with_evidence(review_evidence(
+                reviewer,
+                format!("Superseded by {new_id}: {rationale}"),
+            )?);
+
+        self.repo.save_memory_item(&new_item).await?;
+        self.repo.save_memory_item(&old_item).await?;
+        Ok((new_item, old_item))
+    }
+
     /// Archive a memory item with metadata.
     pub async fn archive_memory(
         &self,
@@ -300,11 +402,7 @@ impl MemoryService {
         reason: impl Into<String>,
         archived_by: Option<String>,
     ) -> IndexResult<MemoryItem> {
-        let item = self
-            .repo
-            .get_memory_item(id)
-            .await?
-            .ok_or_else(|| IndexError::NotFound(format!("memory item not found: {id}")))?;
+        let item = self.get_required_memory(id).await?;
         let item = item.with_archive(reason, archived_by);
         self.repo.save_memory_item(&item).await?;
         Ok(item)
@@ -333,6 +431,13 @@ impl MemoryService {
             .repo
             .list_memory_items_needing_review(OffsetDateTime::now_utc(), limit)
             .await?)
+    }
+
+    async fn get_required_memory(&self, id: &Id) -> IndexResult<MemoryItem> {
+        self.repo
+            .get_memory_item(id)
+            .await?
+            .ok_or_else(|| IndexError::NotFound(format!("memory item not found: {id}")))
     }
 
     /// Persist an already-built knowledge commit.
@@ -1402,6 +1507,24 @@ fn apply_capture_policy(item: MemoryItem) -> MemoryItem {
     item
 }
 
+fn review_evidence(
+    reviewer: impl Into<String>,
+    rationale: impl Into<String>,
+) -> IndexResult<EvidenceRef> {
+    let reviewer = reviewer.into();
+    let rationale = rationale.into();
+    if reviewer.trim().is_empty() {
+        return Err(IndexError::Parse("reviewer must not be empty".to_string()));
+    }
+    if rationale.trim().is_empty() {
+        return Err(IndexError::Parse(
+            "review rationale must not be empty".to_string(),
+        ));
+    }
+
+    Ok(EvidenceRef::new(EvidenceKind::ManualReview, reviewer).with_summary(rationale))
+}
+
 fn durable_guidance_requires_evidence(kind: &MemoryKind) -> bool {
     matches!(
         kind,
@@ -1755,6 +1878,261 @@ mod tests {
         let review_items = service.list_memory_needing_review(None).await.unwrap();
         assert_eq!(review_items.len(), 1);
         assert_eq!(review_items[0].id, review.id);
+    }
+
+    #[tokio::test]
+    async fn promote_memory_activates_review_candidate_with_review_evidence() {
+        let service = setup_service().await;
+        let candidate = service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Decision,
+                "Candidate decision",
+                "Candidate durable guidance should require explicit promotion.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentInferred,
+                writer(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(candidate.status, MemoryStatus::NeedsReview);
+
+        let promoted = service
+            .promote_memory(
+                &candidate.id,
+                "yuval",
+                "Reviewed and accepted for future agents.",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(promoted.status, MemoryStatus::Active);
+        assert!(promoted.evidence.iter().any(|evidence| evidence.kind
+            == EvidenceKind::ManualReview
+            && evidence.target == "yuval"
+            && evidence
+                .summary
+                .as_deref()
+                .is_some_and(|summary| summary.contains("accepted"))));
+        assert_eq!(service.list_active_memory(None).await.unwrap().len(), 1);
+        assert!(service
+            .list_memory_needing_review(None)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn promote_memory_requires_review_candidate_and_rationale() {
+        let service = setup_service().await;
+        let active = service
+            .capture_memory(memory_item("Already active"))
+            .await
+            .unwrap();
+
+        let err = service
+            .promote_memory(&active.id, "yuval", "Already active.")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, IndexError::InvalidState(_)));
+
+        let review = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Missing rationale",
+                    "Review operations must carry reviewer rationale.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::AgentInferred,
+                    writer(),
+                )
+                .with_status(MemoryStatus::NeedsReview),
+            )
+            .await
+            .unwrap();
+        let err = service
+            .promote_memory(&review.id, "yuval", "  ")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, IndexError::Parse(_)));
+    }
+
+    #[tokio::test]
+    async fn reject_memory_keeps_review_candidate_auditable() {
+        let service = setup_service().await;
+        let candidate = service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Rule,
+                "Bad candidate",
+                "This candidate should not guide future work.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentInferred,
+                writer(),
+            ))
+            .await
+            .unwrap();
+
+        let rejected = service
+            .reject_memory(
+                &candidate.id,
+                "agent-reviewer",
+                "Conflicts with current evidence.",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(rejected.status, MemoryStatus::Rejected);
+        assert!(rejected.evidence.iter().any(|evidence| evidence.kind
+            == EvidenceKind::ManualReview
+            && evidence.target == "agent-reviewer"
+            && evidence
+                .summary
+                .as_deref()
+                .is_some_and(|summary| summary.contains("Conflicts"))));
+        assert!(service.list_active_memory(None).await.unwrap().is_empty());
+        assert!(service
+            .list_memory_needing_review(None)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            service
+                .get_memory(&candidate.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Rejected
+        );
+    }
+
+    #[tokio::test]
+    async fn supersede_memory_promotes_replacement_and_hides_replaced_item() {
+        let service = setup_service().await;
+        let old = service
+            .capture_memory(memory_item("Old decision"))
+            .await
+            .unwrap();
+        let replacement = service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Decision,
+                "Replacement decision",
+                "Use the replacement decision after review.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentInferred,
+                writer(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(replacement.status, MemoryStatus::NeedsReview);
+
+        let (new_item, old_item) = service
+            .supersede_memory(
+                &replacement.id,
+                &old.id,
+                "yuval",
+                "Replacement reflects current available evidence.",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(new_item.status, MemoryStatus::Active);
+        assert!(new_item.supersedes.contains(&old.id));
+        assert!(new_item.evidence.iter().any(|evidence| evidence.kind
+            == EvidenceKind::ManualReview
+            && evidence.target == "yuval"
+            && evidence
+                .summary
+                .as_deref()
+                .is_some_and(|summary| summary.contains(&old.id.to_string()))));
+        assert_eq!(old_item.status, MemoryStatus::Superseded);
+        assert!(old_item.evidence.iter().any(|evidence| evidence.kind
+            == EvidenceKind::ManualReview
+            && evidence.target == "yuval"
+            && evidence
+                .summary
+                .as_deref()
+                .is_some_and(|summary| summary.contains(&replacement.id.to_string()))));
+
+        let active_items = service.list_active_memory(None).await.unwrap();
+        assert_eq!(active_items.len(), 1);
+        assert_eq!(active_items[0].id, replacement.id);
+        assert_eq!(
+            service.get_memory(&old.id).await.unwrap().unwrap().status,
+            MemoryStatus::Superseded
+        );
+    }
+
+    #[tokio::test]
+    async fn supersede_memory_rejects_self_or_terminal_old_item() {
+        let service = setup_service().await;
+        let item = service.capture_memory(memory_item("Self")).await.unwrap();
+
+        let err = service
+            .supersede_memory(&item.id, &item.id, "yuval", "Impossible replacement.")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, IndexError::InvalidState(_)));
+
+        let terminal = service
+            .archive_memory(
+                &item.id,
+                "Retired before replacement.",
+                Some("yuval".to_string()),
+            )
+            .await
+            .unwrap();
+        let replacement = service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Decision,
+                "Replacement for terminal",
+                "Terminal records should not be superseded again.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentInferred,
+                writer(),
+            ))
+            .await
+            .unwrap();
+        let err = service
+            .supersede_memory(
+                &replacement.id,
+                &terminal.id,
+                "yuval",
+                "Terminal old item should fail.",
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, IndexError::InvalidState(_)));
+    }
+
+    #[tokio::test]
+    async fn archive_memory_retires_item_from_active_retrieval() {
+        let service = setup_service().await;
+        let item = service
+            .capture_memory(memory_item("Retire me"))
+            .await
+            .unwrap();
+
+        let archived = service
+            .archive_memory(&item.id, "No longer applies.", Some("yuval".to_string()))
+            .await
+            .unwrap();
+
+        assert_eq!(archived.status, MemoryStatus::Archived);
+        assert_eq!(
+            archived
+                .archive
+                .as_ref()
+                .map(|archive| archive.reason.as_str()),
+            Some("No longer applies.")
+        );
+        assert_eq!(
+            archived
+                .archive
+                .as_ref()
+                .and_then(|archive| archive.archived_by.as_deref()),
+            Some("yuval")
+        );
+        assert!(service.list_active_memory(None).await.unwrap().is_empty());
     }
 
     #[tokio::test]
