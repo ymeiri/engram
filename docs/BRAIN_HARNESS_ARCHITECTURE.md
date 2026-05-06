@@ -659,6 +659,12 @@ captured without evidence.
 - Route contradictions to review.
 - Record reviewer identity and rationale.
 
+Status: initial lifecycle review primitives exist. `MemoryService` can promote `needs_review`
+items to active memory with manual-review evidence, reject review candidates while keeping them
+auditable, supersede an older item with a reviewed replacement, and archive active memory as the
+retirement path. The MCP `memory` tool exposes `promote`, `reject`, and `supersede` actions with
+reviewer/rationale fields.
+
 ### M6: Migration From Legacy Layers
 
 - Inventory legacy observations.
