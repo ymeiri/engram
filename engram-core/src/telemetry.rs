@@ -53,6 +53,9 @@ impl fmt::Display for BrainHarnessOperation {
 }
 
 /// Agent intent for a brain-harness operation.
+///
+/// Intent is caller-provided workflow metadata. It is useful for slicing
+/// telemetry, but it is not a substitute for scenario, arm, or outcome evidence.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrainHarnessIntent {
@@ -125,8 +128,12 @@ pub struct BrainHarnessTrace {
     pub agent: Option<String>,
     /// Operation being measured.
     pub operation: BrainHarnessOperation,
-    /// Caller intent, when known.
+    /// Caller intent, when known. This is secondary workflow metadata.
     pub intent: Option<BrainHarnessIntent>,
+    /// Free-form controlled eval scenario identifier.
+    pub scenario_id: Option<String>,
+    /// Free-form eval or comparison arm, such as no_memory, memory_items, or hybrid.
+    pub arm: Option<String>,
     /// Query, prompt, or short operation context.
     pub query: Option<String>,
     /// Project scope, when known.
@@ -157,6 +164,8 @@ impl BrainHarnessTrace {
             agent: None,
             operation,
             intent: None,
+            scenario_id: None,
+            arm: None,
             query: None,
             project: None,
             returned_memory_ids: Vec::new(),
@@ -185,6 +194,20 @@ impl BrainHarnessTrace {
     #[must_use]
     pub fn with_intent(mut self, intent: Option<BrainHarnessIntent>) -> Self {
         self.intent = intent;
+        self
+    }
+
+    /// Set the controlled eval scenario identifier.
+    #[must_use]
+    pub fn with_scenario_id(mut self, scenario_id: Option<String>) -> Self {
+        self.scenario_id = scenario_id;
+        self
+    }
+
+    /// Set the eval or comparison arm.
+    #[must_use]
+    pub fn with_arm(mut self, arm: Option<String>) -> Self {
+        self.arm = arm;
         self
     }
 
@@ -268,6 +291,14 @@ pub struct AgentFeedback {
     pub correctness_score: Option<u8>,
     /// Noise score, 1-5.
     pub noise_score: Option<u8>,
+    /// Whether the task succeeded after using the retrieved context.
+    pub task_success: Option<bool>,
+    /// Whether known user/project preferences were followed.
+    pub preference_adhered: Option<bool>,
+    /// Number of repeated context questions needed after the retrieval.
+    pub repeated_context_questions: Option<u32>,
+    /// Whether the agent used memory later judged harmful, stale, or misleading.
+    pub bad_memory_used: Option<bool>,
     /// Suggested memory changes from the agent.
     pub suggested_memory_changes: Option<String>,
     /// Free-form feedback note.
@@ -296,6 +327,10 @@ impl AgentFeedback {
             usefulness_score: None,
             correctness_score: None,
             noise_score: None,
+            task_success: None,
+            preference_adhered: None,
+            repeated_context_questions: None,
+            bad_memory_used: None,
             suggested_memory_changes: None,
             note: None,
             created_at: OffsetDateTime::now_utc(),
@@ -350,6 +385,16 @@ pub struct RealSessionEvalReport {
     pub unspecified_intent_trace_count: usize,
     /// Trace counts grouped by operation.
     pub operation_counts: BTreeMap<String, usize>,
+    /// Number of distinct non-empty scenario identifiers in the sample.
+    pub distinct_scenario_count: usize,
+    /// Number of distinct non-empty arms in the sample.
+    pub distinct_arm_count: usize,
+    /// Traces that did not provide a scenario identifier.
+    pub unspecified_scenario_trace_count: usize,
+    /// Traces that did not provide an arm.
+    pub unspecified_arm_trace_count: usize,
+    /// Trace counts grouped by non-empty scenario identifier.
+    pub scenario_counts: BTreeMap<String, usize>,
     /// Total warnings recorded on traces.
     pub warning_count: usize,
     /// Total memory IDs returned by traces.
@@ -374,8 +419,24 @@ pub struct RealSessionEvalReport {
     pub suggested_change_count: usize,
     /// Feedback records with at least one score.
     pub scored_feedback_count: usize,
+    /// Feedback records with at least one behavioral outcome field.
+    pub outcome_feedback_count: usize,
+    /// Feedback records that reported task success.
+    pub task_success_count: usize,
+    /// Feedback records that reported task failure.
+    pub task_failure_count: usize,
+    /// Feedback records that reported preference adherence.
+    pub preference_adhered_count: usize,
+    /// Feedback records that reported preference violation.
+    pub preference_violated_count: usize,
+    /// Sum of repeated context questions reported by feedback.
+    pub repeated_context_question_count: usize,
+    /// Feedback records that reported using bad memory.
+    pub bad_memory_used_count: usize,
     /// Per-intent real-session evidence rows.
     pub intents: Vec<RealSessionEvalIntentRow>,
+    /// Per-arm real-session evidence rows. Missing arms are grouped as `unspecified`.
+    pub arms: Vec<RealSessionEvalArmRow>,
     /// Conservative confidence gate for migration write readiness.
     pub confidence_gate: RealSessionConfidenceGate,
     /// Operator-facing follow-up recommendations.
@@ -425,6 +486,55 @@ pub struct RealSessionEvalIntentRow {
     pub suggested_change_count: usize,
     /// Feedback records with at least one score for this intent.
     pub scored_feedback_count: usize,
+    /// Feedback records with at least one behavioral outcome field for this intent.
+    pub outcome_feedback_count: usize,
+    /// Feedback records that reported task success for this intent.
+    pub task_success_count: usize,
+    /// Feedback records that reported task failure for this intent.
+    pub task_failure_count: usize,
+    /// Feedback records that reported preference adherence for this intent.
+    pub preference_adhered_count: usize,
+    /// Feedback records that reported preference violation for this intent.
+    pub preference_violated_count: usize,
+    /// Sum of repeated context questions for this intent.
+    pub repeated_context_question_count: usize,
+    /// Feedback records that reported using bad memory for this intent.
+    pub bad_memory_used_count: usize,
+}
+
+/// Per-arm row in a real-session telemetry eval report.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RealSessionEvalArmRow {
+    /// Arm label. Missing arms are grouped as `unspecified`.
+    pub arm: String,
+    /// Number of traces for this arm.
+    pub trace_count: usize,
+    /// Number of feedback records linked to this arm.
+    pub feedback_count: usize,
+    /// Feedback records divided by traces for this arm.
+    pub feedback_coverage: f32,
+    /// Feedback records with at least one behavioral outcome field.
+    pub outcome_feedback_count: usize,
+    /// Feedback records that reported task success.
+    pub task_success_count: usize,
+    /// Feedback records that reported task failure.
+    pub task_failure_count: usize,
+    /// Feedback records that reported preference adherence.
+    pub preference_adhered_count: usize,
+    /// Feedback records that reported preference violation.
+    pub preference_violated_count: usize,
+    /// Sum of repeated context questions for this arm.
+    pub repeated_context_question_count: usize,
+    /// Feedback records that reported using bad memory for this arm.
+    pub bad_memory_used_count: usize,
+    /// Total memory IDs reported used for this arm.
+    pub used_memory_count: usize,
+    /// Total memory IDs reported rejected for this arm.
+    pub rejected_memory_count: usize,
+    /// Total memory IDs reported stale for this arm.
+    pub stale_memory_count: usize,
+    /// Total memory IDs reported wrong-scope for this arm.
+    pub wrong_scope_memory_count: usize,
 }
 
 /// Conservative, evidence-only confidence gate for migration write readiness.
@@ -440,6 +550,8 @@ pub struct RealSessionConfidenceGate {
     pub min_feedback_coverage: f32,
     /// Minimum number of intents with feedback used by the gate.
     pub min_intents_with_feedback: usize,
+    /// Minimum feedback records with behavioral outcome evidence used by the gate.
+    pub min_outcome_feedback_count: usize,
     /// Migration writes still require explicit user approval, even if this passes.
     pub requires_user_approval: bool,
     /// Concrete reasons the gate did not pass.

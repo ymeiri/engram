@@ -4,7 +4,7 @@ use crate::error::{IndexError, IndexResult};
 use engram_core::id::Id;
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessTrace, IntentTelemetryStats, RealSessionConfidenceGate,
-    RealSessionEvalIntentRow, RealSessionEvalReport,
+    RealSessionEvalArmRow, RealSessionEvalIntentRow, RealSessionEvalReport,
 };
 use engram_store::{Db, TelemetryRepo};
 use std::collections::{BTreeMap, HashMap};
@@ -15,6 +15,7 @@ const MIN_REAL_SESSION_TRACES: usize = 20;
 const MIN_REAL_SESSION_FEEDBACK: usize = 10;
 const MIN_REAL_SESSION_FEEDBACK_COVERAGE: f32 = 0.5;
 const MIN_REAL_SESSION_INTENTS_WITH_FEEDBACK: usize = 3;
+const MIN_REAL_SESSION_OUTCOME_FEEDBACK: usize = 1;
 
 /// Service for retrieval traces and agent feedback.
 #[derive(Clone)]
@@ -284,6 +285,7 @@ impl RealSessionEvalAggregate {
         {
             self.row.scored_feedback_count += 1;
         }
+        add_outcome_counts_to_intent_row(&mut self.row, feedback);
 
         add_score(
             feedback.usefulness_score,
@@ -313,11 +315,61 @@ impl RealSessionEvalAggregate {
 }
 
 #[derive(Debug)]
+struct RealSessionEvalArmAggregate {
+    row: RealSessionEvalArmRow,
+}
+
+impl RealSessionEvalArmAggregate {
+    fn new(arm: String) -> Self {
+        Self {
+            row: RealSessionEvalArmRow {
+                arm,
+                ..Default::default()
+            },
+        }
+    }
+
+    fn add_trace(&mut self) {
+        self.row.trace_count += 1;
+    }
+
+    fn add_feedback(&mut self, feedback: &AgentFeedback) {
+        self.row.feedback_count += 1;
+        self.row.used_memory_count += feedback.used_memory_ids.len();
+        self.row.rejected_memory_count += feedback.rejected_memory_ids.len();
+        self.row.stale_memory_count += feedback.stale_memory_ids.len();
+        self.row.wrong_scope_memory_count += feedback.wrong_scope_memory_ids.len();
+        add_outcome_counts_to_arm_row(&mut self.row, feedback);
+    }
+
+    fn into_row(mut self) -> RealSessionEvalArmRow {
+        self.row.feedback_coverage = coverage(self.row.feedback_count, self.row.trace_count);
+        self.row
+    }
+}
+
+#[derive(Debug)]
 struct TraceAggregation {
     groups: BTreeMap<String, RealSessionEvalAggregate>,
+    arm_groups: BTreeMap<String, RealSessionEvalArmAggregate>,
     operation_counts: BTreeMap<String, usize>,
+    scenario_counts: BTreeMap<String, usize>,
     unspecified_intent_trace_count: usize,
+    unspecified_scenario_trace_count: usize,
+    unspecified_arm_trace_count: usize,
     trace_intents: HashMap<Id, String>,
+    trace_arms: HashMap<Id, String>,
+}
+
+#[derive(Debug)]
+struct ReportRows {
+    operation_counts: BTreeMap<String, usize>,
+    scenario_counts: BTreeMap<String, usize>,
+    unspecified_intent_trace_count: usize,
+    unspecified_scenario_trace_count: usize,
+    unspecified_arm_trace_count: usize,
+    intents: Vec<RealSessionEvalIntentRow>,
+    arms: Vec<RealSessionEvalArmRow>,
 }
 
 fn build_real_session_eval_report(
@@ -329,7 +381,9 @@ fn build_real_session_eval_report(
     aggregate_feedback(
         feedback,
         &aggregation.trace_intents,
+        &aggregation.trace_arms,
         &mut aggregation.groups,
+        &mut aggregation.arm_groups,
     );
 
     let mut intents = aggregation
@@ -344,14 +398,28 @@ fn build_real_session_eval_report(
             .then_with(|| left.intent.cmp(&right.intent))
     });
 
-    let mut report = report_from_rows(
-        sample_limit,
-        traces.len(),
-        feedback.len(),
-        aggregation.operation_counts,
-        aggregation.unspecified_intent_trace_count,
+    let mut arms = aggregation
+        .arm_groups
+        .into_values()
+        .map(RealSessionEvalArmAggregate::into_row)
+        .collect::<Vec<_>>();
+    arms.sort_by(|left, right| {
+        right
+            .trace_count
+            .cmp(&left.trace_count)
+            .then_with(|| left.arm.cmp(&right.arm))
+    });
+
+    let rows = ReportRows {
+        operation_counts: aggregation.operation_counts,
+        scenario_counts: aggregation.scenario_counts,
+        unspecified_intent_trace_count: aggregation.unspecified_intent_trace_count,
+        unspecified_scenario_trace_count: aggregation.unspecified_scenario_trace_count,
+        unspecified_arm_trace_count: aggregation.unspecified_arm_trace_count,
         intents,
-    );
+        arms,
+    };
+    let mut report = report_from_rows(sample_limit, traces.len(), feedback.len(), rows);
     report.confidence_gate = confidence_gate(&report);
     report.recommendations = recommendations(&report);
     report
@@ -359,37 +427,63 @@ fn build_real_session_eval_report(
 
 fn aggregate_traces(traces: &[BrainHarnessTrace]) -> TraceAggregation {
     let mut groups = BTreeMap::<String, RealSessionEvalAggregate>::new();
+    let mut arm_groups = BTreeMap::<String, RealSessionEvalArmAggregate>::new();
     let mut operation_counts = BTreeMap::<String, usize>::new();
+    let mut scenario_counts = BTreeMap::<String, usize>::new();
     let mut unspecified_intent_trace_count = 0;
+    let mut unspecified_scenario_trace_count = 0;
+    let mut unspecified_arm_trace_count = 0;
     let mut trace_intents = HashMap::<Id, String>::new();
+    let mut trace_arms = HashMap::<Id, String>::new();
 
     for trace in traces {
         let key = intent_key(trace);
         if trace.intent.is_none() {
             unspecified_intent_trace_count += 1;
         }
+        if let Some(scenario) = normalized_label(trace.scenario_id.as_deref()) {
+            *scenario_counts.entry(scenario).or_default() += 1;
+        } else {
+            unspecified_scenario_trace_count += 1;
+        }
+        let arm_key = normalized_label(trace.arm.as_deref()).unwrap_or_else(|| {
+            unspecified_arm_trace_count += 1;
+            "unspecified".to_string()
+        });
         *operation_counts
             .entry(trace.operation.to_string())
             .or_default() += 1;
         trace_intents.insert(trace.id, key.clone());
+        trace_arms.insert(trace.id, arm_key.clone());
         groups
             .entry(key.clone())
             .or_insert_with(|| RealSessionEvalAggregate::new(key))
             .add_trace(trace);
+        arm_groups
+            .entry(arm_key.clone())
+            .or_insert_with(|| RealSessionEvalArmAggregate::new(arm_key))
+            .add_trace();
     }
 
     TraceAggregation {
         groups,
+        arm_groups,
         operation_counts,
+        scenario_counts,
         unspecified_intent_trace_count,
+        unspecified_scenario_trace_count,
+        unspecified_arm_trace_count,
         trace_intents,
+        trace_arms,
     }
 }
 
 fn aggregate_feedback(
     feedback: &[AgentFeedback],
     trace_intents: &HashMap<Id, String>,
+    trace_arms: &HashMap<Id, String>,
     groups: &mut BTreeMap<String, RealSessionEvalAggregate>,
+    arm_groups: &mut BTreeMap<String, RealSessionEvalArmAggregate>,
 ) {
     for item in feedback {
         let key = trace_intents
@@ -400,6 +494,14 @@ fn aggregate_feedback(
             .entry(key.clone())
             .or_insert_with(|| RealSessionEvalAggregate::new(key))
             .add_feedback(item);
+        let arm_key = trace_arms
+            .get(&item.trace_id)
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+        arm_groups
+            .entry(arm_key.clone())
+            .or_insert_with(|| RealSessionEvalArmAggregate::new(arm_key))
+            .add_feedback(item);
     }
 }
 
@@ -407,9 +509,7 @@ fn report_from_rows(
     sample_limit: usize,
     trace_count: usize,
     feedback_count: usize,
-    operation_counts: BTreeMap<String, usize>,
-    unspecified_intent_trace_count: usize,
-    intents: Vec<RealSessionEvalIntentRow>,
+    rows: ReportRows,
 ) -> RealSessionEvalReport {
     RealSessionEvalReport {
         generated_at: OffsetDateTime::now_utc(),
@@ -417,29 +517,49 @@ fn report_from_rows(
         trace_count,
         feedback_count,
         feedback_coverage: coverage(feedback_count, trace_count),
-        distinct_intent_count: intents.len(),
-        distinct_operation_count: operation_counts.len(),
-        unspecified_intent_trace_count,
-        operation_counts,
-        warning_count: sum_rows(&intents, |row| row.warning_count),
-        returned_memory_count: sum_rows(&intents, |row| row.returned_memory_count),
-        returned_result_count: sum_rows(&intents, |row| row.returned_result_count),
-        used_memory_count: sum_rows(&intents, |row| row.used_memory_count),
-        rejected_memory_count: sum_rows(&intents, |row| row.rejected_memory_count),
-        stale_memory_count: sum_rows(&intents, |row| row.stale_memory_count),
-        wrong_scope_memory_count: sum_rows(&intents, |row| row.wrong_scope_memory_count),
-        used_result_count: sum_rows(&intents, |row| row.used_result_count),
-        rejected_result_count: sum_rows(&intents, |row| row.rejected_result_count),
-        missing_context_count: sum_rows(&intents, |row| row.missing_context_count),
-        suggested_change_count: sum_rows(&intents, |row| row.suggested_change_count),
-        scored_feedback_count: sum_rows(&intents, |row| row.scored_feedback_count),
-        intents,
+        distinct_intent_count: rows.intents.len(),
+        distinct_operation_count: rows.operation_counts.len(),
+        unspecified_intent_trace_count: rows.unspecified_intent_trace_count,
+        operation_counts: rows.operation_counts,
+        distinct_scenario_count: rows.scenario_counts.len(),
+        distinct_arm_count: rows
+            .arms
+            .iter()
+            .filter(|row| row.arm != "unspecified" && row.arm != "unknown")
+            .count(),
+        unspecified_scenario_trace_count: rows.unspecified_scenario_trace_count,
+        unspecified_arm_trace_count: rows.unspecified_arm_trace_count,
+        scenario_counts: rows.scenario_counts,
+        warning_count: sum_rows(&rows.intents, |row| row.warning_count),
+        returned_memory_count: sum_rows(&rows.intents, |row| row.returned_memory_count),
+        returned_result_count: sum_rows(&rows.intents, |row| row.returned_result_count),
+        used_memory_count: sum_rows(&rows.intents, |row| row.used_memory_count),
+        rejected_memory_count: sum_rows(&rows.intents, |row| row.rejected_memory_count),
+        stale_memory_count: sum_rows(&rows.intents, |row| row.stale_memory_count),
+        wrong_scope_memory_count: sum_rows(&rows.intents, |row| row.wrong_scope_memory_count),
+        used_result_count: sum_rows(&rows.intents, |row| row.used_result_count),
+        rejected_result_count: sum_rows(&rows.intents, |row| row.rejected_result_count),
+        missing_context_count: sum_rows(&rows.intents, |row| row.missing_context_count),
+        suggested_change_count: sum_rows(&rows.intents, |row| row.suggested_change_count),
+        scored_feedback_count: sum_rows(&rows.intents, |row| row.scored_feedback_count),
+        outcome_feedback_count: sum_rows(&rows.intents, |row| row.outcome_feedback_count),
+        task_success_count: sum_rows(&rows.intents, |row| row.task_success_count),
+        task_failure_count: sum_rows(&rows.intents, |row| row.task_failure_count),
+        preference_adhered_count: sum_rows(&rows.intents, |row| row.preference_adhered_count),
+        preference_violated_count: sum_rows(&rows.intents, |row| row.preference_violated_count),
+        repeated_context_question_count: sum_rows(&rows.intents, |row| {
+            row.repeated_context_question_count
+        }),
+        bad_memory_used_count: sum_rows(&rows.intents, |row| row.bad_memory_used_count),
+        intents: rows.intents,
+        arms: rows.arms,
         confidence_gate: RealSessionConfidenceGate {
             passed: false,
             min_trace_count: MIN_REAL_SESSION_TRACES,
             min_feedback_count: MIN_REAL_SESSION_FEEDBACK,
             min_feedback_coverage: MIN_REAL_SESSION_FEEDBACK_COVERAGE,
             min_intents_with_feedback: MIN_REAL_SESSION_INTENTS_WITH_FEEDBACK,
+            min_outcome_feedback_count: MIN_REAL_SESSION_OUTCOME_FEEDBACK,
             requires_user_approval: true,
             reasons: Vec::new(),
         },
@@ -491,6 +611,13 @@ fn confidence_gate(report: &RealSessionEvalReport) -> RealSessionConfidenceGate 
                 .to_string(),
         );
     }
+    if report.outcome_feedback_count < MIN_REAL_SESSION_OUTCOME_FEEDBACK {
+        reasons.push(format!(
+            "Need at least {MIN_REAL_SESSION_OUTCOME_FEEDBACK} feedback record with behavioral \
+             outcome evidence; found {}.",
+            report.outcome_feedback_count
+        ));
+    }
 
     RealSessionConfidenceGate {
         passed: reasons.is_empty(),
@@ -498,6 +625,7 @@ fn confidence_gate(report: &RealSessionEvalReport) -> RealSessionConfidenceGate 
         min_feedback_count: MIN_REAL_SESSION_FEEDBACK,
         min_feedback_coverage: MIN_REAL_SESSION_FEEDBACK_COVERAGE,
         min_intents_with_feedback: MIN_REAL_SESSION_INTENTS_WITH_FEEDBACK,
+        min_outcome_feedback_count: MIN_REAL_SESSION_OUTCOME_FEEDBACK,
         requires_user_approval: true,
         reasons,
     }
@@ -529,8 +657,15 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
     }
     if report.unspecified_intent_trace_count > 0 {
         recommendations.push(
-            "Set intent on every telemetry trace so retrieval accuracy can be compared by \
-             workflow."
+            "Set intent on telemetry traces when the workflow phase is known; keep it as \
+             secondary metadata, not confidence evidence."
+                .to_string(),
+        );
+    }
+    if report.distinct_scenario_count == 0 || report.distinct_arm_count == 0 {
+        recommendations.push(
+            "Use free-form scenario_id and arm on controlled eval traces so custom memory \
+             strategies can be compared without expanding the intent taxonomy."
                 .to_string(),
         );
     }
@@ -538,6 +673,13 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
         recommendations.push(
             "Include usefulness, correctness, and noise scores on feedback records where \
              possible."
+                .to_string(),
+        );
+    }
+    if report.outcome_feedback_count < report.feedback_count {
+        recommendations.push(
+            "Include task_success, preference_adhered, repeated_context_questions, or \
+             bad_memory_used when feedback can report task-level behavior."
                 .to_string(),
         );
     }
@@ -563,6 +705,58 @@ fn sum_rows(
     value: impl Fn(&RealSessionEvalIntentRow) -> usize,
 ) -> usize {
     rows.iter().map(value).sum()
+}
+
+fn add_outcome_counts_to_intent_row(row: &mut RealSessionEvalIntentRow, feedback: &AgentFeedback) {
+    if has_outcome_feedback(feedback) {
+        row.outcome_feedback_count += 1;
+    }
+    if let Some(task_success) = feedback.task_success {
+        if task_success {
+            row.task_success_count += 1;
+        } else {
+            row.task_failure_count += 1;
+        }
+    }
+    if let Some(preference_adhered) = feedback.preference_adhered {
+        if preference_adhered {
+            row.preference_adhered_count += 1;
+        } else {
+            row.preference_violated_count += 1;
+        }
+    }
+    if let Some(repeated_context_questions) = feedback.repeated_context_questions {
+        row.repeated_context_question_count += repeated_context_questions as usize;
+    }
+    if feedback.bad_memory_used == Some(true) {
+        row.bad_memory_used_count += 1;
+    }
+}
+
+fn add_outcome_counts_to_arm_row(row: &mut RealSessionEvalArmRow, feedback: &AgentFeedback) {
+    if has_outcome_feedback(feedback) {
+        row.outcome_feedback_count += 1;
+    }
+    if let Some(task_success) = feedback.task_success {
+        if task_success {
+            row.task_success_count += 1;
+        } else {
+            row.task_failure_count += 1;
+        }
+    }
+    if let Some(preference_adhered) = feedback.preference_adhered {
+        if preference_adhered {
+            row.preference_adhered_count += 1;
+        } else {
+            row.preference_violated_count += 1;
+        }
+    }
+    if let Some(repeated_context_questions) = feedback.repeated_context_questions {
+        row.repeated_context_question_count += repeated_context_questions as usize;
+    }
+    if feedback.bad_memory_used == Some(true) {
+        row.bad_memory_used_count += 1;
+    }
 }
 
 fn validate_trace(trace: &BrainHarnessTrace) -> IndexResult<()> {
@@ -599,7 +793,8 @@ fn validate_feedback(feedback: &AgentFeedback) -> IndexResult<()> {
         || feedback
             .note
             .as_deref()
-            .is_some_and(|value| !value.trim().is_empty());
+            .is_some_and(|value| !value.trim().is_empty())
+        || has_outcome_feedback(feedback);
 
     if !has_signal {
         return Err(IndexError::Parse(
@@ -660,4 +855,20 @@ fn coverage(numerator: usize, denominator: usize) -> f32 {
 
 fn has_text(value: Option<&str>) -> bool {
     value.is_some_and(|text| !text.trim().is_empty())
+}
+
+fn has_outcome_feedback(feedback: &AgentFeedback) -> bool {
+    feedback.task_success.is_some()
+        || feedback.preference_adhered.is_some()
+        || feedback.repeated_context_questions.is_some()
+        || feedback.bad_memory_used.is_some()
+}
+
+fn normalized_label(value: Option<&str>) -> Option<String> {
+    let label = value?.trim();
+    if label.is_empty() {
+        None
+    } else {
+        Some(label.to_string())
+    }
 }

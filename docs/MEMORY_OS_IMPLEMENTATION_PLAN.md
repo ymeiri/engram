@@ -28,6 +28,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Real-session telemetry eval report: MCP `telemetry(action=real_session_eval)` summarizes
       persisted traces and agent feedback with coverage, per-intent signals, and a conservative
       migration confidence gate.
+- [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
+      feedback records task success, preference adherence, repeated context questions, and bad
+      memory use, and the confidence gate requires behavioral outcome evidence.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.

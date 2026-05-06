@@ -3361,6 +3361,10 @@ pub struct TelemetryRequest {
     pub operation: Option<String>,
     /// Intent for trace correlation: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
     pub intent: Option<String>,
+    /// Free-form controlled eval scenario identifier for record_trace.
+    pub scenario_id: Option<String>,
+    /// Free-form eval or comparison arm for record_trace.
+    pub arm: Option<String>,
     /// Query, prompt, or short operation context.
     pub query: Option<String>,
     /// Project scope.
@@ -3406,6 +3410,14 @@ pub struct TelemetryRequest {
     pub correctness_score: Option<u8>,
     /// Agent-reported noise score, 1-5.
     pub noise_score: Option<u8>,
+    /// Whether the task succeeded after using the retrieved context.
+    pub task_success: Option<bool>,
+    /// Whether known user/project preferences were followed.
+    pub preference_adhered: Option<bool>,
+    /// Number of repeated context questions needed after retrieval.
+    pub repeated_context_questions: Option<u32>,
+    /// Whether the agent used memory later judged harmful, stale, or misleading.
+    pub bad_memory_used: Option<bool>,
     /// Suggested memory changes from the agent.
     pub suggested_memory_changes: Option<String>,
     /// Free-form feedback note.
@@ -3434,6 +3446,8 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 .with_session(parse_optional_id(&request.session_id, "session ID")?)
                 .with_agent(request.agent)
                 .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
+                .with_scenario_id(request.scenario_id)
+                .with_arm(request.arm)
                 .with_query(request.query)
                 .with_project(request.project)
                 .with_returned_memory_ids(parse_id_vec(
@@ -3498,6 +3512,10 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             feedback.usefulness_score = request.usefulness_score;
             feedback.correctness_score = request.correctness_score;
             feedback.noise_score = request.noise_score;
+            feedback.task_success = request.task_success;
+            feedback.preference_adhered = request.preference_adhered;
+            feedback.repeated_context_questions = request.repeated_context_questions;
+            feedback.bad_memory_used = request.bad_memory_used;
             feedback.suggested_memory_changes = request.suggested_memory_changes;
             feedback.note = request.note;
 

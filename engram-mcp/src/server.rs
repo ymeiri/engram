@@ -515,7 +515,7 @@ impl EngramServer {
 
     /// Manage brain-harness telemetry traces and agent feedback.
     #[tool(
-        description = "Manage brain-harness telemetry and agent feedback: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval. Feedback should reference a trace_id returned by orient/search."
+        description = "Manage brain-harness telemetry and agent feedback: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval. Traces may include free-form scenario_id/arm. Feedback should reference a trace_id returned by orient/search and may include outcome fields."
     )]
     pub async fn telemetry(
         &self,

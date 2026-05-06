@@ -551,13 +551,25 @@ The system should also collect lightweight feedback from the agent that used the
 
 Implemented spike:
 
-- `BrainHarnessTrace` records operation, intent, query/project/session metadata, returned memory IDs, generic result IDs, latency, warnings, and timestamp.
-- `AgentFeedback` links back to a trace and records used/rejected memory IDs, used/rejected generic result IDs, stale or wrong-scope memory IDs, missing context, usefulness/correctness/noise scores, suggested memory changes, and a note.
+- `BrainHarnessTrace` records operation, secondary intent metadata, free-form `scenario_id`
+  and `arm`, query/project/session metadata, returned memory IDs, generic result IDs,
+  latency, warnings, and timestamp.
+- `AgentFeedback` links back to a trace and records used/rejected memory IDs, used/rejected
+  generic result IDs, stale or wrong-scope memory IDs, missing context,
+  usefulness/correctness/noise scores, task success, preference adherence, repeated context
+  questions, bad-memory use, suggested memory changes, and a note.
 - `orient`, `search`, and `changes_since` can produce trace IDs.
 - The MCP `telemetry` tool can record traces, submit feedback, list records, and aggregate stats by intent.
 - `telemetry(action=real_session_eval)` returns a read-only report over persisted traces and
-  feedback, including coverage, per-intent quality signals, warnings, and a conservative confidence
-  gate. The gate is evidence only; migration writes still require explicit user approval.
+  feedback, including coverage, per-intent quality signals, per-arm outcome rows, scenario
+  counts, warnings, and a conservative confidence gate. The gate requires behavioral outcome
+  feedback in addition to relevance signals; migration writes still require explicit user
+  approval.
+
+`intent` should not become a rigid ontology for every possible memory workflow. It remains a
+caller-supplied workflow slice. Custom memory experiments should use free-form `scenario_id` and
+`arm` labels so users and agents can compare their own strategies without expanding the core
+intent vocabulary.
 
 Agent feedback is not ground truth. It should be treated as a weak signal and correlated with:
 

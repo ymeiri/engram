@@ -31,6 +31,17 @@ enum EvalArm {
     Hybrid,
 }
 
+impl EvalArm {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::NoMemory => "no_memory",
+            Self::LegacyObservations => "legacy_observations",
+            Self::MemoryItems => "memory_items",
+            Self::Hybrid => "hybrid",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct MemoryCallTrace {
     tool: String,
@@ -443,6 +454,13 @@ fn eval_trace_from_operation(
     }
 }
 
+fn apply_outcome_feedback(feedback: &mut AgentFeedback, outcome: &EvalOutcome) {
+    feedback.task_success = Some(outcome.success);
+    feedback.preference_adhered = Some(outcome.preference_adhered);
+    feedback.repeated_context_questions = Some(outcome.repeated_context_questions);
+    feedback.bad_memory_used = Some(outcome.bad_memory_used);
+}
+
 async fn record_no_memory_baseline(
     telemetry_service: &TelemetryService,
     scenario: &str,
@@ -459,6 +477,8 @@ async fn record_no_memory_baseline(
             ))
             .with_agent(Some("codex".to_string()))
             .with_intent(Some(intent))
+            .with_scenario_id(Some(scenario.to_string()))
+            .with_arm(Some(EvalArm::NoMemory.as_str().to_string()))
             .with_query(Some(prompt.to_string()))
             .with_project(Some("engram".to_string()))
             .with_latency_ms(0),
@@ -472,6 +492,7 @@ async fn record_no_memory_baseline(
     feedback.usefulness_score = Some(1);
     feedback.correctness_score = Some(2);
     feedback.noise_score = Some(1);
+    apply_outcome_feedback(&mut feedback, &outcome);
     telemetry_service
         .submit_feedback(feedback)
         .await
@@ -505,6 +526,8 @@ async fn record_legacy_trace(
             ))
             .with_agent(Some("codex".to_string()))
             .with_intent(Some(intent))
+            .with_scenario_id(Some(scenario.to_string()))
+            .with_arm(Some(EvalArm::LegacyObservations.as_str().to_string()))
             .with_query(Some(prompt.to_string()))
             .with_project(Some("engram".to_string()))
             .with_returned_result_ids(returned_result_ids)
@@ -519,6 +542,7 @@ async fn record_legacy_trace(
     feedback.usefulness_score = Some(if outcome.success { 3 } else { 2 });
     feedback.correctness_score = Some(if outcome.bad_memory_used { 2 } else { 4 });
     feedback.noise_score = Some(if outcome.bad_memory_used { 4 } else { 3 });
+    apply_outcome_feedback(&mut feedback, &outcome);
     feedback.note =
         Some("Legacy retrieval returned usable context without trust metadata.".to_string());
     services
@@ -556,6 +580,8 @@ async fn record_hybrid_trace(
             ))
             .with_agent(Some("codex".to_string()))
             .with_intent(Some(intent))
+            .with_scenario_id(Some(scenario.to_string()))
+            .with_arm(Some(EvalArm::Hybrid.as_str().to_string()))
             .with_query(Some(prompt.to_string()))
             .with_project(Some("engram".to_string()))
             .with_returned_memory_ids(returned_memory_ids)
@@ -582,6 +608,7 @@ async fn record_hybrid_trace(
     feedback.usefulness_score = Some(5);
     feedback.correctness_score = Some(5);
     feedback.noise_score = Some(1);
+    apply_outcome_feedback(&mut feedback, &outcome);
     feedback.note =
         Some("Hybrid retrieval used MemoryItems while preserving legacy evidence ids.".to_string());
     services
@@ -628,6 +655,7 @@ async fn memoryitem_trace_from_orient(
     feedback.usefulness_score = Some(5);
     feedback.correctness_score = Some(5);
     feedback.noise_score = Some(1);
+    apply_outcome_feedback(&mut feedback, &outcome);
     feedback.note = Some("MemoryItem retrieval supplied scoped trust-bearing context.".to_string());
     services
         .telemetry

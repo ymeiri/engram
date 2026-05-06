@@ -46,6 +46,8 @@ fn telemetry_request(action: &str) -> TelemetryRequest {
         trace_id: None,
         operation: None,
         intent: None,
+        scenario_id: None,
+        arm: None,
         query: None,
         project: None,
         agent: None,
@@ -64,6 +66,10 @@ fn telemetry_request(action: &str) -> TelemetryRequest {
         usefulness_score: None,
         correctness_score: None,
         noise_score: None,
+        task_success: None,
+        preference_adhered: None,
+        repeated_context_questions: None,
+        bad_memory_used: None,
         suggested_memory_changes: None,
         note: None,
         limit: None,
@@ -167,6 +173,8 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
             BrainHarnessTrace::new(BrainHarnessOperation::Orient)
                 .with_agent(Some("codex".to_string()))
                 .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_scenario_id(Some("preference_continuity".to_string()))
+                .with_arm(Some("memory_items".to_string()))
                 .with_query(Some("continue the telemetry report work".to_string()))
                 .with_project(Some("engram".to_string()))
                 .with_returned_memory_ids(vec![used_memory_id, rejected_memory_id])
@@ -199,6 +207,10 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
     feedback.usefulness_score = Some(4);
     feedback.correctness_score = Some(5);
     feedback.noise_score = Some(2);
+    feedback.task_success = Some(true);
+    feedback.preference_adhered = Some(true);
+    feedback.repeated_context_questions = Some(0);
+    feedback.bad_memory_used = Some(false);
     telemetry
         .submit_feedback(feedback)
         .await
@@ -214,6 +226,11 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
     assert_eq!(report.feedback_coverage, 0.5);
     assert_eq!(report.operation_counts["orient"], 1);
     assert_eq!(report.operation_counts["search"], 1);
+    assert_eq!(report.distinct_scenario_count, 1);
+    assert_eq!(report.distinct_arm_count, 1);
+    assert_eq!(report.unspecified_scenario_trace_count, 1);
+    assert_eq!(report.unspecified_arm_trace_count, 1);
+    assert_eq!(report.scenario_counts["preference_continuity"], 1);
     assert_eq!(report.warning_count, 1);
     assert_eq!(report.returned_memory_count, 2);
     assert_eq!(report.returned_result_count, 1);
@@ -224,6 +241,13 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
     assert_eq!(report.missing_context_count, 1);
     assert_eq!(report.suggested_change_count, 1);
     assert_eq!(report.scored_feedback_count, 1);
+    assert_eq!(report.outcome_feedback_count, 1);
+    assert_eq!(report.task_success_count, 1);
+    assert_eq!(report.task_failure_count, 0);
+    assert_eq!(report.preference_adhered_count, 1);
+    assert_eq!(report.preference_violated_count, 0);
+    assert_eq!(report.repeated_context_question_count, 0);
+    assert_eq!(report.bad_memory_used_count, 0);
 
     let implement_row = report
         .intents
@@ -238,8 +262,23 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
     assert_eq!(implement_row.avg_correctness_score, Some(5.0));
     assert_eq!(implement_row.avg_noise_score, Some(2.0));
     assert_eq!(implement_row.warning_count, 1);
+    assert_eq!(implement_row.outcome_feedback_count, 1);
+    assert_eq!(implement_row.task_success_count, 1);
+    assert_eq!(implement_row.preference_adhered_count, 1);
+
+    let arm_row = report
+        .arms
+        .iter()
+        .find(|row| row.arm == "memory_items")
+        .expect("memory_items arm row should exist");
+    assert_eq!(arm_row.trace_count, 1);
+    assert_eq!(arm_row.feedback_count, 1);
+    assert_eq!(arm_row.outcome_feedback_count, 1);
+    assert_eq!(arm_row.task_success_count, 1);
+    assert_eq!(arm_row.preference_adhered_count, 1);
 
     assert!(!report.confidence_gate.passed);
+    assert_eq!(report.confidence_gate.min_outcome_feedback_count, 1);
     assert!(report
         .confidence_gate
         .reasons
@@ -249,6 +288,36 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
         .recommendations
         .iter()
         .any(|recommendation| recommendation.contains("Keep M6 write-apply blocked")));
+}
+
+#[tokio::test]
+async fn outcome_only_feedback_is_a_concrete_signal() {
+    let (telemetry, _) = setup_services().await;
+    let trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_query(Some(
+                    "check whether outcome feedback is accepted".to_string(),
+                ))
+                .with_intent(Some(BrainHarnessIntent::VerifyDecision)),
+        )
+        .await
+        .expect("trace should be recorded");
+
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.task_success = Some(false);
+    feedback.preference_adhered = Some(false);
+    feedback.repeated_context_questions = Some(2);
+    feedback.bad_memory_used = Some(true);
+
+    let stored = telemetry
+        .submit_feedback(feedback)
+        .await
+        .expect("outcome-only feedback should be accepted");
+    assert_eq!(stored.task_success, Some(false));
+    assert_eq!(stored.preference_adhered, Some(false));
+    assert_eq!(stored.repeated_context_questions, Some(2));
+    assert_eq!(stored.bad_memory_used, Some(true));
 }
 
 #[tokio::test]
@@ -359,6 +428,8 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
     let mut trace_request = telemetry_request("record_trace");
     trace_request.operation = Some("search".to_string());
     trace_request.intent = Some("answer_question".to_string());
+    trace_request.scenario_id = Some("question_answering".to_string());
+    trace_request.arm = Some("memory_items".to_string());
     trace_request.query = Some("how does telemetry work?".to_string());
     trace_request.agent = Some("codex".to_string());
     trace_request.returned_result_ids = vec!["result-1".to_string()];
@@ -369,6 +440,8 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
         .expect("record_trace should work");
     let trace_json = parse_json(&trace_response);
     let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+    assert_eq!(trace_json["trace"]["scenario_id"], "question_answering");
+    assert_eq!(trace_json["trace"]["arm"], "memory_items");
 
     let mut feedback_request = telemetry_request("submit_feedback");
     feedback_request.trace_id = Some(trace_id);
@@ -377,6 +450,10 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
     feedback_request.usefulness_score = Some(4);
     feedback_request.correctness_score = Some(5);
     feedback_request.noise_score = Some(1);
+    feedback_request.task_success = Some(true);
+    feedback_request.preference_adhered = Some(true);
+    feedback_request.repeated_context_questions = Some(0);
+    feedback_request.bad_memory_used = Some(false);
     feedback_request.note = Some("The result answered the question.".to_string());
 
     let feedback_response = tools::telemetry_new(&state, feedback_request)
@@ -384,6 +461,8 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
         .expect("submit_feedback should work");
     let feedback_json = parse_json(&feedback_response);
     assert_eq!(feedback_json["feedback"]["used_result_ids"][0], "result-1");
+    assert_eq!(feedback_json["feedback"]["task_success"], true);
+    assert_eq!(feedback_json["feedback"]["preference_adhered"], true);
 
     let stats_response = tools::telemetry_new(&state, telemetry_request("stats_by_intent"))
         .await
@@ -400,6 +479,13 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
     assert_eq!(report_json["report"]["trace_count"], 1);
     assert_eq!(report_json["report"]["feedback_count"], 1);
     assert_eq!(report_json["report"]["operation_counts"]["search"], 1);
+    assert_eq!(
+        report_json["report"]["scenario_counts"]["question_answering"],
+        1
+    );
+    assert_eq!(report_json["report"]["arms"][0]["arm"], "memory_items");
+    assert_eq!(report_json["report"]["outcome_feedback_count"], 1);
+    assert_eq!(report_json["report"]["task_success_count"], 1);
     assert_eq!(report_json["report"]["confidence_gate"]["passed"], false);
 }
 
