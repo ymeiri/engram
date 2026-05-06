@@ -1,6 +1,6 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC with Brain Loop v1 implementation checkpoint
+Status: Draft RFC with Brain Loop v1 and orient contract checkpoints
 Date: 2026-05-06
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -75,8 +75,16 @@ Implementation checkpoint, 2026-05-06:
 - `orient` is the single frictionless entrypoint for task-boundary context.
 - Brain Loop v1 is additive: `orient` returns a nested `brain_loop` projection generated from the
   memory already selected by orientation.
-- Graph, obligations, lint, and `changes_since` remain specialist paths. They are not called inside
-  the hot orientation path until their signal quality and scoped retrieval behavior are proven.
+- `orient` surfaces already-open, currently applicable obligations as a compact bounded summary,
+  without running obligation detection inside the hot path.
+- `orient` filters stale git-status document obligations and suppresses untracked root instruction
+  files such as local `AGENTS.md` from the open-obligation summary.
+- `docs/ORIENT_CONTRACT.md` defines the current hot-path contract: MemoryItem-based orientation,
+  review-needed separation, prompt-specific ranking, bounded obligations, and no graph traversal,
+  obligation detection, lint, migration, or raw entity observation lookup in normal orientation.
+- Graph traversal, obligation detection, lint, migration, raw entity observation lookup, and
+  `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
+  are proven.
 
 ---
 
@@ -654,7 +662,8 @@ Status: initial MemoryItem unified-search layer exists. It searches active `Memo
 Status: deterministic confidence scenarios now compare no-memory, legacy, MemoryItem, and
 hybrid arms for preference continuity, stale/wrong-scope rejection, and decision continuity. The
 eval suite includes a report gate that aggregates quality, task success, bad-memory use, missing
-expected context, repeated context questions, and retrieval precision by arm.
+expected context, repeated context questions, and retrieval precision by arm. These are synthetic
+deterministic scenarios, not yet real multi-session behavioral evals.
 
 ### M4: Tiered Capture Policy
 
@@ -696,8 +705,18 @@ Status: initial migration viability gate exists. The executable test covers one 
 observation moving through inventory, generated review batch, accepted candidate apply,
 KnowledgeCommit creation, active reviewed `MemoryItem` retrieval through `orient`, memory-layer
 unified search visibility, and duplicate-safe re-apply behavior. This proves the first legacy
-observation path but does not yet justify broad legacy deletion; the next confidence step is a real
-migration completion run against current data.
+observation path but does not yet justify broad legacy deletion, automatic MemoryItem dominance, or
+broad migration write-apply.
+
+The next M6 operational step is intentionally gated. Two defensible paths remain:
+
+1. strengthen M3 with real-session telemetry/eval evidence before any M6 work against current data,
+   or
+2. run a strictly read-only inventory and review-export against current data as provisional evidence
+   gathering.
+
+No migration apply, KnowledgeCommit, vault compile, direct legacy deprecation, or deletion should
+run until the confidence gate is explicit and the user approves that write path.
 
 ### M7: Tool Tiering
 
@@ -720,7 +739,7 @@ the highest prompt-specific ranked top item lead the bounded context. This prese
 without burying a reviewed decision behind a generic limitation when the prompt directly asks about
 that decision.
 
-Next hot-path checkpoint: `orient` should also surface already-open agent obligations as a compact
+Completed hot-path checkpoint: `orient` now surfaces already-open agent obligations as a compact
 summary and recommended action. This closes the "what the agent owes" visibility gap without
 running obligation detection, graph traversal, or lint inside normal orientation.
 
@@ -728,6 +747,11 @@ Dogfood follow-up: the obligation summary must stay quiet when there is no curre
 agent. `orient` filters git-status document obligations that no longer match the current worktree
 and suppresses untracked root instruction files such as local `AGENTS.md`, while leaving explicit
 resolve/skip lifecycle operations in the obligations tool.
+
+Contract checkpoint: `docs/ORIENT_CONTRACT.md` and MCP tests now cover review-gated inferred
+memory, prompt-specific reviewed-decision ranking, open-obligation bounds, `has_more`, and stale
+obligation suppression. M7 is now blocked on real agent tool-selection evidence, not on additional
+hot-path expansion.
 
 ---
 
@@ -737,21 +761,30 @@ resolve/skip lifecycle operations in the obligations tool.
 2. What exact fields define evidence strength?
 3. What reviewer roles should be trusted for reviewed guidance?
 4. Should compiled orientation context be stored, cached, or generated every time?
-5. What is the first golden eval dataset?
-6. How much degraded orientation is acceptable before the agent should ask the user?
-7. Which legacy paths can be removed only after migration succeeds?
-8. What is the minimum viable contradiction detector?
+5. What qualifies as sufficient M3 confidence: deterministic fixture tests, real multi-session
+   traces, or both?
+6. Can read-only M6 inventory/review-export proceed as evidence gathering before real behavioral
+   M3 proof, or must it wait?
+7. What is the first golden eval dataset?
+8. How much degraded orientation is acceptable before the agent should ask the user?
+9. Which legacy paths can be removed only after migration succeeds?
+10. What is the minimum viable contradiction detector?
 
 ---
 
 ## 18. Near-Term Recommendation
 
-Proceed in this order:
+Proceed in this order from the current checkpoint:
 
-1. Finalize this RFC.
-2. Expand runtime telemetry from the spike into the acceptance criteria for retrieval work.
-3. Build the no-memory vs legacy vs MemoryItem confidence experiment.
-4. Add trust metadata to orientation and memory search results.
-5. Use feedback/telemetry to tune ranking and decide when MemoryItems can dominate legacy layers.
+1. Keep this RFC and `docs/ORIENT_CONTRACT.md` synchronized with implemented hot-path behavior.
+2. Decide the confidence gate for MemoryItem dominance: deterministic M3 fixtures already pass, but
+   real multi-session behavioral evidence is still sparse.
+3. Choose the next non-destructive evidence step:
+   - strengthen real-session telemetry/evals first, or
+   - run read-only M6 inventory/review-export as provisional evidence gathering.
+4. Use the resulting evidence to tune ranking, review burden, and migration prioritization.
+5. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
-Do not begin large deletion of legacy layers until the confidence experiment shows MemoryItems improve agent behavior and migration preserves important knowledge.
+Do not begin large deletion, broad legacy simplification, or migration write-apply until the
+confidence experiment shows MemoryItems improve agent behavior and migration preserves important
+knowledge.
