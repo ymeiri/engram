@@ -920,7 +920,7 @@ fn hook_additional_context(
     ));
     match normalized_event_name(&event.hook_event_name).as_str() {
         "userpromptsubmit" => lines.push(
-            "Before acting, call orient if this is a new task and use obligations for source/design, document, failed-tool, verification, handoff, and commit-preference checks."
+            "Before acting, call orient if this is a new task, keep returned trace_id values from orient/search, and use obligations for source/design, document, failed-tool, verification, handoff, and commit-preference checks."
                 .to_string(),
         ),
         "posttoolusefailure" => lines.push(
@@ -932,7 +932,7 @@ fn hook_additional_context(
                 .to_string(),
         ),
         "stop" => lines.push(
-            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user."
+            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, and when outcome is assessable call telemetry(action=submit_feedback) for the relevant trace_id."
                 .to_string(),
         ),
         "precompact" | "postcompact" => lines.push(
@@ -1021,6 +1021,7 @@ fn required_mcp_tools() -> Vec<String> {
         "graph",
         "handoff",
         "obligations",
+        "telemetry",
         "vault",
     ]
     .into_iter()
@@ -1803,6 +1804,7 @@ fn claude_required_permissions() -> &'static [&'static str] {
         "mcp__engram__graph",
         "mcp__engram__handoff",
         "mcp__engram__obligations",
+        "mcp__engram__telemetry",
         "mcp__engram__vault",
         "mcp__engram__digest",
         "mcp__engram__repo",
@@ -1892,6 +1894,9 @@ Use this command when a Claude Code session needs persistent project memory.
 
 Lifecycle contract:
 - At task/session start, call `orient` with the project, cwd, prompt, and harness.
+- Keep the returned `trace_id` from `orient` or `search`; before final response, call
+  `telemetry(action=submit_feedback)` when task success, preference adherence, missing context,
+  repeated context questions, or bad memory use can be judged.
 - Before major decisions, call `memory(action=changes_since)` with the orientation cursor.
 - After non-obvious discoveries, record source-grounded memory or a session event.
 - Before final response, call `changes_since`; if relevant updates appeared, account for them.
@@ -1914,12 +1919,14 @@ fn claude_resume_session_command() -> String {
 
 1. Call `orient` with the explicit project and current cwd.
 2. Read the returned context pack, ambiguities, and memory cursor.
-3. If a rolling handoff exists, inspect `handoff(action=get)`.
-4. Check `memory(action=changes_since)` during the session before major decisions.
-5. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
+3. Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback before
+   final response when task outcome or memory quality can be judged.
+4. If a rolling handoff exists, inspect `handoff(action=get)`.
+5. Check `memory(action=changes_since)` during the session before major decisions.
+6. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
    obligations; close or explicitly skip open items before final response.
-6. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
-7. If this is a resume after compaction, first inspect `handoff(action=get)` and recent
+7. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
+8. If this is a resume after compaction, first inspect `handoff(action=get)` and recent
    `memory(action=changes_since)` before continuing.
 "#
     )
@@ -1966,6 +1973,7 @@ CONTEXT="<engram_session_activation source=\"$SOURCE\" project=\"$PROJECT_NAME\"
 Engram is the durable Memory OS for this Claude Code session.
 Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, and agent=claude_code.
 Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
+Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) before final response when outcome or memory quality can be judged.
 Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
 Before context compaction or session end, update handoff and commit compact durable memory when useful.
 This is a soft contract: resolve obligations or state explicit skip reasons; do not fabricate missing memory.
@@ -2005,7 +2013,7 @@ fi
 cat <<'EOF'
 {{
   "continue": true,
-  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); submit telemetry(action=submit_feedback) for relevant trace_id values when outcome or memory quality can be judged; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
 }}
 EOF
 "#
@@ -2154,6 +2162,9 @@ Use when Codex is working in a repo or project with persistent Engram memory.
 Workflow:
 - Start by calling `orient` with project, cwd, prompt, and `agent=codex`.
 - Treat the returned memory cursor as the baseline for this turn.
+- Keep the returned `trace_id` from `orient` or `search`; before final response, call
+  `telemetry(action=submit_feedback)` when task success, preference adherence, missing context,
+  repeated context questions, or bad memory use can be judged.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
@@ -2179,6 +2190,8 @@ Use when the user asks to continue, resume, or load prior Engram context.
 Steps:
 - Call `orient` before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
+- Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback before
+  final response when task outcome or memory quality can be judged.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2203,6 +2216,9 @@ This command is invoked as `/engram:memory-session`.
 Follow this soft lifecycle contract:
 - Start by calling the Engram MCP `orient` tool with project, cwd, prompt, and `agent=gemini_cli`.
 - Treat the returned memory cursor as the baseline for this turn.
+- Keep the returned `trace_id` from `orient` or `search`; before final response, call
+  `telemetry(action=submit_feedback)` when task success, preference adherence, missing context,
+  repeated context questions, or bad memory use can be judged.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
@@ -2232,6 +2248,8 @@ This command is invoked as `/engram:resume-session`.
 Steps:
 - Call the Engram MCP `orient` tool before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
+- Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback before
+  final response when task outcome or memory quality can be judged.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2277,6 +2295,9 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
 - Start work by calling `orient` with the current project, cwd, prompt, and `agent=gemini_cli`.
 - Keep the returned memory cursor and call `memory(action=changes_since)` before major
   decisions, before final response, and during long sessions.
+- Keep returned `trace_id` values from `orient` or `search` and call
+  `telemetry(action=submit_feedback)` before final response when task outcome or memory quality
+  can be judged.
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Gemini CLI, Claude Code, Codex, and other harnesses
   can be distinguished.
@@ -2310,6 +2331,9 @@ Use this skill when Cursor Agent is working in a repository or project with pers
 Workflow:
 - Start by calling the Engram MCP `orient` tool with project, cwd, prompt, and `agent=cursor`.
 - Treat the returned memory cursor as the baseline for this turn.
+- Keep the returned `trace_id` from `orient` or `search`; before final response, call
+  `telemetry(action=submit_feedback)` when task success, preference adherence, missing context,
+  repeated context questions, or bad memory use can be judged.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
@@ -2340,6 +2364,8 @@ Use this skill when the user asks Cursor Agent to continue, resume, or load prio
 Steps:
 - Call the Engram MCP `orient` tool before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
+- Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback before
+  final response when task outcome or memory quality can be judged.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2384,6 +2410,9 @@ fn agents_snippet() -> String {
 - Start work by calling `orient` with the current project, cwd, prompt, and harness name.
 - Keep the returned memory cursor and call `memory(action=changes_since)` before major
   decisions, before final response, and during long sessions.
+- Keep returned `trace_id` values from `orient` or `search` and call
+  `telemetry(action=submit_feedback)` before final response when task outcome or memory quality
+  can be judged.
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Claude Code, Codex, and other harnesses can be
   distinguished.
@@ -2404,7 +2433,7 @@ fn generic_policy_document() -> String {
         r#"{MARKER_MD}
 # Engram Generic Harness Policy
 
-Required MCP tools: orient, memory, harness, lint, graph, handoff, obligations, vault.
+Required MCP tools: orient, memory, harness, lint, graph, handoff, obligations, telemetry, vault.
 
 Lifecycle:
 - task/session start: call `orient`
@@ -2413,6 +2442,8 @@ Lifecycle:
 - before final response: call `changes_since` and distill if needed
 - before final response: detect obligations, run obligations doctor, and close or explicitly skip
   open obligations
+- before final response: submit `telemetry(action=submit_feedback)` for relevant `trace_id`
+  values when task outcome or memory quality can be judged
 - before context compaction/context loss: update handoff and persist compact durable memory
 - session end/handoff: compile handoff and knowledge commit candidate
 - commit workflows: consult memory for relevant preferences/rules
@@ -2651,11 +2682,30 @@ mod tests {
     }
 
     #[test]
+    fn policy_requires_telemetry_tool_for_feedback() {
+        let policy = HarnessService::new().policy(HarnessKind::Codex);
+        assert!(policy.required_mcp_tools.contains(&"telemetry".to_string()));
+    }
+
+    #[test]
+    fn render_adapter_mentions_feedback_trace_id() {
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
+        assert_eq!(adapters.len(), 1);
+        assert!(adapters[0].contents.contains("trace_id"));
+        assert!(adapters[0]
+            .contents
+            .contains("telemetry(action=submit_feedback)"));
+        assert!(adapters[0].contents.contains("task success"));
+    }
+
+    #[test]
     fn codex_policy_mentions_context_compaction_save() {
         let policy = HarnessService::new()
             .render_policy(HarnessKind::Codex)
             .unwrap();
         assert!(policy.contains("before_context_compaction_save"));
+        assert!(policy.contains("\"telemetry\""));
 
         let adapters = HarnessService::new()
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
@@ -2736,6 +2786,7 @@ mod tests {
             .any(|file| file.name == "claude-settings-merge"));
         let settings = fs::read_to_string(root.path().join(".claude/settings.json")).unwrap();
         assert!(settings.contains("mcp__engram__orient"));
+        assert!(settings.contains("mcp__engram__telemetry"));
         assert!(settings.contains("\"PostToolUseFailure\""));
         assert!(settings.contains("existing"));
         let settings_json: Value = serde_json::from_str(&settings).unwrap();

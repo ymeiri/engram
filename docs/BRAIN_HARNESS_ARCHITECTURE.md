@@ -566,6 +566,10 @@ Implemented spike:
   counts, warnings, and a conservative confidence gate. The gate requires behavioral outcome
   feedback in addition to relevance signals; migration writes still require explicit user
   approval.
+- Generated harness adapters now instruct agents to preserve `trace_id` values returned by
+  `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
+  when task success, preference adherence, missing context, repeated context questions, or
+  bad-memory use can be judged.
 
 `intent` should not become a rigid ontology for every possible memory workflow. It remains a
 caller-supplied workflow slice. Custom memory experiments should use free-form `scenario_id` and
