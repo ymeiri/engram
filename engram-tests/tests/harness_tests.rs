@@ -104,7 +104,8 @@ async fn test_mcp_harness_render_adapter_mentions_feedback_trace_id() {
         .expect("rendered adapter should include contents");
     assert!(contents.contains("trace_id"));
     assert!(contents.contains("telemetry(action=submit_feedback)"));
-    assert!(contents.contains("task success"));
+    assert!(contents.contains("task_success"));
+    assert!(contents.contains("missing_context"));
 }
 
 #[tokio::test]

@@ -35,8 +35,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `scenario_id` and `arm`, so controlled eval comparisons use the same trace IDs agents
       receive during normal retrieval.
 - [x] Generated agent harness adapters require the `telemetry` MCP tool and tell agents to keep
-      `orient`/`search` trace IDs, then submit outcome feedback before final response when the
-      result is assessable.
+      `orient`/`search` trace IDs, then submit explicit outcome/gap feedback fields before final
+      response when the result is assessable.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
