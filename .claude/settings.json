@@ -1,0 +1,255 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__engram__orient",
+      "mcp__engram__memory",
+      "mcp__engram__harness",
+      "mcp__engram__lint",
+      "mcp__engram__graph",
+      "mcp__engram__handoff",
+      "mcp__engram__obligations",
+      "mcp__engram__vault",
+      "mcp__engram__digest",
+      "mcp__engram__repo"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"",
+            "timeout": 10
+          }
+        ],
+        "matcher": "startup|resume|compact"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "engram",
+            "tool": "harness",
+            "timeout": 10,
+            "input": {
+              "action": "hook_event",
+              "harness": "claude_code",
+              "hook_event_name": "UserPromptSubmit",
+              "session_id": "${session_id}",
+              "cwd": "${cwd}",
+              "transcript_path": "${transcript_path}",
+              "prompt": "${prompt}",
+              "tool_name": "${tool_name}",
+              "tool_error": "${error}",
+              "tool_input_command": "${tool_input.command}",
+              "file_path": "${tool_input.file_path}",
+              "last_assistant_message": "${last_assistant_message}",
+              "compact_summary": "${compact_summary}",
+              "trigger": "${trigger}",
+              "reason": "${reason}",
+              "stop_hook_active": "${stop_hook_active}",
+              "write_policy": "durable",
+              "model_provider": "anthropic",
+              "model": "claude-code",
+              "surface": "claude-code",
+              "actor": "agent"
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "engram",
+            "tool": "harness",
+            "timeout": 10,
+            "input": {
+              "action": "hook_event",
+              "harness": "claude_code",
+              "hook_event_name": "PostToolUse",
+              "session_id": "${session_id}",
+              "cwd": "${cwd}",
+              "transcript_path": "${transcript_path}",
+              "prompt": "${prompt}",
+              "tool_name": "${tool_name}",
+              "tool_error": "${error}",
+              "tool_input_command": "${tool_input.command}",
+              "file_path": "${tool_input.file_path}",
+              "last_assistant_message": "${last_assistant_message}",
+              "compact_summary": "${compact_summary}",
+              "trigger": "${trigger}",
+              "reason": "${reason}",
+              "stop_hook_active": "${stop_hook_active}",
+              "write_policy": "durable",
+              "model_provider": "anthropic",
+              "model": "claude-code",
+              "surface": "claude-code",
+              "actor": "agent"
+            }
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "engram",
+            "tool": "harness",
+            "timeout": 10,
+            "input": {
+              "action": "hook_event",
+              "harness": "claude_code",
+              "hook_event_name": "PostToolUseFailure",
+              "session_id": "${session_id}",
+              "cwd": "${cwd}",
+              "transcript_path": "${transcript_path}",
+              "prompt": "${prompt}",
+              "tool_name": "${tool_name}",
+              "tool_error": "${error}",
+              "tool_input_command": "${tool_input.command}",
+              "file_path": "${tool_input.file_path}",
+              "last_assistant_message": "${last_assistant_message}",
+              "compact_summary": "${compact_summary}",
+              "trigger": "${trigger}",
+              "reason": "${reason}",
+              "stop_hook_active": "${stop_hook_active}",
+              "write_policy": "durable",
+              "model_provider": "anthropic",
+              "model": "claude-code",
+              "surface": "claude-code",
+              "actor": "agent"
+            }
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "engram",
+            "tool": "harness",
+            "timeout": 10,
+            "input": {
+              "action": "hook_event",
+              "harness": "claude_code",
+              "hook_event_name": "Stop",
+              "session_id": "${session_id}",
+              "cwd": "${cwd}",
+              "transcript_path": "${transcript_path}",
+              "prompt": "${prompt}",
+              "tool_name": "${tool_name}",
+              "tool_error": "${error}",
+              "tool_input_command": "${tool_input.command}",
+              "file_path": "${tool_input.file_path}",
+              "last_assistant_message": "${last_assistant_message}",
+              "compact_summary": "${compact_summary}",
+              "trigger": "${trigger}",
+              "reason": "${reason}",
+              "stop_hook_active": "${stop_hook_active}",
+              "write_policy": "durable",
+              "model_provider": "anthropic",
+              "model": "claude-code",
+              "surface": "claude-code",
+              "actor": "agent"
+            }
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "engram",
+            "tool": "harness",
+            "timeout": 10,
+            "input": {
+              "action": "hook_event",
+              "harness": "claude_code",
+              "hook_event_name": "PreCompact",
+              "session_id": "${session_id}",
+              "cwd": "${cwd}",
+              "transcript_path": "${transcript_path}",
+              "prompt": "${prompt}",
+              "tool_name": "${tool_name}",
+              "tool_error": "${error}",
+              "tool_input_command": "${tool_input.command}",
+              "file_path": "${tool_input.file_path}",
+              "last_assistant_message": "${last_assistant_message}",
+              "compact_summary": "${compact_summary}",
+              "trigger": "${trigger}",
+              "reason": "${reason}",
+              "stop_hook_active": "${stop_hook_active}",
+              "write_policy": "durable",
+              "model_provider": "anthropic",
+              "model": "claude-code",
+              "surface": "claude-code",
+              "actor": "agent"
+            }
+          }
+        ],
+        "matcher": "manual|auto"
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "engram",
+            "tool": "harness",
+            "timeout": 10,
+            "input": {
+              "action": "hook_event",
+              "harness": "claude_code",
+              "hook_event_name": "PostCompact",
+              "session_id": "${session_id}",
+              "cwd": "${cwd}",
+              "transcript_path": "${transcript_path}",
+              "prompt": "${prompt}",
+              "tool_name": "${tool_name}",
+              "tool_error": "${error}",
+              "tool_input_command": "${tool_input.command}",
+              "file_path": "${tool_input.file_path}",
+              "last_assistant_message": "${last_assistant_message}",
+              "compact_summary": "${compact_summary}",
+              "trigger": "${trigger}",
+              "reason": "${reason}",
+              "stop_hook_active": "${stop_hook_active}",
+              "write_policy": "durable",
+              "model_provider": "anthropic",
+              "model": "claude-code",
+              "surface": "claude-code",
+              "actor": "agent"
+            }
+          }
+        ],
+        "matcher": "manual|auto"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
