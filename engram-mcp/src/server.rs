@@ -419,7 +419,7 @@ impl EngramServer {
 
     /// Manage Memory OS items and knowledge commits.
     #[tool(
-        description = "Manage Memory OS records: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session. Requires writer provenance for add, commit, migration_review_apply, digest_extraction_apply, and distill_session: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
+        description = "Manage Memory OS records: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session. Requires writer provenance for add, commit, migration_review_apply, digest_extraction_apply, and distill_session: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
     )]
     pub async fn memory(
         &self,

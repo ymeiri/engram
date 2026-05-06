@@ -70,6 +70,9 @@ fn request(action: &str) -> MemoryRequestNew {
         intent: None,
         archive_reason: None,
         archived_by: None,
+        reviewer: None,
+        rationale: None,
+        supersedes_id: None,
         vault_path: None,
         migration_review_path: None,
         exclude_reviewed_path: None,
@@ -190,6 +193,154 @@ async fn test_mcp_memory_review_lists_inferred_items() {
         review_json["items"][0]["title"],
         "Possible status update preference"
     );
+}
+
+#[tokio::test]
+async fn test_mcp_memory_promote_review_candidate() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.kind = Some("decision".to_string());
+    add.title = Some("Candidate decision".to_string());
+    add.content = Some("Candidate guidance should become active only after review.".to_string());
+    add.origin = Some("agent_inferred".to_string());
+    add.scope_type = Some("project".to_string());
+    add.project_name = Some("engram".to_string());
+    let add_response = tools::memory_new(&state, add)
+        .await
+        .expect("add should work");
+    let add_json = parse_json(&add_response);
+    let id = add_json["item"]["id"].as_str().unwrap().to_string();
+    assert_eq!(add_json["item"]["status"], "needs_review");
+
+    let mut promote = request("promote");
+    promote.id = Some(id.clone());
+    promote.reviewer = Some("yuval".to_string());
+    promote.rationale = Some("Reviewed and accepted.".to_string());
+    let promote_response = tools::memory_new(&state, promote)
+        .await
+        .expect("promote should work");
+    let promote_json = parse_json(&promote_response);
+
+    assert_eq!(promote_json["item"]["id"], id);
+    assert_eq!(promote_json["item"]["status"], "active");
+    assert_eq!(promote_json["item"]["evidence"][0]["kind"], "manual_review");
+    assert_eq!(promote_json["item"]["evidence"][0]["target"], "yuval");
+    assert_eq!(
+        promote_json["item"]["evidence"][0]["summary"],
+        "Reviewed and accepted."
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_memory_reject_review_candidate() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.kind = Some("rule".to_string());
+    add.title = Some("Bad candidate".to_string());
+    add.content = Some("This inferred rule should be rejected during review.".to_string());
+    add.origin = Some("agent_inferred".to_string());
+    add.scope_type = Some("project".to_string());
+    add.project_name = Some("engram".to_string());
+    let add_response = tools::memory_new(&state, add)
+        .await
+        .expect("add should work");
+    let id = parse_json(&add_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut reject = request("reject");
+    reject.id = Some(id.clone());
+    reject.reviewer = Some("agent-reviewer".to_string());
+    reject.rationale = Some("Contradicted by current project evidence.".to_string());
+    let reject_response = tools::memory_new(&state, reject)
+        .await
+        .expect("reject should work");
+    let reject_json = parse_json(&reject_response);
+
+    assert_eq!(reject_json["item"]["id"], id);
+    assert_eq!(reject_json["item"]["status"], "rejected");
+    assert_eq!(
+        reject_json["item"]["evidence"][0]["target"],
+        "agent-reviewer"
+    );
+    assert_eq!(
+        reject_json["item"]["evidence"][0]["summary"],
+        "Contradicted by current project evidence."
+    );
+
+    let review_response = tools::memory_new(&state, request("review"))
+        .await
+        .expect("review should work");
+    let review_json = parse_json(&review_response);
+    assert_eq!(review_json["count"], 0);
+}
+
+#[tokio::test]
+async fn test_mcp_memory_supersede_replaces_active_item() {
+    let state = setup_tool_state().await;
+
+    let mut old = with_writer(request("add"));
+    old.kind = Some("decision".to_string());
+    old.title = Some("Old decision".to_string());
+    old.content = Some("The old workflow should be replaced.".to_string());
+    old.origin = Some("user_stated".to_string());
+    old.scope_type = Some("project".to_string());
+    old.project_name = Some("engram".to_string());
+    old.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "memory_tests".to_string(),
+        summary: Some("Old decision starts as active guidance.".to_string()),
+        excerpt: None,
+    }];
+    let old_response = tools::memory_new(&state, old)
+        .await
+        .expect("old add should work");
+    let old_id = parse_json(&old_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut new = with_writer(request("add"));
+    new.kind = Some("decision".to_string());
+    new.title = Some("Replacement decision".to_string());
+    new.content = Some("The replacement workflow should guide future agents.".to_string());
+    new.origin = Some("agent_inferred".to_string());
+    new.scope_type = Some("project".to_string());
+    new.project_name = Some("engram".to_string());
+    let new_response = tools::memory_new(&state, new)
+        .await
+        .expect("new add should work");
+    let new_json = parse_json(&new_response);
+    let new_id = new_json["item"]["id"].as_str().unwrap().to_string();
+    assert_eq!(new_json["item"]["status"], "needs_review");
+
+    let mut supersede = request("supersede");
+    supersede.id = Some(new_id.clone());
+    supersede.supersedes_id = Some(old_id.clone());
+    supersede.reviewer = Some("yuval".to_string());
+    supersede.rationale = Some("Replacement reflects current evidence.".to_string());
+    let supersede_response = tools::memory_new(&state, supersede)
+        .await
+        .expect("supersede should work");
+    let supersede_json = parse_json(&supersede_response);
+
+    assert_eq!(supersede_json["item"]["id"], new_id);
+    assert_eq!(supersede_json["item"]["status"], "active");
+    assert_eq!(supersede_json["item"]["supersedes"][0], old_id);
+    assert_eq!(supersede_json["superseded_item"]["id"], old_id);
+    assert_eq!(supersede_json["superseded_item"]["status"], "superseded");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["id"], new_id);
 }
 
 #[tokio::test]

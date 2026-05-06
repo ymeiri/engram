@@ -8165,9 +8165,9 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
 /// Consolidated request for Memory OS operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryRequestNew {
-    /// Action to perform: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
+    /// Action to perform: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
     #[schemars(
-        description = "Action: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
+        description = "Action: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
     )]
     pub action: String,
 
@@ -8288,6 +8288,12 @@ pub struct MemoryRequestNew {
     pub archive_reason: Option<String>,
     /// Actor/harness archiving the item for archive action.
     pub archived_by: Option<String>,
+    /// Reviewer identity for promote/reject/supersede actions.
+    pub reviewer: Option<String>,
+    /// Review rationale for promote/reject/supersede actions.
+    pub rationale: Option<String>,
+    /// Existing memory item ID replaced by `id` for supersede action.
+    pub supersedes_id: Option<String>,
 
     /// Markdown vault root path (required for export_vault)
     pub vault_path: Option<String>,
@@ -8420,6 +8426,56 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             serde_json::to_string_pretty(&serde_json::json!({
                 "count": items.len(),
                 "items": items
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "promote" => {
+            let id = parse_id(
+                &required(&request.id, "id", "promote")?,
+                "memory item ID",
+            )?;
+            let reviewer = required(&request.reviewer, "reviewer", "promote")?;
+            let rationale = required(&request.rationale, "rationale", "promote")?;
+            let item = service
+                .promote_memory(&id, reviewer, rationale)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "reject" => {
+            let id = parse_id(&required(&request.id, "id", "reject")?, "memory item ID")?;
+            let reviewer = required(&request.reviewer, "reviewer", "reject")?;
+            let rationale = required(&request.rationale, "rationale", "reject")?;
+            let item = service
+                .reject_memory(&id, reviewer, rationale)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "supersede" => {
+            let new_id = parse_id(
+                &required(&request.id, "id", "supersede")?,
+                "replacement memory item ID",
+            )?;
+            let old_id = parse_id(
+                &required(&request.supersedes_id, "supersedes_id", "supersede")?,
+                "superseded memory item ID",
+            )?;
+            let reviewer = required(&request.reviewer, "reviewer", "supersede")?;
+            let rationale = required(&request.rationale, "rationale", "supersede")?;
+            let (item, superseded_item) = service
+                .supersede_memory(&new_id, &old_id, reviewer, rationale)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item,
+                "superseded_item": superseded_item
             }))
             .map_err(|e| e.to_string())
         }
@@ -8697,7 +8753,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
+            "Unknown action: '{}'. Valid actions: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
             request.action
         )),
     }
