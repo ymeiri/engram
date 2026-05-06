@@ -21,6 +21,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       prompt-matched reviewed decision can lead the bounded context.
 - [x] MCP `orient` surfaces already-open agent obligations as a compact summary and recommended
       action without running obligation detection in the hot path.
+- [x] `orient` filters stale git-status document obligations and untracked root instruction files
+      from its open-obligation summary, while leaving stored obligation lifecycle explicit.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.

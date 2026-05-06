@@ -724,6 +724,11 @@ Next hot-path checkpoint: `orient` should also surface already-open agent obliga
 summary and recommended action. This closes the "what the agent owes" visibility gap without
 running obligation detection, graph traversal, or lint inside normal orientation.
 
+Dogfood follow-up: the obligation summary must stay quiet when there is no current action for the
+agent. `orient` filters git-status document obligations that no longer match the current worktree
+and suppresses untracked root instruction files such as local `AGENTS.md`, while leaving explicit
+resolve/skip lifecycle operations in the obligations tool.
+
 ---
 
 ## 17. Open Questions

@@ -4,6 +4,9 @@ use engram_index::{MemoryService, ObligationService};
 use engram_mcp::tools::{self, MemoryEvidenceRequest, ObligationRequest, OrientRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
+use std::fs;
+use std::process::Command;
+use tempfile::tempdir;
 
 async fn setup_tool_state() -> ToolState {
     let config = StoreConfig::memory();
@@ -65,6 +68,60 @@ fn with_writer(mut req: ObligationRequest) -> ObligationRequest {
 
 fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+fn init_git_repo(path: &std::path::Path) {
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .arg("init")
+        .arg("-q")
+        .status()
+        .expect("git init should run");
+    assert!(status.success(), "git init should succeed");
+}
+
+async fn add_document_obligation(
+    state: &ToolState,
+    project: &str,
+    trigger_kind: &str,
+    trigger_target: &str,
+    title: &str,
+) {
+    let mut add = with_writer(request("add"));
+    add.project = Some(project.to_string());
+    add.kind = Some("document_disposition".to_string());
+    add.title = Some(title.to_string());
+    add.description = Some("A durable document needs ingestion or an explicit skip.".to_string());
+    add.trigger_kind = Some(trigger_kind.to_string());
+    add.trigger_target = Some(trigger_target.to_string());
+    add.trigger_summary = Some("document changed".to_string());
+    add.required_resolutions = vec![
+        "indexed_document".to_string(),
+        "memory_recorded".to_string(),
+        "skipped_with_reason".to_string(),
+    ];
+    tools::obligations_new(state, add)
+        .await
+        .expect("add should work");
+}
+
+async fn orient_for_project(state: &ToolState, cwd: &str) -> Value {
+    let response = tools::orient(
+        state,
+        OrientRequest {
+            cwd: Some(cwd.to_string()),
+            prompt: Some("continue the Engram brain harness work".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("plan_work".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+    parse_json(&response)
 }
 
 #[tokio::test]
@@ -236,4 +293,82 @@ async fn test_mcp_orient_surfaces_open_obligations() {
         .as_str()
         .unwrap()
         .contains("## Open Obligations"));
+}
+
+#[tokio::test]
+async fn test_mcp_orient_surfaces_current_git_status_document_obligation() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+    let docs_dir = repo.path().join("docs");
+    fs::create_dir_all(&docs_dir).expect("docs dir should be created");
+    fs::write(docs_dir.join("design.md"), "# Design\n").expect("doc should be written");
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "git_status",
+        "docs/design.md",
+        "Review current design note",
+    )
+    .await;
+
+    let orient = orient_for_project(&state, repo.path().to_str().unwrap()).await;
+
+    assert_eq!(orient["obligation_summary"]["available"], true);
+    assert_eq!(orient["obligation_summary"]["returned_count"], 1);
+    assert_eq!(
+        orient["open_obligations"][0]["title"],
+        "Review current design note"
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_orient_suppresses_stale_git_status_document_obligation() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "git_status",
+        "docs/stale.md",
+        "Review stale design note",
+    )
+    .await;
+
+    let orient = orient_for_project(&state, repo.path().to_str().unwrap()).await;
+
+    assert_eq!(orient["obligation_summary"]["available"], true);
+    assert_eq!(orient["obligation_summary"]["returned_count"], 0);
+    assert!(orient["open_obligations"].as_array().unwrap().is_empty());
+    assert!(!orient["context_pack"]
+        .as_str()
+        .unwrap()
+        .contains("## Open Obligations"));
+}
+
+#[tokio::test]
+async fn test_mcp_orient_suppresses_untracked_root_instruction_obligation() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+    fs::write(repo.path().join("AGENTS.md"), "# Local instructions\n")
+        .expect("instruction file should be written");
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "git_status",
+        "AGENTS.md",
+        "Review local instructions",
+    )
+    .await;
+
+    let orient = orient_for_project(&state, repo.path().to_str().unwrap()).await;
+
+    assert_eq!(orient["obligation_summary"]["available"], true);
+    assert_eq!(orient["obligation_summary"]["returned_count"], 0);
+    assert!(orient["open_obligations"].as_array().unwrap().is_empty());
 }

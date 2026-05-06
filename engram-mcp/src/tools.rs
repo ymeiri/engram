@@ -42,6 +42,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -7266,6 +7267,12 @@ struct OrientOpenObligation {
     required_resolutions: Vec<String>,
 }
 
+enum OrientGitStatusTarget {
+    Present(String),
+    Missing,
+    Unavailable,
+}
+
 /// Build an orientation context packet.
 pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String, String> {
     debug!(
@@ -7330,6 +7337,7 @@ async fn orient_open_obligations(
         .map_err(|e| e.to_string())?
         .into_iter()
         .filter(|obligation| obligation_applies_to_orient(obligation, project, cwd))
+        .filter(|obligation| obligation_is_current_for_orient(obligation, cwd))
         .collect::<Vec<_>>();
     obligations.sort_by(|left, right| {
         right
@@ -7393,6 +7401,92 @@ fn obligation_applies_to_orient(
             false
         }
     }
+}
+
+fn obligation_is_current_for_orient(obligation: &AgentObligation, cwd: Option<&str>) -> bool {
+    if !is_git_status_document_obligation(obligation) {
+        return true;
+    }
+
+    let (Some(cwd), Some(target)) = (cwd, obligation.trigger.target.as_deref()) else {
+        return true;
+    };
+
+    match current_git_status_target(cwd, target) {
+        OrientGitStatusTarget::Present(status_line) => {
+            !is_untracked_root_instruction_file(&status_line, target)
+        }
+        OrientGitStatusTarget::Missing => false,
+        OrientGitStatusTarget::Unavailable => true,
+    }
+}
+
+fn is_git_status_document_obligation(obligation: &AgentObligation) -> bool {
+    obligation.kind == AgentObligationKind::DocumentDisposition
+        && obligation.trigger.kind == "git_status"
+}
+
+fn current_git_status_target(cwd: &str, target: &str) -> OrientGitStatusTarget {
+    let Ok(output) = Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=all")
+        .arg("--")
+        .arg(target)
+        .output()
+    else {
+        return OrientGitStatusTarget::Unavailable;
+    };
+    if !output.status.success() {
+        return OrientGitStatusTarget::Unavailable;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find_map(|line| {
+            let path = parse_orient_git_status_path(line)?;
+            if path == target {
+                Some(line.to_string())
+            } else {
+                None
+            }
+        })
+        .map_or(
+            OrientGitStatusTarget::Missing,
+            OrientGitStatusTarget::Present,
+        )
+}
+
+fn parse_orient_git_status_path(line: &str) -> Option<String> {
+    if line.len() < 4 {
+        return None;
+    }
+    let raw = line[3..].trim();
+    let path = raw.split(" -> ").last().unwrap_or(raw).trim_matches('"');
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+fn is_untracked_root_instruction_file(status_line: &str, target: &str) -> bool {
+    status_line.starts_with("?? ") && is_root_instruction_file(target)
+}
+
+fn is_root_instruction_file(target: &str) -> bool {
+    let normalized = target.replace('\\', "/");
+    if normalized.contains('/') {
+        return false;
+    }
+
+    matches!(
+        normalized.to_ascii_lowercase().as_str(),
+        "agents.md" | "claude.md" | "gemini.md"
+    )
 }
 
 fn apply_obligation_summary_to_packet(
