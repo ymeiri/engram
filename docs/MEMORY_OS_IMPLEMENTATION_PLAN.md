@@ -31,6 +31,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
       feedback records task success, preference adherence, repeated context questions, and bad
       memory use, and the confidence gate requires behavioral outcome evidence.
+- [x] Brain Harness research operating method documented: dogfood is one experimental instrument
+      under explicit research questions, competing hypotheses, evidence levels, claim ledger, and
+      decision gates.
 - [x] Real `orient` and `search` operations can tag their automatic traces with free-form
       `scenario_id` and `arm`, so controlled eval comparisons use the same trace IDs agents
       receive during normal retrieval.

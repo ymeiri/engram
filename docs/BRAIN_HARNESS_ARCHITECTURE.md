@@ -1,6 +1,6 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC with Brain Loop v1 and orient contract checkpoints
+Status: Draft RFC with Brain Loop v1, orient contract, and research-method checkpoints
 Date: 2026-05-06
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -27,6 +27,10 @@ MemoryItem becomes the canonical cognitive unit for agent-facing memory.
 ```
 
 This is a bet, not a premise to accept blindly. Engram should prove it through evals before deleting or heavily simplifying legacy components.
+
+`docs/BRAIN_HARNESS_RESEARCH_METHOD.md` defines the research operating model for proving or
+rejecting this bet. Dogfood is one experimental instrument under that method, not the entire
+confidence story.
 
 ---
 
@@ -687,9 +691,11 @@ deterministic scenarios, not yet real multi-session behavioral evals. A first re
 report now summarizes persisted traces and agent feedback as non-destructive evidence, but it is
 not a substitute for a real multi-session comparative eval.
 
-`docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md` defines the next evidence step: a small read-only corpus
-preflight plus labeled live scenarios with `scenario_id`, `arm`, pre-registered success criteria,
-explicit outcome feedback, and anti-overfit rules.
+`docs/BRAIN_HARNESS_RESEARCH_METHOD.md` now defines the research operating model above the
+architecture: explicit research questions, competing hypotheses, evidence levels, and decision
+gates. Under that method, `docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md` is the next live behavioral
+instrument: a small read-only corpus preflight plus labeled live scenarios with `scenario_id`,
+`arm`, pre-registered success criteria, explicit outcome feedback, and anti-overfit rules.
 
 ### M4: Tiered Capture Policy
 

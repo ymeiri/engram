@@ -4,6 +4,7 @@ Status: Active protocol
 Date: 2026-05-07
 Audience: Engram maintainers and AI coding-agent operators
 Scope: Generate small, labeled, live evidence for whether Engram's Brain Loop v1 improves agent behavior.
+Research method: `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`
 
 ---
 
@@ -15,6 +16,10 @@ traces exist, but most are not grouped by `scenario_id` or compared across `arm`
 
 This protocol creates decision-grade dogfood evidence before any broad migration, deletion, or
 legacy-layer simplification.
+
+Under the Brain Harness research method, this protocol is an experimental instrument. It calibrates
+live behavioral evidence and exposes failure modes; it does not, by itself, prove the full
+architecture or authorize irreversible memory-system changes.
 
 The protocol answers:
 
