@@ -16,6 +16,12 @@ for migration gating, but it did not surface the newest dogfood protocol when as
 adding that protocol. The next fix should target capture/indexing/ranking for fresh project plan
 documents and decisions before broadening the eval batch.
 
+A focused rerun after `dcb72f2` narrowed the failure: recent Git context now surfaces the fresh
+Brain Harness documents and commits, but Brain Loop still ranks older harness-adapter memories above
+the current research method and dogfood plan. Diagnostic search did not return the new Brain Harness
+docs as document results. The next fix should therefore target active MemoryItem capture/promotion
+or project-doc indexing for current plan documents, not graph/obligation hot-path expansion.
+
 ## Preflight
 
 ### Corpus Shape
@@ -156,6 +162,79 @@ fresh-plan linkage and less wrong-scope noise.
 The post-run gate failed only because the larger 50-trace window had 48% feedback coverage. The
 pilot successfully created the first labeled scenario/arm coverage.
 
+## Focused Rerun After Research Method
+
+After commit `dcb72f2 Add brain harness research method`, reran `resume_continuity_001` to test the
+claim from `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`: recent Git context plus current Brain Loop
+ranking should either fix resume continuity or reveal that fresh project-plan docs need active
+MemoryItem capture/promotion.
+
+Prompt:
+
+> Resume the Engram brain harness work after adding the Brain Harness research method and recent Git
+> context. What is the next action and why?
+
+Expected helpful context:
+
+- `dcb72f2 Add brain harness research method`.
+- `68ed6d2 Add recent git context to orient`.
+- `4fe2570 Add brain harness dogfood pilot report`.
+- `0eede1e Add brain harness dogfood protocol`.
+- Explicit next action: use the rerun evidence to choose between broader dogfood and targeted
+  capture/ranking/promotion for fresh plan context.
+
+| Arm | Trace | Outcome |
+|---|---|---|
+| `memoryitem_orient` | `019e01d6-de7b-7052-844f-5584a24d5e35` | Partial failure. `repository_context.recent_commits` surfaced all expected recent commits, but active decisions and Brain Loop top items were dominated by older harness-adapter decisions and did not state the current research/dogfood next action. |
+| `diagnostic_search` | `019e01d7-32b5-7142-af6b-e7cd0378c883` | Confirmed the likely failure mode. Memory search found adjacent older Brain Harness facts, but not an active MemoryItem for the research-method checkpoint or immediate next action. Document search did not return the new Brain Harness docs. |
+
+Recorded feedback for `memoryitem_orient`:
+
+- `task_success`: false.
+- `usefulness_score`: 3.
+- `correctness_score`: 3.
+- `noise_score`: 4.
+- `bad_memory_used`: false.
+- Rejected memories:
+  - `019dd509-46f2-71c0-aff7-ebe777810825`
+  - `019dd334-3b8e-7471-afba-1b1aaeecfe45`
+  - `019dd321-4584-7970-ae87-b81eacea7a3f`
+  - `019dd320-02fb-7420-8d57-bf255f27a0a9`
+  - `019dd313-eb1f-7741-9854-dcf00e3f2229`
+- Missing context: active Brain Harness research method, dogfood pilot/protocol as current plan
+  guidance, and the explicit next action.
+
+Diagnostic search result:
+
+- Useful adjacent MemoryItems existed:
+  - `019dfed3-519d-7f01-8c46-c9245ba0045b`
+  - `019dfe2f-7950-7a63-9416-6e059e7af34c`
+- Search did not retrieve:
+  - `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`
+  - `docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md`
+  - `docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md`
+
+Post-rerun `telemetry(action=real_session_eval, limit=50)`:
+
+| Field | Value |
+|---|---:|
+| `trace_count` | 50 |
+| `feedback_count` | 30 |
+| `feedback_coverage` | 0.60 |
+| `distinct_scenario_count` | 3 |
+| `distinct_arm_count` | 4 |
+| `scenario_counts.resume_continuity_001` | 5 |
+| `outcome_feedback_count` | 14 |
+| `task_success_count` | 12 |
+| `task_failure_count` | 2 |
+| `bad_memory_used_count` | 0 |
+| `confidence_gate.passed` | true |
+
+Interpretation: recent Git context is useful and should stay, but it is not sufficient for
+resume-continuity. Fresh plan documents need an active cognitive representation or reliable project
+document indexing. The evidence does not justify adding graph traversal, obligation detection, lint,
+or raw observation lookup to the `orient` hot path.
+
 ## Conclusions
 
 1. Labeled telemetry works end to end for `scenario_id`, `arm`, outcome fields, missing context,
@@ -166,15 +245,18 @@ pilot successfully created the first labeled scenario/arm coverage.
 4. `orient` can still preserve important reviewed safety decisions, as shown by the M6 migration
    gate scenario.
 5. Wrong-scope noise is visible and measurable now, which is useful.
+6. The focused rerun shows recent Git context improves artifact visibility, but does not replace
+   active MemoryItem guidance or project-doc indexing for current plan continuity.
 
 ## Recommended Next Step
 
 Implement the smallest ranking/capture improvement that helps `resume_session` orientation retrieve
 the latest project plan:
 
-- ensure the dogfood protocol and latest plan decision are available as MemoryItem or indexed
-  document evidence,
-- prefer recent current-branch docs/commits for resume-continuity prompts,
+- ensure the research method, dogfood protocol, dogfood pilot, and latest plan decision are
+  available as active MemoryItem guidance or indexed document evidence,
+- prefer current-plan MemoryItems and recent current-branch docs/commits for resume-continuity
+  prompts,
 - link the dogfood protocol to the M6 migration-gate decision,
 - rerun `resume_continuity_001` and `stale_scope_rejection_001` after the change.
 
