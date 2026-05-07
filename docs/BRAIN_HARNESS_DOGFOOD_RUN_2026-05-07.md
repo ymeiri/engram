@@ -574,3 +574,49 @@ Decision: the next implementation slice should be current-plan freshness/superse
 graph, obligations, or M6 write/apply. The narrow target is to ensure a newly captured current-plan
 memory supersedes or suppresses older current-plan/resume-continuity guidance for the same project,
 then rerun the same three-intent regression set.
+
+### Current-Plan Supersession Regression
+
+Commit `3d91f53` implemented current-plan freshness/supersession. `capture_current_plan` now
+automatically marks older active same-scope current-plan memories as superseded, records supersedes
+links, and includes superseded entries in the knowledge commit. `orient` also has a resume-intent
+read guard that prioritizes the latest current-plan per scope and suppresses older current-plan
+items that were created before write-time supersession existed.
+
+Verification:
+
+- `cargo test -p engram-index` passed: 176 passed, 1 ignored.
+- `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
+- `cargo test -p engram-tests --test brain_harness_eval_tests` passed: 9 tests.
+- `cargo test -p engram-mcp` passed.
+
+Live refresh status: `/Users/yuval.meiri/.local/bin/engram` was reinstalled from the workspace and
+the global daemon was restarted on port 8765. A live
+`memory(action=capture_current_plan)` call created current-plan memory
+`019e03d6-de16-71e2-a477-33ea272e0d66` and knowledge commit
+`019e03d6-de3e-71b3-bfb6-f5535801de7b`; the capture superseded 15 older active same-project
+current-plan items.
+
+The minimal regression set was rerun with external session label
+`codex://threads/current-plan-supersession-2026-05-07` and arm
+`post_current_plan_supersession`.
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `resume_continuity_001` | `019e03d6-fea9-7033-a11a-2cb695e8d096` | Passed. The new current-plan memory `019e03d6-de16-71e2-a477-33ea272e0d66` was the first active decision and first Brain Loop item. Feedback `019e03d7-1696-73a3-9877-fc512cd4c5ee` recorded `task_success=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+| `stale_scope_rejection_001` | `019e03d7-24ff-7c22-85b0-b09e6186a328` | Passed. The reviewed migration gate `019dc9ce-3b4e-7b02-80b5-04f56c84624e` surfaced in active decisions, so M6 write/apply remains blocked. Feedback `019e03d7-3893-7832-a57c-0f33bc401b26` recorded `task_success=true`, `usefulness_score=4`, `correctness_score=5`, and `noise_score=3`. |
+| `follow_user_preference_001` | `019e03d7-4529-7560-b130-2bea2ca5ea5a` | Passed. The commit-every-meaningful-step preference `019e03be-a9a5-7db2-848d-eb26ef78bcb5` was the first Brain Loop item, and the new current-plan memory was also visible. Feedback `019e03d7-55da-7522-96ac-9545f1b2502f` recorded `task_success=true`, `preference_adhered=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+
+Aggregate for this arm:
+
+- `trace_count`: 3.
+- `feedback_count`: 3.
+- `feedback_coverage`: 1.0.
+- `task_success_count`: 3.
+- `task_failure_count`: 0.
+- `bad_memory_used_count`: 0.
+
+Interpretation: current-plan freshness is now working in the live store for the original resume
+failure. The remaining measured issue is not stale current-plan accumulation; it is generic
+same-project topic noise, visible in the M6 gate probe where the current-plan memory ranked above
+the specific migration gate even though the gate still surfaced correctly.
