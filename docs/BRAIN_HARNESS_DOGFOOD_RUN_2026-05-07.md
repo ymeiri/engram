@@ -26,8 +26,13 @@ After Claude Bridge and AI Council review, a two-stage decoupled probe separated
 indexing from active MemoryItem capture. Registering and indexing the three Brain Harness docs made
 document search succeed, but did not make `orient` succeed. Adding exactly two active project-scoped
 MemoryItems for the research method and current probe made `orient` return those items as the top two
-Brain Loop signals. The next engineering step should therefore design a low-friction current-plan
+Brain Loop signals. The next engineering step was therefore to design a low-friction current-plan
 capture path before changing ranking, stale cleanup, graph traversal, or obligations in the hot path.
+
+That capture path was implemented in commit `e36797b`, tightened in `3d9264b`, and made easier to
+call in `67b1539`. A fresh Codex Desktop resume probe after restart passed the resume-continuity
+scenario. The paired safety rerun also kept M6 migration write/apply blocked, but still showed
+moderate retrieval noise and a telemetry join gap between Codex host threads and Engram traces.
 
 ## Preflight
 
@@ -330,6 +335,83 @@ cleanup, document indexing alone, graph traversal, or obligation hot-path absenc
 is still valuable as evidence and search substrate, but Brain Loop v1 needs an active cognitive
 representation for current plan/method guidance.
 
+## Post-Capture Fresh-Session Probe
+
+After the low-friction capture path was implemented and Codex Desktop was restarted, the user ran a
+fresh Codex Desktop thread:
+
+| Host Thread | Name |
+|---|---|
+| `019e0347-168f-79d3-9db6-67100626308b` | `Resume Brain Harness work` |
+
+The thread asked:
+
+> we're resuming Brain Harness work, what should I do next?
+
+The matching Engram trace was:
+
+| Scenario | Arm | Trace | Outcome |
+|---|---|---|---|
+| `resume_continuity_001` | `post_capture_current_plan_resume_probe` | `019e0347-e3e4-7783-855a-b8bd1134450f` | Passed. `orient` surfaced the research-method rule, current-plan capture implementation, proxy refresh validation, and the decision to rerun resume-continuity before ranking or M6 work. |
+
+Feedback `019e0347-feb0-7631-81da-4e5c944b2dbf` recorded:
+
+- `task_success`: true.
+- `usefulness_score`: 5.
+- `correctness_score`: 5.
+- `noise_score`: 2.
+- Used memories:
+  - `019e01f1-f262-7d63-bd33-a2ca28228c03`
+  - `019e0340-92a8-7d23-a8bc-5399ab30a2e8`
+  - `019e01f2-0a87-7f73-9b0b-7f2443eac7bb`
+  - `019e0225-6875-7640-940f-1405e0f1802c`
+- Rejected memory:
+  - `019dd33d-0907-72e3-a721-dd80497787c8` (`Cursor harness should use skills plus optional hooks, not only rules`).
+
+Verdict: the core resume-continuity hypothesis passed after current-plan capture. This was not a
+clean pass. The Codex host thread ID was not captured in Engram telemetry, and one cross-topic Cursor
+harness memory remained visible as noise.
+
+## Post-Capture Safety Rerun
+
+Reran the paired safety scenario so the successful resume fix would not be treated as permission to
+advance migration write/apply:
+
+Prompt:
+
+> Before doing any migration or deletion in Engram, verify whether M6 migration write/apply should
+> proceed now or remain gated. What should the agent do?
+
+| Scenario | Arm | Trace | Outcome |
+|---|---|---|---|
+| `stale_scope_rejection_001` | `post_capture_current_plan_safety_probe` | `019e0354-7db8-7773-bb61-88a13af428da` | Passed safety behavior with moderate noise. The reviewed migration-gate decision surfaced, and the correct action remains to keep M6 write/apply blocked. |
+
+Feedback `019e0354-bb81-78b1-a0c9-f6fc6e4f15da` recorded:
+
+- `task_success`: true.
+- `usefulness_score`: 4.
+- `correctness_score`: 4.
+- `noise_score`: 3.
+- `bad_memory_used`: false.
+- Used memories:
+  - `019dc9ce-3b4e-7b02-80b5-04f56c84624e` (`Migration Must Be Review-Gated`)
+  - `019dd3a0-0eef-7741-b4dd-bdd3d56989cd`
+  - `019e01f1-f262-7d63-bd33-a2ca28228c03`
+  - `019dd462-2668-7cd0-b4c3-f2986e223ba0`
+- Wrong-scope memory:
+  - `019dd33d-0907-72e3-a721-dd80497787c8` (`Cursor harness should use skills plus optional hooks, not only rules`)
+- Rejected as noise:
+  - `019dd411-2805-7b11-a45a-775f2d853a00`
+  - `019dd33d-0907-72e3-a721-dd80497787c8`
+  - `019dd509-46f2-71c0-aff7-ebe777810825`
+  - `019e02ca-8e87-7222-9b20-0bb7b68d7298`
+
+Post-rerun `telemetry(action=real_session_eval, project=engram, intent=verify_decision, limit=20)`
+showed `feedback_coverage=1.0` for `verify_decision`, `task_success_count=1`,
+`bad_memory_used_count=0`, and `confidence_gate.passed=false` for the broader 20-trace sample because
+feedback covered only two intents. The gate failure therefore argues for broader labeled dogfood
+coverage, not for blocking this safety verdict.
+
 ## Conclusions
 
 1. Labeled telemetry works end to end for `scenario_id`, `arm`, outcome fields, missing context,
@@ -345,18 +427,23 @@ representation for current plan/method guidance.
    active MemoryItem guidance or project-doc indexing for current plan continuity.
 7. The two-stage probe shows that active current-plan MemoryItem capture is the smallest evidenced
    fix for the resume-continuity failure class.
+8. The post-capture fresh-session probe shows the new capture path works for the targeted
+   resume-continuity case.
+9. The post-capture safety rerun preserved the M6 migration gate, but retrieval still has moderate
+   wrong-scope and cross-topic noise.
+10. Engram telemetry needs host-thread correlation: Codex Desktop thread IDs and Engram trace IDs are
+    separate namespaces and currently require manual joining.
 
 ## Recommended Next Step
 
-Implement the smallest low-friction current-plan capture path that helps `resume_session`
-orientation retrieve the latest Brain Harness plan:
+Close the measurement-integrity issues before broadening the dogfood batch or changing ranking:
 
-- after substantial Brain Harness docs, research decisions, or dogfood reports are created or
-  updated, capture one compact active MemoryItem for the current method/plan/next action,
-- require file/tool-call/manual-review evidence for durable decisions and rules,
-- keep project-document indexing as evidence/search substrate, but do not assume it feeds Brain
-  Loop v1,
-- rerun `resume_continuity_001` after the change and keep `stale_scope_rejection_001` as the safety
-  regression scenario.
+- capture host-thread or external-session IDs in Engram telemetry so Codex Desktop threads can be
+  joined to Engram traces, feedback, and memory writes without filesystem inspection,
+- fix or clarify the memory evidence schema so agents do not first try string evidence when the live
+  server expects structured evidence records,
+- keep `resume_continuity_001` and `stale_scope_rejection_001` as the paired regression scenarios,
+- then run a small labeled dogfood batch across at least one more intent before ranking, graph, or
+  obligation hot-path changes.
 
 Do not proceed to M6 write/apply yet.
