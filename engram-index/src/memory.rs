@@ -1170,6 +1170,7 @@ impl MemoryService {
             project: effective_project,
             cwd: input.cwd.as_deref(),
             query: input.prompt.as_deref(),
+            intent: input.intent.as_ref(),
             decisions: &active_decisions,
             rules: &active_rules,
             preferences: &preferences,
@@ -1748,6 +1749,7 @@ struct BrainLoopParts<'a> {
     project: Option<&'a str>,
     cwd: Option<&'a str>,
     query: Option<&'a str>,
+    intent: Option<&'a BrainHarnessIntent>,
     decisions: &'a [MemoryItem],
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
@@ -1809,6 +1811,8 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
             score: 0.0,
         },
     ];
+    let resume_current_plan = matches!(parts.intent, Some(BrainHarnessIntent::ResumeSession))
+        && parts.decisions.first().is_some_and(is_current_plan_item);
     if parts.query.is_some_and(|query| !query.trim().is_empty()) {
         let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
         for group in &mut groups {
@@ -1820,6 +1824,11 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
                 .map(|ranked| ranked.score)
                 .unwrap_or(0.0);
         }
+    }
+    if resume_current_plan {
+        groups[3].score = f32::INFINITY;
+    }
+    if parts.query.is_some_and(|query| !query.trim().is_empty()) || resume_current_plan {
         groups.sort_by(|left, right| {
             right
                 .score
@@ -3527,12 +3536,29 @@ mod tests {
         .with_tag(CURRENT_PLAN_TAG);
         latest.updated_at = OffsetDateTime::now_utc();
         let latest = service.capture_memory(latest).await.unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Brain Harness work follows research method",
+                    "Brain Harness development should be run through explicit research \
+                     questions, evidence levels, falsifiers, decision gates, and claim-ledger \
+                     updates.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
 
         let packet = service
             .orient(OrientInput {
                 project: Some("engram".to_string()),
                 prompt: Some(
-                    "I just restarted Codex and want to resume Engram Brain Harness work."
+                    "I just restarted Codex and want to resume Engram Brain Harness work. \
+                     What is the current plan, current gate, and next action?"
                         .to_string(),
                 ),
                 intent: Some(BrainHarnessIntent::ResumeSession),
