@@ -549,7 +549,6 @@ async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
     capture.content = Some(
         "Use compact active MemoryItems for current method, plan, and next action.".to_string(),
     );
-    capture.scope_type = Some("project".to_string());
     capture.project_name = Some("engram".to_string());
     capture.origin = Some("tool_result".to_string());
     capture.message = Some("Capture current Brain Harness plan".to_string());

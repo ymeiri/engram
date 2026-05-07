@@ -8725,7 +8725,11 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                     );
                 }
             }
-            let scope = parse_memory_scope(&request)?;
+            let mut scope_request = request.clone();
+            if scope_request.scope_type.is_none() && scope_request.project_name.is_some() {
+                scope_request.scope_type = Some("project".to_string());
+            }
+            let scope = parse_memory_scope(&scope_request)?;
             let writer = parse_writer(&request)?;
             let session_id = request
                 .session_id
