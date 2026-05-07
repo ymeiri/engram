@@ -11,6 +11,9 @@ the next agent decision better without forcing the agent to choose among special
   feedback for the exact orientation they received.
 - Rank active `MemoryItem` guidance by scope, prompt relevance, recency, confidence, review state,
   and freshness.
+- When recent context is requested, include a bounded current-branch Git commit summary in
+  repository context so resume prompts can see fresh project-plan commits without widening Brain
+  Loop beyond selected `MemoryItem` guidance.
 - Keep unreviewed or inferred claims out of active guidance; return them in `review_needed` with a
   recommended review action.
 - Return the Brain Loop v1 projection from the same selected memory as the raw orientation arrays.

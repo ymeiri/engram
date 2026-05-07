@@ -210,6 +210,33 @@ impl LocalCheckout {
     }
 }
 
+/// Recent Git commit context for a local checkout.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecentGitCommit {
+    /// Full commit SHA.
+    pub sha: String,
+    /// Commit subject line.
+    pub summary: String,
+    /// Changed paths reported for the commit, capped by the caller.
+    pub changed_paths: Vec<String>,
+}
+
+impl RecentGitCommit {
+    /// Create recent Git commit context.
+    #[must_use]
+    pub fn new(
+        sha: impl Into<String>,
+        summary: impl Into<String>,
+        changed_paths: Vec<String>,
+    ) -> Self {
+        Self {
+            sha: sha.into(),
+            summary: summary.into(),
+            changed_paths,
+        }
+    }
+}
+
 /// A component within a monorepo.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MonorepoComponent {
@@ -377,6 +404,9 @@ pub struct RepositoryContext {
     pub repository: GitRepository,
     /// Matched checkout.
     pub checkout: Option<LocalCheckout>,
+    /// Recent current-branch commits, when requested by the caller.
+    #[serde(default)]
+    pub recent_commits: Vec<RecentGitCommit>,
     /// Monorepo components containing the current path.
     pub matching_components: Vec<MonorepoComponent>,
     /// Projects linked to this repository.

@@ -25,19 +25,24 @@ use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange, MemoryCursor,
     MemoryItem, MemoryKind, MemoryScope, MemoryStatus, MemoryTrustMetadata, WriterProvenance,
 };
-use engram_core::repository::{MonorepoComponent, ProjectRepositoryLink, RepositoryContext};
+use engram_core::repository::{
+    MonorepoComponent, ProjectRepositoryLink, RecentGitCommit, RepositoryContext,
+};
 use engram_core::session::{Event, EventType};
 use engram_core::telemetry::{BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace};
 use engram_store::{Db, MemoryRepo, RepositoryRepo, SessionRepo, TelemetryRepo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
+use std::process::Command;
 use std::time::Instant;
 use time::OffsetDateTime;
 use tracing::info;
 
 const BRAIN_LOOP_TOP_ITEM_LIMIT: usize = 5;
 const BRAIN_LOOP_SUMMARY_CHAR_LIMIT: usize = 240;
+const ORIENT_RECENT_GIT_COMMIT_LIMIT: usize = 5;
+const ORIENT_RECENT_GIT_COMMIT_PATH_LIMIT: usize = 8;
 
 /// Relevance score for a memory item returned by changes_since.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -890,9 +895,12 @@ impl MemoryService {
         let cursor = self.current_cursor().await?;
         let active = self.list_active_memory(None).await?;
         let review = self.list_memory_needing_review(Some(limit)).await?;
-        let repository_context = self
+        let mut repository_context = self
             .resolve_repository_context(input.cwd.as_deref())
             .await?;
+        if input.include_recent_commits {
+            attach_recent_git_commits(&mut repository_context)?;
+        }
         let recent_commits = if input.include_recent_commits {
             self.list_commits(Some(limit)).await?
         } else {
@@ -1084,6 +1092,7 @@ impl MemoryService {
         Ok(Some(RepositoryContext {
             repository,
             checkout: Some(checkout),
+            recent_commits: Vec::new(),
             matching_components,
             linked_projects,
         }))
@@ -1708,6 +1717,22 @@ fn append_repository_section(lines: &mut Vec<String>, context: Option<&Repositor
             lines.push(format!("- Dirty: {is_dirty}"));
         }
     }
+    if !context.recent_commits.is_empty() {
+        lines.push("- Recent Git commits:".to_string());
+        for commit in &context.recent_commits {
+            let paths = if commit.changed_paths.is_empty() {
+                String::new()
+            } else {
+                format!(" [{}]", commit.changed_paths.join(", "))
+            };
+            lines.push(format!(
+                "  - {}: {}{}",
+                short_commit_sha(&commit.sha),
+                commit.summary,
+                paths
+            ));
+        }
+    }
     if context.matching_components.is_empty() {
         lines.push("- Matching components: none".to_string());
     } else {
@@ -1730,6 +1755,73 @@ fn append_repository_section(lines: &mut Vec<String>, context: Option<&Repositor
             .join(", ");
         lines.push(format!("- Linked projects: {projects}"));
     }
+}
+
+fn attach_recent_git_commits(context: &mut Option<RepositoryContext>) -> IndexResult<()> {
+    let Some(context) = context else {
+        return Ok(());
+    };
+    let Some(checkout) = &context.checkout else {
+        return Ok(());
+    };
+    context.recent_commits = recent_git_commits(Path::new(&checkout.local_path))?;
+    Ok(())
+}
+
+fn recent_git_commits(checkout_path: &Path) -> IndexResult<Vec<RecentGitCommit>> {
+    let limit = ORIENT_RECENT_GIT_COMMIT_LIMIT.to_string();
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(checkout_path)
+        .args(["log", "-n", limit.as_str(), "--pretty=format:%H%x1f%s"])
+        .output()?;
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut commits = Vec::new();
+    for line in stdout.lines() {
+        let Some((sha, summary)) = line.split_once('\u{1f}') else {
+            continue;
+        };
+        let sha = sha.trim();
+        commits.push(RecentGitCommit::new(
+            sha,
+            summary.trim(),
+            recent_git_commit_paths(checkout_path, sha)?,
+        ));
+    }
+    Ok(commits)
+}
+
+fn recent_git_commit_paths(checkout_path: &Path, sha: &str) -> IndexResult<Vec<String>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(checkout_path)
+        .args([
+            "show",
+            "--pretty=format:",
+            "--name-only",
+            "--diff-filter=ACMR",
+            sha,
+        ])
+        .output()?;
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(ORIENT_RECENT_GIT_COMMIT_PATH_LIMIT)
+        .map(str::to_string)
+        .collect())
+}
+
+fn short_commit_sha(sha: &str) -> &str {
+    sha.get(..12).unwrap_or(sha)
 }
 
 fn append_memory_section(lines: &mut Vec<String>, title: &str, items: &[MemoryItem]) {
@@ -3239,6 +3331,91 @@ mod tests {
         assert_eq!(checkout.head_sha.as_deref(), Some(current_head.as_str()));
         assert_eq!(checkout.is_dirty, Some(false));
         assert!(checkout.last_seen_at >= stale_seen_at);
+    }
+
+    #[tokio::test]
+    async fn orient_can_include_recent_current_branch_git_commits() {
+        if !git_available() {
+            return;
+        }
+        let (service, repo) = setup_service_with_repository_repo().await;
+        let dir = tempdir().unwrap();
+        run_git(dir.path(), &["init"]);
+        fs::write(dir.path().join("README.md"), "initial\n").unwrap();
+        commit_all(dir.path(), "Initial repository context");
+        fs::create_dir_all(dir.path().join("docs")).unwrap();
+        fs::write(
+            dir.path().join("docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md"),
+            "# Brain Harness Dogfood Protocol\n",
+        )
+        .unwrap();
+        commit_all(dir.path(), "Add brain harness dogfood protocol");
+
+        let repository = GitRepository::new("engram");
+        repo.save_repository(&repository).await.unwrap();
+        repo.save_checkout(
+            &LocalCheckout::new(dir.path().display().to_string()).with_repository(repository.id),
+        )
+        .await
+        .unwrap();
+        repo.save_project_link(&ProjectRepositoryLink::new(
+            "engram",
+            repository.id,
+            ProjectRepositoryRole::Primary,
+        ))
+        .await
+        .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                cwd: Some(dir.path().display().to_string()),
+                project: Some("engram".to_string()),
+                prompt: Some("resume after adding the dogfood protocol".to_string()),
+                include_recent_commits: true,
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        let recent_commits = &packet
+            .repository_context
+            .as_ref()
+            .expect("repository context should be resolved")
+            .recent_commits;
+        assert_eq!(
+            recent_commits.first().map(|commit| commit.summary.as_str()),
+            Some("Add brain harness dogfood protocol")
+        );
+        assert!(recent_commits[0]
+            .changed_paths
+            .iter()
+            .any(|path| path == "docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md"));
+        assert!(packet.context_pack.contains("## Repository Context"));
+        assert!(packet.context_pack.contains("Recent Git commits"));
+        assert!(packet
+            .context_pack
+            .contains("Add brain harness dogfood protocol"));
+        assert!(packet
+            .context_pack
+            .contains("docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md"));
+
+        let without_commits = service
+            .orient(OrientInput {
+                cwd: Some(dir.path().display().to_string()),
+                project: Some("engram".to_string()),
+                include_recent_commits: false,
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert!(without_commits
+            .repository_context
+            .as_ref()
+            .expect("repository context should be resolved")
+            .recent_commits
+            .is_empty());
     }
 
     #[tokio::test]

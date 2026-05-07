@@ -915,6 +915,7 @@ impl RepositoryService {
         Ok(Some(RepositoryContext {
             repository,
             checkout: Some(checkout),
+            recent_commits: Vec::new(),
             matching_components,
             linked_projects,
         }))
