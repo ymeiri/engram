@@ -462,8 +462,9 @@ Verification:
 - `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
 
 Live refresh status: after commit `49d4c0f`, `/Users/yuval.meiri/.local/bin/engram` was reinstalled
-from the workspace and the global daemon was restarted successfully on port 8765. Codex Desktop
-still needs a restart so its MCP proxy and tool schema are reloaded.
+from the workspace and the global daemon was restarted successfully on port 8765. After Codex
+Desktop restart, the live MCP schema exposed the structured evidence shape and still accepts legacy
+string evidence.
 
 ### External Session Telemetry
 
@@ -484,8 +485,9 @@ Verification:
 - `cargo test -p engram-tests --test obligation_tests --test repo_tests` passed: 12 tests.
 
 Live refresh status: after commit `49d4c0f`, `/Users/yuval.meiri/.local/bin/engram` was reinstalled
-from the workspace and the global daemon was restarted successfully on port 8765. Codex Desktop
-still needs a restart so its MCP proxy and tool schema include `external_session_id`.
+from the workspace and the global daemon was restarted successfully on port 8765. After Codex
+Desktop restart, live `orient`, `search`, `telemetry`, and `memory` calls accepted
+`external_session_id`.
 
 ### Scope-Noise Diagnostic
 
@@ -502,3 +504,40 @@ This is therefore same-project cross-topic noise, not a broken project-scope fil
 Decision: do not patch scope filtering or ranking yet. Keep the item as a measured rejection/noise
 case, improve telemetry correlation next, then broaden dogfood with a third intent before making
 ranking or hot-path graph/obligation changes.
+
+### Third Intent: Follow User Preference
+
+After Codex Desktop restart, the third consensus intent was tested with scenario
+`follow_user_preference_001` and external session label
+`codex://threads/restarted-consensus-validation-2026-05-07`.
+
+| Arm | Trace | Outcome |
+|---|---|---|
+| `post_restart_external_session_probe` | `019e03bc-dbee-7e61-bb02-48c3f90d5991` | Failed the target preference check. `external_session_id` persisted, but `orient` did not surface the explicit commit-per-step preference in `Preferences`. Feedback `019e03be-8d54-74c1-8009-c3b1c555b498` recorded `task_success=false`, `preference_adhered=false`, `usefulness_score=2`, `correctness_score=3`, and `noise_score=4`. |
+| `post_restart_preference_search` | `019e03bd-05b1-7a11-bd6a-36e1647b8000` | Confirmed the missing-data diagnosis. Search for the commit preference returned indirect roadmap/closeout items but no direct active preference. Feedback `019e03bf-771d-78c0-9495-b499132788e0` recorded `task_success=false`, `preference_adhered=false`, `usefulness_score=1`, `correctness_score=2`, and `noise_score=5`. |
+| `post_preference_capture_probe` | `019e03be-b6c8-7cf2-b12d-d229ddba0b9f` | Passed after adding project-scoped preference memory `019e03be-a9a5-7db2-848d-eb26ef78bcb5` (`Commit every meaningful Engram step`). The preference appeared in the context pack `Preferences` section and as the top Brain Loop item. Feedback `019e03be-c99f-7a73-a1eb-aa9a74de3117` recorded `task_success=true`, `preference_adhered=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=3`. |
+
+The important result is not that ranking was fixed. The first two probes showed there was no direct
+MemoryItem for the user's workflow preference, so the correct small repair was to capture the
+preference as explicit user-stated memory with manual-review evidence. The rerun then showed that
+Brain Loop v1 can surface the preference once the data exists.
+
+Residual issue: same-project cross-topic noise remains. In the successful rerun, the Cursor harness
+memory `019dd33d-0907-72e3-a721-dd80497787c8` was still rejected as noise. This should stay measured
+rather than driving an immediate ranking or graph hot-path change.
+
+Updated telemetry snapshot for `follow_user_preference` after labeling all three traces:
+
+- `trace_count`: 3.
+- `feedback_count`: 3.
+- `feedback_coverage`: 1.0.
+- `task_success_count`: 1.
+- `task_failure_count`: 2.
+- `preference_adhered_count`: 1.
+- `preference_violated_count`: 2.
+- `bad_memory_used_count`: 0.
+
+Decision: keep `resume_continuity_001`, `stale_scope_rejection_001`, and
+`follow_user_preference_001` as the minimal regression set. The next high-confidence step is to run
+that three-intent set once more against the current daemon before any ranking, graph, obligation, or
+M6 write/apply change.
