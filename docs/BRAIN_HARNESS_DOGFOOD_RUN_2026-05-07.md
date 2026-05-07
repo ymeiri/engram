@@ -851,3 +851,36 @@ Expected failure modes:
 User judgment required: no. The scenario can be scored by checking whether the agent acts only on
 already-open obligations returned by `orient`, does not invent new obligations, and leaves any
 uncertain obligation for morning review.
+
+### `obligation_followthrough_001` Overnight Result
+
+| Arm | Trace | Outcome |
+|---|---|---|
+| `memoryitem_orient` | `019e0418-b134-74a0-9c8e-5bfd5c4832fd` | Passed as agent self-report, but only for the empty-obligation case. `orient` returned `obligation_summary.available=true`, `returned_count=0`, and `open_obligations=[]`. |
+
+Feedback `019e0418-dd6a-7e82-b89a-a5212ed07c19` recorded:
+
+- `task_success`: true.
+- `preference_adhered`: true.
+- `bad_memory_used`: false.
+- `usefulness_score`: 4.
+- `correctness_score`: 5.
+- `noise_score`: 3.
+- Used memories:
+  - `019e0412-244f-7d70-b595-6de85e4dab41`
+    (`Autonomous overnight plan: no M6, run honest orient dogfood arms`).
+  - `019e01f1-f262-7d63-bd33-a2ca28228c03`
+    (`Brain Harness work follows research method`).
+  - `019e03be-a9a5-7db2-848d-eb26ef78bcb5`
+    (`Commit every meaningful Engram step`).
+  - `019dd462-2668-7cd0-b4c3-f2986e223ba0`
+    (`Direct CLI store commands conflict with running global daemon`).
+- Rejected as not a current open obligation:
+  - `019dd3a0-0eef-7741-b4dd-bdd3d56989cd`
+    (`Migration inventory now supports durable batch progression`).
+
+Interpretation: `orient` can expose an empty open-obligation set without causing the agent to
+invent work. This is useful but limited evidence. It does not prove that `orient` will surface a
+real already-open obligation when one exists. The correct next action is to continue to telemetry
+summary and morning review, not to change obligation lifecycle detection or add obligation logic to
+the hot path.
