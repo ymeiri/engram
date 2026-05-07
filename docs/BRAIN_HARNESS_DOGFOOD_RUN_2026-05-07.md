@@ -884,3 +884,74 @@ invent work. This is useful but limited evidence. It does not prove that `orient
 real already-open obligation when one exists. The correct next action is to continue to telemetry
 summary and morning review, not to change obligation lifecycle detection or add obligation logic to
 the hot path.
+
+### Overnight Telemetry Snapshot
+
+`telemetry(action=real_session_eval, project=engram, limit=100)` after both overnight traces:
+
+| Field | Value |
+|---|---:|
+| `trace_count` | 100 |
+| `feedback_count` | 60 |
+| `feedback_coverage` | 0.60 |
+| `distinct_scenario_count` | 16 |
+| `distinct_arm_count` | 32 |
+| `external_session_trace_count` | 28 |
+| `distinct_external_session_count` | 5 |
+| `outcome_feedback_count` | 44 |
+| `task_success_count` | 35 |
+| `task_failure_count` | 9 |
+| `bad_memory_used_count` | 1 |
+| `confidence_gate.passed` | true |
+| `confidence_gate.requires_user_approval` | true |
+| `scenario_counts.decision_continuity_001` | 1 |
+| `scenario_counts.obligation_followthrough_001` | 1 |
+
+The two autonomous overnight traces both have feedback and both passed as agent self-report.
+
+| Scenario | Trace | Feedback | Result |
+|---|---|---|---|
+| `decision_continuity_001` | `019e0417-d4e6-7493-aaf3-fee0e1b56a43` | `019e0417-f625-7b03-93c0-9a08a77870ad` | Passed; current plan and research method guided the next step. |
+| `obligation_followthrough_001` | `019e0418-b134-74a0-9c8e-5bfd5c4832fd` | `019e0418-dd6a-7e82-b89a-a5212ed07c19` | Passed for the empty-open-obligation case only. |
+
+Interpretation: the overnight continuation improved labeled scenario coverage and did not create
+bad-memory use, but it remains single-arm, agent-self-report evidence. The telemetry confidence gate
+passing is operational telemetry health, not permission to enter M6 inventory, migration apply,
+deletion, or legacy cleanup.
+
+### Morning Review Queue
+
+What changed overnight:
+
+- Added preregistration and result notes for `decision_continuity_001`.
+- Added preregistration and result notes for `obligation_followthrough_001`.
+- Submitted feedback for every overnight trace.
+- Preserved the non-destructive boundary: no M6 inventory, migration apply, deletion, or legacy
+  cleanup was run.
+
+What can be claimed:
+
+- `decision_continuity_001` has one labeled `memoryitem_orient` arm that passed as agent
+  self-report.
+- `obligation_followthrough_001` has one labeled `memoryitem_orient` arm that passed only for the
+  empty-open-obligation case.
+- The current-plan memory, research-method rule, and commit preference are usable in `orient`.
+
+What cannot be claimed:
+
+- The first labeled dogfood batch is not complete.
+- `memoryitem_orient` has not beaten `no_memory`; clean baseline arms are still missing.
+- The read-only M6 inventory gate is not cleared because inventory scope still needs explicit user
+  approval.
+- Obligation recall is not proven for a real open obligation.
+- User-confirmed usefulness is not established for the two overnight traces.
+
+Recommended morning decisions:
+
+1. Review and either confirm or correct the two agent-self-report labels.
+2. Decide whether to prioritize clean isolated `no_memory` arms for the four-scenario batch or grant
+   an explicit read-only M6 inventory scope.
+3. If obligation follow-through remains a priority, create or identify a real open obligation and
+   rerun `obligation_followthrough_001` before changing obligation lifecycle logic.
+4. Keep graph traversal, obligation detection, lint, raw observations, M6 migration, and legacy
+   cleanup outside the `orient` hot path until controlled evidence shows they are needed.
