@@ -1813,6 +1813,9 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
     ];
     let resume_current_plan = matches!(parts.intent, Some(BrainHarnessIntent::ResumeSession))
         && parts.decisions.first().is_some_and(is_current_plan_item);
+    let follow_user_preference =
+        matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference))
+            && !parts.preferences.is_empty();
     if parts.query.is_some_and(|query| !query.trim().is_empty()) {
         let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
         for group in &mut groups {
@@ -1828,7 +1831,13 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
     if resume_current_plan {
         groups[3].score = f32::INFINITY;
     }
-    if parts.query.is_some_and(|query| !query.trim().is_empty()) || resume_current_plan {
+    if follow_user_preference {
+        groups[1].score = f32::INFINITY;
+    }
+    if parts.query.is_some_and(|query| !query.trim().is_empty())
+        || resume_current_plan
+        || follow_user_preference
+    {
         groups.sort_by(|left, right| {
             right
                 .score
@@ -3581,6 +3590,61 @@ mod tests {
             service.get_memory(&old.id).await.unwrap().unwrap().status,
             MemoryStatus::Active,
             "resume guard should not mutate existing records"
+        );
+    }
+
+    #[tokio::test]
+    async fn orient_brain_loop_prioritizes_preference_for_follow_preference_intent() {
+        let service = setup_service().await;
+        let preference = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Preference,
+                    "Commit every meaningful Engram step",
+                    "When developing Engram, create a focused git commit after each meaningful \
+                     implementation, validation, or documentation step. Keep unrelated \
+                     user-owned files, such as AGENTS.md, out of those commits unless the user \
+                     explicitly asks to include them.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Decision,
+                "Cursor workflow preference uses generated harness files",
+                "Cursor harness workflow decisions can mention user workflow, generated files, \
+                 settings, commits, and what to keep out of local configuration.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            ))
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "We are changing Engram code and documentation. What user workflow \
+                     preference should I follow after each meaningful step, and what should I \
+                     keep out of the commit?"
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::FollowUserPreference),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(preference.id)
         );
     }
 
