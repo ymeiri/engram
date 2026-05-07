@@ -461,8 +461,9 @@ Verification:
 
 - `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
 
-This change still needs the installed Engram binary and running daemon to be refreshed before live
-Codex MCP calls receive the new behavior.
+Live refresh status: after commit `49d4c0f`, `/Users/yuval.meiri/.local/bin/engram` was reinstalled
+from the workspace and the global daemon was restarted successfully on port 8765. Codex Desktop
+still needs a restart so its MCP proxy and tool schema are reloaded.
 
 ### External Session Telemetry
 
@@ -482,8 +483,9 @@ Verification:
 - `cargo test -p engram-tests --test brain_harness_eval_tests` passed: 9 tests.
 - `cargo test -p engram-tests --test obligation_tests --test repo_tests` passed: 12 tests.
 
-This change also needs the installed Engram binary and running daemon to be refreshed before live
-Codex MCP calls can submit or report `external_session_id`.
+Live refresh status: after commit `49d4c0f`, `/Users/yuval.meiri/.local/bin/engram` was reinstalled
+from the workspace and the global daemon was restarted successfully on port 8765. Codex Desktop
+still needs a restart so its MCP proxy and tool schema include `external_session_id`.
 
 ### Scope-Noise Diagnostic
 
