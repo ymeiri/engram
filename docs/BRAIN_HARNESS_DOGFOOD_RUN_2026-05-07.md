@@ -22,6 +22,13 @@ the current research method and dogfood plan. Diagnostic search did not return t
 docs as document results. The next fix should therefore target active MemoryItem capture/promotion
 or project-doc indexing for current plan documents, not graph/obligation hot-path expansion.
 
+After Claude Bridge and AI Council review, a two-stage decoupled probe separated project-document
+indexing from active MemoryItem capture. Registering and indexing the three Brain Harness docs made
+document search succeed, but did not make `orient` succeed. Adding exactly two active project-scoped
+MemoryItems for the research method and current probe made `orient` return those items as the top two
+Brain Loop signals. The next engineering step should therefore design a low-friction current-plan
+capture path before changing ranking, stale cleanup, graph traversal, or obligations in the hot path.
+
 ## Preflight
 
 ### Corpus Shape
@@ -235,29 +242,121 @@ resume-continuity. Fresh plan documents need an active cognitive representation 
 document indexing. The evidence does not justify adding graph traversal, obligation detection, lint,
 or raw observation lookup to the `orient` hot path.
 
+## Two-Stage Missing-Signal Probe
+
+Claude Bridge and AI Council agreed on a decoupled probe: first make the missing Brain Harness docs
+available as documents, then add only one or two active MemoryItems if `orient` still misses the
+current plan. This tested whether the problem was missing document evidence, missing active memory,
+or ranking/noise.
+
+### Stage 1: Register and Index Docs
+
+Registered the three missing Brain Harness documents in the knowledge registry:
+
+| Document | Registry ID |
+|---|---|
+| `docs/BRAIN_HARNESS_RESEARCH_METHOD.md` | `019e01ef-420b-7733-b39d-6048ade20598` |
+| `docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md` | `019e01ef-4eb1-7211-88e1-f667d8e5990f` |
+| `docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md` | `019e01ef-5aa7-7eb0-8781-eb7a1714a852` |
+
+Indexed the same files into the document layer:
+
+| Document | Chunks |
+|---|---:|
+| `docs/BRAIN_HARNESS_RESEARCH_METHOD.md` | 29 |
+| `docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md` | 18 |
+| `docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md` | 13 |
+
+Document search trace `019e01ef-b16c-79a0-b3a2-c379598ae47f` then returned the dogfood run,
+research method, and dogfood protocol as top document results. Feedback
+`019e01ef-ea72-7660-bd14-17934b2981df` marked this as successful document retrieval.
+
+However, the Stage 1 `orient` rerun still failed:
+
+| Arm | Trace | Outcome |
+|---|---|---|
+| `memoryitem_orient_docs_indexed` | `019e01ef-c496-7e62-896c-4de5ce02d5f6` | Failed. Recent Git context remained useful, but active decisions and Brain Loop still missed the research method, dogfood docs, and immediate next action. |
+
+Feedback `019e01f0-025c-7c62-920c-2b9cb1c2af2d` recorded `task_success=false`,
+`noise_score=4`, and rejected the older harness-adapter memories that dominated the top results.
+
+Interpretation: document indexing fixed document search but not Brain Loop v1. Current `orient`
+does not pull document results into the hot path, so document availability alone cannot fix
+resume-continuity.
+
+### Stage 2: Add Minimal Active MemoryItems
+
+Added exactly two active project-scoped MemoryItems:
+
+| Kind | ID | Title |
+|---|---|---|
+| `rule` | `019e01f1-f262-7d63-bd33-a2ca28228c03` | Brain Harness work follows research method |
+| `decision` | `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` | Resume continuity probe uses active MemoryItems before ranking changes |
+
+The rule has manual-review, file, and git-commit evidence. The decision has tool-call evidence from
+the successful document search and failed Stage 1 `orient` trace, plus file evidence pointing at this
+dogfood report.
+
+Recorded Memory OS knowledge commit `019e01f3-085b-7031-9124-d0860267d16c` for the two added
+MemoryItems.
+
+The Stage 2 `orient` rerun then passed:
+
+| Arm | Trace | Outcome |
+|---|---|---|
+| `memoryitem_orient_docs_indexed_memoryitems` | `019e01f2-24f0-72e3-ac95-67f1dfb5ef3b` | Passed. Brain Loop top item 1 was the research-method rule. Top item 2 was the current resume-continuity probe decision. Active Rules and Active Decisions also surfaced the two items. |
+
+Feedback `019e01f2-4de3-72d0-a377-5dbcbe9e4896` recorded:
+
+- `task_success`: true.
+- `usefulness_score`: 5.
+- `correctness_score`: 5.
+- `noise_score`: 2.
+- Used memories:
+  - `019e01f1-f262-7d63-bd33-a2ca28228c03`
+  - `019e01f2-0a87-7f73-9b0b-7f2443eac7bb`
+
+Post-probe `telemetry(action=real_session_eval, scenario_id=resume_continuity_001, limit=20)`
+showed the three-arm result:
+
+| Arm | Task Success | Task Failure | Used Memory Count | Rejected Memory Count |
+|---|---:|---:|---:|---:|
+| `memoryitem_orient` | 0 | 1 | 0 | 5 |
+| `memoryitem_orient_docs_indexed` | 0 | 1 | 0 | 5 |
+| `memoryitem_orient_docs_indexed_memoryitems` | 1 | 0 | 2 | 0 |
+
+Interpretation: the failure was primarily missing active current-plan MemoryItems, not stale-memory
+cleanup, document indexing alone, graph traversal, or obligation hot-path absence. Document indexing
+is still valuable as evidence and search substrate, but Brain Loop v1 needs an active cognitive
+representation for current plan/method guidance.
+
 ## Conclusions
 
 1. Labeled telemetry works end to end for `scenario_id`, `arm`, outcome fields, missing context,
    used/rejected memory, and wrong-scope memory.
 2. Clean no-memory comparison still needs a fresh or isolated agent session; this pilot cannot
    claim treatment superiority.
-3. `orient` currently misses fresh docs/current-plan context in resume prompts.
+3. `orient` currently misses fresh docs/current-plan context unless that context is also represented
+   as active MemoryItems.
 4. `orient` can still preserve important reviewed safety decisions, as shown by the M6 migration
    gate scenario.
 5. Wrong-scope noise is visible and measurable now, which is useful.
 6. The focused rerun shows recent Git context improves artifact visibility, but does not replace
    active MemoryItem guidance or project-doc indexing for current plan continuity.
+7. The two-stage probe shows that active current-plan MemoryItem capture is the smallest evidenced
+   fix for the resume-continuity failure class.
 
 ## Recommended Next Step
 
-Implement the smallest ranking/capture improvement that helps `resume_session` orientation retrieve
-the latest project plan:
+Implement the smallest low-friction current-plan capture path that helps `resume_session`
+orientation retrieve the latest Brain Harness plan:
 
-- ensure the research method, dogfood protocol, dogfood pilot, and latest plan decision are
-  available as active MemoryItem guidance or indexed document evidence,
-- prefer current-plan MemoryItems and recent current-branch docs/commits for resume-continuity
-  prompts,
-- link the dogfood protocol to the M6 migration-gate decision,
-- rerun `resume_continuity_001` and `stale_scope_rejection_001` after the change.
+- after substantial Brain Harness docs, research decisions, or dogfood reports are created or
+  updated, capture one compact active MemoryItem for the current method/plan/next action,
+- require file/tool-call/manual-review evidence for durable decisions and rules,
+- keep project-document indexing as evidence/search substrate, but do not assume it feeds Brain
+  Loop v1,
+- rerun `resume_continuity_001` after the change and keep `stale_scope_rejection_001` as the safety
+  regression scenario.
 
 Do not proceed to M6 write/apply yet.
