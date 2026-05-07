@@ -606,6 +606,63 @@ async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_capture_current_plan_accepts_string_evidence_from_tool_schema() {
+    let state = setup_tool_state().await;
+
+    let capture: MemoryRequestNew = serde_json::from_value(serde_json::json!({
+        "action": "capture_current_plan",
+        "kind": "decision",
+        "title": "String evidence fallback",
+        "content": "Accept string evidence from MCP tool schemas while preserving evidence validation.",
+        "project_name": "engram",
+        "origin": "agent_observed",
+        "writer_harness": "codex",
+        "model_provider": "openai",
+        "model": "gpt-5.5",
+        "surface": "desktop",
+        "evidence": ["engram.orient trace string-evidence-test"]
+    }))
+    .expect("tool-schema-shaped request should deserialize");
+
+    let capture_response = tools::memory_new(&state, capture)
+        .await
+        .expect("string evidence fallback should work");
+    let capture_json = parse_json(&capture_response);
+
+    assert_eq!(capture_json["item"]["status"], "active");
+    assert_eq!(
+        capture_json["item"]["evidence"][0]["target"],
+        "engram.orient trace string-evidence-test"
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_memory_string_evidence_does_not_bypass_manual_review_policy() {
+    let state = setup_tool_state().await;
+
+    let capture: MemoryRequestNew = serde_json::from_value(serde_json::json!({
+        "action": "capture_current_plan",
+        "kind": "decision",
+        "title": "Reviewed inferred plan",
+        "content": "Agent-inferred current plans still require explicit manual_review evidence.",
+        "project_name": "engram",
+        "origin": "agent_inferred",
+        "writer_harness": "codex",
+        "model_provider": "openai",
+        "model": "gpt-5.5",
+        "surface": "desktop",
+        "evidence": ["agent inferred this plan from surrounding work"]
+    }))
+    .expect("tool-schema-shaped request should deserialize");
+
+    let err = tools::memory_new(&state, capture)
+        .await
+        .expect_err("string evidence must not satisfy manual review");
+
+    assert!(err.contains("manual_review evidence"));
+}
+
+#[tokio::test]
 async fn test_mcp_memory_export_vault() {
     let state = setup_tool_state().await;
 

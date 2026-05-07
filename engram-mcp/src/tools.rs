@@ -8562,6 +8562,9 @@ pub struct MemoryRequestNew {
     pub writer_session_id: Option<String>,
 
     /// Evidence backing the memory item
+    #[schemars(
+        description = "Evidence records as objects with kind, target, optional summary, and optional excerpt. String entries are accepted as legacy note evidence, but structured evidence is preferred."
+    )]
     #[serde(default)]
     pub evidence: Vec<MemoryEvidenceRequest>,
 
@@ -8627,7 +8630,7 @@ pub struct MemoryRequestNew {
 }
 
 /// Evidence request for Memory OS items.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize)]
 pub struct MemoryEvidenceRequest {
     /// Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review
     pub kind: String,
@@ -8637,6 +8640,82 @@ pub struct MemoryEvidenceRequest {
     pub summary: Option<String>,
     /// Optional excerpt or selector
     pub excerpt: Option<String>,
+}
+
+impl JsonSchema for MemoryEvidenceRequest {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MemoryEvidenceRequest".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "description": "Evidence backing a Memory OS item.",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "description": "Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review"
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Stable evidence target: ID, path, URL, or commit SHA"
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Optional human-readable summary"
+                },
+                "excerpt": {
+                    "type": "string",
+                    "description": "Optional excerpt or selector"
+                }
+            },
+            "required": ["kind", "target"],
+            "additionalProperties": false
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for MemoryEvidenceRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum EvidenceInput {
+            Object {
+                kind: String,
+                target: String,
+                summary: Option<String>,
+                excerpt: Option<String>,
+            },
+            Text(String),
+        }
+
+        match EvidenceInput::deserialize(deserializer)? {
+            EvidenceInput::Object {
+                kind,
+                target,
+                summary,
+                excerpt,
+            } => Ok(Self {
+                kind,
+                target,
+                summary,
+                excerpt,
+            }),
+            EvidenceInput::Text(target) => Ok(Self {
+                kind: "note".to_string(),
+                target,
+                summary: None,
+                excerpt: None,
+            }),
+        }
+    }
 }
 
 /// Knowledge commit change request.
