@@ -8793,7 +8793,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
         "capture_current_plan" | "capture-current-plan" => {
             if request.supersedes_id.is_some() {
                 return Err(
-                    "capture_current_plan does not supersede existing memory; capture the new plan, then use memory(action=supersede) explicitly".to_string(),
+                    "capture_current_plan automatically supersedes older same-scope current-plan memory; explicit supersedes_id is not accepted".to_string(),
                 );
             }
             let kind = request

@@ -33,7 +33,7 @@ use engram_core::session::{Event, EventType};
 use engram_core::telemetry::{BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace};
 use engram_store::{Db, MemoryRepo, RepositoryRepo, SessionRepo, TelemetryRepo};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
@@ -44,6 +44,7 @@ const BRAIN_LOOP_TOP_ITEM_LIMIT: usize = 5;
 const BRAIN_LOOP_SUMMARY_CHAR_LIMIT: usize = 240;
 const ORIENT_RECENT_GIT_COMMIT_LIMIT: usize = 5;
 const ORIENT_RECENT_GIT_COMMIT_PATH_LIMIT: usize = 8;
+const CURRENT_PLAN_TAG: &str = "current-plan";
 
 /// Relevance score for a memory item returned by changes_since.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -419,7 +420,7 @@ impl MemoryService {
             input.writer.clone(),
         )
         .with_status(MemoryStatus::Active)
-        .with_tag("current-plan");
+        .with_tag(CURRENT_PLAN_TAG);
 
         for evidence in input.evidence {
             item = item.with_evidence(evidence);
@@ -440,22 +441,36 @@ impl MemoryService {
                 item.status
             )));
         }
+        let (item, superseded_ids) = self.supersede_previous_current_plan_items(item).await?;
 
         let commit = if input.create_commit {
             let message = input
                 .commit_message
                 .unwrap_or_else(|| format!("Capture current plan: {}", item.title));
-            let change = MemoryChange::new(
+            let mut changes = vec![MemoryChange::new(
                 MemoryChangeType::Added,
                 item.title.clone(),
                 "Captured compact current-plan guidance for future resume orientation.",
             )
-            .with_item(item.id);
+            .with_item(item.id)];
+            for superseded_id in superseded_ids {
+                changes.push(
+                    MemoryChange::new(
+                        MemoryChangeType::Superseded,
+                        format!("Superseded current-plan memory {superseded_id}"),
+                        format!(
+                            "Superseded by newer current-plan memory {} for the same scope.",
+                            item.id
+                        ),
+                    )
+                    .with_item(superseded_id),
+                );
+            }
             Some(
                 self.commit_changes(
                     input.writer,
                     message,
-                    vec![change],
+                    changes,
                     input.session_id,
                     input.parent_id,
                 )
@@ -696,6 +711,67 @@ impl MemoryService {
                     .iter()
                     .any(|e| e.kind == EvidenceKind::Observation && e.target == target)
         }))
+    }
+
+    async fn supersede_previous_current_plan_items(
+        &self,
+        mut item: MemoryItem,
+    ) -> IndexResult<(MemoryItem, Vec<Id>)> {
+        let previous = self
+            .repo
+            .list_memory_items(Some(MemoryStatus::Active), None)
+            .await?
+            .into_iter()
+            .filter(|candidate| {
+                candidate.id != item.id
+                    && is_current_plan_item(candidate)
+                    && current_plan_scope_key(&candidate.scope)
+                        == current_plan_scope_key(&item.scope)
+            })
+            .collect::<Vec<_>>();
+
+        if previous.is_empty() {
+            return Ok((item, Vec::new()));
+        }
+
+        let superseded_ids = previous
+            .iter()
+            .map(|previous| previous.id)
+            .collect::<Vec<_>>();
+        for superseded_id in &superseded_ids {
+            if !item.supersedes.contains(superseded_id) {
+                item = item.with_superseded_item(*superseded_id);
+            }
+        }
+        item = item.with_evidence(
+            EvidenceRef::new(
+                EvidenceKind::ToolCall,
+                "memory(action=capture_current_plan)",
+            )
+            .with_summary(format!(
+                "Supersedes {} older active current-plan item(s) for the same scope.",
+                superseded_ids.len()
+            )),
+        );
+        self.repo.save_memory_item(&item).await?;
+
+        for previous_item in previous {
+            let superseded = previous_item
+                .with_status(MemoryStatus::Superseded)
+                .with_evidence(
+                    EvidenceRef::new(
+                        EvidenceKind::ToolCall,
+                        format!("memory(action=capture_current_plan):{}", item.id),
+                    )
+                    .with_summary(format!(
+                        "Superseded by newer current-plan memory {} for the same scope.",
+                        item.id
+                    )),
+                );
+            self.repo.save_memory_item(&superseded).await?;
+        }
+
+        Ok((item, superseded_ids))
     }
 
     async fn get_required_memory(&self, id: &Id) -> IndexResult<MemoryItem> {
@@ -1030,6 +1106,8 @@ impl MemoryService {
             input.cwd.as_deref(),
             input.prompt.as_deref(),
         );
+        let relevant_active =
+            prioritize_current_plan_for_resume(relevant_active, input.intent.as_ref());
         let mut relevant_review = filter_relevant(
             review,
             effective_project,
@@ -1249,6 +1327,89 @@ fn filter_relevant(
         .into_iter()
         .map(|ranked| ranked.item)
         .collect()
+}
+
+fn prioritize_current_plan_for_resume(
+    items: Vec<MemoryItem>,
+    intent: Option<&BrainHarnessIntent>,
+) -> Vec<MemoryItem> {
+    if !matches!(intent, Some(BrainHarnessIntent::ResumeSession)) {
+        return items;
+    }
+
+    let mut latest_by_scope: HashMap<String, MemoryItem> = HashMap::new();
+    for item in items.iter().filter(|item| is_current_plan_item(item)) {
+        let scope_key = current_plan_scope_key(&item.scope);
+        let should_replace = latest_by_scope
+            .get(&scope_key)
+            .map(|existing| {
+                item.updated_at > existing.updated_at
+                    || (item.updated_at == existing.updated_at
+                        && item.id.to_string() > existing.id.to_string())
+            })
+            .unwrap_or(true);
+        if should_replace {
+            latest_by_scope.insert(scope_key, item.clone());
+        }
+    }
+
+    if latest_by_scope.is_empty() {
+        return items;
+    }
+
+    let mut latest_current_plans = latest_by_scope.into_values().collect::<Vec<_>>();
+    latest_current_plans.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| right.id.to_string().cmp(&left.id.to_string()))
+    });
+
+    let mut prioritized = latest_current_plans;
+    prioritized.extend(items.into_iter().filter(|item| !is_current_plan_item(item)));
+    prioritized
+}
+
+fn is_current_plan_item(item: &MemoryItem) -> bool {
+    item.tags
+        .iter()
+        .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
+}
+
+fn current_plan_scope_key(scope: &MemoryScope) -> String {
+    match scope {
+        MemoryScope::Global => "global".to_string(),
+        MemoryScope::User => "user".to_string(),
+        MemoryScope::Project { project_name, .. } => {
+            format!("project:{}", project_name.to_lowercase())
+        }
+        MemoryScope::Task {
+            project_name,
+            task_name,
+            ..
+        } => format!(
+            "task:{}/{}",
+            project_name.as_deref().unwrap_or("").to_lowercase(),
+            task_name.to_lowercase()
+        ),
+        MemoryScope::Entity { entity_name, .. } => {
+            format!("entity:{}", entity_name.to_lowercase())
+        }
+        MemoryScope::Repository {
+            remote_url,
+            local_path,
+            ..
+        } => format!(
+            "repository:{}",
+            local_path
+                .as_deref()
+                .or(remote_url.as_deref())
+                .unwrap_or("")
+                .to_lowercase()
+        ),
+        MemoryScope::Session { session_id } => format!("session:{session_id}"),
+        MemoryScope::Custom { name } => format!("custom:{}", name.to_lowercase()),
+    }
 }
 
 fn resolve_orientation_project(
@@ -2218,6 +2379,24 @@ mod tests {
         .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test"))
     }
 
+    fn current_plan_input(project: &str, title: &str, content: &str) -> CurrentPlanCaptureInput {
+        CurrentPlanCaptureInput {
+            kind: MemoryKind::Decision,
+            title: title.to_string(),
+            content: content.to_string(),
+            scope: MemoryScope::project(project),
+            origin: ClaimOrigin::ToolResult,
+            writer: writer(),
+            evidence: vec![EvidenceRef::new(EvidenceKind::ToolCall, "unit-test")],
+            confidence: Some(0.9),
+            tags: Vec::new(),
+            create_commit: false,
+            commit_message: None,
+            session_id: None,
+            parent_id: None,
+        }
+    }
+
     fn run_git(cwd: &Path, args: &[&str]) {
         let output = Command::new("git")
             .arg("-C")
@@ -2462,6 +2641,78 @@ mod tests {
         assert_eq!(commit.change_count(), 1);
         assert_eq!(commit.changes[0].change_type, MemoryChangeType::Added);
         assert_eq!(commit.changes[0].item_id, Some(capture.item.id));
+    }
+
+    #[tokio::test]
+    async fn capture_current_plan_supersedes_previous_same_project_current_plan() {
+        let service = setup_service().await;
+
+        let old = service
+            .capture_current_plan(current_plan_input(
+                "engram",
+                "Old current plan",
+                "Resume from the old current plan.",
+            ))
+            .await
+            .unwrap()
+            .item;
+        let other_project = service
+            .capture_current_plan(current_plan_input(
+                "other",
+                "Other project current plan",
+                "Keep the other project plan active.",
+            ))
+            .await
+            .unwrap()
+            .item;
+        let mut input = current_plan_input(
+            "engram",
+            "New current plan",
+            "Resume from the new current plan.",
+        );
+        input.create_commit = true;
+        let capture = service.capture_current_plan(input).await.unwrap();
+        let new = capture.item;
+
+        assert!(new.supersedes.contains(&old.id));
+        assert!(!new.supersedes.contains(&other_project.id));
+        let commit = capture
+            .commit
+            .expect("superseding current-plan capture should create a commit");
+        assert_eq!(commit.change_count(), 2);
+        assert!(commit.changes.iter().any(|change| {
+            change.change_type == MemoryChangeType::Superseded && change.item_id == Some(old.id)
+        }));
+        assert_eq!(
+            service.get_memory(&old.id).await.unwrap().unwrap().status,
+            MemoryStatus::Superseded
+        );
+        assert_eq!(
+            service
+                .get_memory(&other_project.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active
+        );
+
+        let active_engram_current_plans = service
+            .list_active_memory(None)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|item| {
+                is_current_plan_item(item)
+                    && matches!(
+                        &item.scope,
+                        MemoryScope::Project { project_name, .. }
+                            if project_name == "engram"
+                    )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(active_engram_current_plans.len(), 1);
+        assert_eq!(active_engram_current_plans[0].id, new.id);
     }
 
     #[tokio::test]
@@ -3241,6 +3492,70 @@ mod tests {
                 && item.title == "Global preference"
                 && item.trust.memory_id == item.id
         }));
+    }
+
+    #[tokio::test]
+    async fn orient_resume_session_prioritizes_latest_current_plan_and_suppresses_older_ones() {
+        let service = setup_service().await;
+        let mut old = MemoryItem::new(
+            MemoryKind::Decision,
+            "User confirmed post-capture resume probe looked great",
+            "Older resume-continuity current plan that should not lead a new resume.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "old-current-plan"))
+        .with_tag(CURRENT_PLAN_TAG);
+        old.updated_at = OffsetDateTime::now_utc() - time::Duration::hours(1);
+        let old = service.capture_memory(old).await.unwrap();
+
+        let mut latest = MemoryItem::new(
+            MemoryKind::Decision,
+            "Three-intent regression points to current-plan supersession",
+            "Latest current plan: implement current-plan freshness before ranking or M6 changes.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            "latest-current-plan",
+        ))
+        .with_tag(CURRENT_PLAN_TAG);
+        latest.updated_at = OffsetDateTime::now_utc();
+        let latest = service.capture_memory(latest).await.unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "I just restarted Codex and want to resume Engram Brain Harness work."
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::ResumeSession),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet.active_decisions.first().map(|item| item.id),
+            Some(latest.id)
+        );
+        assert!(!packet.active_decisions.iter().any(|item| item.id == old.id));
+        assert_eq!(
+            packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(latest.id)
+        );
+        assert_eq!(
+            service.get_memory(&old.id).await.unwrap().unwrap().status,
+            MemoryStatus::Active,
+            "resume guard should not mutate existing records"
+        );
     }
 
     #[tokio::test]
