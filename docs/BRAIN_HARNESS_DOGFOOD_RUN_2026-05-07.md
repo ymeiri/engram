@@ -620,3 +620,84 @@ Interpretation: current-plan freshness is now working in the live store for the 
 failure. The remaining measured issue is not stale current-plan accumulation; it is generic
 same-project topic noise, visible in the M6 gate probe where the current-plan memory ranked above
 the specific migration gate even though the gate still surfaced correctly.
+
+### Topic-Noise Calibration
+
+The next slice tested whether prompt-specific reviewed safety gates can outrank broad same-project
+context without weakening resume continuity.
+
+Pre-patch live probe:
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `topic_noise_calibration_001` | `019e03db-a047-7883-ba07-3d5e6236e328` | Failed the desired ordering. The prompt asked whether M6 write/apply should proceed and what safety gate applies, but broad obligations/design memory ranked above the reviewed `Migration Must Be Review-Gated` decision. Feedback `019e03db-bdec-74f2-a7d3-0f172be10f9d` recorded `task_success=false`, `usefulness_score=3`, `correctness_score=3`, and `noise_score=4`. |
+
+Commit `51bba2e` added a generic guidance rank component for decision-gate prompts. The calibration
+does not special-case migration. It boosts reviewed memories with gate language only when the query
+itself asks for a decision/safety gate.
+
+Verification for `51bba2e`:
+
+- `cargo test -p engram-index current_plan` passed: 5 tests.
+- `cargo test -p engram-tests --test brain_harness_eval_tests` passed: 9 tests.
+- `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
+- `cargo test -p engram-index` passed: 177 passed, 1 ignored.
+- `git diff --check` passed.
+
+Live result after installing `51bba2e`:
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `topic_noise_calibration_001` | `019e03e2-b021-7aa3-99c1-f238e0b7a11c` | Passed. The reviewed migration gate ranked first in active decisions and Brain Loop. Feedback `019e03e2-cf4e-74f3-bc4c-439914b4e7b3` recorded `task_success=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+
+However, the resume control exposed a regression:
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `resume_continuity_001` | `019e03e2-dd5e-71d2-b235-3b0b2fdf98df` | Failed Brain Loop ordering. The latest current-plan stayed first in active decisions, but the reviewed research-method rule became the first Brain Loop item. Feedback `019e03e3-0f3a-76a2-b8c4-7ba81b074dc6` recorded `task_success=false`, `usefulness_score=3`, `correctness_score=3`, and `noise_score=4`. |
+
+Commit `0ed6d92` preserved resume current-plan Brain Loop ordering by making `resume_session`
+explicitly prefer the decision bucket when the top decision is a current-plan item.
+
+Verification for `0ed6d92`:
+
+- `cargo test -p engram-index current_plan` passed: 5 tests.
+- `cargo test -p engram-tests --test brain_harness_eval_tests` passed: 9 tests.
+- `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
+- `cargo test -p engram-index` passed: 177 passed, 1 ignored.
+- `git diff --check` passed.
+
+Live result after installing `0ed6d92`:
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `resume_continuity_001` | `019e03ea-17d6-7020-8dd4-ac3c3a7b27ca` | Passed. Latest current-plan was first in active decisions and Brain Loop. Feedback `019e03ea-294b-7c33-9fd8-0d8b743e401a` recorded `task_success=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+| `topic_noise_calibration_001` | `019e03ea-37f2-7140-9cfc-54a924303da5` | Passed. Reviewed migration gate remained first in active decisions and Brain Loop. Feedback `019e03ea-461b-73e2-8f20-e4d611991a38` recorded `task_success=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+| `follow_user_preference_001` | `019e03ea-5512-7052-8844-d20d69c0b51d` | Partial failure. The commit preference was present in `Preferences`, but Brain Loop started with an unrelated Cursor decision. Feedback `019e03ea-d701-7933-baee-aa72877d7797` recorded `task_success=false`, `usefulness_score=3`, `correctness_score=3`, and `noise_score=4`. |
+
+Commit `550280b` added the same kind of explicit-intent ordering for `follow_user_preference`: when
+the caller declares that intent and preferences are available, Brain Loop starts with the preference
+bucket.
+
+Verification for `550280b`:
+
+- `cargo test -p engram-index current_plan` passed: 5 tests.
+- `cargo test -p engram-index orient_brain_loop_prioritizes_preference_for_follow_preference_intent` passed.
+- `cargo test -p engram-index` passed: 178 passed, 1 ignored.
+- `cargo test -p engram-tests --test brain_harness_eval_tests` passed: 9 tests.
+- `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
+- `git diff --check` and `git diff --cached --check` passed.
+
+Final live result after installing `550280b` and restarting the daemon on port 8765:
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `follow_user_preference_001` | `019e03f0-a282-78a3-8319-babff64c0b89` | Passed. Brain Loop started with `Commit every meaningful Engram step`. Feedback `019e03f0-b3ff-7da1-a4d5-0501d14dba8a` recorded `task_success=true`, `preference_adhered=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+| `resume_continuity_001` | `019e03f0-c2fb-7740-a271-da0094bcbfb8` | Passed. Latest current-plan remained first in active decisions and Brain Loop. Feedback `019e03f0-d3c3-7fa2-995b-629cec94f61c` recorded `task_success=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+| `topic_noise_calibration_001` | `019e03f0-e9a7-7752-87f3-848fb33e5d01` | Passed. Reviewed migration gate remained first in active decisions and Brain Loop. Feedback `019e03f0-f9d9-79f2-bc5b-3215df4807dd` recorded `task_success=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`. |
+
+Interpretation: the narrow calibration is now validated against the three-intent regression set.
+Brain Loop can preserve the current-plan resume path, prioritize prompt-specific reviewed gates,
+and honor explicit user-preference intent without adding graph traversal or obligations to the hot
+path. The next high-confidence step is to capture a new current-plan memory for this validated
+state, then move to the next Brain Harness roadmap slice rather than broad ranking churn.
