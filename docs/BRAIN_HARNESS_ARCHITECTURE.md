@@ -687,6 +687,10 @@ deterministic scenarios, not yet real multi-session behavioral evals. A first re
 report now summarizes persisted traces and agent feedback as non-destructive evidence, but it is
 not a substitute for a real multi-session comparative eval.
 
+`docs/BRAIN_HARNESS_DOGFOOD_PROTOCOL.md` defines the next evidence step: a small read-only corpus
+preflight plus labeled live scenarios with `scenario_id`, `arm`, pre-registered success criteria,
+explicit outcome feedback, and anti-overfit rules.
+
 ### M4: Tiered Capture Policy
 
 - Implement per-kind validation in `capture_memory`.
@@ -802,7 +806,7 @@ Proceed in this order from the current checkpoint:
 2. Decide the confidence gate for MemoryItem dominance: deterministic M3 fixtures already pass, but
    real multi-session behavioral evidence is still sparse.
 3. Choose the next non-destructive evidence step:
-   - strengthen real-session telemetry/evals first, or
+   - run the dogfood protocol to strengthen labeled real-session telemetry/evals first, or
    - run read-only M6 inventory/review-export as provisional evidence gathering.
 4. Use the resulting evidence to tune ranking, review burden, and migration prioritization.
 5. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.

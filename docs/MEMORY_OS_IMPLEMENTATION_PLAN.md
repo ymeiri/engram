@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-05-06
+Last Updated: 2026-05-07
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -37,6 +37,12 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Generated agent harness adapters require the `telemetry` MCP tool and tell agents to keep
       `orient`/`search` trace IDs, then submit explicit outcome/gap feedback fields before final
       response when the result is assessable.
+- [x] Brain Harness dogfood protocol documented with a read-only corpus preflight, labeled
+      `scenario_id`/`arm` runs, feedback rubric, anti-overfit rules, and evidence-based next-step
+      routing.
+- [ ] First labeled Brain Harness dogfood batch: run at least 4 scenarios across at least 2 arms,
+      submit feedback for every trace, and route the next implementation step from
+      `telemetry(action=real_session_eval)`.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Review-gated migration and digest extraction flows; no automatic promotion from orphan, digest, or legacy data.
