@@ -464,6 +464,27 @@ Verification:
 This change still needs the installed Engram binary and running daemon to be refreshed before live
 Codex MCP calls receive the new behavior.
 
+### External Session Telemetry
+
+Commit `55e0817` implemented the second consensus hot-path issue by adding optional
+`external_session_id` correlation metadata. Agents can now pass a host/application session label,
+such as a Codex Desktop thread ID, through `orient`, `search`, `memory(action=changes_since)`,
+`telemetry(action=record_trace)`, and `telemetry(action=submit_feedback)`.
+
+Feedback inherits the trace external session label when the caller submits only `trace_id`, so
+after-the-fact agent feedback remains joinable to the originating host thread without repeating the
+label. The real-session eval report now includes external-session coverage counts.
+
+Verification:
+
+- `cargo test -p engram-tests --test telemetry_tests` passed: 9 tests.
+- `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
+- `cargo test -p engram-tests --test brain_harness_eval_tests` passed: 9 tests.
+- `cargo test -p engram-tests --test obligation_tests --test repo_tests` passed: 12 tests.
+
+This change also needs the installed Engram binary and running daemon to be refreshed before live
+Codex MCP calls can submit or report `external_session_id`.
+
 ### Scope-Noise Diagnostic
 
 Consensus review asked whether the recurring Cursor memory
