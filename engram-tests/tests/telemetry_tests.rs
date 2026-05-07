@@ -52,6 +52,7 @@ fn telemetry_request(action: &str) -> TelemetryRequest {
         project: None,
         agent: None,
         session_id: None,
+        external_session_id: None,
         returned_memory_ids: Vec::new(),
         returned_result_ids: Vec::new(),
         latency_ms: None,
@@ -342,6 +343,7 @@ async fn orient_with_intent_emits_trace_for_agent_feedback() {
             prompt: Some("continue telemetry implementation".to_string()),
             project: Some("engram".to_string()),
             agent: Some("codex".to_string()),
+            external_session_id: Some("codex://threads/orient-service-test".to_string()),
             intent: Some(BrainHarnessIntent::ImplementChange),
             scenario_id: Some("telemetry_implementation".to_string()),
             arm: Some("memory_items".to_string()),
@@ -360,6 +362,10 @@ async fn orient_with_intent_emits_trace_for_agent_feedback() {
 
     assert_eq!(packet.intent, Some(BrainHarnessIntent::ImplementChange));
     assert_eq!(trace.operation, BrainHarnessOperation::Orient);
+    assert_eq!(
+        trace.external_session_id.as_deref(),
+        Some("codex://threads/orient-service-test")
+    );
     assert_eq!(trace.intent, Some(BrainHarnessIntent::ImplementChange));
     assert_eq!(
         trace.scenario_id.as_deref(),
@@ -398,6 +404,7 @@ async fn changes_since_with_intent_emits_trace_for_agent_feedback() {
                 project: Some("engram".to_string()),
                 query: Some("telemetry trace".to_string()),
                 intent: Some(BrainHarnessIntent::ReviewMemory),
+                external_session_id: Some("codex://threads/changes-test".to_string()),
                 ..Default::default()
             },
         )
@@ -414,6 +421,10 @@ async fn changes_since_with_intent_emits_trace_for_agent_feedback() {
         .expect("trace should exist");
 
     assert_eq!(trace.operation, BrainHarnessOperation::ChangesSince);
+    assert_eq!(
+        trace.external_session_id.as_deref(),
+        Some("codex://threads/changes-test")
+    );
     assert_eq!(trace.intent, Some(BrainHarnessIntent::ReviewMemory));
     assert_eq!(trace.returned_memory_ids, vec![decision.id]);
 }
@@ -439,6 +450,7 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
     trace_request.arm = Some("memory_items".to_string());
     trace_request.query = Some("how does telemetry work?".to_string());
     trace_request.agent = Some("codex".to_string());
+    trace_request.external_session_id = Some("codex://threads/test-host-session".to_string());
     trace_request.returned_result_ids = vec!["result-1".to_string()];
     trace_request.latency_ms = Some(18);
 
@@ -449,6 +461,10 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
     let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
     assert_eq!(trace_json["trace"]["scenario_id"], "question_answering");
     assert_eq!(trace_json["trace"]["arm"], "memory_items");
+    assert_eq!(
+        trace_json["trace"]["external_session_id"],
+        "codex://threads/test-host-session"
+    );
 
     let mut feedback_request = telemetry_request("submit_feedback");
     feedback_request.trace_id = Some(trace_id);
@@ -468,6 +484,10 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
         .expect("submit_feedback should work");
     let feedback_json = parse_json(&feedback_response);
     assert_eq!(feedback_json["feedback"]["used_result_ids"][0], "result-1");
+    assert_eq!(
+        feedback_json["feedback"]["external_session_id"],
+        "codex://threads/test-host-session"
+    );
     assert_eq!(feedback_json["feedback"]["task_success"], true);
     assert_eq!(feedback_json["feedback"]["preference_adhered"], true);
 
@@ -484,6 +504,12 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
         .expect("real-session eval report should work");
     let report_json = parse_json(&report_response);
     assert_eq!(report_json["report"]["trace_count"], 1);
+    assert_eq!(report_json["report"]["external_session_trace_count"], 1);
+    assert_eq!(report_json["report"]["distinct_external_session_count"], 1);
+    assert_eq!(
+        report_json["report"]["unspecified_external_session_trace_count"],
+        0
+    );
     assert_eq!(report_json["report"]["feedback_count"], 1);
     assert_eq!(report_json["report"]["operation_counts"]["search"], 1);
     assert_eq!(
@@ -522,6 +548,7 @@ async fn mcp_orient_tags_trace_with_scenario_and_arm() {
             prompt: Some("continue controlled telemetry eval".to_string()),
             project: Some("engram".to_string()),
             agent: Some("codex".to_string()),
+            external_session_id: Some("codex://threads/orient-test".to_string()),
             intent: Some("verify_decision".to_string()),
             scenario_id: Some("controlled_eval_tagging".to_string()),
             arm: Some("memory_items".to_string()),
@@ -541,6 +568,10 @@ async fn mcp_orient_tags_trace_with_scenario_and_arm() {
         .expect("trace should exist");
 
     assert_eq!(trace.operation, BrainHarnessOperation::Orient);
+    assert_eq!(
+        trace.external_session_id.as_deref(),
+        Some("codex://threads/orient-test")
+    );
     assert_eq!(trace.intent, Some(BrainHarnessIntent::VerifyDecision));
     assert_eq!(
         trace.scenario_id.as_deref(),
@@ -598,6 +629,7 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
             arm: Some("memory_items".to_string()),
             agent: Some("codex".to_string()),
             session_id: None,
+            external_session_id: Some("codex://threads/search-test".to_string()),
             project: Some("engram".to_string()),
             cwd: None,
         },
@@ -630,6 +662,10 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         .expect("trace should exist");
 
     assert_eq!(trace.operation, BrainHarnessOperation::Search);
+    assert_eq!(
+        trace.external_session_id.as_deref(),
+        Some("codex://threads/search-test")
+    );
     assert_eq!(trace.intent, Some(BrainHarnessIntent::AnswerQuestion));
     assert_eq!(
         trace.scenario_id.as_deref(),

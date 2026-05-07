@@ -7,7 +7,7 @@ use engram_core::telemetry::{
     RealSessionEvalArmRow, RealSessionEvalIntentRow, RealSessionEvalReport,
 };
 use engram_store::{Db, TelemetryRepo};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use time::OffsetDateTime;
 
 const DEFAULT_REAL_SESSION_EVAL_LIMIT: usize = 10_000;
@@ -55,14 +55,18 @@ impl TelemetryService {
     }
 
     /// Submit agent feedback for a trace.
-    pub async fn submit_feedback(&self, feedback: AgentFeedback) -> IndexResult<AgentFeedback> {
-        validate_feedback(&feedback)?;
-        if self.repo.get_trace(&feedback.trace_id).await?.is_none() {
-            return Err(IndexError::NotFound(format!(
-                "trace not found: {}",
-                feedback.trace_id
-            )));
+    pub async fn submit_feedback(&self, mut feedback: AgentFeedback) -> IndexResult<AgentFeedback> {
+        let trace = self
+            .repo
+            .get_trace(&feedback.trace_id)
+            .await?
+            .ok_or_else(|| {
+                IndexError::NotFound(format!("trace not found: {}", feedback.trace_id))
+            })?;
+        if feedback.external_session_id.is_none() {
+            feedback.external_session_id = trace.external_session_id;
         }
+        validate_feedback(&feedback)?;
 
         self.repo.save_feedback(&feedback).await?;
         Ok(feedback)
@@ -355,6 +359,9 @@ struct TraceAggregation {
     operation_counts: BTreeMap<String, usize>,
     scenario_counts: BTreeMap<String, usize>,
     unspecified_intent_trace_count: usize,
+    external_session_trace_count: usize,
+    distinct_external_session_count: usize,
+    unspecified_external_session_trace_count: usize,
     unspecified_scenario_trace_count: usize,
     unspecified_arm_trace_count: usize,
     trace_intents: HashMap<Id, String>,
@@ -366,6 +373,9 @@ struct ReportRows {
     operation_counts: BTreeMap<String, usize>,
     scenario_counts: BTreeMap<String, usize>,
     unspecified_intent_trace_count: usize,
+    external_session_trace_count: usize,
+    distinct_external_session_count: usize,
+    unspecified_external_session_trace_count: usize,
     unspecified_scenario_trace_count: usize,
     unspecified_arm_trace_count: usize,
     intents: Vec<RealSessionEvalIntentRow>,
@@ -414,6 +424,10 @@ fn build_real_session_eval_report(
         operation_counts: aggregation.operation_counts,
         scenario_counts: aggregation.scenario_counts,
         unspecified_intent_trace_count: aggregation.unspecified_intent_trace_count,
+        external_session_trace_count: aggregation.external_session_trace_count,
+        distinct_external_session_count: aggregation.distinct_external_session_count,
+        unspecified_external_session_trace_count: aggregation
+            .unspecified_external_session_trace_count,
         unspecified_scenario_trace_count: aggregation.unspecified_scenario_trace_count,
         unspecified_arm_trace_count: aggregation.unspecified_arm_trace_count,
         intents,
@@ -431,6 +445,9 @@ fn aggregate_traces(traces: &[BrainHarnessTrace]) -> TraceAggregation {
     let mut operation_counts = BTreeMap::<String, usize>::new();
     let mut scenario_counts = BTreeMap::<String, usize>::new();
     let mut unspecified_intent_trace_count = 0;
+    let mut external_session_trace_count = 0;
+    let mut unspecified_external_session_trace_count = 0;
+    let mut external_session_ids = HashSet::<String>::new();
     let mut unspecified_scenario_trace_count = 0;
     let mut unspecified_arm_trace_count = 0;
     let mut trace_intents = HashMap::<Id, String>::new();
@@ -440,6 +457,12 @@ fn aggregate_traces(traces: &[BrainHarnessTrace]) -> TraceAggregation {
         let key = intent_key(trace);
         if trace.intent.is_none() {
             unspecified_intent_trace_count += 1;
+        }
+        if let Some(external_session_id) = normalized_label(trace.external_session_id.as_deref()) {
+            external_session_trace_count += 1;
+            external_session_ids.insert(external_session_id);
+        } else {
+            unspecified_external_session_trace_count += 1;
         }
         if let Some(scenario) = normalized_label(trace.scenario_id.as_deref()) {
             *scenario_counts.entry(scenario).or_default() += 1;
@@ -471,6 +494,9 @@ fn aggregate_traces(traces: &[BrainHarnessTrace]) -> TraceAggregation {
         operation_counts,
         scenario_counts,
         unspecified_intent_trace_count,
+        external_session_trace_count,
+        distinct_external_session_count: external_session_ids.len(),
+        unspecified_external_session_trace_count,
         unspecified_scenario_trace_count,
         unspecified_arm_trace_count,
         trace_intents,
@@ -520,6 +546,9 @@ fn report_from_rows(
         distinct_intent_count: rows.intents.len(),
         distinct_operation_count: rows.operation_counts.len(),
         unspecified_intent_trace_count: rows.unspecified_intent_trace_count,
+        external_session_trace_count: rows.external_session_trace_count,
+        distinct_external_session_count: rows.distinct_external_session_count,
+        unspecified_external_session_trace_count: rows.unspecified_external_session_trace_count,
         operation_counts: rows.operation_counts,
         distinct_scenario_count: rows.scenario_counts.len(),
         distinct_arm_count: rows
@@ -662,6 +691,13 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
                 .to_string(),
         );
     }
+    if report.unspecified_external_session_trace_count > 0 {
+        recommendations.push(
+            "Set external_session_id on telemetry traces when the host thread/session ID is known \
+             so traces, feedback, and host transcripts can be joined."
+                .to_string(),
+        );
+    }
     if report.distinct_scenario_count == 0 || report.distinct_arm_count == 0 {
         recommendations.push(
             "Use free-form scenario_id and arm on controlled eval traces so custom memory \
@@ -760,6 +796,7 @@ fn add_outcome_counts_to_arm_row(row: &mut RealSessionEvalArmRow, feedback: &Age
 }
 
 fn validate_trace(trace: &BrainHarnessTrace) -> IndexResult<()> {
+    validate_external_session_id(trace.external_session_id.as_deref())?;
     if trace.returned_memory_ids.is_empty()
         && trace.returned_result_ids.is_empty()
         && trace.query.as_deref().unwrap_or_default().trim().is_empty()
@@ -772,6 +809,7 @@ fn validate_trace(trace: &BrainHarnessTrace) -> IndexResult<()> {
 }
 
 fn validate_feedback(feedback: &AgentFeedback) -> IndexResult<()> {
+    validate_external_session_id(feedback.external_session_id.as_deref())?;
     validate_score("usefulness_score", feedback.usefulness_score)?;
     validate_score("correctness_score", feedback.correctness_score)?;
     validate_score("noise_score", feedback.noise_score)?;
@@ -802,6 +840,24 @@ fn validate_feedback(feedback: &AgentFeedback) -> IndexResult<()> {
         ));
     }
 
+    Ok(())
+}
+
+fn validate_external_session_id(external_session_id: Option<&str>) -> IndexResult<()> {
+    let Some(external_session_id) = external_session_id else {
+        return Ok(());
+    };
+    let trimmed = external_session_id.trim();
+    if trimmed.is_empty() {
+        return Err(IndexError::Parse(
+            "external_session_id must not be empty when provided".to_string(),
+        ));
+    }
+    if trimmed.len() > 256 {
+        return Err(IndexError::Parse(
+            "external_session_id must be 256 characters or fewer".to_string(),
+        ));
+    }
     Ok(())
 }
 

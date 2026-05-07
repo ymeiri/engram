@@ -166,6 +166,7 @@ async fn test_mcp_repo_detect_component_link_context_and_orient() {
             prompt: Some("continue implementation".to_string()),
             project: None,
             agent: Some("codex".to_string()),
+            external_session_id: None,
             intent: None,
             scenario_id: None,
             arm: None,

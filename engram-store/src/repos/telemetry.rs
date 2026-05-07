@@ -64,12 +64,14 @@ impl TelemetryRepo {
                 DEFINE INDEX IF NOT EXISTS idx_trace_operation ON brain_harness_trace FIELDS operation_key;
                 DEFINE INDEX IF NOT EXISTS idx_trace_intent ON brain_harness_trace FIELDS intent_key;
                 DEFINE INDEX IF NOT EXISTS idx_trace_session ON brain_harness_trace FIELDS session_id;
+                DEFINE INDEX IF NOT EXISTS idx_trace_external_session ON brain_harness_trace FIELDS external_session_id;
                 DEFINE INDEX IF NOT EXISTS idx_trace_project ON brain_harness_trace FIELDS project;
                 DEFINE INDEX IF NOT EXISTS idx_trace_created ON brain_harness_trace FIELDS created_at;
 
                 DEFINE TABLE IF NOT EXISTS agent_feedback SCHEMALESS;
                 DEFINE INDEX IF NOT EXISTS idx_feedback_trace ON agent_feedback FIELDS trace_id;
                 DEFINE INDEX IF NOT EXISTS idx_feedback_session ON agent_feedback FIELDS session_id;
+                DEFINE INDEX IF NOT EXISTS idx_feedback_external_session ON agent_feedback FIELDS external_session_id;
                 DEFINE INDEX IF NOT EXISTS idx_feedback_created ON agent_feedback FIELDS created_at;
                 "#,
             )
@@ -91,6 +93,7 @@ impl TelemetryRepo {
                     operation_key = $operation_key,
                     intent_key = $intent_key,
                     session_id = $session_id,
+                    external_session_id = $external_session_id,
                     project = $project,
                     created_at = $created_at
                 "#,
@@ -103,6 +106,7 @@ impl TelemetryRepo {
                 trace.intent.as_ref().map(std::string::ToString::to_string),
             ))
             .bind(("session_id", trace.session_id.map(|id| id.to_string())))
+            .bind(("external_session_id", trace.external_session_id.clone()))
             .bind(("project", trace.project.clone()))
             .bind(("created_at", format_rfc3339(trace.created_at)?))
             .await?;
@@ -165,6 +169,7 @@ impl TelemetryRepo {
                     feedback = $feedback,
                     trace_id = $trace_id,
                     session_id = $session_id,
+                    external_session_id = $external_session_id,
                     created_at = $created_at
                 "#,
             )
@@ -172,6 +177,7 @@ impl TelemetryRepo {
             .bind(("feedback", to_json(feedback)?))
             .bind(("trace_id", feedback.trace_id.to_string()))
             .bind(("session_id", feedback.session_id.map(|id| id.to_string())))
+            .bind(("external_session_id", feedback.external_session_id.clone()))
             .bind(("created_at", format_rfc3339(feedback.created_at)?))
             .await?;
 

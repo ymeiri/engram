@@ -3206,6 +3206,10 @@ pub struct SearchRequest {
     #[schemars(description = "Session ID for telemetry correlation")]
     pub session_id: Option<String>,
 
+    /// Host/application session label for telemetry correlation.
+    #[schemars(description = "Host/application session label for telemetry correlation")]
+    pub external_session_id: Option<String>,
+
     /// Project name for telemetry correlation.
     #[schemars(description = "Project name for telemetry correlation")]
     pub project: Option<String>,
@@ -3297,6 +3301,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
                     .map(|id| parse_id(id, "session ID"))
                     .transpose()?,
             )
+            .with_external_session_id(request.external_session_id.clone())
             .with_agent(request.agent.clone())
             .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
             .with_scenario_id(request.scenario_id.clone())
@@ -3383,6 +3388,8 @@ pub struct TelemetryRequest {
     pub agent: Option<String>,
     /// Session ID.
     pub session_id: Option<String>,
+    /// Host/application session label, such as a Codex Desktop thread ID.
+    pub external_session_id: Option<String>,
     /// Returned memory IDs for record_trace.
     #[serde(default)]
     pub returned_memory_ids: Vec<String>,
@@ -3454,6 +3461,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 .ok_or("operation required for record_trace")?;
             let mut trace = BrainHarnessTrace::new(operation)
                 .with_session(parse_optional_id(&request.session_id, "session ID")?)
+                .with_external_session_id(request.external_session_id.clone())
                 .with_agent(request.agent)
                 .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
                 .with_scenario_id(request.scenario_id)
@@ -3509,6 +3517,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             )?;
             let mut feedback = AgentFeedback::new(trace_id);
             feedback.session_id = parse_optional_id(&request.session_id, "session ID")?;
+            feedback.external_session_id = request.external_session_id;
             feedback.agent = request.agent;
             feedback.used_memory_ids = parse_id_vec(&request.used_memory_ids, "used memory ID")?;
             feedback.rejected_memory_ids =
@@ -7265,6 +7274,8 @@ pub struct OrientRequest {
     pub project: Option<String>,
     /// Agent/harness name
     pub agent: Option<String>,
+    /// Host/application session label for telemetry correlation
+    pub external_session_id: Option<String>,
     /// Caller intent for telemetry, e.g. resume_session, plan_work, debug_error
     pub intent: Option<String>,
     /// Free-form controlled eval scenario identifier for telemetry
@@ -7334,6 +7345,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
                 prompt: request.prompt,
                 project: project.clone(),
                 agent: request.agent,
+                external_session_id: request.external_session_id,
                 intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
                 scenario_id: request.scenario_id,
                 arm: request.arm,
@@ -8560,6 +8572,8 @@ pub struct MemoryRequestNew {
     pub actor: Option<String>,
     /// Session ID associated with the writer
     pub writer_session_id: Option<String>,
+    /// Host/application session label for telemetry correlation.
+    pub external_session_id: Option<String>,
 
     /// Evidence backing the memory item
     #[schemars(
@@ -9088,6 +9102,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                         cwd: request.cwd.clone(),
                         query: request.query.clone(),
                         intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
+                        external_session_id: request.external_session_id.clone(),
                     },
                 )
                 .await

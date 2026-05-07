@@ -75,6 +75,8 @@ pub struct MemoryChangesSinceOptions {
     pub query: Option<String>,
     /// Caller intent for telemetry correlation.
     pub intent: Option<BrainHarnessIntent>,
+    /// Optional host/application session label for telemetry correlation.
+    pub external_session_id: Option<String>,
 }
 
 /// Memory changes visible after a cursor.
@@ -212,6 +214,8 @@ pub struct OrientInput {
     pub project: Option<String>,
     /// Agent/harness name.
     pub agent: Option<String>,
+    /// Optional host/application session label for telemetry correlation.
+    pub external_session_id: Option<String>,
     /// Caller intent for telemetry correlation.
     pub intent: Option<BrainHarnessIntent>,
     /// Free-form controlled eval scenario identifier for telemetry correlation.
@@ -958,6 +962,7 @@ impl MemoryService {
 
         let returned_memory_ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
         let trace = BrainHarnessTrace::new(BrainHarnessOperation::ChangesSince)
+            .with_external_session_id(options.external_session_id.clone())
             .with_intent(options.intent.clone())
             .with_query(options.query.clone())
             .with_project(options.project.clone())
@@ -1110,6 +1115,7 @@ impl MemoryService {
             &relevant_review,
         ]);
         let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_external_session_id(input.external_session_id.clone())
             .with_agent(input.agent.clone())
             .with_intent(input.intent.clone())
             .with_scenario_id(input.scenario_id.clone())
@@ -3204,6 +3210,7 @@ mod tests {
                 project: Some("engram".to_string()),
                 cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
                 agent: Some("codex".to_string()),
+                external_session_id: None,
                 intent: None,
                 scenario_id: None,
                 arm: None,

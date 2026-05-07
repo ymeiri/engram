@@ -124,6 +124,8 @@ pub struct BrainHarnessTrace {
     pub id: Id,
     /// Optional session ID associated with the operation.
     pub session_id: Option<Id>,
+    /// Optional host/application session label supplied by the caller.
+    pub external_session_id: Option<String>,
     /// Agent or harness label.
     pub agent: Option<String>,
     /// Operation being measured.
@@ -161,6 +163,7 @@ impl BrainHarnessTrace {
         Self {
             id: Id::new(),
             session_id: None,
+            external_session_id: None,
             agent: None,
             operation,
             intent: None,
@@ -180,6 +183,13 @@ impl BrainHarnessTrace {
     #[must_use]
     pub const fn with_session(mut self, session_id: Option<Id>) -> Self {
         self.session_id = session_id;
+        self
+    }
+
+    /// Set the host/application session label.
+    #[must_use]
+    pub fn with_external_session_id(mut self, external_session_id: Option<String>) -> Self {
+        self.external_session_id = external_session_id;
         self
     }
 
@@ -263,6 +273,8 @@ pub struct AgentFeedback {
     pub trace_id: Id,
     /// Optional session ID.
     pub session_id: Option<Id>,
+    /// Optional host/application session label supplied by the caller.
+    pub external_session_id: Option<String>,
     /// Agent or harness label.
     pub agent: Option<String>,
     /// Memory IDs the agent reports using.
@@ -316,6 +328,7 @@ impl AgentFeedback {
             id: Id::new(),
             trace_id,
             session_id: None,
+            external_session_id: None,
             agent: None,
             used_memory_ids: Vec::new(),
             rejected_memory_ids: Vec::new(),
@@ -383,6 +396,12 @@ pub struct RealSessionEvalReport {
     pub distinct_operation_count: usize,
     /// Traces that did not provide an intent.
     pub unspecified_intent_trace_count: usize,
+    /// Number of traces with a caller-supplied external session label.
+    pub external_session_trace_count: usize,
+    /// Number of distinct caller-supplied external session labels in the sample.
+    pub distinct_external_session_count: usize,
+    /// Traces that did not provide an external session label.
+    pub unspecified_external_session_trace_count: usize,
     /// Trace counts grouped by operation.
     pub operation_counts: BTreeMap<String, usize>,
     /// Number of distinct non-empty scenario identifiers in the sample.
