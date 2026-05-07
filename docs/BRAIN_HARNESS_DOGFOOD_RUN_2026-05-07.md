@@ -447,3 +447,35 @@ Close the measurement-integrity issues before broadening the dogfood batch or ch
   obligation hot-path changes.
 
 Do not proceed to M6 write/apply yet.
+
+## Consensus Follow-Up: Hot-Path Correctness
+
+### Evidence Schema Boundary
+
+Commit `333e5c2` fixed the first consensus hot-path issue by making the Memory MCP boundary tolerate
+the `evidence: string[]` shape exposed to agents while keeping structured evidence objects as the
+preferred schema. String evidence is stored as generic `note` evidence, so it does not satisfy
+`manual_review` requirements for origins that require review.
+
+Verification:
+
+- `cargo test -p engram-tests --test memory_tests` passed: 22 tests.
+
+This change still needs the installed Engram binary and running daemon to be refreshed before live
+Codex MCP calls receive the new behavior.
+
+### Scope-Noise Diagnostic
+
+Consensus review asked whether the recurring Cursor memory
+`019dd33d-0907-72e3-a721-dd80497787c8` was a scope-filter defect. Direct inspection shows it is not
+wrong project scope: the memory is active, project-scoped to `engram`, and tagged
+`memory-os`, `harness`, `cursor`, `research`, and `design`.
+
+A live diagnostic orient run with scenario `stale_scope_rejection_001`, arm
+`scope_noise_diagnostic`, and trace `019e038d-8cfa-70c1-8da2-680d7687f7d7` reproduced the behavior:
+the reviewed migration-gate memory surfaced, and the Cursor harness memory also remained visible.
+This is therefore same-project cross-topic noise, not a broken project-scope filter.
+
+Decision: do not patch scope filtering or ranking yet. Keep the item as a measured rejection/noise
+case, improve telemetry correlation next, then broaden dogfood with a third intent before making
+ranking or hot-path graph/obligation changes.
