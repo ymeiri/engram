@@ -887,30 +887,35 @@ the hot path.
 
 ### Overnight Telemetry Snapshot
 
-`telemetry(action=real_session_eval, project=engram, limit=100)` after both overnight traces:
+`telemetry(action=real_session_eval, project=engram, limit=100)` after the overnight continuation
+traces:
 
 | Field | Value |
 |---|---:|
 | `trace_count` | 100 |
-| `feedback_count` | 60 |
-| `feedback_coverage` | 0.60 |
+| `feedback_count` | 61 |
+| `feedback_coverage` | 0.61 |
 | `distinct_scenario_count` | 16 |
 | `distinct_arm_count` | 32 |
 | `external_session_trace_count` | 28 |
 | `distinct_external_session_count` | 5 |
-| `outcome_feedback_count` | 44 |
-| `task_success_count` | 35 |
+| `outcome_feedback_count` | 45 |
+| `task_success_count` | 36 |
 | `task_failure_count` | 9 |
+| `preference_adhered_count` | 35 |
 | `bad_memory_used_count` | 1 |
 | `confidence_gate.passed` | true |
 | `confidence_gate.requires_user_approval` | true |
 | `scenario_counts.decision_continuity_001` | 1 |
 | `scenario_counts.obligation_followthrough_001` | 1 |
+| `scenario_counts.overnight_autonomous_execution_2026_05_07` | 1 |
 
-The two autonomous overnight traces both have feedback and both passed as agent self-report.
+All three continuation traces have feedback. The two dogfood scenario traces both passed as
+agent self-report; the startup orientation trace also passed as execution-boundary feedback.
 
 | Scenario | Trace | Feedback | Result |
 |---|---|---|---|
+| `overnight_autonomous_execution_2026_05_07` | `019e0417-0f40-7c10-8700-340aef8be5c9` | `019e0419-ec99-7c13-b492-d53fbb93a918` | Passed; startup orientation recovered the approved boundary and current plan. |
 | `decision_continuity_001` | `019e0417-d4e6-7493-aaf3-fee0e1b56a43` | `019e0417-f625-7b03-93c0-9a08a77870ad` | Passed; current plan and research method guided the next step. |
 | `obligation_followthrough_001` | `019e0418-b134-74a0-9c8e-5bfd5c4832fd` | `019e0418-dd6a-7e82-b89a-a5212ed07c19` | Passed for the empty-open-obligation case only. |
 
@@ -925,7 +930,8 @@ What changed overnight:
 
 - Added preregistration and result notes for `decision_continuity_001`.
 - Added preregistration and result notes for `obligation_followthrough_001`.
-- Submitted feedback for every overnight trace.
+- Submitted feedback for every overnight continuation trace, including the startup orientation
+  trace.
 - Preserved the non-destructive boundary: no M6 inventory, migration apply, deletion, or legacy
   cleanup was run.
 
