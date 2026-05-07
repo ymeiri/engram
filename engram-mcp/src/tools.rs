@@ -23,9 +23,9 @@ use engram_core::telemetry::{
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, DigestExtractionOptions, DigestExtractionReviewApplyOptions,
-    DigestInventoryOptions, DigestService, DigestSourceIndexOptions,
-    DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupPlan,
+    CoordinationService, CurrentPlanCaptureInput, DigestExtractionOptions,
+    DigestExtractionReviewApplyOptions, DigestInventoryOptions, DigestService,
+    DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupPlan,
     DocumentOrphanCleanupPlanOptions, DocumentOrphanQuarantineReviewApplyOptions,
     DocumentOrphanQuarantineReviewOptions, DocumentOrphanQuarantineReviewPrioritizationOptions,
     DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
@@ -8471,9 +8471,9 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
 /// Consolidated request for Memory OS operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryRequestNew {
-    /// Action to perform: add, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
+    /// Action to perform: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
     #[schemars(
-        description = "Action: add, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
+        description = "Action: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
     )]
     pub action: String,
 
@@ -8694,6 +8694,77 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "capture_current_plan" | "capture-current-plan" => {
+            if request.supersedes_id.is_some() {
+                return Err(
+                    "capture_current_plan does not supersede existing memory; capture the new plan, then use memory(action=supersede) explicitly".to_string(),
+                );
+            }
+            let kind = request
+                .kind
+                .as_deref()
+                .map(MemoryKind::parse)
+                .unwrap_or(MemoryKind::Decision);
+            let title = required(&request.title, "title", "capture_current_plan")?;
+            let content = required(&request.content, "content", "capture_current_plan")?;
+            let origin = request
+                .origin
+                .as_deref()
+                .map(parse_claim_origin)
+                .transpose()?
+                .unwrap_or(ClaimOrigin::AgentObserved);
+            if let Some(status) = &request.status {
+                let status = parse_memory_status(status)?;
+                if status != MemoryStatus::Active {
+                    return Err(
+                        "capture_current_plan always writes active memory; use memory(action=add) for other statuses"
+                            .to_string(),
+                    );
+                }
+            }
+            let scope = parse_memory_scope(&request)?;
+            let writer = parse_writer(&request)?;
+            let session_id = request
+                .session_id
+                .as_deref()
+                .map(|id| parse_id(id, "session ID"))
+                .transpose()?;
+            let parent_id = request
+                .parent_id
+                .as_deref()
+                .map(|id| parse_id(id, "parent commit ID"))
+                .transpose()?;
+            let evidence = request
+                .evidence
+                .into_iter()
+                .map(parse_evidence)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let capture = service
+                .capture_current_plan(CurrentPlanCaptureInput {
+                    kind,
+                    title,
+                    content,
+                    scope,
+                    origin,
+                    writer,
+                    evidence,
+                    confidence: request.confidence,
+                    tags: request.tags,
+                    create_commit: request.create_commit.unwrap_or(true),
+                    commit_message: request.message,
+                    session_id,
+                    parent_id,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": capture.item,
+                "commit": capture.commit
             }))
             .map_err(|e| e.to_string())
         }
@@ -9142,7 +9213,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: add, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
+            "Unknown action: '{}'. Valid actions: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
             request.action
         )),
     }

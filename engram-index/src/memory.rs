@@ -22,8 +22,9 @@ use crate::vault::{
 use engram_core::entity::Observation;
 use engram_core::id::Id;
 use engram_core::memory::{
-    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange, MemoryCursor,
-    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, MemoryTrustMetadata, WriterProvenance,
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange,
+    MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind, MemoryScope, MemoryStatus,
+    MemoryTrustMetadata, WriterProvenance,
 };
 use engram_core::repository::{
     MonorepoComponent, ProjectRepositoryLink, RecentGitCommit, RepositoryContext,
@@ -144,6 +145,46 @@ pub struct ObservationPromotionInput {
     pub reviewer: Option<String>,
     /// Review rationale. Required when status is active.
     pub rationale: Option<String>,
+}
+
+/// Input for low-friction capture of current plan/method/next-action guidance.
+#[derive(Debug, Clone)]
+pub struct CurrentPlanCaptureInput {
+    /// Memory kind to create. Must be decision or rule.
+    pub kind: MemoryKind,
+    /// Compact title for the current plan memory.
+    pub title: String,
+    /// Compact current plan, method, or next-action content.
+    pub content: String,
+    /// Scope for the captured plan.
+    pub scope: MemoryScope,
+    /// Origin of the captured claim.
+    pub origin: ClaimOrigin,
+    /// Writer provenance for the capture.
+    pub writer: WriterProvenance,
+    /// Evidence backing the current plan.
+    pub evidence: Vec<EvidenceRef>,
+    /// Optional confidence override.
+    pub confidence: Option<f32>,
+    /// Extra tags to attach.
+    pub tags: Vec<String>,
+    /// Whether to write a knowledge commit for the captured plan.
+    pub create_commit: bool,
+    /// Optional commit message. Defaults to the title.
+    pub commit_message: Option<String>,
+    /// Optional session that produced the knowledge commit.
+    pub session_id: Option<Id>,
+    /// Optional parent knowledge commit.
+    pub parent_id: Option<Id>,
+}
+
+/// Result of capturing current plan guidance.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrentPlanCapture {
+    /// Captured active MemoryItem.
+    pub item: MemoryItem,
+    /// Knowledge commit written for the capture, when requested.
+    pub commit: Option<KnowledgeCommit>,
 }
 
 impl MemoryChanges {
@@ -356,6 +397,69 @@ impl MemoryService {
         let item = apply_capture_policy(item);
         self.repo.save_memory_item(&item).await?;
         Ok(item)
+    }
+
+    /// Capture compact active current-plan guidance and optionally commit it.
+    pub async fn capture_current_plan(
+        &self,
+        input: CurrentPlanCaptureInput,
+    ) -> IndexResult<CurrentPlanCapture> {
+        validate_current_plan_capture(&input)?;
+
+        let mut item = MemoryItem::new(
+            input.kind,
+            input.title,
+            input.content,
+            input.scope,
+            input.origin,
+            input.writer.clone(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_tag("current-plan");
+
+        for evidence in input.evidence {
+            item = item.with_evidence(evidence);
+        }
+        if let Some(confidence) = input.confidence {
+            item = item.with_confidence(confidence);
+        }
+        for tag in input.tags {
+            item = item.with_tag(tag);
+        }
+
+        let item = self.capture_memory(item).await?;
+        if item.status != MemoryStatus::Active {
+            return Err(IndexError::InvalidState(format!(
+                "current plan capture produced {} memory; add manual_review evidence or use memory(action=add)",
+                item.status
+            )));
+        }
+
+        let commit = if input.create_commit {
+            let message = input
+                .commit_message
+                .unwrap_or_else(|| format!("Capture current plan: {}", item.title));
+            let change = MemoryChange::new(
+                MemoryChangeType::Added,
+                item.title.clone(),
+                "Captured compact current-plan guidance for future resume orientation.",
+            )
+            .with_item(item.id);
+            Some(
+                self.commit_changes(
+                    input.writer,
+                    message,
+                    vec![change],
+                    input.session_id,
+                    input.parent_id,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+
+        Ok(CurrentPlanCapture { item, commit })
     }
 
     /// Promote an entity observation into Memory OS while preserving source evidence.
@@ -1912,6 +2016,28 @@ fn validate_memory_item(item: &MemoryItem) -> IndexResult<()> {
     Ok(())
 }
 
+fn validate_current_plan_capture(input: &CurrentPlanCaptureInput) -> IndexResult<()> {
+    match input.kind {
+        MemoryKind::Decision | MemoryKind::Rule => {}
+        _ => {
+            return Err(IndexError::Parse(
+                "current plan capture only supports decision or rule memory".to_string(),
+            ));
+        }
+    }
+    if input.evidence.is_empty() {
+        return Err(IndexError::Parse(
+            "current plan capture requires at least one evidence record".to_string(),
+        ));
+    }
+    if origin_requires_review(&input.origin) && !has_manual_review_evidence_refs(&input.evidence) {
+        return Err(IndexError::Parse(
+            "current plan capture from this origin requires manual_review evidence".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn apply_capture_policy(item: MemoryItem) -> MemoryItem {
     if item.status != MemoryStatus::Active {
         return item;
@@ -1980,6 +2106,12 @@ fn origin_requires_review(origin: &ClaimOrigin) -> bool {
 
 fn has_manual_review_evidence(item: &MemoryItem) -> bool {
     item.evidence
+        .iter()
+        .any(|evidence| matches!(evidence.kind, EvidenceKind::ManualReview))
+}
+
+fn has_manual_review_evidence_refs(evidence: &[EvidenceRef]) -> bool {
+    evidence
         .iter()
         .any(|evidence| matches!(evidence.kind, EvidenceKind::ManualReview))
 }
@@ -2270,6 +2402,82 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("reviewer and rationale required"));
+    }
+
+    #[tokio::test]
+    async fn capture_current_plan_creates_active_item_and_commit() {
+        let service = setup_service().await;
+
+        let capture = service
+            .capture_current_plan(CurrentPlanCaptureInput {
+                kind: MemoryKind::Decision,
+                title: "Current Brain Harness plan".to_string(),
+                content: "Implement compact current-plan capture before ranking changes."
+                    .to_string(),
+                scope: MemoryScope::project("engram"),
+                origin: ClaimOrigin::ToolResult,
+                writer: writer(),
+                evidence: vec![EvidenceRef::new(
+                    EvidenceKind::ToolCall,
+                    "engram.orient trace current-plan-test",
+                )
+                .with_summary("Orient missed current plan until active MemoryItems were added.")],
+                confidence: Some(0.94),
+                tags: vec!["brain-harness".to_string()],
+                create_commit: true,
+                commit_message: Some("Capture current Brain Harness plan".to_string()),
+                session_id: None,
+                parent_id: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(capture.item.status, MemoryStatus::Active);
+        assert_eq!(capture.item.kind, MemoryKind::Decision);
+        assert_eq!(capture.item.confidence.value(), 0.94);
+        assert!(capture.item.tags.contains(&"current-plan".to_string()));
+        assert!(capture.item.tags.contains(&"brain-harness".to_string()));
+
+        let commit = capture
+            .commit
+            .expect("current plan capture should commit by default");
+        assert_eq!(commit.message, "Capture current Brain Harness plan");
+        assert_eq!(commit.change_count(), 1);
+        assert_eq!(commit.changes[0].change_type, MemoryChangeType::Added);
+        assert_eq!(commit.changes[0].item_id, Some(capture.item.id));
+    }
+
+    #[tokio::test]
+    async fn capture_current_plan_requires_evidence_and_guidance_kind() {
+        let service = setup_service().await;
+
+        let base = CurrentPlanCaptureInput {
+            kind: MemoryKind::Decision,
+            title: "Current plan".to_string(),
+            content: "Keep this plan available for resume orientation.".to_string(),
+            scope: MemoryScope::project("engram"),
+            origin: ClaimOrigin::AgentObserved,
+            writer: writer(),
+            evidence: Vec::new(),
+            confidence: None,
+            tags: Vec::new(),
+            create_commit: false,
+            commit_message: None,
+            session_id: None,
+            parent_id: None,
+        };
+
+        let err = service
+            .capture_current_plan(base.clone())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("requires at least one evidence"));
+
+        let mut unsupported = base;
+        unsupported.kind = MemoryKind::ProjectFact;
+        unsupported.evidence = vec![EvidenceRef::new(EvidenceKind::File, "docs/current.md")];
+        let err = service.capture_current_plan(unsupported).await.unwrap_err();
+        assert!(err.to_string().contains("decision or rule"));
     }
 
     #[tokio::test]

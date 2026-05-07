@@ -419,7 +419,7 @@ impl EngramServer {
 
     /// Manage Memory OS items and knowledge commits.
     #[tool(
-        description = "Manage Memory OS records: add, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session. Requires writer provenance for add, commit, migration_review_apply, digest_extraction_apply, and distill_session: writer_harness, model_provider, model. Use cursor before a session and changes_since during a session to detect newer memory writes."
+        description = "Manage Memory OS records: add, capture_current_plan, get, list, review, promote, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session. Requires writer provenance for add, capture_current_plan, commit, migration_review_apply, digest_extraction_apply, and distill_session: writer_harness, model_provider, model. Use capture_current_plan for compact evidenced current method/plan/next-action guidance. Use cursor before a session and changes_since during a session to detect newer memory writes."
     )]
     pub async fn memory(
         &self,
@@ -679,7 +679,7 @@ impl ServerHandler for EngramServer {
                  - graph: Traverse derived memory graph (actions: around, path, subgraph, export)\n\
                  - handoff: Manage rolling handoffs (actions: get, update, compile; dry-run by default)\n\
                  - obligations: Manage agent-native obligations (actions: detect, add, get, list, open, resolve, skip, doctor; detect dry-run by default)\n\
-                 - memory: Manage Memory OS records (actions: add, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session)\n\
+                 - memory: Manage Memory OS records (actions: add, capture_current_plan, get, list, review, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session)\n\
                  - vault: Manage the generated Markdown vault (actions: init, compile, status, page)\n\
                  - digest: Inventory digest source files, export metadata-only review batches, parse review decisions, build review-gated extraction plans, or index reviewed source_only digests as document evidence (actions: inventory, review_export, review_apply, extraction_plan, source_index)\n\
                  - repo: Manage repository topology (actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply)\n\n\

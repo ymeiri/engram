@@ -540,6 +540,73 @@ async fn test_mcp_memory_commit_and_changes_since() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
+    let state = setup_tool_state().await;
+
+    let mut capture = with_writer(request("capture_current_plan"));
+    capture.kind = Some("decision".to_string());
+    capture.title = Some("Current Brain Harness plan".to_string());
+    capture.content = Some(
+        "Use compact active MemoryItems for current method, plan, and next action.".to_string(),
+    );
+    capture.scope_type = Some("project".to_string());
+    capture.project_name = Some("engram".to_string());
+    capture.origin = Some("tool_result".to_string());
+    capture.message = Some("Capture current Brain Harness plan".to_string());
+    capture.tags = vec!["brain-harness".to_string()];
+    capture.evidence = vec![MemoryEvidenceRequest {
+        kind: "tool_call".to_string(),
+        target: "engram.orient trace current-plan-mcp-test".to_string(),
+        summary: Some(
+            "Resume continuity improved after current-plan MemoryItems were added.".to_string(),
+        ),
+        excerpt: None,
+    }];
+
+    let capture_response = tools::memory_new(&state, capture)
+        .await
+        .expect("capture_current_plan should work");
+    let capture_json = parse_json(&capture_response);
+    let item_id = capture_json["item"]["id"].as_str().unwrap().to_string();
+    assert_eq!(capture_json["item"]["status"], "active");
+    assert_eq!(capture_json["item"]["kind"], "decision");
+    assert_eq!(capture_json["item"]["tags"][0], "current-plan");
+    assert_eq!(
+        capture_json["commit"]["message"],
+        "Capture current Brain Harness plan"
+    );
+    assert_eq!(capture_json["commit"]["changes"][0]["item_id"], item_id);
+
+    let orient_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("resume current Brain Harness plan".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            intent: Some("resume_session".to_string()),
+            scenario_id: Some("current_plan_capture_test".to_string()),
+            arm: Some("capture_current_plan".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+    let orient_json = parse_json(&orient_response);
+
+    assert!(orient_json["active_decisions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["id"].as_str() == Some(item_id.as_str())));
+    assert_eq!(
+        orient_json["brain_loop"]["top_items"][0]["trust"]["memory_id"].as_str(),
+        Some(item_id.as_str())
+    );
+}
+
+#[tokio::test]
 async fn test_mcp_memory_export_vault() {
     let state = setup_tool_state().await;
 

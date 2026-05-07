@@ -1900,6 +1900,8 @@ Lifecycle contract:
   gaps can be judged.
 - Before major decisions, call `memory(action=changes_since)` with the orientation cursor.
 - After non-obvious discoveries, record source-grounded memory or a session event.
+- When the current method, plan, or next action should survive resume, use
+  `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Before final response, call `changes_since`; if relevant updates appeared, account for them.
 - Before final response, call `obligations(action=detect)` and `obligations(action=doctor)`;
   resolve open obligations or report explicit skip reasons.
@@ -1927,6 +1929,8 @@ fn claude_resume_session_command() -> String {
 6. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
    obligations; close or explicitly skip open items before final response.
 7. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
+   Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
+   guidance that should surface on the next resume.
 8. If this is a resume after compaction, first inspect `handoff(action=get)` and recent
    `memory(action=changes_since)` before continuing.
 "#
@@ -1976,6 +1980,7 @@ Before making claims or edits, call the Engram MCP orient tool with project, cwd
 Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
 Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, and missing_context before final response when those outcomes or gaps can be judged.
 Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
+When the current method, plan, or next action should survive resume, use memory(action=capture_current_plan) with compact content and file/tool/manual-review evidence.
 Before context compaction or session end, update handoff and commit compact durable memory when useful.
 This is a soft contract: resolve obligations or state explicit skip reasons; do not fabricate missing memory.
 </engram_session_activation>"
@@ -2169,6 +2174,8 @@ Workflow:
   gaps can be judged.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- When the current method, plan, or next action should survive resume, use
+  `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
   is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
   skip open obligations.
@@ -2199,6 +2206,8 @@ Steps:
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
+- Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
+  guidance that should surface on the next resume.
 - If resuming after compaction, read `handoff(action=get)` and recent
   `memory(action=changes_since)` before continuing.
 "#
@@ -2224,6 +2233,8 @@ Follow this soft lifecycle contract:
   gaps can be judged.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- When the current method, plan, or next action should survive resume, use
+  `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
   is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
   skip open obligations.
@@ -2258,6 +2269,8 @@ Steps:
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
+- Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
+  guidance that should surface on the next resume.
 - If resuming after compaction, read `handoff(action=get)` and recent
   `memory(action=changes_since)` before continuing.
 """
@@ -2305,6 +2318,8 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Gemini CLI, Claude Code, Codex, and other harnesses
   can be distinguished.
+- Use `memory(action=capture_current_plan)` when the current method, plan, or next action should
+  survive resume.
 - Detect and close agent obligations before final response: document dispositions, failed tool
   recovery, source/design reading, verification, handoff, and commit-preference checks.
 - Before context compaction or expected context loss, update `handoff` and record or commit
@@ -2341,6 +2356,8 @@ Workflow:
   gaps can be judged.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
+- When the current method, plan, or next action should survive resume, use
+  `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
   is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
   skip open obligations.
@@ -2376,6 +2393,8 @@ Steps:
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
+- Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
+  guidance that should surface on the next resume.
 - If resuming after compaction, read `handoff(action=get)` and recent
   `memory(action=changes_since)` before continuing.
 - Use writer provenance with `writer_harness=cursor` for durable memory writes.
@@ -2422,6 +2441,8 @@ fn agents_snippet() -> String {
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Claude Code, Codex, and other harnesses can be
   distinguished.
+- Use `memory(action=capture_current_plan)` when the current method, plan, or next action should
+  survive resume.
 - Use `obligations(action=detect)` at task start and before final response. Resolve or explicitly
   skip document, failed-tool, source/design reading, verification, handoff, and commit-preference
   obligations before claiming the task is done.
@@ -2445,6 +2466,8 @@ Lifecycle:
 - task/session start: call `orient`
 - before major decisions: call `memory(action=changes_since)`
 - after non-obvious discoveries: record memory/session event
+- after current method/plan/next-action changes: use `memory(action=capture_current_plan)` with
+  compact content and evidence
 - before final response: call `changes_since` and distill if needed
 - before final response: detect obligations, run obligations doctor, and close or explicitly skip
   open obligations
