@@ -770,3 +770,36 @@ Expected failure modes:
 
 User judgment required: no. The outcome can be scored by checking whether the returned context
 supports the already approved non-destructive plan and whether the agent follows it.
+
+### `decision_continuity_001` Overnight Result
+
+| Arm | Trace | Outcome |
+|---|---|---|
+| `memoryitem_orient` | `019e0417-d4e6-7493-aaf3-fee0e1b56a43` | Passed as agent self-report. `orient` surfaced the research-method rule, the autonomous overnight current-plan decision, the commit-every-meaningful-step preference, and recent commits including the preregistration commit. |
+
+Feedback `019e0417-f625-7b03-93c0-9a08a77870ad` recorded:
+
+- `task_success`: true.
+- `preference_adhered`: true.
+- `bad_memory_used`: false.
+- `usefulness_score`: 4.
+- `correctness_score`: 5.
+- `noise_score`: 3.
+- Used memories:
+  - `019e0412-244f-7d70-b595-6de85e4dab41`
+    (`Autonomous overnight plan: no M6, run honest orient dogfood arms`).
+  - `019e01f1-f262-7d63-bd33-a2ca28228c03`
+    (`Brain Harness work follows research method`).
+  - `019e03be-a9a5-7db2-848d-eb26ef78bcb5`
+    (`Commit every meaningful Engram step`).
+- Rejected as same-project topic noise:
+  - `019dd33d-0907-72e3-a721-dd80497787c8`
+    (`Cursor harness should use skills plus optional hooks, not only rules`).
+  - `019dd404-1783-7790-bee1-b64cd1b2b691`
+    (`Harness does not automatically ingest newly created documents`).
+
+Interpretation: the architecture decision continuity path is healthy enough for this autonomous
+slice. The result supports continuing the preregistered dogfood run and keeps M6 inventory,
+migration apply, deletion, legacy cleanup, graph traversal, and obligation detection out of the hot
+path. It does not prove `memoryitem_orient` beats a baseline because no clean `no_memory` arm was
+run.
