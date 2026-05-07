@@ -3710,6 +3710,103 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn orient_prioritizes_reviewed_gate_over_broad_current_plan_for_specific_prompt() {
+        let service = setup_service().await;
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Migration Must Be Review-Gated",
+                    "Memory OS migration for Engram must be review-gated. Existing Engram data \
+                     can be valuable, but migrated records must pass inventory, source \
+                     classification, staleness scoring, quarantine for uncertainty, human batch \
+                     review, provenance preservation, and a knowledge commit before becoming \
+                     active memory. Do not bulk-write migrated memory from raw Engram data or \
+                     vault export alone.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::Migrated,
+                    writer(),
+                )
+                .with_confidence(0.70)
+                .with_status(MemoryStatus::Active)
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::SessionEvent,
+                    "migration-gate-session",
+                ))
+                .with_evidence(
+                    EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")
+                        .with_summary("User accepted migration gate as reviewed safety guidance."),
+                ),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_current_plan(current_plan_input(
+                "engram",
+                "Current-plan supersession validated; next measure topic noise",
+                "Current-plan supersession passed. Next high-confidence step is not M6, graph, \
+                 or obligations; it is a narrow same-project topic-noise calibration so \
+                 prompt-specific reviewed safety gates, especially the migration gate, outrank \
+                 broad current-plan context.",
+            ))
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Agent-native harness should use generalized obligations, not document-only checks",
+                    "Engram should model agent-native behavior as generated obligations from \
+                     session cues: durable document writes require ingest/register/record/skip \
+                     disposition; failed tool calls require schema/help inspection; design/code \
+                     tasks require source-reading obligations over AGENTS, README, relevant docs, \
+                     and existing code before asserting behavior.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::ManualReview,
+                    "broad-obligations-memory",
+                )),
+            )
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "Before changing ranking, graph, obligations, or applying M6 write/apply \
+                     migration behavior, should Engram proceed with M6 write/apply now? What \
+                     safety gate applies?"
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::VerifyDecision),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet
+                .active_decisions
+                .first()
+                .map(|item| item.title.as_str()),
+            Some("Migration Must Be Review-Gated")
+        );
+        assert_eq!(
+            packet
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.title.as_str()),
+            Some("Migration Must Be Review-Gated")
+        );
+    }
+
+    #[tokio::test]
     async fn orient_limit_applies_per_bucket_after_relevance_grouping() {
         let service = setup_service().await;
         service

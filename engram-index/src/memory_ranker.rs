@@ -105,6 +105,8 @@ pub(crate) struct MemoryRankComponents {
     pub review: f32,
     /// Freshness contribution, normalized 0.0-1.0.
     pub freshness: f32,
+    /// Prompt-specific decision gate or guardrail contribution, normalized 0.0-1.0.
+    pub guidance: f32,
 }
 
 /// Rank a collection of memory items for orientation or search.
@@ -134,14 +136,22 @@ pub(crate) fn rank_memory_item(
         return None;
     }
 
+    let text_score = text.unwrap_or(0.0);
+    let guidance = if text.is_some() {
+        guidance_score(&item, context.query)
+    } else {
+        0.0
+    };
+
     let components = MemoryRankComponents {
-        text: text.unwrap_or(0.0),
+        text: text_score,
         scope: normalized_scope_score(&item, context),
         recency: recency_score(item.updated_at),
         confidence: item.confidence.value(),
         status: status_score(item.status),
         review: review_score(item.trust_metadata().review_state),
         freshness: freshness_score(item.trust_metadata().freshness),
+        guidance,
     };
     let score = rank_score(components);
 
@@ -213,7 +223,8 @@ fn rank_score(components: MemoryRankComponents) -> f32 {
         + components.confidence * 0.04
         + components.status * 0.02
         + components.review * 0.02
-        + components.freshness * 0.01;
+        + components.freshness * 0.01
+        + components.guidance * 0.10;
     score.clamp(0.0, 1.0)
 }
 
@@ -354,6 +365,51 @@ fn freshness_score(freshness: MemoryFreshness) -> f32 {
         MemoryFreshness::Unscheduled => 0.7,
         MemoryFreshness::ReviewDue => 0.0,
     }
+}
+
+fn guidance_score(item: &MemoryItem, query: Option<&str>) -> f32 {
+    let Some(query) = query.map(str::to_lowercase) else {
+        return 0.0;
+    };
+    if !asks_for_decision_gate(&query) {
+        return 0.0;
+    }
+
+    let title = item.title.to_lowercase();
+    let content = item.content.to_lowercase();
+    let reviewed = item.trust_metadata().review_state == MemoryReviewState::Reviewed;
+    if has_gate_language(&title) {
+        return if reviewed { 1.0 } else { 0.6 };
+    }
+    if has_gate_language(&content) {
+        return if reviewed { 0.8 } else { 0.4 };
+    }
+    0.0
+}
+
+fn asks_for_decision_gate(query: &str) -> bool {
+    [
+        "should", "proceed", "allowed", "allow", "apply", "gate", "safety", "block", "blocked",
+        "must",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
+}
+
+fn has_gate_language(value: &str) -> bool {
+    [
+        "review-gated",
+        "gate",
+        "must",
+        "do not",
+        "should not",
+        "blocked",
+        "cannot",
+        "never",
+        "requires approval",
+    ]
+    .iter()
+    .any(|term| value.contains(term))
 }
 
 fn canonical_or_original(path: &Path) -> std::path::PathBuf {
