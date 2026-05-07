@@ -7679,6 +7679,7 @@ async fn main() -> Result<()> {
                     prompt,
                     project,
                     agent,
+                    external_session_id: None,
                     intent: None,
                     scenario_id: None,
                     arm: None,
@@ -8309,6 +8310,7 @@ async fn main() -> Result<()> {
                                 cwd,
                                 query,
                                 intent: None,
+                                external_session_id: None,
                             },
                         )
                         .await?;
