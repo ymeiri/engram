@@ -701,3 +701,72 @@ Brain Loop can preserve the current-plan resume path, prioritize prompt-specific
 and honor explicit user-preference intent without adding graph traversal or obligations to the hot
 path. The next high-confidence step is to capture a new current-plan memory for this validated
 state, then move to the next Brain Harness roadmap slice rather than broad ranking churn.
+
+## Overnight Autonomous Continuation
+
+User-approved boundary:
+
+> Start the overnight plan. Stay non-destructive. Do not run M6 inventory, migration apply,
+> deletion, or legacy cleanup. Commit each meaningful step.
+
+This continuation is intentionally weaker than a complete first labeled dogfood batch. It can add
+honest agent-self-report evidence for the remaining `memoryitem_orient` scenarios, but it cannot
+claim treatment superiority because clean `no_memory` arms still require isolated conditions.
+
+Evidence level: L4 single-session dogfood continuation.
+
+Global constraints:
+
+- no M6 inventory, migration apply, deletion, or legacy cleanup;
+- no graph or obligation expansion in the `orient` hot path;
+- no unlabeled traces;
+- feedback must be submitted for every trace created during this continuation;
+- each meaningful documentation or evidence step gets a focused git commit;
+- user-owned untracked files, including root `AGENTS.md`, stay out of commits.
+
+### `decision_continuity_001` Overnight Pre-Registration
+
+Prompt:
+
+> Engram Brain Harness has validated topic-noise calibration and the user approved the autonomous
+> overnight plan. Decide the next implementation or documentation action and the architecture
+> constraints that should govern it.
+
+Intent: `implement_change`.
+
+Arm: `memoryitem_orient`.
+
+Expected helpful context:
+
+- Current-plan memory `019e0412-244f-7d70-b595-6de85e4dab41`
+  (`Autonomous overnight plan: no M6, run honest orient dogfood arms`).
+- Rule memory `019e01f1-f262-7d63-bd33-a2ca28228c03`
+  (`Brain Harness work follows research method`).
+- Preference memory `019e03be-a9a5-7db2-848d-eb26ef78bcb5`
+  (`Commit every meaningful Engram step`).
+- Recent commits showing the topic-noise and explicit-intent calibration state:
+  `344b2a2`, `550280b`, `0ed6d92`, and `51bba2e`.
+
+Must not surface as governing direction:
+
+- M6 inventory, migration write/apply, deletion, or legacy cleanup as an overnight action.
+- Graph traversal, obligation detection, lint, or raw observations as hot-path additions.
+- Broad ranking churn when a smaller preregistered dogfood/evidence step is available.
+- Superseded current-plan memories as the active next action.
+
+Measurable success outcome:
+
+- The agent chooses the preregistered dogfood continuation as the next step.
+- The agent keeps M6 and legacy cleanup blocked.
+- The agent preserves `orient` as the frictionless hot-path entrypoint.
+- The agent follows the commit-per-meaningful-step preference without re-asking the user.
+
+Expected failure modes:
+
+- `decision_drift`: the agent treats M6 inventory or broad cleanup as approved.
+- `missing_context`: the current overnight plan or research-method rule is absent.
+- `bad_memory_used`: stale current-plan guidance drives the decision.
+- `noise`: unrelated same-project harness memories dominate the Brain Loop.
+
+User judgment required: no. The outcome can be scored by checking whether the returned context
+supports the already approved non-destructive plan and whether the agent follows it.
