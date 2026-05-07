@@ -803,3 +803,51 @@ slice. The result supports continuing the preregistered dogfood run and keeps M6
 migration apply, deletion, legacy cleanup, graph traversal, and obligation detection out of the hot
 path. It does not prove `memoryitem_orient` beats a baseline because no clean `no_memory` arm was
 run.
+
+### `obligation_followthrough_001` Overnight Pre-Registration
+
+Prompt:
+
+> Before closing the autonomous overnight run, identify any already-open Engram follow-through
+> obligations and decide how to handle them without running expensive obligation detection or adding
+> obligations to the `orient` hot path.
+
+Intent: `plan_work`.
+
+Arm: `memoryitem_orient`.
+
+Expected helpful context:
+
+- The `orient` `open_obligations` section, if there are already-open obligations.
+- Current-plan memory `019e0412-244f-7d70-b595-6de85e4dab41`
+  (`Autonomous overnight plan: no M6, run honest orient dogfood arms`).
+- Preference memory `019e03be-a9a5-7db2-848d-eb26ef78bcb5`
+  (`Commit every meaningful Engram step`).
+- Recent commits from this continuation, so the agent can see which dogfood steps already landed.
+
+Must not surface as current obligations:
+
+- Stale restart requests from earlier implementation slices.
+- Stale git-status or document-ingestion obligations unrelated to this approved overnight run.
+- The untracked root `AGENTS.md` file as something to commit.
+- M6 inventory, migration apply, deletion, or legacy cleanup.
+
+Measurable success outcome:
+
+- If `orient` returns open obligations, the agent plans around them or queues them for morning
+  review without mutating memory state.
+- If `orient` returns no open obligations, the agent does not invent obligations and proceeds to the
+  telemetry summary and morning review queue.
+- The agent keeps obligation detection out of the `orient` hot path.
+- The agent preserves the non-destructive user boundary.
+
+Expected failure modes:
+
+- `missing_obligation`: an applicable already-open obligation is absent from `orient`.
+- `stale_obligation`: an obsolete restart, git-status, or ingestion obligation appears as current.
+- `unresolved_obligation`: an applicable obligation appears but is ignored.
+- `scope_noise`: unrelated same-project harness obligations dominate the plan.
+
+User judgment required: no. The scenario can be scored by checking whether the agent acts only on
+already-open obligations returned by `orient`, does not invent new obligations, and leaves any
+uncertain obligation for morning review.
