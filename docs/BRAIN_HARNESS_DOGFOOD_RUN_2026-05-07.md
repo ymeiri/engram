@@ -541,3 +541,36 @@ Decision: keep `resume_continuity_001`, `stale_scope_rejection_001`, and
 `follow_user_preference_001` as the minimal regression set. The next high-confidence step is to run
 that three-intent set once more against the current daemon before any ranking, graph, obligation, or
 M6 write/apply change.
+
+### Three-Intent Regression Rerun
+
+The minimal regression set was rerun against the current daemon with external session label
+`codex://threads/current-three-intent-regression-2026-05-07` and arm
+`three_intent_regression_current_daemon`.
+
+| Scenario | Trace | Outcome |
+|---|---|---|
+| `resume_continuity_001` | `019e03c4-0d4a-7e93-b703-2ac2a3fa5312` | Failed the current-plan part of resume continuity. The trace returned useful research-method and commit-preference context, but it missed latest current-plan memory `019e03c0-45d2-7281-975d-539a1a0d897e` and foregrounded older active resume/current-plan decisions. Feedback `019e03c4-52b0-7fe3-9dc9-2b18f9f20754` recorded `task_success=false`, `bad_memory_used=true`, `stale_memory_count=6`, `usefulness_score=3`, `correctness_score=2`, and `noise_score=4`. |
+| `stale_scope_rejection_001` | `019e03c4-64e4-73f3-a609-84376f0cb632` | Passed the safety gate. The reviewed migration-gate memory `019dc9ce-3b4e-7b02-80b5-04f56c84624e` and latest current-plan gate were visible, so M6 write/apply remains blocked. Feedback `019e03c4-8c2e-7c53-b699-3d4065dc5086` recorded `task_success=true`, `bad_memory_used=false`, `usefulness_score=4`, `correctness_score=4`, and `noise_score=3`. |
+| `follow_user_preference_001` | `019e03c4-9c1f-7853-8704-d474950cd57b` | Passed. Preference memory `019e03be-a9a5-7db2-848d-eb26ef78bcb5` was the top Brain Loop item and appeared in `Preferences`; latest current-plan memory `019e03c0-45d2-7281-975d-539a1a0d897e` was also visible. Feedback `019e03c4-b68d-7bc1-a004-fc8969e5bb52` recorded `task_success=true`, `preference_adhered=true`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=3`. |
+
+Aggregate telemetry for this arm:
+
+- `trace_count`: 3.
+- `feedback_count`: 3.
+- `feedback_coverage`: 1.0.
+- `task_success_count`: 2.
+- `task_failure_count`: 1.
+- `bad_memory_used_count`: 1.
+- `stale_memory_count`: 6.
+- `wrong_scope_memory_count`: 0.
+
+Interpretation: the system is now good enough to preserve the safety gate and explicit user
+preference, but generic resume continuity is not yet reliable. The failure mode is stale active
+current-plan accumulation: older resume/current-plan memories remain active and can outrank the
+latest current-plan guidance for a broad resume prompt.
+
+Decision: the next implementation slice should be current-plan freshness/supersession, not ranking,
+graph, obligations, or M6 write/apply. The narrow target is to ensure a newly captured current-plan
+memory supersedes or suppresses older current-plan/resume-continuity guidance for the same project,
+then rerun the same three-intent regression set.
