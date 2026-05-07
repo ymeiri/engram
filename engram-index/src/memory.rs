@@ -424,7 +424,9 @@ impl MemoryService {
             item = item.with_confidence(confidence);
         }
         for tag in input.tags {
-            item = item.with_tag(tag);
+            if !item.tags.contains(&tag) {
+                item = item.with_tag(tag);
+            }
         }
 
         let item = self.capture_memory(item).await?;
@@ -2423,7 +2425,7 @@ mod tests {
                 )
                 .with_summary("Orient missed current plan until active MemoryItems were added.")],
                 confidence: Some(0.94),
-                tags: vec!["brain-harness".to_string()],
+                tags: vec!["current-plan".to_string(), "brain-harness".to_string()],
                 create_commit: true,
                 commit_message: Some("Capture current Brain Harness plan".to_string()),
                 session_id: None,
@@ -2437,6 +2439,15 @@ mod tests {
         assert_eq!(capture.item.confidence.value(), 0.94);
         assert!(capture.item.tags.contains(&"current-plan".to_string()));
         assert!(capture.item.tags.contains(&"brain-harness".to_string()));
+        assert_eq!(
+            capture
+                .item
+                .tags
+                .iter()
+                .filter(|tag| tag.as_str() == "current-plan")
+                .count(),
+            1
+        );
 
         let commit = capture
             .commit
