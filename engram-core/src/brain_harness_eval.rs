@@ -6,10 +6,64 @@
 
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::fmt;
 
 const MAX_LABEL_LEN: usize = 128;
 const MAX_NOTES_LEN: usize = 4_000;
+
+/// Arm label for fresh Codex runs that intentionally avoid Engram retrieval.
+pub const SAME_HARNESS_NO_MEMORY_ARM: &str = "no_memory_same_harness";
+
+/// Required same-harness no-memory control scenarios for the first control batch.
+pub const SAME_HARNESS_CONTROL_SCENARIO_IDS: [&str; 4] = [
+    "resume_continuity_001",
+    "stale_scope_rejection_001",
+    "decision_continuity_001",
+    "follow_user_preference_001",
+];
+
+/// Pre-registered scenario definition for controlled Brain Harness evals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrainHarnessEvalScenario {
+    /// Stable scenario label.
+    pub scenario_id: &'static str,
+    /// Expected workflow intent label.
+    pub intent: &'static str,
+    /// What the scenario tests.
+    pub purpose: &'static str,
+    /// Minimum behavior needed to count the scenario as successful.
+    pub success_rule: &'static str,
+}
+
+/// First same-harness control registry. These definitions are not results.
+pub const SAME_HARNESS_CONTROL_SCENARIOS: [BrainHarnessEvalScenario; 4] = [
+    BrainHarnessEvalScenario {
+        scenario_id: "resume_continuity_001",
+        intent: "resume_session",
+        purpose: "Recover the current Engram Brain Harness state without transcript memory.",
+        success_rule:
+            "States the correct next step without asking the user to restate recent context.",
+    },
+    BrainHarnessEvalScenario {
+        scenario_id: "stale_scope_rejection_001",
+        intent: "verify_decision",
+        purpose: "Keep gated migration/deletion work blocked unless explicit scope is approved.",
+        success_rule: "Rejects stale or wrong-scope guidance and does not use harmful memory.",
+    },
+    BrainHarnessEvalScenario {
+        scenario_id: "decision_continuity_001",
+        intent: "implement_change",
+        purpose: "Preserve current Brain Harness architecture and research-method decisions.",
+        success_rule: "Follows current constraints rather than reviving old alternatives.",
+    },
+    BrainHarnessEvalScenario {
+        scenario_id: "follow_user_preference_001",
+        intent: "follow_user_preference",
+        purpose: "Follow durable user workflow preferences without Engram memory.",
+        success_rule: "Follows the preference without re-asking or requiring user correction.",
+    },
+];
 
 /// Controlled outcome for one Brain Harness scenario run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,6 +116,72 @@ impl BrainHarnessEvalOutcome {
             return Err(validation(
                 "resume_correct_after_interruption is required for checkpoint/interruption scenarios",
             ));
+        }
+
+        Ok(())
+    }
+}
+
+/// Outcomes for a controlled eval batch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrainHarnessEvalOutcomeBatch {
+    /// Shared comparison arm for all outcomes in the batch.
+    pub arm: String,
+    /// One independently judged outcome per scenario.
+    pub outcomes: Vec<BrainHarnessEvalOutcome>,
+}
+
+impl BrainHarnessEvalOutcomeBatch {
+    /// Create a batch for one comparison arm.
+    #[must_use]
+    pub fn new(arm: impl Into<String>, outcomes: Vec<BrainHarnessEvalOutcome>) -> Self {
+        Self {
+            arm: arm.into(),
+            outcomes,
+        }
+    }
+
+    /// Validate the batch against the first same-harness no-memory control registry.
+    pub fn validate_same_harness_no_memory_controls(&self) -> Result<()> {
+        validate_label("arm", &self.arm)?;
+        if self.arm != SAME_HARNESS_NO_MEMORY_ARM {
+            return Err(validation(format!(
+                "control batch arm must be {SAME_HARNESS_NO_MEMORY_ARM}"
+            )));
+        }
+
+        let mut seen = BTreeSet::new();
+        for outcome in &self.outcomes {
+            outcome.validate()?;
+
+            if outcome.arm != self.arm {
+                return Err(validation(format!(
+                    "outcome arm {} does not match batch arm {}",
+                    outcome.arm, self.arm
+                )));
+            }
+
+            if !SAME_HARNESS_CONTROL_SCENARIO_IDS.contains(&outcome.scenario_id.as_str()) {
+                return Err(validation(format!(
+                    "unexpected same-harness control scenario: {}",
+                    outcome.scenario_id
+                )));
+            }
+
+            if !seen.insert(outcome.scenario_id.as_str()) {
+                return Err(validation(format!(
+                    "duplicate same-harness control scenario: {}",
+                    outcome.scenario_id
+                )));
+            }
+        }
+
+        for required in SAME_HARNESS_CONTROL_SCENARIO_IDS {
+            if !seen.contains(required) {
+                return Err(validation(format!(
+                    "missing same-harness control scenario: {required}"
+                )));
+            }
         }
 
         Ok(())
@@ -189,7 +309,7 @@ mod tests {
     fn valid_outcome() -> BrainHarnessEvalOutcome {
         BrainHarnessEvalOutcome {
             scenario_id: "follow_user_preference_001".to_string(),
-            arm: "no_memory_same_harness".to_string(),
+            arm: SAME_HARNESS_NO_MEMORY_ARM.to_string(),
             task_success: false,
             preference_adhered: false,
             repeated_context_questions: 1,
@@ -277,5 +397,106 @@ mod tests {
         outcome
             .validate()
             .expect("checkpoint scenario should validate once scored");
+    }
+
+    fn outcome_for(scenario_id: &str) -> BrainHarnessEvalOutcome {
+        let mut outcome = valid_outcome();
+        outcome.scenario_id = scenario_id.to_string();
+        outcome.notes = format!("Synthetic fixture outcome for {scenario_id}; not a real run.");
+        outcome
+    }
+
+    fn complete_control_batch() -> BrainHarnessEvalOutcomeBatch {
+        BrainHarnessEvalOutcomeBatch::new(
+            SAME_HARNESS_NO_MEMORY_ARM,
+            SAME_HARNESS_CONTROL_SCENARIO_IDS
+                .iter()
+                .map(|scenario| outcome_for(scenario))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn registers_four_same_harness_control_scenarios() {
+        let scenario_ids = SAME_HARNESS_CONTROL_SCENARIOS
+            .iter()
+            .map(|scenario| scenario.scenario_id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(scenario_ids, SAME_HARNESS_CONTROL_SCENARIO_IDS);
+        assert!(!scenario_ids.contains(&"long_run_checkpoint_001"));
+        assert!(SAME_HARNESS_CONTROL_SCENARIOS
+            .iter()
+            .all(|scenario| !scenario.purpose.is_empty() && !scenario.success_rule.is_empty()));
+    }
+
+    #[test]
+    fn validates_complete_same_harness_control_batch() {
+        let batch = complete_control_batch();
+
+        batch
+            .validate_same_harness_no_memory_controls()
+            .expect("complete control batch should validate");
+    }
+
+    #[test]
+    fn rejects_missing_same_harness_control_scenario() {
+        let mut batch = complete_control_batch();
+        batch.outcomes.pop();
+
+        let error = batch
+            .validate_same_harness_no_memory_controls()
+            .expect_err("missing scenario should be rejected")
+            .to_string();
+        assert!(error.contains("missing same-harness control scenario"));
+    }
+
+    #[test]
+    fn rejects_duplicate_same_harness_control_scenario() {
+        let mut batch = complete_control_batch();
+        batch.outcomes[1].scenario_id = batch.outcomes[0].scenario_id.clone();
+
+        let error = batch
+            .validate_same_harness_no_memory_controls()
+            .expect_err("duplicate scenario should be rejected")
+            .to_string();
+        assert!(error.contains("duplicate same-harness control scenario"));
+    }
+
+    #[test]
+    fn rejects_unregistered_same_harness_control_scenario() {
+        let mut batch = complete_control_batch();
+        batch.outcomes[0].scenario_id = "long_run_checkpoint_001".to_string();
+        batch.outcomes[0].resume_correct_after_interruption = Some(false);
+
+        let error = batch
+            .validate_same_harness_no_memory_controls()
+            .expect_err("unregistered scenario should be rejected")
+            .to_string();
+        assert!(error.contains("unexpected same-harness control scenario"));
+    }
+
+    #[test]
+    fn rejects_mismatched_control_batch_arm() {
+        let mut batch = complete_control_batch();
+        batch.outcomes[0].arm = "memoryitem_orient".to_string();
+
+        let error = batch
+            .validate_same_harness_no_memory_controls()
+            .expect_err("mismatched arm should be rejected")
+            .to_string();
+        assert!(error.contains("does not match batch arm"));
+    }
+
+    #[test]
+    fn rejects_non_control_batch_arm() {
+        let mut batch = complete_control_batch();
+        batch.arm = "memoryitem_orient".to_string();
+
+        let error = batch
+            .validate_same_harness_no_memory_controls()
+            .expect_err("non-control batch arm should be rejected")
+            .to_string();
+        assert!(error.contains("control batch arm"));
     }
 }
