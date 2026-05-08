@@ -21,11 +21,13 @@
 //! - [`harness`] - Agent harness policy and adapter contracts
 //! - [`obligation`] - Agent-native session obligations
 //! - [`telemetry`] - Brain-harness traces and agent feedback
+//! - [`brain_harness_eval`] - Controlled Brain Harness eval outcome schema
 //! - [`lint`] - Memory health and migration-safety linting
 //! - [`graph`] - Memory OS graph traversal types
 //! - [`id`] - ID types and generation
 //! - [`error`] - Error types
 
+pub mod brain_harness_eval;
 pub mod coordination;
 pub mod document;
 pub mod entity;
