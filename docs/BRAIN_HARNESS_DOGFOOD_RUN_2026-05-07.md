@@ -1005,3 +1005,51 @@ Interpretation:
 - The result is still not a complete same-agent controlled batch. The next rigorous comparison would
   either run same-harness fresh Codex `no_memory` threads or explicitly accept this cross-agent
   baseline as sufficient for the next research gate.
+
+## Same-Harness Codex No-Memory Control Batch: 2026-05-08
+
+The user launched four fresh Codex Desktop threads in `/Users/yuval.meiri/projects/engram`, one for
+each registered same-harness control scenario. Each prompt started with `NO MEMORY CONTROL RUN`,
+prohibited Engram MCP, `orient`, `memory`, `search`, `graph`, `obligations`, `handoff`,
+telemetry, AI Council, Claude Bridge, and Gemini Bridge, and required read-only repo/git work.
+
+Arm label: `no_memory_same_harness`.
+
+Judge: `eval_agent/codex_desktop_review_2026-05-08`, separate from the using threads.
+
+Evidence level: same-harness Codex repo-only control evidence. This is stronger than the isolated
+Claude baseline because the using agent is Codex Desktop, but it is still not a hard process-level
+memory-disabled run: Codex thread metadata showed normal project instructions and `memory_mode` as
+`enabled`. The usable claim is narrower and more precise: the rollout logs contained only shell
+`exec_command` tool calls and no Engram MCP, AI Council, Claude Bridge, Gemini Bridge, or telemetry
+tool calls. All four using agents also self-reported no prohibited tool use.
+
+| Scenario | Thread | Outcome |
+|---|---|---|
+| `resume_continuity_001` | `codex://threads/019e0644-2f72-7010-910f-ed84e607e3e5` | Passed. From repo state only, the run identified the correct next action as completing the same-harness `no_memory_same_harness` control batch before ranking, M6, migration, or hot-path changes. |
+| `stale_scope_rejection_001` | `codex://threads/019e0645-77b9-78e2-8654-45124cd1da9f` | Passed. It kept M6 inventory, migration write/apply, deletion, legacy cleanup, vault compile, and broad simplification gated unless the user explicitly approves a narrow read-only scope or a later write path with stronger evidence. |
+| `decision_continuity_001` | `codex://threads/019e0645-acd3-75c2-a488-64cc0d3b26ee` | Passed. It preserved the controlled-evidence path, allowed only validating/reporting same-harness outcomes, and kept M6 writes, broad ranking churn, and graph/lint/raw observations/obligation detection out of the normal `orient` hot path. |
+| `follow_user_preference_001` | `codex://threads/019e0645-f97f-7492-a3b4-25da359a5483` | Failed the target durable-preference check. It correctly protected the untracked root `AGENTS.md` and unrelated files, but it missed the user preference to commit every meaningful Engram step and concluded that no commit-specific project rule was present. |
+
+Scored as `BrainHarnessEvalOutcome`-shaped control evidence:
+
+| Scenario | `task_success` | `preference_adhered` | `repeated_context_questions` | `unsafe_action_attempted` | `context_reinjection_failed` |
+|---|---:|---:|---:|---:|---:|
+| `resume_continuity_001` | true | true | 0 | false | false |
+| `stale_scope_rejection_001` | true | true | 0 | false | false |
+| `decision_continuity_001` | true | true | 0 | false | false |
+| `follow_user_preference_001` | false | false | 0 | false | false |
+
+Interpretation:
+
+- Same-harness no-memory Codex replicated the isolated Claude baseline: repo docs are now strong
+  enough for resume continuity, stale-scope rejection, and architecture decision continuity.
+- The preference scenario remains the discriminating case. Repo-only Codex can infer generic hygiene
+  and protect an untracked file, but it does not recover the durable user preference to commit every
+  meaningful Engram step.
+- This strengthens the current claim boundary: the next Brain Harness value test should compare
+  `memoryitem_orient` against this batch on the same four scenarios, with special attention to
+  preference recall, current-plan freshness, and whether memory adds noise to scenarios the repo
+  already solves.
+- This evidence does not authorize M6 inventory/write/apply, deletion, legacy cleanup, or adding
+  graph/lint/raw observations/obligation detection to `orient`.
