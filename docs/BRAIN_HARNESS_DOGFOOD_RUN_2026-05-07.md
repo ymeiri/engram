@@ -1079,3 +1079,57 @@ Interpretation:
 - It does not justify changing retrieval code yet. The next rigorous step is to run the remaining
   matched `memoryitem_orient` scenarios and compare the full four-scenario treatment batch against
   the no-memory controls.
+
+## Matched Orient Treatment Batch Completion: 2026-05-08
+
+The user launched the three remaining fresh Codex Desktop treatment threads. Each thread was
+instructed to call Engram MCP `orient` exactly once, avoid `search`, `memory`, `graph`,
+`obligations`, `handoff`, telemetry, council, and bridge tools, and avoid file edits. Tool discovery
+to expose `orient` was allowed. Each treatment turn used one `orient` call plus tool discovery and no
+file edits.
+
+| Scenario | Thread | Trace | Feedback | Outcome |
+|---|---|---|---|---|
+| `resume_continuity_001` | `codex://threads/019e065a-56bc-7ae1-a07f-e45b0ef3169a` | `019e065a-a17e-7d73-9a78-4ea47f5da971` | `019e065d-56ec-7e63-b58d-d6a12888c45d` | Passed. The fresh thread identified the correct next action as continuing the matched `memoryitem_orient` evaluation batch, not changing code, and explicitly avoided ranking changes, stale cleanup, graph traversal, obligation hot-path work, M6, deletion, and broader implementation. |
+| `stale_scope_rejection_001` | `codex://threads/019e065a-77cb-7dd1-b7d0-cb375cd5e2fc` | `019e065a-b1a7-7452-97ef-7f2a73391014` | `019e065d-707d-78c3-968f-ed39b8fcdba1` | Passed. The fresh thread kept migration, deletion, legacy cleanup, M6 migration write/apply, and M6 inventory gated unless the user explicitly approves the exact work and the review-gated migration workflow is followed. |
+| `decision_continuity_001` | `codex://threads/019e065a-9e1d-7ad1-b179-5f83b09a190d` | `019e065a-cf38-7530-a208-b4ec08be6c57` | `019e065d-87a3-73c1-8b4d-8acf89dfa32b` | Passed. The fresh treatment answer said to complete the remaining matched treatment comparison before retrieval, ranking, graph traversal, stale cleanup, or other code changes. A later no-tool acknowledgment in the same thread was not part of the treatment scoring. |
+
+Together with the previous preference probe, the same-harness treatment batch is now:
+
+| Scenario | `memoryitem_orient` result | `no_memory_same_harness` result | Difference |
+|---|---|---|---|
+| `resume_continuity_001` | pass | pass | No clear outcome advantage; memory preserved the current next step without adding harmful noise. |
+| `stale_scope_rejection_001` | pass | pass | No clear outcome advantage; memory preserved the gate without harmful action. |
+| `decision_continuity_001` | pass | pass | No clear outcome advantage; memory preserved the evidence-gate direction. |
+| `follow_user_preference_001` | pass | fail | Clear advantage for memory: `orient` recovered the durable commit preference that repo-only Codex missed. |
+
+Treatment-batch scores:
+
+| Arm | Scored scenarios | Task successes | Preference adhered | Repeated context questions | Bad memory used |
+|---|---:|---:|---:|---:|---:|
+| `memoryitem_orient` | 4 | 4 | 4 | 0 | 0 |
+| `no_memory_same_harness` | 4 | 3 | 3 | 0 | 0 |
+
+Telemetry report after feedback submission:
+
+- `telemetry(action=real_session_eval, limit=100)` passed the confidence gate.
+- Overall recent sample: 100 traces, 78 feedback records, 78% feedback coverage, 62 outcome feedback
+  records.
+- `memoryitem_orient` arm in the recent sample: 14 traces, 14 feedback records, 14 outcome feedback
+  records, 14 task successes, 0 task failures, 0 bad-memory-used records.
+- Limitation: the same-harness no-memory controls were judged from Codex thread transcripts, not
+  from telemetry traces, because the control prompts intentionally prohibited telemetry and all
+  Engram MCP use. Treat the arm comparison as controlled transcript evidence plus treatment
+  telemetry, not as a fully telemetry-native A/B batch.
+
+Decision:
+
+- Brain Loop v1 has enough evidence to claim useful value for durable user preference recall in
+  this project.
+- The current evidence does not justify retrieval/ranking/code changes. The treatment batch passed
+  without intervention, and the only clear advantage over no-memory was the intended durable
+  preference case.
+- The next implementation step should not be M6 migration, deletion, legacy cleanup, graph/lint/raw
+  observation expansion in `orient`, or obligation hot-path expansion. The next research step should
+  be a concise claim-ledger/RFC update that records this batch as evidence and defines the next
+  higher-value scenario before any new behavior is built.

@@ -43,7 +43,7 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Brain Harness dogfood protocol documented with a read-only corpus preflight, labeled
       `scenario_id`/`arm` runs, feedback rubric, anti-overfit rules, and evidence-based next-step
       routing.
-- [ ] First labeled Brain Harness dogfood batch: run at least 4 scenarios across at least 2 arms,
+- [x] First labeled Brain Harness dogfood batch: run at least 4 scenarios across at least 2 arms,
       submit feedback for every trace, and route the next implementation step from
       `telemetry(action=real_session_eval)`.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
