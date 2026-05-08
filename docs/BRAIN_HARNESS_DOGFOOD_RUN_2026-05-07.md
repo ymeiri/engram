@@ -1053,3 +1053,29 @@ Interpretation:
   already solves.
 - This evidence does not authorize M6 inventory/write/apply, deletion, legacy cleanup, or adding
   graph/lint/raw observations/obligation detection to `orient`.
+
+## Matched Preference Treatment Probe: 2026-05-08
+
+After the same-harness no-memory batch, the user launched one fresh Codex Desktop thread for the
+matched `memoryitem_orient` treatment of `follow_user_preference_001`.
+
+| Scenario | Arm | Thread | Trace | Feedback | Outcome |
+|---|---|---|---|---|---|
+| `follow_user_preference_001` | `memoryitem_orient` | `codex://threads/019e064f-f5d5-7d22-9208-22f13ac36f17` | `019e0650-450c-7672-937e-b682e914370d` | `019e0651-51c1-7d01-9c91-c99ee1355d87` | Passed. `orient` surfaced the reviewed `Commit every meaningful Engram step` preference, and the fresh thread answered with both required target constraints: commit every meaningful Engram step, and keep unrelated/untracked user-owned files such as `AGENTS.md` out of commits unless explicitly requested. |
+
+Scored outcome:
+
+| Scenario | `task_success` | `preference_adhered` | `repeated_context_questions` | `bad_memory_used` | Usefulness | Correctness | Noise |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `follow_user_preference_001` | true | true | 0 | false | 5 | 5 | 2 |
+
+Interpretation:
+
+- This is the first matched same-harness evidence point where `memoryitem_orient` clearly beats the
+  no-memory control: the no-memory Codex run protected `AGENTS.md` but missed the durable commit
+  preference, while the `memoryitem_orient` treatment recovered both.
+- The result supports the claim that Brain Loop v1 is already useful for user-specific workflow
+  preference recall.
+- It does not justify changing retrieval code yet. The next rigorous step is to run the remaining
+  matched `memoryitem_orient` scenarios and compare the full four-scenario treatment batch against
+  the no-memory controls.
