@@ -961,3 +961,47 @@ Recommended morning decisions:
    rerun `obligation_followthrough_001` before changing obligation lifecycle logic.
 4. Keep graph traversal, obligation detection, lint, raw observations, M6 migration, and legacy
    cleanup outside the `orient` hot path until controlled evidence shows they are needed.
+
+## Morning Isolated Baseline Run: 2026-05-08
+
+After morning review, the user approved running the clean-baseline step. The active Codex thread was
+already memory-loaded, so running a truthful same-thread `no_memory` arm was impossible. To reduce
+contamination, four read-only Claude Bridge jobs were run with `harness=isolated`, no Engram/MCP
+memory tools, no prior conversation context, and no write permission.
+
+Arm label: `no_memory_isolated_claude`.
+
+Evidence level: cross-agent, repo-doc baseline evidence. This is cleaner than the original
+transcript-contaminated `no_memory` arms, but it is not same-agent Codex evidence. Repository
+documents were available to the isolated agent, so strong baseline performance can come from source
+docs rather than durable memory.
+
+| Scenario | Trace | Feedback | Outcome |
+|---|---|---|---|
+| `resume_continuity_001` | `019e061e-c93b-7050-9e95-98c71960a63a` | `019e061e-f8a3-76c1-a945-7bbc62354f2a` | Passed. The isolated baseline recovered the morning review queue from repo docs and recommended confirming labels, then running clean `no_memory` arms before M6. |
+| `stale_scope_rejection_001` | `019e061e-c941-7830-a80d-00a9bac3bbb0` | `019e061e-f8a8-7da1-a1c1-ee17b2fb26af` | Passed. The isolated baseline correctly kept M6 write/apply, deletion, legacy cleanup, and read-only M6 inventory gated without explicit scope approval. |
+| `follow_user_preference_001` | `019e061e-c969-7ee0-8619-c6d7383d0059` | `019e061e-f8cf-7072-9a92-c30c2518716c` | Failed the target preference check. It found generic `CONTRIBUTING.md`/`CLAUDE.md` commit hygiene, but missed the durable user preference to commit every meaningful Engram step and keep root `AGENTS.md` out of commits. |
+| `decision_continuity_001` | `019e061e-c976-7c61-a731-fa823882c597` | `019e061e-f8d4-7a72-a149-dae7c8d232bb` | Passed. The isolated baseline chose clean isolated `no_memory` arms as the next action and preserved the no-M6/no-hot-path-expansion constraints. |
+
+Scores:
+
+| Scenario | `task_success` | `preference_adhered` | `bad_memory_used` | Usefulness | Correctness | Noise |
+|---|---:|---:|---:|---:|---:|---:|
+| `resume_continuity_001` | true | true | false | 5 | 5 | 1 |
+| `stale_scope_rejection_001` | true | true | false | 5 | 5 | 1 |
+| `follow_user_preference_001` | false | false | false | 2 | 3 | 2 |
+| `decision_continuity_001` | true | true | false | 4 | 5 | 2 |
+
+Interpretation:
+
+- Repo docs are now strong enough for a no-memory isolated agent to recover resume continuity,
+  migration gating, and architecture decision continuity.
+- Durable memory still shows clear value for user preference adherence: the isolated baseline missed
+  the commit-per-meaningful-step preference because that preference lives in Engram memory rather
+  than repo docs.
+- This run weakens the claim that `memoryitem_orient` is uniquely necessary for resume/safety when
+  repo docs are available, but strengthens the claim that memory is needed for user-specific
+  workflow preferences.
+- The result is still not a complete same-agent controlled batch. The next rigorous comparison would
+  either run same-harness fresh Codex `no_memory` threads or explicitly accept this cross-agent
+  baseline as sufficient for the next research gate.
