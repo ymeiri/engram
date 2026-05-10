@@ -100,8 +100,14 @@ Research checkpoint, 2026-05-10:
   commit-hygiene preference that repo-only context missed.
 - Resume continuity, stale-scope rejection, and decision continuity passed in both arms, so this
   batch does not justify retrieval/ranking code changes or hot-path expansion.
-- The next evidence step is a bounded autonomous follow-through scenario, not M6 migration,
-  deletion, graph/lint/raw-observation expansion, or obligation detection in `orient`.
+- `bounded_autonomous_followthrough_001` passed both arms but was contaminated by self-referential
+  task choice and cross-arm working-tree exposure.
+- `bounded_autonomous_followthrough_002` fixed those protocol flaws with isolated worktrees and a
+  pre-selected doc-only work slice. Both arms passed; no material `memoryitem_orient` advantage was
+  observed.
+- The next discriminating evidence step should not be another doc-only task. Use a harder
+  code-bearing follow-through slice before changing `orient`, migration, graph/lint/raw-observation
+  exposure, obligation detection, or legacy deletion.
 
 ---
 
@@ -508,8 +514,15 @@ Unsupported by this batch:
 - graph, lint, raw observations, migration, or obligation detection in the normal `orient` path,
 - deletion or simplification of legacy layers.
 
-Next confidence scenario: `bounded_autonomous_followthrough_001`, where preference recall and
-current-plan continuity must constrain a real verified and committed work slice.
+Follow-up checkpoint:
+
+- `bounded_autonomous_followthrough_001` was inconclusive because both arms passed and the protocol
+  allowed self-referential work selection plus possible cross-arm contamination.
+- `bounded_autonomous_followthrough_002` removed those flaws. Both arms again passed on a narrow
+  doc-only contract update, with no material outcome advantage for `memoryitem_orient`.
+
+Next confidence scenario: a harder code-bearing bounded follow-through task where preference recall
+and current-plan continuity must constrain a real verified and committed implementation slice.
 
 ---
 
@@ -849,13 +862,14 @@ Proceed in this order from the current checkpoint:
 
 1. Keep this RFC and `docs/ORIENT_CONTRACT.md` synchronized with implemented hot-path behavior.
 2. Treat the 2026-05-08 matched batch as support for durable preference recall only.
-3. Run the next non-destructive evidence step: `bounded_autonomous_followthrough_001`, comparing
-   same-harness no-memory and `memoryitem_orient` arms on a small verified and committed work
-   slice.
-4. Use that result to decide whether to keep gathering dogfood, run read-only M6
+3. Treat BAF002 as a clean but weakly discriminating result: both arms passed a doc-only work slice,
+   so it does not justify broad implementation changes.
+4. Select and pre-register a harder code-bearing bounded follow-through scenario before making
+   `orient` ranking, hot-path, migration, or legacy-simplification changes.
+5. Use that result to decide whether to keep gathering dogfood, run read-only M6
    inventory/review-export as provisional evidence, or make a narrowly justified implementation
    change.
-5. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+6. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

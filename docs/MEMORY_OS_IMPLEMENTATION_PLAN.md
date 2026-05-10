@@ -52,6 +52,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Brain Harness bounded-autonomy protocol tightened after the first follow-through batch:
       implementation-bearing comparisons now require pre-selected non-self-referential work,
       isolated clean arm starts, and evaluator-recorded results.
+- [x] Brain Harness BAF002 isolated follow-through scored: both arms passed a doc-only
+      `ORIENT_CONTRACT.md` slice with no material `memoryitem_orient` advantage; next
+      discriminating evidence should be code-bearing, not another doc-only task.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Low-friction current-plan capture through `memory(action=capture_current_plan)`: agents can

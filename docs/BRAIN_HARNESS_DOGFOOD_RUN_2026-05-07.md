@@ -1531,3 +1531,68 @@ Scoring addition:
   finish.
 - If the two patches differ, judge whether the difference is material to task quality before
   claiming an arm advantage.
+
+## Bounded Autonomous Follow-Through 002 Evaluator Scoring: 2026-05-10
+
+Input threads:
+
+- `no_memory_same_harness`: `codex://threads/019e1164-0451-7f90-8dcd-7623a31318df`
+- `memoryitem_orient`: `codex://threads/019e1164-a44e-7773-8ae4-bd0366b424da`
+
+Artifact summary:
+
+| Arm | Commit | Trace / feedback | Verification | Result |
+|---|---|---|---|---|
+| `no_memory_same_harness` | `5c37f0ae7dc2b896fd6c41ea9fd6d9c8f630020b` | Evaluator trace `019e116a-04b4-7602-a40b-6b8030ff6d91`; feedback `019e116a-163d-7f53-8772-7ea2a7cc75f5` | `cargo test -p engram-tests test_mcp_harness_render_adapter_mentions_feedback_trace_id` | Passed |
+| `memoryitem_orient` | `0a509ad1573bf532aac032b70388b722b6e0121e` | Orient trace `019e1164-e513-7c92-98ac-ee78a623ecf1`; feedback `019e1166-0a5e-7881-a4c0-ada4233d951a` | `git diff --check -- docs/ORIENT_CONTRACT.md` | Passed |
+
+Protocol checks:
+
+- Both arms started in the intended isolated worktrees and committed only
+  `docs/ORIENT_CONTRACT.md`.
+- The no-memory arm used shell/file/git commands plus `apply_patch`; no Engram MCP, telemetry,
+  AI Council, Claude Bridge, or Gemini Bridge tools were used during the task.
+- The treatment arm called `orient` exactly once, preserved trace
+  `019e1164-e513-7c92-98ac-ee78a623ecf1`, submitted outcome feedback, and did not call Engram
+  search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini Bridge. It used
+  `tool_search` only to expose the deferred `orient` tool.
+- Both worktrees ended with untracked `.codex/` and `AGENTS.md` files. These were left
+  uncommitted and did not affect the tracked artifacts.
+- The treatment commit first failed through the local signing helper because `SSH_AUTH_SOCK` was
+  absent, then succeeded with `--no-gpg-sign`. This is a run-environment artifact, not a content
+  failure.
+
+Content-quality scoring:
+
+- Both patches added a concise `## Feedback Expectations` section and covered the core requested
+  ideas: preserve `trace_id`, submit feedback when assessable, include behavioral fields, and treat
+  agent feedback as weak evidence requiring correlation.
+- The no-memory patch was slightly more explicit: it named
+  `telemetry(action=submit_feedback)`, included `missing_context`, stated "not ground truth", and
+  tied correlation to later ranking or migration decisions.
+- The treatment patch was also acceptable and added useful mention of used/rejected memory IDs, but
+  it did not name the telemetry action or `missing_context` explicitly.
+- The treatment arm exercised the live feedback loop and reported `task_success=true`,
+  `preference_adhered=true`, `repeated_context_questions=0`, `bad_memory_used=false`,
+  usefulness `4`, correctness `5`, and noise `3`; its own note said `orient` preserved the commit
+  preference and constraints but returned substantial unrelated context.
+
+Decision:
+
+- Both arms passed.
+- There is no material outcome advantage for `memoryitem_orient` in BAF002.
+- The no-memory wording was adopted into `docs/ORIENT_CONTRACT.md` because it is clearer, not
+  because the no-memory arm materially beat the treatment.
+- BAF002 is cleaner than BAF001 but weakly discriminating: the task was narrow, doc-only, and the
+  success criteria were mostly present in the prompt itself.
+- The result does not justify changing `orient` ranking, widening the hot path, adding graph,
+  obligation detection, lint, raw observations, migration, legacy cleanup, or deletion.
+
+Next evidence implication:
+
+- Do not run another doc-only bounded follow-through as the next discriminating test.
+- If the goal is to test whether `orient` improves autonomous follow-through, the next scenario
+  should be a harder code-bearing slice where success depends on preserving a non-obvious current
+  plan, project preference, or safety gate across execution.
+- Read-only M6 inventory can still be considered later as evidence gathering, but migration write
+  apply and legacy simplification remain blocked.

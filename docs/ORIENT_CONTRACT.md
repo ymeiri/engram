@@ -30,6 +30,17 @@ the next agent decision better without forcing the agent to choose among special
 - Untracked root instruction files such as `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` are suppressed
   from the open-obligation summary.
 
+## Feedback Expectations
+
+- Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
+  orientation packet.
+- When the task result is assessable, submit `telemetry(action=submit_feedback)` before final
+  response.
+- Include key behavioral fields when known: `task_success`, `preference_adhered`,
+  `repeated_context_questions`, `bad_memory_used`, and `missing_context`.
+- Treat agent feedback as a weak signal, not ground truth; correlate it with the transcript, tests,
+  user judgment, or later memory edits before using it for ranking or migration decisions.
+
 ## Non-Contract For Now
 
 - `orient` does not enforce a byte or token budget yet; tests should not pretend that it does.

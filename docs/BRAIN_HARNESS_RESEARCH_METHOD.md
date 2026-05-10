@@ -246,13 +246,17 @@ This ledger is intentionally small. It should be updated when evidence changes.
 Claim: `MemoryItem` should become the canonical agent-facing cognitive and retrieval unit.
 
 Current evidence: architecture RFC, AI Council insight, deterministic retrieval tests, pilot
-safety behavior, and the first matched same-harness dogfood batch from 2026-05-08.
+safety behavior, the first matched same-harness dogfood batch from 2026-05-08, and BAF002.
 
 Confidence: medium.
 
+Current update: BAF002 was cleanly isolated and both arms passed, but it showed no material
+`memoryitem_orient` advantage on a narrow doc-only task. The MemoryItem-canonicality bet remains
+plausible but unproven beyond durable preference recall.
+
 Next gate: matched dogfood beyond one-turn recall shows `memoryitem_orient` beats `no_memory` and
-specialist legacy retrieval on bounded autonomous follow-through, preference adherence,
-bad-memory containment, and migration-preservation checks.
+specialist legacy retrieval on a harder code-bearing bounded follow-through task, preference
+adherence, bad-memory containment, and migration-preservation checks.
 
 ### BH-C2: Orient As The Single Hot-Path Entrypoint
 
@@ -293,9 +297,13 @@ Current update: the matched 2026-05-08 treatment rerun passed, but the same-harn
 control also passed. This supports recent Git/current-plan context as sufficient for that narrow
 resume task, not as a broad MemoryItem-dominance claim.
 
+BAF002 update: both isolated arms passed the doc-only follow-through slice, with no material
+`memoryitem_orient` advantage. This weakens the doc-only task class as a discriminating instrument
+and points the next gate toward a harder code-bearing slice.
+
 Next gate: a harder autonomous follow-through scenario where the agent must preserve the current
 plan, user preference, verification habit, and no-M6/no-deletion gates through an actual bounded
-work slice.
+code-bearing work slice.
 
 ### BH-C5: Dogfood Is An Instrument, Not The Method
 
@@ -326,9 +334,13 @@ telemetry for orient arms. It does not prove that all preferences should be acce
 review, that stale preferences will be challenged correctly, or that MemoryItems should dominate
 legacy retrieval for non-preference tasks.
 
-Next gate: repeat the preference advantage inside `bounded_autonomous_followthrough_001`, where the
-preference must constrain a real verified and committed work slice rather than a direct question
-about the preference itself.
+Current update: BAF002 showed both arms could preserve commit hygiene and scope constraints in a
+narrow doc-only work slice, so it did not repeat the earlier preference advantage as a meaningful
+arm difference.
+
+Next gate: repeat the preference advantage inside a harder bounded work slice where the preference
+must constrain a non-trivial implementation decision, not only a direct preference question or a
+fully specified documentation edit.
 
 ---
 
@@ -408,13 +420,22 @@ as the single frictionless entrypoint while leaving graph, lint, migration, raw 
 obligation detection outside the normal hot path?
 ```
 
-Recommended instrument:
+BAF002 result:
 
-1. Pre-register `bounded_autonomous_followthrough_002` in the dogfood run report.
-2. Use a pre-selected, non-self-referential work slice; the using agents must not choose their own
-   task or update the dogfood report as task output.
-3. Run matched same-harness `no_memory` and `memoryitem_orient` arms from isolated clean worktrees
-   created from the same base commit.
+- `bounded_autonomous_followthrough_002` used isolated clean worktrees and a pre-selected
+  doc-only `docs/ORIENT_CONTRACT.md` slice.
+- Both arms passed, and no material `memoryitem_orient` advantage was observed.
+- The task was clean but weakly discriminating because the required content was mostly specified in
+  the prompt.
+
+Recommended next instrument:
+
+1. Do not run another doc-only bounded follow-through as the next discriminating test.
+2. Pre-register a harder code-bearing follow-through scenario only after selecting a small Engram
+   implementation slice whose success depends on a non-obvious current plan, project preference, or
+   safety gate.
+3. Use isolated clean worktrees from the same base commit, and keep the using agents from updating
+   the dogfood report as their task output.
 4. Require the agent to complete the specified Engram work slice, run the relevant verification,
    commit the meaningful step, and capture the next plan only if a new durable plan is created.
 5. Score task success, preference adherence, repeated context questions, bad-memory use, cross-arm
