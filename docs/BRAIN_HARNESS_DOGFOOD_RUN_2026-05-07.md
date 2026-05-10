@@ -1949,3 +1949,35 @@ Evaluator rubric:
   commit rule?
 - Score whether orientation helped preserve the current safety gate and avoid broader architecture
   work.
+
+## Bounded Autonomous Follow-Through 004 Invalid Attempt: 2026-05-10
+
+Input threads:
+
+- `codex://threads/019e126f-33e4-7c63-8af9-21d45ed9afa2`
+- `codex://threads/019e126f-8aa0-7ee1-a489-8036f30784d8`
+
+Verdict: invalid and not scoreable.
+
+Evidence:
+
+- `019e126f-33e4-7c63-8af9-21d45ed9afa2` was created in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-no-memory`, but the local transcript contains
+  only session metadata and task start. No user task, code change, verification, commit, or final
+  answer was recorded.
+- `019e126f-8aa0-7ee1-a489-8036f30784d8` was created in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-orient`, but received the no-memory prompt.
+  It did not call Engram tools, so it is not a valid `memoryitem_orient` arm.
+- The same thread left uncommitted changes in the orient worktree and reported `Commit hash: none
+  created`, so it also fails the completed-step and commit-hygiene requirement.
+- `telemetry(action=list_traces, project=engram,
+  scenario_id=bounded_autonomous_followthrough_004)` returned no BAF004 traces, and
+  `telemetry(action=list_feedback, project=engram,
+  scenario_id=bounded_autonomous_followthrough_004)` returned no BAF004 feedback.
+
+Protocol implication:
+
+- Do not score this as either arm.
+- Preserve the dirty worktree as an invalid-attempt artifact unless explicitly cleaned later.
+- Rerun BAF004 from clean isolated worktrees using corrected prompts and a fresh `memoryitem_orient`
+  thread that calls `orient` exactly once as its first tool call.
