@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-05-07
+Last Updated: 2026-05-10
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -46,6 +46,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] First labeled Brain Harness dogfood batch: run at least 4 scenarios across at least 2 arms,
       submit feedback for every trace, and route the next implementation step from
       `telemetry(action=real_session_eval)`.
+- [x] Brain Harness claim ledger/RFC updated from the first matched dogfood batch: narrow durable
+      preference-recall claim recorded, unsupported claims bounded, and
+      `bounded_autonomous_followthrough_001` defined as the next evidence scenario.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Low-friction current-plan capture through `memory(action=capture_current_plan)`: agents can

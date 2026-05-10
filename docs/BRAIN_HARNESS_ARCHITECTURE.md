@@ -1,6 +1,7 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC with Brain Loop v1, orient contract, and research-method checkpoints
+Status: Draft RFC with Brain Loop v1, orient contract, research-method checkpoints, and first
+matched dogfood evidence
 Date: 2026-05-06
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -89,6 +90,18 @@ Implementation checkpoint, 2026-05-06:
 - Graph traversal, obligation detection, lint, migration, raw entity observation lookup, and
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
+
+Research checkpoint, 2026-05-10:
+
+- The first matched same-harness dogfood batch is recorded in
+  `docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md`.
+- `memoryitem_orient` passed 4/4 scored scenarios; the same-harness no-memory controls passed 3/4.
+- The clear observed advantage was durable preference recall: `orient` recovered the reviewed
+  commit-hygiene preference that repo-only context missed.
+- Resume continuity, stale-scope rejection, and decision continuity passed in both arms, so this
+  batch does not justify retrieval/ranking code changes or hot-path expansion.
+- The next evidence step is a bounded autonomous follow-through scenario, not M6 migration,
+  deletion, graph/lint/raw-observation expansion, or obligation detection in `orient`.
 
 ---
 
@@ -475,6 +488,29 @@ MemoryItem becomes canonical if it shows:
 - acceptable latency,
 - migration viability from legacy observations.
 
+### 12.4 First Matched Dogfood Checkpoint
+
+The 2026-05-08 matched same-harness batch provides the first controlled behavioral checkpoint for
+Brain Loop v1:
+
+| Arm | Scored scenarios | Task successes | Preference adhered | Bad memory used |
+|---|---:|---:|---:|---:|
+| `memoryitem_orient` | 4 | 4 | 4 | 0 |
+| `no_memory_same_harness` | 4 | 3 | 3 | 0 |
+
+Supported claim: Brain Loop v1 is useful for durable user preference recall in this repository
+when the preference has been captured as reviewed active memory.
+
+Unsupported by this batch:
+
+- broad MemoryItem dominance over legacy retrieval,
+- retrieval/ranking code changes,
+- graph, lint, raw observations, migration, or obligation detection in the normal `orient` path,
+- deletion or simplification of legacy layers.
+
+Next confidence scenario: `bounded_autonomous_followthrough_001`, where preference recall and
+current-plan continuity must constrain a real verified and committed work slice.
+
 ---
 
 ## 13. Eval Trace Schema
@@ -686,10 +722,13 @@ Status: initial MemoryItem unified-search layer exists. It searches active `Memo
 Status: deterministic confidence scenarios now compare no-memory, legacy, MemoryItem, and
 hybrid arms for preference continuity, stale/wrong-scope rejection, and decision continuity. The
 eval suite includes a report gate that aggregates quality, task success, bad-memory use, missing
-expected context, repeated context questions, and retrieval precision by arm. These are synthetic
-deterministic scenarios, not yet real multi-session behavioral evals. A first real-session telemetry
-report now summarizes persisted traces and agent feedback as non-destructive evidence, but it is
-not a substitute for a real multi-session comparative eval.
+expected context, repeated context questions, and retrieval precision by arm.
+
+The first matched same-harness live batch is also complete. It showed `memoryitem_orient` beating
+repo-only no-memory context on durable preference recall, while both arms passed resume continuity,
+stale-scope rejection, and decision continuity. This is stronger than the original contaminated
+pilot, but it is still narrow: it supports a preference-recall claim, not broad MemoryItem
+canonicality or migration/deletion authority.
 
 `docs/BRAIN_HARNESS_RESEARCH_METHOD.md` now defines the research operating model above the
 architecture: explicit research questions, competing hypotheses, evidence levels, and decision
@@ -809,12 +848,13 @@ hot-path expansion.
 Proceed in this order from the current checkpoint:
 
 1. Keep this RFC and `docs/ORIENT_CONTRACT.md` synchronized with implemented hot-path behavior.
-2. Decide the confidence gate for MemoryItem dominance: deterministic M3 fixtures already pass, but
-   real multi-session behavioral evidence is still sparse.
-3. Choose the next non-destructive evidence step:
-   - run the dogfood protocol to strengthen labeled real-session telemetry/evals first, or
-   - run read-only M6 inventory/review-export as provisional evidence gathering.
-4. Use the resulting evidence to tune ranking, review burden, and migration prioritization.
+2. Treat the 2026-05-08 matched batch as support for durable preference recall only.
+3. Run the next non-destructive evidence step: `bounded_autonomous_followthrough_001`, comparing
+   same-harness no-memory and `memoryitem_orient` arms on a small verified and committed work
+   slice.
+4. Use that result to decide whether to keep gathering dogfood, run read-only M6
+   inventory/review-export as provisional evidence, or make a narrowly justified implementation
+   change.
 5. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the

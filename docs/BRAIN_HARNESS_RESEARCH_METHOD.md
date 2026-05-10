@@ -245,21 +245,24 @@ This ledger is intentionally small. It should be updated when evidence changes.
 
 Claim: `MemoryItem` should become the canonical agent-facing cognitive and retrieval unit.
 
-Current evidence: architecture RFC, AI Council insight, deterministic retrieval tests, and pilot
-safety behavior.
+Current evidence: architecture RFC, AI Council insight, deterministic retrieval tests, pilot
+safety behavior, and the first matched same-harness dogfood batch from 2026-05-08.
 
 Confidence: medium.
 
-Next gate: controlled multi-arm dogfood shows `memoryitem_orient` beats `no_memory` and specialist
-legacy retrieval on continuity, preference adherence, and bad-memory containment.
+Next gate: matched dogfood beyond one-turn recall shows `memoryitem_orient` beats `no_memory` and
+specialist legacy retrieval on bounded autonomous follow-through, preference adherence,
+bad-memory containment, and migration-preservation checks.
 
 ### BH-C2: Orient As The Single Hot-Path Entrypoint
 
 Claim: `orient` should remain the single frictionless hot-path entrypoint, while graph, lint,
 migration, raw observations, and obligation detection stay specialist paths.
 
-Current evidence: orient contract, MCP tests, pilot evidence that noise is visible, and Council
-insight to defer ontology expansion.
+Current evidence: orient contract, MCP tests, pilot evidence that noise is visible, Council
+insight to defer ontology expansion, and the 2026-05-08 matched batch where resume continuity,
+decision continuity, stale-scope rejection, and durable preference recall passed without adding
+graph, lint, raw observations, or obligation detection to the hot path.
 
 Confidence: medium-high.
 
@@ -286,8 +289,13 @@ Current evidence: implemented orient contract and live smoke after the recent-gi
 
 Confidence: low-medium.
 
-Next gate: rerun `resume_continuity_001`. If fresh project-plan context remains missing or noisy,
-prefer capture/promotion or ranking fixes.
+Current update: the matched 2026-05-08 treatment rerun passed, but the same-harness no-memory
+control also passed. This supports recent Git/current-plan context as sufficient for that narrow
+resume task, not as a broad MemoryItem-dominance claim.
+
+Next gate: a harder autonomous follow-through scenario where the agent must preserve the current
+plan, user preference, verification habit, and no-M6/no-deletion gates through an actual bounded
+work slice.
 
 ### BH-C5: Dogfood Is An Instrument, Not The Method
 
@@ -298,6 +306,29 @@ Current evidence: pilot contamination and explicit method analysis.
 Confidence: high.
 
 Update condition: revise only if the research operating model is replaced.
+
+### BH-C6: Reviewed Preferences Improve Durable Preference Recall
+
+Claim: reviewed project/user preferences captured as `MemoryItem` records improve durable
+preference recall for agents working in this repository.
+
+Current evidence: in the matched 2026-05-08 same-harness batch, `memoryitem_orient` passed
+`follow_user_preference_001` while the no-memory control failed the target durable preference check.
+The treatment recovered both target constraints: commit every meaningful Engram step, and keep
+unrelated/untracked user-owned files such as root `AGENTS.md` out of commits unless explicitly
+requested.
+
+Confidence: medium-high for this repository and this preference class; low for cross-project,
+cross-user, or long-horizon generality.
+
+Limits: the batch used Codex fresh-thread transcript judgments for no-memory controls and treatment
+telemetry for orient arms. It does not prove that all preferences should be accepted without
+review, that stale preferences will be challenged correctly, or that MemoryItems should dominate
+legacy retrieval for non-preference tasks.
+
+Next gate: repeat the preference advantage inside `bounded_autonomous_followthrough_001`, where the
+preference must constrain a real verified and committed work slice rather than a direct question
+about the preference itself.
 
 ---
 
@@ -348,11 +379,14 @@ Consensus is useful for breadth. It is not a substitute for evidence.
 
 Near-term research questions:
 
-1. Does recent Git context plus existing MemoryItem ranking fix resume continuity?
-2. Are fresh project-plan documents absent from active MemoryItems, poorly ranked, or both?
-3. Which dogfood scenarios need isolated fresh sessions to remove transcript contamination?
+1. Can `memoryitem_orient` improve bounded autonomous follow-through over no-memory when the agent
+   must choose a scoped next step, verify it, commit it, and capture the next plan?
+2. Does durable preference recall survive inside a real work slice, not only a direct preference
+   question?
+3. Which outcomes still require human judgment rather than agent self-report?
 4. What is the minimum evidence to start read-only M6 inventory without increasing migration risk?
-5. Which constructs require human judgment rather than agent self-report?
+5. Does legacy search add useful evidence for migration-preservation scenarios, or does it add
+   noise compared with reviewed MemoryItems?
 
 Medium-term research questions:
 
@@ -369,15 +403,20 @@ Medium-term research questions:
 The next Brain Harness step should apply this method to the current active question:
 
 ```text
-Does the new recent Git context plus existing Brain Loop ranking improve resume continuity enough
-to proceed with the labeled dogfood batch, or do we first need capture/promotion of fresh project
-plan documents into active MemoryItems?
+Does Brain Loop v1 improve bounded autonomous follow-through enough to justify keeping `orient`
+as the single frictionless entrypoint while leaving graph, lint, migration, raw observations, and
+obligation detection outside the normal hot path?
 ```
 
 Recommended instrument:
 
-1. Rerun `resume_continuity_001` with `memoryitem_orient` in the current restarted Codex session.
-2. Score whether the dogfood protocol, pilot report, and latest implementation commit surface.
-3. If the answer is still missing, inspect whether the gap is capture, indexing, ranking, or
-   prompt-shaping.
-4. Only then choose between ranking calibration, targeted promotion, or broader dogfood.
+1. Pre-register `bounded_autonomous_followthrough_001` in the dogfood run report.
+2. Run matched same-harness `no_memory` and `memoryitem_orient` arms without tuning memory between
+   arms.
+3. Require the agent to choose a small current Engram work slice, implement or document it, run the
+   relevant verification, commit the meaningful step, and capture the next plan.
+4. Score task success, preference adherence, repeated context questions, bad-memory use, and
+   whether the agent avoided M6, deletion, broad ranking churn, and hot-path expansion without
+   explicit approval.
+5. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
+   implementation change.
