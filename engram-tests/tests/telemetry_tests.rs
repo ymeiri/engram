@@ -523,6 +523,113 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
 }
 
 #[tokio::test]
+async fn mcp_telemetry_filters_traces_feedback_and_eval_by_scenario_and_arm() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let target_scenario = "bounded_autonomous_followthrough_003";
+    let target_arm = "no_memory_same_harness";
+    let unrelated_scenario = "bounded_autonomous_followthrough_unrelated";
+    let unrelated_arm = "orient_same_harness";
+    let mut target_trace_id = String::new();
+
+    for (label, scenario_id, arm, task_success) in [
+        ("target", target_scenario, target_arm, true),
+        ("unrelated-scenario", unrelated_scenario, target_arm, false),
+        ("unrelated-arm", target_scenario, unrelated_arm, false),
+    ] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("search".to_string());
+        trace_request.intent = Some("implement_change".to_string());
+        trace_request.scenario_id = Some(scenario_id.to_string());
+        trace_request.arm = Some(arm.to_string());
+        trace_request.query = Some(format!("{label} telemetry scope"));
+        trace_request.returned_result_ids = vec![format!("result-{label}")];
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+        if label == "target" {
+            target_trace_id = trace_id.clone();
+        }
+
+        let mut feedback_request = telemetry_request("submit_feedback");
+        feedback_request.trace_id = Some(trace_id);
+        feedback_request.used_result_ids = vec![format!("result-{label}")];
+        feedback_request.task_success = Some(task_success);
+        feedback_request.note = Some(format!("{label} feedback"));
+
+        tools::telemetry_new(&state, feedback_request)
+            .await
+            .expect("submit_feedback should work");
+    }
+
+    let unfiltered_response = tools::telemetry_new(&state, telemetry_request("list_traces"))
+        .await
+        .expect("unfiltered list_traces should work");
+    let unfiltered_json = parse_json(&unfiltered_response);
+    assert_eq!(unfiltered_json["count"], 3);
+
+    let mut list_traces_request = telemetry_request("list_traces");
+    list_traces_request.scenario_id = Some(target_scenario.to_string());
+    list_traces_request.arm = Some(target_arm.to_string());
+    let list_traces_response = tools::telemetry_new(&state, list_traces_request)
+        .await
+        .expect("filtered list_traces should work");
+    let list_traces_json = parse_json(&list_traces_response);
+    let traces = list_traces_json["traces"].as_array().unwrap();
+    assert_eq!(list_traces_json["count"], 1);
+    assert_eq!(traces[0]["id"].as_str(), Some(target_trace_id.as_str()));
+    assert_eq!(traces[0]["scenario_id"], target_scenario);
+    assert_eq!(traces[0]["arm"], target_arm);
+
+    let mut list_feedback_request = telemetry_request("list_feedback");
+    list_feedback_request.scenario_id = Some(target_scenario.to_string());
+    list_feedback_request.arm = Some(target_arm.to_string());
+    let list_feedback_response = tools::telemetry_new(&state, list_feedback_request)
+        .await
+        .expect("filtered list_feedback should work");
+    let list_feedback_json = parse_json(&list_feedback_response);
+    let feedback = list_feedback_json["feedback"].as_array().unwrap();
+    assert_eq!(list_feedback_json["count"], 1);
+    assert_eq!(
+        feedback[0]["trace_id"].as_str(),
+        Some(target_trace_id.as_str())
+    );
+    assert_eq!(feedback[0]["note"], "target feedback");
+
+    let mut eval_request = telemetry_request("real_session_eval");
+    eval_request.scenario_id = Some(target_scenario.to_string());
+    eval_request.arm = Some(target_arm.to_string());
+    let eval_response = tools::telemetry_new(&state, eval_request)
+        .await
+        .expect("filtered real_session_eval should work");
+    let eval_json = parse_json(&eval_response);
+    let report = &eval_json["report"];
+    assert_eq!(report["trace_count"], 1);
+    assert_eq!(report["feedback_count"], 1);
+    assert_eq!(report["task_success_count"], 1);
+    assert_eq!(report["task_failure_count"], 0);
+    assert_eq!(report["scenario_counts"][target_scenario], 1);
+    assert!(report["scenario_counts"].get(unrelated_scenario).is_none());
+    let arms = report["arms"].as_array().unwrap();
+    assert_eq!(arms.len(), 1);
+    assert_eq!(arms[0]["arm"], target_arm);
+    assert_ne!(arms[0]["arm"], unrelated_arm);
+}
+
+#[tokio::test]
 async fn mcp_orient_tags_trace_with_scenario_and_arm() {
     let (telemetry, memory) = setup_services().await;
     memory

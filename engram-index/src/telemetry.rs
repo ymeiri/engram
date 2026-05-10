@@ -54,6 +54,21 @@ impl TelemetryService {
         Ok(self.repo.list_traces(limit).await?)
     }
 
+    /// List traces scoped by optional scenario and arm filters.
+    pub async fn list_traces_scoped(
+        &self,
+        limit: Option<usize>,
+        scenario_id: Option<&str>,
+        arm: Option<&str>,
+    ) -> IndexResult<Vec<BrainHarnessTrace>> {
+        let traces = self.repo.list_traces(limit).await?;
+        if !has_scope_filter(scenario_id, arm) {
+            return Ok(traces);
+        }
+
+        Ok(filter_traces_by_scope(traces, scenario_id, arm))
+    }
+
     /// Submit agent feedback for a trace.
     pub async fn submit_feedback(&self, mut feedback: AgentFeedback) -> IndexResult<AgentFeedback> {
         let trace = self
@@ -85,6 +100,28 @@ impl TelemetryService {
     /// List recent feedback.
     pub async fn list_feedback(&self, limit: Option<usize>) -> IndexResult<Vec<AgentFeedback>> {
         Ok(self.repo.list_feedback(limit).await?)
+    }
+
+    /// List recent feedback linked to traces matching optional scenario and arm filters.
+    pub async fn list_feedback_scoped(
+        &self,
+        limit: Option<usize>,
+        scenario_id: Option<&str>,
+        arm: Option<&str>,
+    ) -> IndexResult<Vec<AgentFeedback>> {
+        if !has_scope_filter(scenario_id, arm) {
+            return self.list_feedback(limit).await;
+        }
+
+        let traces = self.repo.list_traces(limit).await?;
+        let traces = filter_traces_by_scope(traces, scenario_id, arm);
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
+        let feedback = self.repo.list_feedback(limit).await?;
+
+        Ok(feedback
+            .into_iter()
+            .filter(|item| trace_ids.contains(&item.trace_id))
+            .collect())
     }
 
     /// Aggregate traces and feedback by intent.
@@ -193,6 +230,34 @@ impl TelemetryService {
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
         let traces = self.repo.list_traces(Some(sample_limit)).await?;
         let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
+
+        Ok(build_real_session_eval_report(
+            sample_limit,
+            &traces,
+            &feedback,
+        ))
+    }
+
+    /// Build a read-only report over traces scoped by optional scenario and arm filters.
+    pub async fn real_session_eval_report_scoped(
+        &self,
+        limit: Option<usize>,
+        scenario_id: Option<&str>,
+        arm: Option<&str>,
+    ) -> IndexResult<RealSessionEvalReport> {
+        if !has_scope_filter(scenario_id, arm) {
+            return self.real_session_eval_report(limit).await;
+        }
+
+        let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
+        let traces = self.repo.list_traces(Some(sample_limit)).await?;
+        let traces = filter_traces_by_scope(traces, scenario_id, arm);
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
+        let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
+        let feedback = feedback
+            .into_iter()
+            .filter(|item| trace_ids.contains(&item.trace_id))
+            .collect::<Vec<_>>();
 
         Ok(build_real_session_eval_report(
             sample_limit,
@@ -913,6 +978,37 @@ fn has_text(value: Option<&str>) -> bool {
     value.is_some_and(|text| !text.trim().is_empty())
 }
 
+fn has_scope_filter(scenario_id: Option<&str>, arm: Option<&str>) -> bool {
+    normalized_label_ref(scenario_id).is_some() || normalized_label_ref(arm).is_some()
+}
+
+fn filter_traces_by_scope(
+    traces: Vec<BrainHarnessTrace>,
+    scenario_id: Option<&str>,
+    arm: Option<&str>,
+) -> Vec<BrainHarnessTrace> {
+    traces
+        .into_iter()
+        .filter(|trace| trace_matches_scope(trace, scenario_id, arm))
+        .collect()
+}
+
+fn trace_matches_scope(
+    trace: &BrainHarnessTrace,
+    scenario_id: Option<&str>,
+    arm: Option<&str>,
+) -> bool {
+    label_matches(trace.scenario_id.as_deref(), scenario_id)
+        && label_matches(trace.arm.as_deref(), arm)
+}
+
+fn label_matches(actual: Option<&str>, expected: Option<&str>) -> bool {
+    let Some(expected) = normalized_label_ref(expected) else {
+        return true;
+    };
+    normalized_label_ref(actual) == Some(expected)
+}
+
 fn has_outcome_feedback(feedback: &AgentFeedback) -> bool {
     feedback.task_success.is_some()
         || feedback.preference_adhered.is_some()
@@ -926,5 +1022,14 @@ fn normalized_label(value: Option<&str>) -> Option<String> {
         None
     } else {
         Some(label.to_string())
+    }
+}
+
+fn normalized_label_ref(value: Option<&str>) -> Option<&str> {
+    let label = value?.trim();
+    if label.is_empty() {
+        None
+    } else {
+        Some(label)
     }
 }

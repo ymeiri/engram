@@ -3376,9 +3376,9 @@ pub struct TelemetryRequest {
     pub operation: Option<String>,
     /// Intent for trace correlation: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
     pub intent: Option<String>,
-    /// Free-form controlled eval scenario identifier for record_trace.
+    /// Free-form controlled eval scenario identifier for record_trace and list/report filtering.
     pub scenario_id: Option<String>,
-    /// Free-form eval or comparison arm for record_trace.
+    /// Free-form eval or comparison arm for record_trace and list/report filtering.
     pub arm: Option<String>,
     /// Query, prompt, or short operation context.
     pub query: Option<String>,
@@ -3501,7 +3501,11 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
         }
         "list_traces" => {
             let traces = service
-                .list_traces(request.limit)
+                .list_traces_scoped(
+                    request.limit,
+                    request.scenario_id.as_deref(),
+                    request.arm.as_deref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&serde_json::json!({
@@ -3554,7 +3558,11 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                     .map_err(|e| e.to_string())?
             } else {
                 service
-                    .list_feedback(request.limit)
+                    .list_feedback_scoped(
+                        request.limit,
+                        request.scenario_id.as_deref(),
+                        request.arm.as_deref(),
+                    )
                     .await
                     .map_err(|e| e.to_string())?
             };
@@ -3574,7 +3582,11 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
         }
         "real_session_eval" | "eval_report" => {
             let report = service
-                .real_session_eval_report(request.limit)
+                .real_session_eval_report_scoped(
+                    request.limit,
+                    request.scenario_id.as_deref(),
+                    request.arm.as_deref(),
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&serde_json::json!({ "report": report }))
