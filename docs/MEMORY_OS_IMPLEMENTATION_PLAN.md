@@ -61,6 +61,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       slice with no material `memoryitem_orient` advantage; the leaner implementation landed, but
       the result does not justify `orient` ranking, hot-path, migration, or legacy-simplification
       changes.
+- [x] Brain Harness BAF004 pre-registered: next controlled code-bearing confidence scenario will
+      make scoped `real_session_eval` reports self-describing with `applied_filters`, while testing
+      whether `orient` preserves non-obvious commit-hygiene and safety-gate context.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Low-friction current-plan capture through `memory(action=capture_current_plan)`: agents can

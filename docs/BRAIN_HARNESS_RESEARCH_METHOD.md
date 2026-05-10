@@ -452,3 +452,12 @@ Recommended next instrument:
    expansion without explicit approval.
 6. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
    implementation change.
+
+BAF004 pre-registration:
+
+- `bounded_autonomous_followthrough_004` is pre-registered as the next confidence scenario.
+- The work slice is small and code-bearing: make scoped `real_session_eval` reports echo their
+  effective `project`, `scenario_id`, and `arm` filters through `applied_filters`.
+- The prompt intentionally leaves the commit-hygiene preference and safety-gate discipline only
+  partially stated, so the treatment can test whether `orient` preserves non-obvious workflow
+  context rather than merely following a fully specified implementation checklist.

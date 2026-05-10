@@ -524,8 +524,9 @@ Follow-up checkpoint:
   arms passed and the leaner patch landed, but there was still no material outcome advantage for
   `memoryitem_orient`.
 
-Next confidence scenario: a harder code-bearing task where success depends on a non-obvious
-current plan or preference that is not fully restated in the task prompt.
+Next confidence scenario: `bounded_autonomous_followthrough_004`, a small code-bearing telemetry
+reporting task where success depends on preserving non-obvious Engram workflow preferences and
+safety gates that are not fully restated in the task prompt.
 
 ---
 
@@ -869,8 +870,8 @@ Proceed in this order from the current checkpoint:
    so it does not justify broad implementation changes.
 4. Treat BAF003 as a stronger code-bearing pass for the protocol and scoped telemetry fix, but not
    as evidence for `orient` ranking, hot-path, migration, or legacy-simplification changes.
-5. Use the filtered telemetry capability for cleaner scoring, then decide whether to keep gathering
-   dogfood, run read-only M6
+5. Run the pre-registered BAF004 applied-filter-reporting scenario with the filtered telemetry
+   capability, then decide whether to keep gathering dogfood, run read-only M6
    inventory/review-export as provisional evidence, or make a narrowly justified implementation
    change.
 6. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
