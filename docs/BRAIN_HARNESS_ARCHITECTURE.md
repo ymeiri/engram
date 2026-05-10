@@ -521,8 +521,9 @@ Follow-up checkpoint:
 - `bounded_autonomous_followthrough_002` removed those flaws. Both arms again passed on a narrow
   doc-only contract update, with no material outcome advantage for `memoryitem_orient`.
 
-Next confidence scenario: a harder code-bearing bounded follow-through task where preference recall
-and current-plan continuity must constrain a real verified and committed implementation slice.
+Next confidence scenario: `bounded_autonomous_followthrough_003`, a code-bearing telemetry
+filtering fix where preference recall and current-plan continuity must constrain a real verified
+and committed implementation slice.
 
 ---
 
@@ -864,8 +865,8 @@ Proceed in this order from the current checkpoint:
 2. Treat the 2026-05-08 matched batch as support for durable preference recall only.
 3. Treat BAF002 as a clean but weakly discriminating result: both arms passed a doc-only work slice,
    so it does not justify broad implementation changes.
-4. Select and pre-register a harder code-bearing bounded follow-through scenario before making
-   `orient` ranking, hot-path, migration, or legacy-simplification changes.
+4. Run the pre-registered `bounded_autonomous_followthrough_003` code-bearing telemetry-filter
+   scenario before making `orient` ranking, hot-path, migration, or legacy-simplification changes.
 5. Use that result to decide whether to keep gathering dogfood, run read-only M6
    inventory/review-export as provisional evidence, or make a narrowly justified implementation
    change.

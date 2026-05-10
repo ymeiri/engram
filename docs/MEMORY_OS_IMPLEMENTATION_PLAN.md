@@ -55,6 +55,10 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Brain Harness BAF002 isolated follow-through scored: both arms passed a doc-only
       `ORIENT_CONTRACT.md` slice with no material `memoryitem_orient` advantage; next
       discriminating evidence should be code-bearing, not another doc-only task.
+- [x] Brain Harness BAF003 code-bearing scenario pre-registered around scoped telemetry filtering
+      for `scenario_id` and `arm`.
+- [ ] Run and score BAF003 in isolated no-memory and `memoryitem_orient` worktrees before using it
+      to justify `orient` ranking, hot-path, migration, or legacy-simplification changes.
 - [x] Review-gated entity observation promotion through `memory(action=promote_observation)`,
       preserving the source observation as evidence instead of widening `orient`.
 - [x] Low-friction current-plan capture through `memory(action=capture_current_plan)`: agents can

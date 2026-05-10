@@ -430,16 +430,14 @@ BAF002 result:
 
 Recommended next instrument:
 
-1. Do not run another doc-only bounded follow-through as the next discriminating test.
-2. Pre-register a harder code-bearing follow-through scenario only after selecting a small Engram
-   implementation slice whose success depends on a non-obvious current plan, project preference, or
-   safety gate.
-3. Use isolated clean worktrees from the same base commit, and keep the using agents from updating
+1. Run the pre-registered `bounded_autonomous_followthrough_003` code-bearing telemetry-filter
+   scenario.
+2. Use isolated clean worktrees from the same base commit, and keep the using agents from updating
    the dogfood report as their task output.
-4. Require the agent to complete the specified Engram work slice, run the relevant verification,
+3. Require the agent to complete the specified Engram work slice, run the relevant verification,
    commit the meaningful step, and capture the next plan only if a new durable plan is created.
-5. Score task success, preference adherence, repeated context questions, bad-memory use, cross-arm
+4. Score task success, preference adherence, repeated context questions, bad-memory use, cross-arm
    contamination, and whether the agent avoided M6, deletion, broad ranking churn, and hot-path
    expansion without explicit approval.
-6. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
+5. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
    implementation change.
