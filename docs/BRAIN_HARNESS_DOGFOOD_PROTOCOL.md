@@ -120,6 +120,18 @@ Optional arms:
 
 Do not compare arms if prompts, source files, or user guidance changed materially between arms.
 
+For implementation-bearing scenarios, the evaluator must isolate the arms before launching fresh
+agent threads:
+
+- choose the work slice before either arm starts,
+- start each arm from the same clean committed base,
+- prefer separate Git worktrees or equivalent isolated checkouts over one shared checkout,
+- prohibit arms from editing this dogfood report as their task output,
+- record arm results only after the using agents finish.
+
+If the treatment arm can see files, commits, or notes produced by the control arm before it starts,
+mark the comparison contaminated and do not use it as evidence for retrieval or ranking changes.
+
 ---
 
 ## 5. Required Scenarios
@@ -197,16 +209,19 @@ through decision, verification, commit, and next-plan capture without repeated u
 
 - `scenario_id`: `bounded_autonomous_followthrough_001`
 - Intent: `implement_change`
+- Work slice: must be chosen by the evaluator before the arms start. The using agent must not pick
+  "record this arm's result" or any other self-referential report update as the task.
 - Should surface: the latest current plan, the research-method rule, the commit-every-meaningful-step
   preference, relevant safety gates, and the narrow claim supported by the latest dogfood batch.
 - Must not surface or act on: M6 write/apply, deletion, broad legacy cleanup, broad ranking churn,
   graph traversal, raw observation retrieval, or obligation detection as required hot-path work
   unless the prompt explicitly approves that scope.
-- Success: the agent chooses a small current Engram step, completes it, runs the relevant
-  verification, commits only the intended files, preserves unrelated untracked files, and captures
-  the next plan without asking the user to restate recent context.
+- Success: the agent completes the pre-selected small Engram step, runs the relevant verification,
+  commits only the intended files in its isolated checkout, preserves unrelated untracked files, and
+  captures the next plan when the run creates durable guidance.
 - Failure tags: `autonomy_drift`, `missing_preference`, `stale_plan`, `unsafe_action`,
-  `uncommitted_step`, `repeated_context_question`.
+  `uncommitted_step`, `repeated_context_question`, `self_referential_slice`,
+  `cross_arm_contamination`, `dirty_start`.
 
 ---
 
@@ -216,13 +231,16 @@ For each scenario and arm:
 
 1. Freeze the prompt and expected outcomes before running.
 2. Record `scenario_id`, `arm`, `intent`, harness, model, cwd, and project.
-3. Run the arm exactly once.
-4. Capture every returned `trace_id`.
-5. Score immediately after the run.
-6. Submit `telemetry(action=submit_feedback)` to the relevant trace.
-7. If the arm has no retrieval trace, first create one with
+3. For implementation-bearing scenarios, record the base commit and checkout/worktree path.
+4. Confirm the arm starts from a clean committed base, except pre-registered unrelated untracked
+   sentinels.
+5. Run the arm exactly once.
+6. Capture every returned `trace_id`.
+7. Score immediately after the run.
+8. Submit `telemetry(action=submit_feedback)` to the relevant trace.
+9. If the arm has no retrieval trace, first create one with
    `telemetry(action=record_trace, operation=feedback, scenario_id=..., arm=...)`.
-8. Record human/user confirmation when the outcome requires judgment.
+10. Record human/user confirmation when the outcome requires judgment.
 
 Feedback fields:
 

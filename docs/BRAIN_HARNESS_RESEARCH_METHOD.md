@@ -410,13 +410,15 @@ obligation detection outside the normal hot path?
 
 Recommended instrument:
 
-1. Pre-register `bounded_autonomous_followthrough_001` in the dogfood run report.
-2. Run matched same-harness `no_memory` and `memoryitem_orient` arms without tuning memory between
-   arms.
-3. Require the agent to choose a small current Engram work slice, implement or document it, run the
-   relevant verification, commit the meaningful step, and capture the next plan.
-4. Score task success, preference adherence, repeated context questions, bad-memory use, and
-   whether the agent avoided M6, deletion, broad ranking churn, and hot-path expansion without
-   explicit approval.
-5. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
+1. Pre-register `bounded_autonomous_followthrough_002` in the dogfood run report.
+2. Use a pre-selected, non-self-referential work slice; the using agents must not choose their own
+   task or update the dogfood report as task output.
+3. Run matched same-harness `no_memory` and `memoryitem_orient` arms from isolated clean worktrees
+   created from the same base commit.
+4. Require the agent to complete the specified Engram work slice, run the relevant verification,
+   commit the meaningful step, and capture the next plan only if a new durable plan is created.
+5. Score task success, preference adherence, repeated context questions, bad-memory use, cross-arm
+   contamination, and whether the agent avoided M6, deletion, broad ranking churn, and hot-path
+   expansion without explicit approval.
+6. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
    implementation change.

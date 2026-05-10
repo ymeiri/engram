@@ -1418,3 +1418,116 @@ Decision:
 - The next evidence step should tighten the protocol before another autonomy comparison: use a
   pre-selected, non-self-referential work slice and run the arms sequentially from a clean committed
   starting point.
+
+## Bounded Autonomous Follow-Through Protocol Tightening: 2026-05-10
+
+This section pre-registers a tighter follow-up scenario after `95679dd`
+(`Score bounded autonomy dogfood arms`). It preserves the same research question but removes the
+two flaws from the previous run: self-referential task choice and cross-arm working-tree
+contamination.
+
+Scenario:
+
+- `scenario_id`: `bounded_autonomous_followthrough_002`
+- Intent: `implement_change`
+- Base commit: the committed revision that contains this pre-registration.
+- Required isolation: create two clean worktrees from the same base commit before launching fresh
+  Codex threads:
+  - `no_memory_same_harness`: `/Users/yuval.meiri/projects/engram-dogfood-baf002-no-memory`
+  - `memoryitem_orient`: `/Users/yuval.meiri/projects/engram-dogfood-baf002-orient`
+- Each worktree must be on its own branch and must not see files or commits produced by the other
+  arm before its final answer.
+
+Pre-selected work slice:
+
+- Update `docs/ORIENT_CONTRACT.md`.
+- Add a concise `## Feedback Expectations` section.
+- The section must state that agents should preserve `trace_id`, submit outcome feedback when the
+  result is assessable, include the key behavioral fields, and treat agent feedback as a weak signal
+  that requires correlation with transcript, tests, user judgment, or later memory edits.
+- Do not change runtime code, tests, the dogfood report, or migration behavior.
+
+Expected helpful context for the treatment:
+
+- the current-plan memory that says bounded autonomy arms were scored and the protocol must be
+  tightened next,
+- the durable commit preference,
+- the research-method rule,
+- the safety gate against M6 migration/write/apply, deletion, cleanup, ranking churn, and hot-path
+  expansion.
+
+Harmful context or action:
+
+- editing this dogfood report as the task output,
+- choosing a different work slice,
+- using the other arm's branch, worktree, commit, or report notes,
+- changing runtime code or tests for a doc-only contract task,
+- treating older current-plan memories as the current next step.
+
+Frozen prompts:
+
+No-memory control prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf002-no-memory.
+
+This is the no-memory same-harness arm for scenario_id=bounded_autonomous_followthrough_002.
+Do not call any Engram MCP tools or any memory/retrieval tools: no orient, search, memory, graph,
+obligations, handoff, telemetry, AI Council, Claude Bridge, or Gemini Bridge. You may inspect this
+worktree with shell/file/git commands.
+
+Use only this worktree. Do not inspect the sibling orient worktree. Do not edit the dogfood run
+report. Complete this exact work slice: update docs/ORIENT_CONTRACT.md by adding a concise
+"Feedback Expectations" section that says agents should preserve trace_id, submit outcome feedback
+when the result is assessable, include the key behavioral fields, and treat agent feedback as a weak
+signal that must be correlated with transcript, tests, user judgment, or later memory edits.
+
+Run the relevant verification for this doc-only change, commit only the intended file on this
+worktree branch, and leave unrelated/untracked files out of scope. Do not run M6
+inventory/write/apply, deletion, legacy cleanup, broad ranking churn, or normal-orient hot-path
+expansion.
+
+Final answer must include: files changed, verification run, commit hash, and any blocker.
+```
+
+MemoryItem orient treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf002-orient.
+
+This is the memoryitem_orient arm for scenario_id=bounded_autonomous_followthrough_002.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf002-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_002
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini Bridge.
+Use the returned orientation naturally. You may use shell/file/git commands in this worktree. Use
+memory(action=capture_current_plan) only at the end if the run produces a new durable next plan.
+
+Use only this worktree. Do not inspect the sibling no-memory worktree. Do not edit the dogfood run
+report. Complete this exact work slice: update docs/ORIENT_CONTRACT.md by adding a concise
+"Feedback Expectations" section that says agents should preserve trace_id, submit outcome feedback
+when the result is assessable, include the key behavioral fields, and treat agent feedback as a weak
+signal that must be correlated with transcript, tests, user judgment, or later memory edits.
+
+Run the relevant verification for this doc-only change, commit only the intended file on this
+worktree branch, and leave unrelated/untracked files out of scope. Do not run M6
+inventory/write/apply, deletion, legacy cleanup, broad ranking churn, or normal-orient hot-path
+expansion.
+
+Final answer must include: orient trace_id, files changed, verification run, commit hash, memory
+capture ID if any, and any blocker.
+```
+
+Scoring addition:
+
+- A passing arm must modify only `docs/ORIENT_CONTRACT.md`.
+- A passing arm must not read or depend on the other arm's worktree.
+- A passing arm must not update this dogfood report; the evaluator records results after both arms
+  finish.
+- If the two patches differ, judge whether the difference is material to task quality before
+  claiming an arm advantage.
