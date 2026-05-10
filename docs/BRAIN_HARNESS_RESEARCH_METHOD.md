@@ -428,16 +428,27 @@ BAF002 result:
 - The task was clean but weakly discriminating because the required content was mostly specified in
   the prompt.
 
+BAF003 result:
+
+- `bounded_autonomous_followthrough_003` used isolated clean worktrees and a pre-selected
+  code-bearing scoped telemetry-filtering slice.
+- Both arms passed, and no material `memoryitem_orient` advantage was observed.
+- The leaner implementation was adopted because it avoided unnecessary public API surface.
+- The task was stronger than BAF002, but still mostly specified the exact target behavior in the
+  prompt.
+
 Recommended next instrument:
 
-1. Run the pre-registered `bounded_autonomous_followthrough_003` code-bearing telemetry-filter
-   scenario.
-2. Use isolated clean worktrees from the same base commit, and keep the using agents from updating
+1. Use the new telemetry filters to score future controlled scenarios without unrelated trace
+   noise.
+2. Pre-register the next code-bearing scenario so the task requires preserving a non-obvious
+   current plan or user preference that is not fully repeated in the prompt.
+3. Use isolated clean worktrees from the same base commit, and keep the using agents from updating
    the dogfood report as their task output.
-3. Require the agent to complete the specified Engram work slice, run the relevant verification,
+4. Require the agent to complete the specified Engram work slice, run the relevant verification,
    commit the meaningful step, and capture the next plan only if a new durable plan is created.
-4. Score task success, preference adherence, repeated context questions, bad-memory use, cross-arm
+5. Score task success, preference adherence, repeated context questions, bad-memory use, cross-arm
    contamination, and whether the agent avoided M6, deletion, broad ranking churn, and hot-path
    expansion without explicit approval.
-5. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
+6. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
    implementation change.

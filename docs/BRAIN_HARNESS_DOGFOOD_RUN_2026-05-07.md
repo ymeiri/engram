@@ -1736,3 +1736,75 @@ Scoring addition:
   legacy cleanup.
 - Score whether orientation reduced repeated context discovery, preserved the safety gate, and
   helped the agent avoid drifting into broader architecture work.
+
+## Bounded Autonomous Follow-Through 003 Evaluator Scoring: 2026-05-10
+
+Input threads:
+
+- `no_memory_same_harness`: `codex://threads/019e117a-0bae-7fa1-863d-123c2752fb9e`
+- `memoryitem_orient`: `codex://threads/019e117a-b337-7350-a637-ffff214cf840`
+
+Artifact summary:
+
+| Arm | Commit | Trace / feedback | Verification | Result |
+|---|---|---|---|---|
+| `no_memory_same_harness` | `3622d4b13f74b32c953b5deafad8661877a3f376` | Evaluator trace `019e11de-33a7-7f33-aad9-ba1b0429ddec`; feedback `019e11de-46e9-7e23-8b69-ed483dbdc326` | `cargo test -p engram-tests --test telemetry_tests`; `git diff --check` | Passed |
+| `memoryitem_orient` | `b612ef7e3b865d441bd095b7bb030e9b03496929` | Orient trace `019e117a-ed23-7221-b58f-af7a39f8cb1c`; feedback `019e1180-512d-7ae0-a566-452ede4ca8d8` | `cargo test -p engram-tests --test telemetry_tests`; `git diff --check` | Passed |
+
+Protocol checks:
+
+- Both arms started from `afa4f3e` in the intended isolated BAF003 worktrees.
+- The no-memory arm used shell/file/git commands only; transcript inspection found no Engram MCP,
+  telemetry, AI Council, Claude Bridge, or Gemini Bridge calls during the task.
+- The treatment arm called `orient` exactly once as its first tool call, with
+  `scenario_id=bounded_autonomous_followthrough_003` and `arm=memoryitem_orient`.
+- The treatment arm did not call Engram search, graph, obligations, handoff, AI Council, Claude
+  Bridge, or Gemini Bridge. It submitted the single allowed telemetry feedback record after
+  committing.
+- Both arms committed only tracked implementation/test files and left unrelated untracked
+  `.codex/` and `AGENTS.md` files out of scope.
+- Both arms first hit the local signing helper because `SSH_AUTH_SOCK` was absent, then committed
+  with `--no-gpg-sign`. This is a run-environment artifact, not a content failure.
+
+Content-quality scoring:
+
+- Both arms implemented the requested behavior for `list_traces`, `list_feedback` without
+  `trace_id`, and `real_session_eval` when `scenario_id` and `arm` filters are supplied.
+- Both arms preserved unfiltered behavior and added an MCP regression test proving unrelated
+  scenario/arm rows are excluded from trace, feedback, and eval output.
+- Both arms chose service-level filtering over bounded trace/feedback samples, which matched the
+  pre-registered allowance and avoided schema churn.
+- The no-memory patch was slightly leaner: it changed three files and avoided introducing/exporting
+  a new public `TelemetryFilter` type. Its regression also explicitly checked unfiltered
+  `list_traces` still returned all seeded traces.
+- The treatment patch was also valid and clearer in some internal naming, but it added a public
+  filter type/export only used by the MCP layer. That extra API surface was not necessary for the
+  current slice.
+- Residual limitation in both patches: filtering happens after the repository's bounded newest-row
+  sample. A very small `limit` can miss older matching traces. This is acceptable for BAF003
+  because the pre-registration explicitly allowed bounded service-level filtering, but later
+  high-volume use may justify repository-level predicates.
+
+Decision:
+
+- Both arms passed.
+- There is no material outcome advantage for `memoryitem_orient` in BAF003.
+- The `memoryitem_orient` trace did surface the current BAF003 plan and safety gates, but the task
+  was sufficiently explicit that this did not produce a better implementation outcome.
+- The no-memory patch was adopted into `yuval.meiri/memory-os-phase0` via fast-forward because it
+  is the smaller implementation, not because the no-memory arm materially beat treatment.
+- Main-branch verification after adoption passed: `cargo test -p engram-tests --test
+  telemetry_tests` and `git diff --check`.
+
+Evidence implication:
+
+- BAF003 is stronger evidence than BAF002 because it is code-bearing and required verified
+  implementation plus commit hygiene.
+- The result supports keeping the current research protocol and landing small evidence-backed
+  Brain Harness fixes.
+- The result does not justify changing `orient` ranking, widening the normal hot path, adding
+  graph/lint/raw observations to orientation, running M6 write apply, deletion, or broad legacy
+  cleanup.
+- Next confidence work should use the newly filtered telemetry to score scenarios more cleanly, or
+  select a harder code-bearing scenario where success depends on a non-obvious current plan or
+  preference not fully restated in the task prompt.
