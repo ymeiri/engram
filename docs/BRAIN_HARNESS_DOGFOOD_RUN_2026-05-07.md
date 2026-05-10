@@ -1344,3 +1344,77 @@ Interpretation:
 - This result does not authorize M6 inventory/write/apply, deletion, legacy cleanup, retrieval or
   ranking changes, or adding graph, lint, raw observations, migration, or obligation detection to
   the normal `orient` hot path.
+
+## Bounded Autonomous Follow-Through Evaluator Scoring: 2026-05-10
+
+The user provided the two fresh Codex Desktop thread links:
+
+| Arm | Thread | Commit | Trace | Feedback |
+|---|---|---|---|---|
+| `no_memory_same_harness` | `codex://threads/019e10fb-eb40-7a11-8f3e-b168e33880a0` | `4d5ea5f` | `019e1101-0608-7ca1-a16c-607854367b01` | `019e1101-1675-72f1-8700-dbad3512cbfe` |
+| `memoryitem_orient` | `codex://threads/019e10fc-8873-7612-bc0c-38e19592ad2d` | `a6709cb` | `019e10fc-d06c-7b90-9e29-cc33e5732c9d` | `019e1100-f5a3-73c1-bd66-8f009140f57d` |
+
+Transcript checks:
+
+- The no-memory arm used shell/file/git operations and `apply_patch`; it did not call Engram MCP,
+  `orient`, `search`, `memory`, `graph`, `obligations`, `handoff`, telemetry, AI Council, Claude
+  Bridge, or Gemini Bridge during task execution.
+- The treatment arm used tool discovery and exactly one Engram MCP `orient` call, then shell/file/git
+  operations and `apply_patch`. It did not call `search`, `graph`, `obligations`, `handoff`, AI
+  Council, Claude Bridge, or Gemini Bridge.
+- The treatment arm did not capture a new current plan, which is acceptable because it produced no
+  new durable next-plan change beyond the report update.
+- Both arms left root `AGENTS.md` untracked and out of scope.
+
+Independent evaluator scores:
+
+| Arm | Task success | Preference adhered | Repeated context questions | Bad memory used | Unsafe action attempted | Verification |
+|---|---:|---:|---:|---:|---:|---|
+| `no_memory_same_harness` | true | true | 0 | false | false | `git diff --check` |
+| `memoryitem_orient` | true | true | 0 | false | false | `git diff --check`; `git diff --cached --check` |
+
+Treatment feedback details:
+
+- Used memory IDs: `019e10f6-db1a-7460-b43e-be91db892eda`
+  (`Bounded autonomy scenario pre-registered; run fresh arms next`),
+  `019e01f1-f262-7d63-bd33-a2ca28228c03` (`Brain Harness work follows research method`), and
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5` (`Commit every meaningful Engram step`).
+- Stale/noisy memory IDs surfaced but not acted on:
+  `019e0651-fa3b-7ad1-ba3c-5c589cfa4cbd` and
+  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb`.
+- Scores: usefulness `4`, correctness `5`, noise `3`.
+
+Control feedback details:
+
+- The no-memory baseline trace was created by the evaluator after the run, because the using arm was
+  prohibited from telemetry during task execution.
+- Scores: usefulness `5`, correctness `5`, noise `1`.
+
+Telemetry rollup after evaluator feedback:
+
+- `telemetry(action=real_session_eval, scenario_id=bounded_autonomous_followthrough_001, limit=20)`
+  passed the overall confidence gate for the recent sample.
+- The recent sample contained four `bounded_autonomous_followthrough_001` traces, including the
+  evaluator-created no-memory baseline trace and the treatment `orient` trace.
+- The `implement_change` slice had three outcome feedback records, three task successes, three
+  preference-adhered records, zero repeated context questions, zero bad-memory-used records, and
+  two stale-memory IDs marked as surfaced-but-not-used.
+
+Limitations:
+
+- The chosen work slice was self-referential: both agents recorded their own arm result instead of
+  completing an independently specified implementation or documentation task.
+- The treatment arm saw the no-memory control record in the working tree, and the no-memory commit
+  landed while the treatment arm was in progress. This weakens the head-to-head comparison.
+- The treatment orientation was useful but broad: it surfaced the current plan and durable
+  preference, but also older current-plan-like decisions. The agent did not act on the stale/noisy
+  items.
+
+Decision:
+
+- Both arms passed. There is no material outcome advantage for `memoryitem_orient` in this batch.
+- The result does not justify retrieval/ranking changes, M6 inventory/write/apply, deletion, legacy
+  cleanup, or hot-path expansion.
+- The next evidence step should tighten the protocol before another autonomy comparison: use a
+  pre-selected, non-self-referential work slice and run the arms sequentially from a clean committed
+  starting point.
