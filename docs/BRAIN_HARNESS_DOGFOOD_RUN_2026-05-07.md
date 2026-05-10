@@ -1981,3 +1981,93 @@ Protocol implication:
 - Preserve the dirty worktree as an invalid-attempt artifact unless explicitly cleaned later.
 - Rerun BAF004 from clean isolated worktrees using corrected prompts and a fresh `memoryitem_orient`
   thread that calls `orient` exactly once as its first tool call.
+
+## Bounded Autonomous Follow-Through 004 Rerun Partial Result: 2026-05-10
+
+Input threads:
+
+- `codex://threads/019e1337-fe87-7b00-a87c-d444d63cf0cc`
+- `codex://threads/019e1338-8733-7992-8fb0-60c8aba6b331`
+
+Verdict: partial rerun only. The no-memory control is valid, but the treatment is invalid and not
+scoreable.
+
+Evidence:
+
+- `019e1337-fe87-7b00-a87c-d444d63cf0cc` ran in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-no-memory` and received the correct
+  no-memory prompt.
+- The valid no-memory arm did not call Engram MCP, memory retrieval, AI Council, Claude Bridge, or
+  Gemini Bridge. It used only shell/file/git commands.
+- The no-memory arm committed `711c736` (`Add applied filters to telemetry eval reports`), changing
+  `engram-core/src/telemetry.rs`, `engram-index/src/telemetry.rs`,
+  `engram-mcp/src/tools.rs`, and `engram-tests/tests/telemetry_tests.rs`.
+- The no-memory arm verified with `cargo fmt --all --check`,
+  `cargo test -p engram-tests --test telemetry_tests`, and `git diff --check`.
+- The no-memory implementation made `RealSessionEvalReport` include `applied_filters` and threaded
+  the `project` filter through the scoped eval path, so the regression proves that the project
+  filter changes the aggregated sample rather than only echoing the request.
+- `019e1338-8733-7992-8fb0-60c8aba6b331` ran in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-orient`, but received a no-memory prompt
+  that explicitly prohibited Engram MCP tools. It did not call `orient`, so it is not a valid
+  `memoryitem_orient` arm.
+- The invalid treatment thread left uncommitted changes in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-orient` and reported
+  `Commit: none created`.
+- The invalid treatment implementation only inserted `applied_filters` at the MCP JSON response
+  boundary. It did not thread the project filter into the scoped eval aggregation, so it is weaker
+  than the valid no-memory control patch.
+- `telemetry(action=list_traces, project=engram,
+  scenario_id=bounded_autonomous_followthrough_004)` returned no BAF004 traces, and
+  `telemetry(action=list_feedback, project=engram,
+  scenario_id=bounded_autonomous_followthrough_004)` returned no BAF004 feedback.
+
+Protocol implication:
+
+- Preserve `711c736` as the valid no-memory rerun output.
+- Do not score BAF004 yet, because there is no valid `memoryitem_orient` treatment arm to compare.
+- Preserve the dirty `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-orient` worktree as an
+  invalid-attempt artifact unless explicitly cleaned later.
+- Rerun only the `memoryitem_orient` treatment from
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient`, branch
+  `yuval.meiri/dogfood-baf004-rerun2-orient`, based at `50de8e0`.
+
+Corrected treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient.
+
+This is the memoryitem_orient rerun arm for
+scenario_id=bounded_autonomous_followthrough_004.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_004
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini
+Bridge. Do not call telemetry except to submit outcome feedback for the orient trace before the
+final answer. Use the returned orientation naturally. You may use shell/file/git commands in this
+worktree. Use memory(action=capture_current_plan) only at the end if the run produces a new
+durable next plan.
+
+Use only this worktree. Do not inspect the sibling no-memory worktree or any prior BAF004 worktree.
+Do not edit the dogfood run report. Complete this work slice: make scoped Brain Harness telemetry
+eval reports self-describing. telemetry(action=real_session_eval, project=..., scenario_id=...,
+arm=...) should include an applied_filters object in the returned report showing the effective
+project, scenario_id, and arm filters. Omitted filters should appear as null or an equivalent JSON
+null value. Preserve existing counts, confidence-gate behavior, and scoped filtering behavior.
+
+Add a focused MCP regression test in engram-tests/tests/telemetry_tests.rs proving filtered and
+unfiltered eval reports expose the expected applied_filters. Keep the implementation narrow: do not
+add repository-level predicates, new public telemetry API surface, ranking changes, or hot-path
+orientation changes.
+
+Follow the repository's normal Engram workflow for a meaningful completed step. Before final answer,
+submit telemetry feedback for the orient trace with task_success, preference_adhered,
+usefulness_score, correctness_score, noise_score, repeated_context_questions, bad_memory_used, any
+used/rejected/stale/wrong-scope memory IDs, and a concise note. Final answer must include: files
+changed, verification run, commit hash if one was created, and any blocker.
+```
