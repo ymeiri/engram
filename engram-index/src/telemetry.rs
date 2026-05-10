@@ -4,7 +4,8 @@ use crate::error::{IndexError, IndexResult};
 use engram_core::id::Id;
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessTrace, IntentTelemetryStats, RealSessionConfidenceGate,
-    RealSessionEvalArmRow, RealSessionEvalIntentRow, RealSessionEvalReport,
+    RealSessionEvalAppliedFilters, RealSessionEvalArmRow, RealSessionEvalIntentRow,
+    RealSessionEvalReport,
 };
 use engram_store::{Db, TelemetryRepo};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -235,23 +236,43 @@ impl TelemetryService {
             sample_limit,
             &traces,
             &feedback,
+            RealSessionEvalAppliedFilters::default(),
         ))
     }
 
-    /// Build a read-only report over traces scoped by optional scenario and arm filters.
+    /// Build a read-only report over traces scoped by optional project, scenario, and arm filters.
     pub async fn real_session_eval_report_scoped(
         &self,
         limit: Option<usize>,
+        project: Option<&str>,
         scenario_id: Option<&str>,
         arm: Option<&str>,
     ) -> IndexResult<RealSessionEvalReport> {
-        if !has_scope_filter(scenario_id, arm) {
+        let applied_filters = RealSessionEvalAppliedFilters {
+            project: normalized_label(project),
+            scenario_id: normalized_label(scenario_id),
+            arm: normalized_label(arm),
+        };
+        if applied_filters.project.is_none()
+            && applied_filters.scenario_id.is_none()
+            && applied_filters.arm.is_none()
+        {
             return self.real_session_eval_report(limit).await;
         }
 
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
         let traces = self.repo.list_traces(Some(sample_limit)).await?;
-        let traces = filter_traces_by_scope(traces, scenario_id, arm);
+        let traces = traces
+            .into_iter()
+            .filter(|trace| {
+                label_matches(trace.project.as_deref(), applied_filters.project.as_deref())
+                    && trace_matches_scope(
+                        trace,
+                        applied_filters.scenario_id.as_deref(),
+                        applied_filters.arm.as_deref(),
+                    )
+            })
+            .collect::<Vec<_>>();
         let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
         let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
         let feedback = feedback
@@ -263,6 +284,7 @@ impl TelemetryService {
             sample_limit,
             &traces,
             &feedback,
+            applied_filters,
         ))
     }
 }
@@ -451,6 +473,7 @@ fn build_real_session_eval_report(
     sample_limit: usize,
     traces: &[BrainHarnessTrace],
     feedback: &[AgentFeedback],
+    applied_filters: RealSessionEvalAppliedFilters,
 ) -> RealSessionEvalReport {
     let mut aggregation = aggregate_traces(traces);
     aggregate_feedback(
@@ -498,7 +521,13 @@ fn build_real_session_eval_report(
         intents,
         arms,
     };
-    let mut report = report_from_rows(sample_limit, traces.len(), feedback.len(), rows);
+    let mut report = report_from_rows(
+        sample_limit,
+        traces.len(),
+        feedback.len(),
+        applied_filters,
+        rows,
+    );
     report.confidence_gate = confidence_gate(&report);
     report.recommendations = recommendations(&report);
     report
@@ -600,11 +629,13 @@ fn report_from_rows(
     sample_limit: usize,
     trace_count: usize,
     feedback_count: usize,
+    applied_filters: RealSessionEvalAppliedFilters,
     rows: ReportRows,
 ) -> RealSessionEvalReport {
     RealSessionEvalReport {
         generated_at: OffsetDateTime::now_utc(),
         sample_limit,
+        applied_filters,
         trace_count,
         feedback_count,
         feedback_coverage: coverage(feedback_count, trace_count),

@@ -3584,6 +3584,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             let report = service
                 .real_session_eval_report_scoped(
                     request.limit,
+                    request.project.as_deref(),
                     request.scenario_id.as_deref(),
                     request.arm.as_deref(),
                 )
