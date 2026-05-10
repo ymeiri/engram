@@ -1828,7 +1828,7 @@ Hypothesis:
 
 Base and isolation:
 
-- Base commit: `66df75412d4beaa9ff1e65c4c73ba9c7dc05e961`.
+- Base commit: the committed revision that contains this pre-registration.
 - Worktrees to create before running:
   - no-memory control: `/Users/yuval.meiri/projects/engram-dogfood-baf004-no-memory`
   - `memoryitem_orient` treatment:
