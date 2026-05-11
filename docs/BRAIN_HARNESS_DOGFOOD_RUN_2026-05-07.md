@@ -2071,3 +2071,79 @@ usefulness_score, correctness_score, noise_score, repeated_context_questions, ba
 used/rejected/stale/wrong-scope memory IDs, and a concise note. Final answer must include: files
 changed, verification run, commit hash if one was created, and any blocker.
 ```
+
+## Bounded Autonomous Follow-Through 004 Rerun Score: 2026-05-11
+
+Scoreable inputs:
+
+- No-memory control:
+  `codex://threads/019e1337-fe87-7b00-a87c-d444d63cf0cc`
+- `memoryitem_orient` treatment implementation:
+  `codex://threads/019e134a-8984-71a1-97aa-f6bf00d846f7`
+- `memoryitem_orient` treatment verification:
+  `codex://threads/019e1682-c7f3-7990-a6bd-50144c67977b`
+
+Verdict: scoreable. Both arms passed the requested code-bearing work slice. Do not claim a material
+`memoryitem_orient` advantage from this scenario; the strongest conclusion is that `orient` preserved
+the workflow constraints and did not harm task completion, but the prompt itself carried most of the
+decisive context.
+
+Treatment evidence:
+
+- The implementation-producing treatment thread called `orient` as its first tool call with
+  `project=engram`, `scenario_id=bounded_autonomous_followthrough_004`, and
+  `arm=memoryitem_orient`.
+- The orient trace was `019e134a-eaf6-7e92-929a-b113ed626215`; feedback
+  `019e134f-f926-7c10-97eb-72949df5056a` reported `task_success=true`,
+  `preference_adhered=true`, usefulness `5`, correctness `5`, noise `2`, no repeated context
+  questions, and no harmful memory.
+- The treatment committed `2e78170` (`Describe telemetry eval filters`) in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient`, changing
+  `engram-core/src/telemetry.rs`, `engram-index/src/telemetry.rs`,
+  `engram-mcp/src/tools.rs`, and `engram-tests/tests/telemetry_tests.rs`.
+- The treatment verified with
+  `cargo test -p engram-tests --test telemetry_tests mcp_telemetry_eval_report_exposes_applied_filters`,
+  `cargo test -p engram-tests --test telemetry_tests`, `cargo fmt --all --check`, and
+  `git diff --check`.
+- The first signed commit attempt failed because `SSH_AUTH_SOCK` was missing; the agent recovered by
+  committing locally with signing disabled. Pre-existing untracked `.codex/` and `AGENTS.md` were
+  left untouched.
+- The follow-up verification thread `019e1682-c7f3-7990-a6bd-50144c67977b` also called `orient`
+  first, verified `2e78170` at HEAD, reran the focused and full telemetry tests, and submitted
+  feedback `019e1684-be5b-7b53-a77f-b3b3da9c8614`. It is useful confirmation, but it is not the
+  implementation-producing treatment run.
+
+Arm comparison:
+
+| Criterion | No-memory control | `memoryitem_orient` treatment | Assessment |
+|---|---|---|---|
+| Protocol validity | Passed: no Engram calls, correct worktree, no report edit | Passed: first call was `orient`; only later Engram call was feedback | Both valid |
+| Code correctness | Passed | Passed | Tie |
+| Scoped project behavior | Passed: project filter changes the aggregated sample | Passed: project filter changes the aggregated sample | Tie |
+| Regression strength | Stronger on feedback/outcome counts | Stronger on excluding both other project and other arm | Complementary |
+| Public shape | Adds explicit `RealSessionEvalAppliedFilters` struct | Uses `BTreeMap<String, Option<String>>` | Prefer explicit struct for fixed report keys |
+| Workflow preference | Committed `711c736`; left untracked files alone | Committed `2e78170`; left untracked files alone | Tie |
+| Orientation value | Not applicable | Helped surface current-plan and commit preference, but also returned unrelated harness history | Useful but noisy |
+
+Conclusion:
+
+- H1 is not strongly supported. The treatment did not materially outperform the no-memory control on
+  correctness, verification, commit hygiene, or scope control.
+- H0 is not rejected. A detailed prompt plus local code inspection was sufficient for this bounded
+  work slice.
+- The treatment still gives positive safety evidence: `orient` did not distract the agent into
+  graph, obligations, migration, ranking, or architecture work, and the agent followed the commit
+  preference despite a signing failure.
+- The feedback itself exposed a telemetry quality issue: the implementation-producing treatment
+  feedback reported no `used_memory_ids` even though its note says orient context helped. Future
+  dogfood prompts should explicitly ask agents to mark the current-plan memory as used when it
+  shaped behavior.
+
+Integration recommendation:
+
+- Adopt a curated implementation rather than blindly choosing one arm. Prefer the no-memory arm's
+  explicit `RealSessionEvalAppliedFilters` schema and feedback/outcome regression, plus the treatment
+  arm's centralized project/scenario/arm scope helper coverage.
+- After integration, install/restart the current Engram binary before relying on live
+  `telemetry(action=real_session_eval, project=..., scenario_id=..., arm=...)` output to include
+  `applied_filters`.
