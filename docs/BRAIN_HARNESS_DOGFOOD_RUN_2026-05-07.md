@@ -2309,3 +2309,75 @@ Evaluator rubric:
   unrelated untracked file handling still matter.
 - For the treatment arm, score feedback quality: `used_memory_ids` should include the current-plan
   memory if it shaped the chosen step.
+
+## Bounded Autonomous Follow-Through 005 Score: 2026-05-11
+
+Scoreable inputs:
+
+- No-memory control: `codex://threads/019e174c-c8f7-7dc0-865a-59aef65ffc1c`
+- `memoryitem_orient` treatment: `codex://threads/019e174d-4c00-75b0-b023-8aca8ae7c687`
+
+Verdict: partially scoreable and confounded. Both arms are valid weak passes under the evaluator
+rubric because each completed a real bounded Brain Harness code step, verified it, committed it,
+and left unrelated untracked files alone. Neither arm is a strong pass because neither chose the
+pre-selected docs synchronization target. Do not claim a material `memoryitem_orient` advantage
+from BAF005.
+
+The stronger finding is that BAF005 did not cleanly test H1. The treatment did call `orient`, but
+the returned active current-plan MemoryItem was `019e1711-ea55-7c92-a11a-44c593a26cf1`
+(`BAF005 worktrees ready; run fresh arms next`). That memory correctly identified the worktrees and
+scenario protocol, but it did not include the hidden pre-selected docs synchronization target from
+this pre-registration. The earlier target-bearing current-plan memory was superseded by the later
+worktree-ready current-plan memory. Therefore, the treatment arm was not actually given the key
+memory evidence H1 required it to use.
+
+Protocol evidence:
+
+- The no-memory transcript contains no Engram MCP calls. It used only shell/file/git inspection in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf005-no-memory`, did not read or edit this dogfood
+  report, and did not inspect the sibling worktree.
+- The treatment transcript used tool discovery, then made its first Engram MCP call to
+  `orient(project=engram, cwd=/Users/yuval.meiri/projects/engram-dogfood-baf005-orient,
+  agent=codex, intent=implement_change, scenario_id=bounded_autonomous_followthrough_005,
+  arm=memoryitem_orient)`. The orient trace was `019e174d-ae5a-7543-a7d1-9a065574bdbf`.
+- The treatment's only later Engram MCP call was telemetry feedback
+  `019e1756-168d-7913-aa74-2a1a390df611`; it did not call search, graph, obligations, handoff,
+  AI Council, Claude Bridge, or Gemini Bridge.
+- Both arms left pre-existing untracked `.codex/` and `AGENTS.md` files out of their commits.
+- Both first signed commit attempts failed because `SSH_AUTH_SOCK` was missing; both agents recovered
+  by creating unsigned local commits.
+
+Arm comparison:
+
+| Criterion | No-memory control | `memoryitem_orient` treatment | Assessment |
+|---|---|---|---|
+| Protocol validity | Passed: no Engram calls; no report/sibling inspection | Passed: first Engram MCP call was `orient`; only later Engram call was feedback | Both valid |
+| Target selection | Chose harness feedback-field guidance | Chose telemetry list project filtering | Both weak pass; neither selected docs sync |
+| Commit | `d1064f2` (`Clarify stale memory feedback fields`) | `8be52a7` (`Filter telemetry lists by project`) | Both committed |
+| Files | `engram-index/src/harness.rs`, `engram-tests/tests/harness_tests.rs` | `engram-index/src/telemetry.rs`, `engram-mcp/src/tools.rs`, `engram-tests/tests/telemetry_tests.rs` | Both narrow |
+| Verification | `cargo fmt --all --check`; `cargo test -p engram-index harness`; `cargo test -p engram-tests --test harness_tests`; `git diff --check` | `cargo fmt --all --check`; `git diff --check`; focused telemetry-list test; full `telemetry_tests` | Both adequate |
+| Orientation value | Not applicable | Surfaced scenario/worktree protocol, safety exclusions, research-method rule, and commit preference, but omitted the intended hidden target and included substantial unrelated harness history | Useful but not discriminating |
+| Feedback quality | No baseline feedback trace was recorded | Feedback reported success and usefulness, but used knowledge commit ID `019e1711-ea68-7213-bb75-00b5681b57be` instead of the current-plan MemoryItem ID `019e1711-ea55-7c92-a11a-44c593a26cf1` | Treatment feedback is semantically right but attribution ID is imprecise |
+
+Conclusion:
+
+- H1 is not supported by BAF005 because the treatment did not receive the intended target-bearing
+  current-plan memory.
+- H0 is not rejected. With the decisive hidden target absent from `orient`, both arms reasonably used
+  local evidence to choose plausible small Brain Harness improvements.
+- BAF005 exposes a real harness/research risk: current-plan freshness and supersession can erase
+  discriminating task intent if a later operational current-plan memory replaces an earlier
+  target-bearing memory before the treatment arm runs.
+- BAF005 also confirms the value of telemetry attribution fields: the treatment followed the request
+  to submit feedback, but selected the knowledge commit ID rather than the returned MemoryItem ID.
+
+Integration recommendation:
+
+- Do not merge either branch because it "won" BAF005. The scenario does not justify that claim.
+- Both branch changes look independently useful and narrow; integrate them only after normal code
+  review, one focused commit at a time.
+- Before running another underspecified continuation dogfood, fix the protocol rather than ranking:
+  every setup/current-plan memory that supersedes a pre-registration memory must preserve the
+  intended target or explicitly state that the target is intentionally hidden elsewhere. A simple
+  pre-arm smoke check should inspect the treatment `orient` result and confirm the target-bearing
+  MemoryItem is present before the arm is run.
