@@ -1,7 +1,7 @@
 # Brain Harness Cross-Harness Run Log
 
 Date: 2026-05-11
-Status: Claude Phase 1A in progress; commit-hygiene salience failure reproduced in manual Claude Code
+Status: Claude Phase 1A in progress; Hot Context fixed commit-hygiene salience behavior, with residual protocol and telemetry-ID gaps
 
 ## Scope
 
@@ -528,3 +528,64 @@ already exists as `019e03be-a9a5-7db2-848d-eb26ef78bcb5`. The next Engram
 implementation step should improve `follow_user_preference` orientation so
 matching reviewed preferences are visible in the compact/hot agent-consumed
 context before lower-priority decisions.
+
+## Hot Context Manual Rerun: `claude_rescue_commit_hygiene_001`
+
+Question: after installing commit `deef133` and restarting the daemon, does the
+new `follow_user_preference` Hot Context presentation fix the real Claude Code
+commit-hygiene salience failure?
+
+Manual validation used a fresh worktree at the same Phase 1A base commit:
+
+| Arm | Branch | Worktree | HEAD |
+|---|---|---|---|
+| `claude_manual_terminal_hot_context` | `yuval.meiri/calib-claude-commit-hygiene-hot-context-manual` | `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-hot-context-manual` | `32123670131e5effffbc4cdf72c502a73ccf0c3a` |
+
+Transcript export:
+
+- `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-hot-context-manual/2026-05-11-224936-controlled-engram-calibration-arm-clauderescue.txt`
+
+Telemetry:
+
+- Required orient trace: `019e1894-de44-7a30-8b23-cad71e491599`
+- Claude-submitted feedback:
+  - malformed first attempt: `019e1895-4d24-7db1-8748-d059429e8d68`
+  - clean retry: `019e1895-7ba9-7ba0-8ca3-46b4bef2b305`
+
+Manual terminal observations:
+
+- Real Claude Code startup hooks fired and injected the Engram session
+  activation contract twice.
+- Claude called `orient` with `intent=follow_user_preference` and
+  `arm=claude_manual_terminal_hot_context`.
+- The trace returned the reviewed commit-hygiene preference
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`.
+- Claude explicitly cited Hot Context and the reviewed user preference:
+  `Commit every meaningful Engram step`.
+- Claude mentioned `AGENTS.md` as an unrelated user-owned file that should stay
+  out of commits unless explicitly requested.
+- Claude's plan included path-scoped staging, no `git add -A` / `git add .`,
+  one focused commit per meaningful documentation step, and no WIP commits.
+- Claude did not suggest adding a duplicate commit-hygiene preference.
+
+Residual issues:
+
+- The transcript shows a disallowed `Read` tool attempt, followed by
+  `PostToolUseFailure:Read` hooks. The failed read did not appear to influence
+  the final answer, but it means this was not a protocol-clean controlled run.
+- Claude reported that the visible orient preview did not expose stable memory
+  IDs, so both submitted feedback records left `used_memory_ids` empty even
+  though Claude behaviorally used the reviewed preference.
+- The first telemetry feedback attempt had malformed parameters after XML-like
+  wrappers leaked into the note. Claude retried successfully, but the retry
+  still embedded a `missing_context` note inside the free-form note field rather
+  than the structured `missing_context` field.
+
+Evaluator result: Hot Context fixed the salience failure behaviorally, but this
+is a partial/qualified pass rather than a fully clean controlled run. Compared
+with the previous manual terminal run, Claude now used the reviewed preference,
+mentioned `AGENTS.md`, avoided inventing a missing preference, and produced the
+expected commit-hygiene plan. The remaining evidence points to two next
+implementation needs: expose `hot_context_ids` or equivalent compact IDs near
+the top of `orient`, and improve hook/eval handling so disallowed tool attempts
+and malformed feedback are captured as first-class scoring signals.
