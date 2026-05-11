@@ -1090,3 +1090,74 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
         "Prefer write-ahead schema migration"
     );
 }
+
+#[tokio::test]
+async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
+    let state = setup_tool_state().await;
+
+    let mut decision = with_writer(request("add"));
+    decision.kind = Some("decision".to_string());
+    decision.title = Some("Calibration run is active".to_string());
+    decision.content =
+        Some("Calibration update planning should stay scoped to the current run log.".to_string());
+    decision.origin = Some("user_stated".to_string());
+    decision.scope_type = Some("project".to_string());
+    decision.project_name = Some("engram".to_string());
+    decision.evidence = manual_review_evidence("Reviewed calibration decision.");
+    tools::memory_new(&state, decision)
+        .await
+        .expect("decision add should work");
+
+    let mut preference = with_writer(request("add"));
+    preference.kind = Some("preference".to_string());
+    preference.title = Some("Commit every meaningful Engram step".to_string());
+    preference.content = Some(
+        "When developing Engram, create a focused git commit after each meaningful implementation, validation, or documentation step. Keep unrelated user-owned files, such as AGENTS.md, out of those commits unless the user explicitly asks to include them.".to_string(),
+    );
+    preference.origin = Some("user_stated".to_string());
+    preference.scope_type = Some("project".to_string());
+    preference.project_name = Some("engram".to_string());
+    preference.evidence = manual_review_evidence("Reviewed commit-hygiene preference.");
+    tools::memory_new(&state, preference)
+        .await
+        .expect("preference add should work");
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(
+                "Prepare a small Engram doc-only calibration update plan. Include how you will handle unrelated files and when you will commit. Do not implement yet."
+                    .to_string(),
+            ),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("follow_user_preference".to_string()),
+            scenario_id: Some("claude_rescue_commit_hygiene_001".to_string()),
+            arm: Some("test_hot_context".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+        },
+    )
+    .await
+    .expect("orient should work");
+    let json = parse_json(&response);
+    let context_pack = json["context_pack"].as_str().unwrap();
+    let hot_index = context_pack
+        .find("## Hot Context")
+        .expect("hot context should be present");
+    let preference_index = context_pack
+        .find("Commit every meaningful Engram step")
+        .expect("preference should appear in context pack");
+    let decisions_index = context_pack
+        .find("## Active Decisions")
+        .expect("decisions section should be present");
+
+    assert!(hot_index < preference_index);
+    assert!(preference_index < decisions_index);
+    assert_eq!(
+        json["brain_loop"]["top_items"][0]["title"],
+        "Commit every meaningful Engram step"
+    );
+}

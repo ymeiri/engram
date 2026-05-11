@@ -23,8 +23,8 @@ use engram_core::entity::Observation;
 use engram_core::id::Id;
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange,
-    MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind, MemoryScope, MemoryStatus,
-    MemoryTrustMetadata, WriterProvenance,
+    MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope,
+    MemoryStatus, MemoryTrustMetadata, WriterProvenance,
 };
 use engram_core::repository::{
     MonorepoComponent, ProjectRepositoryLink, RecentGitCommit, RepositoryContext,
@@ -42,6 +42,7 @@ use tracing::info;
 
 const BRAIN_LOOP_TOP_ITEM_LIMIT: usize = 5;
 const BRAIN_LOOP_SUMMARY_CHAR_LIMIT: usize = 240;
+const ORIENT_HOT_CONTEXT_ITEM_LIMIT: usize = 3;
 const ORIENT_RECENT_GIT_COMMIT_LIMIT: usize = 5;
 const ORIENT_RECENT_GIT_COMMIT_PATH_LIMIT: usize = 8;
 const CURRENT_PLAN_TAG: &str = "current-plan";
@@ -1155,6 +1156,10 @@ impl MemoryService {
             cursor: &cursor,
             resolution: &resolution,
             repository_context: repository_context.as_ref(),
+            project: effective_project,
+            cwd: input.cwd.as_deref(),
+            query: input.prompt.as_deref(),
+            intent: input.intent.as_ref(),
             decisions: &active_decisions,
             rules: &active_rules,
             preferences: &preferences,
@@ -1733,6 +1738,10 @@ struct ContextPackParts<'a> {
     cursor: &'a MemoryCursor,
     resolution: &'a OrientationResolution,
     repository_context: Option<&'a RepositoryContext>,
+    project: Option<&'a str>,
+    cwd: Option<&'a str>,
+    query: Option<&'a str>,
+    intent: Option<&'a BrainHarnessIntent>,
     decisions: &'a [MemoryItem],
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
@@ -1941,6 +1950,7 @@ fn build_context_pack(parts: ContextPackParts<'_>) -> String {
     }
     append_resolution_section(&mut lines, parts.resolution);
     append_repository_section(&mut lines, parts.repository_context);
+    append_hot_context_section(&mut lines, &parts);
     append_memory_section(&mut lines, "Active Decisions", parts.decisions);
     append_memory_section(&mut lines, "Active Rules", parts.rules);
     append_memory_section(&mut lines, "Preferences", parts.preferences);
@@ -1960,6 +1970,56 @@ fn build_context_pack(parts: ContextPackParts<'_>) -> String {
     append_string_section(&mut lines, "Recommended Actions", parts.recommended_actions);
     append_string_section(&mut lines, "Ambiguities", parts.ambiguities);
     lines.join("\n")
+}
+
+fn append_hot_context_section(lines: &mut Vec<String>, parts: &ContextPackParts<'_>) {
+    let hot_preferences = intent_matched_reviewed_preferences(parts);
+    if hot_preferences.is_empty() {
+        return;
+    }
+
+    lines.push(String::new());
+    lines.push("## Hot Context".to_string());
+    lines.push(
+        "- Intent-matched reviewed preferences. Read these before lower-priority memory."
+            .to_string(),
+    );
+    lines.push("### Reviewed Preferences".to_string());
+    for item in hot_preferences {
+        let metadata = item.trust_metadata();
+        lines.push(format!("- {}: {}", item.title, item.content));
+        lines.push(format!(
+            "  - Trust: status={}, review_state={}, freshness={}, origin={}, confidence={:.2}, evidence_count={}, writer={}/{}",
+            metadata.status,
+            metadata.review_state,
+            metadata.freshness,
+            metadata.claim_origin,
+            metadata.confidence,
+            metadata.evidence_count,
+            metadata.writer.harness,
+            metadata.writer.model
+        ));
+    }
+}
+
+fn intent_matched_reviewed_preferences<'a>(parts: &ContextPackParts<'a>) -> Vec<&'a MemoryItem> {
+    if !matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference)) {
+        return Vec::new();
+    }
+
+    let has_query = parts.query.is_some_and(|query| !query.trim().is_empty());
+    let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
+    parts
+        .preferences
+        .iter()
+        .filter(|item| item.trust_metadata().review_state == MemoryReviewState::Reviewed)
+        .filter(|item| {
+            !has_query
+                || rank_memory_item((*item).clone(), context)
+                    .is_some_and(|ranked| ranked.components.text > 0.0)
+        })
+        .take(ORIENT_HOT_CONTEXT_ITEM_LIMIT)
+        .collect()
 }
 
 fn append_resolution_section(lines: &mut Vec<String>, resolution: &OrientationResolution) {
