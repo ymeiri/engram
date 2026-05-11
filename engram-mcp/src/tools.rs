@@ -3503,6 +3503,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             let traces = service
                 .list_traces_scoped(
                     request.limit,
+                    request.project.as_deref(),
                     request.scenario_id.as_deref(),
                     request.arm.as_deref(),
                 )
@@ -3560,6 +3561,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 service
                     .list_feedback_scoped(
                         request.limit,
+                        request.project.as_deref(),
                         request.scenario_id.as_deref(),
                         request.arm.as_deref(),
                     )
