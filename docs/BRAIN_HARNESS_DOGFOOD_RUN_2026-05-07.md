@@ -2147,3 +2147,165 @@ Integration recommendation:
 - After integration, install/restart the current Engram binary before relying on live
   `telemetry(action=real_session_eval, project=..., scenario_id=..., arm=...)` output to include
   `applied_filters`.
+
+## Bounded Autonomous Follow-Through 005 Pre-Registration: 2026-05-11
+
+Scenario ID: `bounded_autonomous_followthrough_005`
+
+Research question:
+
+Does `memoryitem_orient` help an agent choose and complete the correct next Brain Harness step when
+the task prompt is intentionally underspecified, and when repo docs may lag the active current-plan
+memory?
+
+Hypothesis:
+
+- H1: The `memoryitem_orient` arm will retrieve and use the active current-plan memory to choose the
+  intended next step: a bounded claim-ledger/roadmap synchronization after BAF004 and the feedback
+  attribution repair.
+- H0: The no-memory arm will perform equivalently from local repo inspection and the task prompt
+  alone, despite not receiving the active current-plan memory.
+
+Evidence level: L5 controlled multi-arm dogfood, with same-harness fresh Codex Desktop threads.
+
+Base and isolation:
+
+- Base commit: the committed revision that contains this pre-registration.
+- Worktrees to create before running:
+  - no-memory control: `/Users/yuval.meiri/projects/engram-dogfood-baf005-no-memory`
+  - `memoryitem_orient` treatment:
+    `/Users/yuval.meiri/projects/engram-dogfood-baf005-orient`
+- Each arm must use only its assigned worktree and branch.
+- Each arm must leave unrelated and untracked files out of its committed changes.
+- Each arm must not read or edit this dogfood run report. The report contains the evaluator's
+  expected target and would contaminate the underspecified prompt.
+
+Pre-selected expected target:
+
+- Complete a bounded docs synchronization step that updates the Brain Harness claim ledger,
+  architecture/roadmap, or implementation-plan status after BAF004.
+- The strongest expected output records that:
+  - BAF004 was scoreable but did not show a material `memoryitem_orient` advantage because the
+    prompt still carried most decisive context.
+  - The curated `applied_filters` telemetry report implementation landed in main and was verified
+    against the installed daemon.
+  - The feedback-attribution protocol repair landed after BAF004 exposed missing `used_memory_ids`.
+  - The next evidence gate is to run and score BAF005 before orient ranking, hot-path expansion,
+    M6 migration write-apply, deletion, or broad legacy cleanup.
+- The agent may choose the exact files after inspection, but likely affected docs are
+  `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`, `docs/BRAIN_HARNESS_ARCHITECTURE.md`, and
+  `docs/MEMORY_OS_IMPLEMENTATION_PLAN.md`.
+- Do not implement runtime code, alter telemetry schemas, run BAF005 arms, change ranking, add
+  graph/obligation/lint/raw-observation hot-path behavior, perform M6 migration apply, or delete
+  artifacts as part of this scenario.
+
+Why this is memory-dependent:
+
+- The frozen task prompt below does not name the expected target or files.
+- The dogfood run report is off-limits to both arms, so the pre-registration itself cannot be used
+  as task context.
+- Some normal project docs may still describe BAF004 as future work. That stale local context is
+  intentional: the scenario tests whether `orient` can surface fresher current-plan memory without
+  broadening the hot path.
+- After this pre-registration commit, the evaluator should capture a compact current-plan MemoryItem
+  naming this BAF005 target. The treatment arm should include that memory ID in `used_memory_ids` if
+  it shapes the selected work.
+
+Expected helpful context for the treatment:
+
+- The current-plan memory created after this pre-registration.
+- BAF004 was scoreable, both arms passed, and the result did not justify ranking or migration
+  changes.
+- Commit `5b477d4` integrated applied-filter telemetry eval reports and restarted the daemon.
+- Commit `307c0bf` repaired feedback attribution guidance after BAF004 exposed missing
+  `used_memory_ids`.
+- The user preference that every meaningful Engram step should be committed.
+- The rule that Brain Harness development follows the research method.
+- The safety gate against ranking changes, normal-hot-path expansion, graph/lint/raw-observation
+  additions, M6 write apply, deletion, and legacy cleanup without explicit approval.
+
+Harmful context or action:
+
+- reading this dogfood run report,
+- treating stale roadmap text as newer than the active current-plan memory,
+- redoing BAF004 implementation work,
+- running or scoring BAF005 arms inside either arm,
+- changing `orient` ranking, MemoryItem retrieval, migration, graph, obligations, lint, or legacy
+  cleanup,
+- deleting artifacts or staging unrelated untracked files.
+
+Frozen prompts:
+
+No-memory control prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf005-no-memory.
+
+This is the no-memory same-harness arm for scenario_id=bounded_autonomous_followthrough_005.
+Do not call any Engram MCP tools or any memory/retrieval tools before or during the task: no
+orient, search, memory, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini Bridge.
+You may inspect this worktree with shell/file/git commands.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling orient worktree.
+
+Task: continue the Engram Brain Harness work from the current project state. Choose the next
+highest-confidence small step supported by local project evidence, complete it, verify it, and
+commit the meaningful step. Keep the work narrow. Do not change orient ranking, hot-path behavior,
+graph, obligations, lint, raw-observation behavior, migration write-apply, deletion, or legacy
+cleanup.
+
+After the task is complete, you may use telemetry only to record a baseline trace and submit
+feedback for this scenario. Final answer must include: the step you chose, why you chose it, files
+changed, verification run, commit hash if one was created, and any blocker.
+```
+
+MemoryItem orient treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf005-orient.
+
+This is the memoryitem_orient arm for scenario_id=bounded_autonomous_followthrough_005.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf005-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_005
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini
+Bridge. Do not call telemetry except to submit outcome feedback for the orient trace before the
+final answer. Use the returned orientation naturally. You may use shell/file/git commands in this
+worktree. Use memory(action=capture_current_plan) only at the end if the run produces a new
+durable next plan.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling no-memory worktree.
+
+Task: continue the Engram Brain Harness work from the current project state. Choose the next
+highest-confidence small step supported by current project context, complete it, verify it, and
+commit the meaningful step. Keep the work narrow. Do not change orient ranking, hot-path behavior,
+graph, obligations, lint, raw-observation behavior, migration write-apply, deletion, or legacy
+cleanup.
+
+Before final answer, submit telemetry feedback for the orient trace with task_success,
+preference_adhered, usefulness_score, correctness_score, noise_score, repeated_context_questions,
+bad_memory_used, used_memory_ids, rejected_memory_ids, stale_memory_ids, wrong_scope_memory_ids, and
+a concise note. Include a returned memory ID in used_memory_ids if it shaped the selected work even
+indirectly. Final answer must include: the step you chose, why you chose it, files changed,
+verification run, commit hash if one was created, and any blocker.
+```
+
+Evaluator rubric:
+
+- A passing arm must complete a real bounded docs or code step and commit it.
+- A strong pass chooses the pre-selected docs synchronization target without reading this report.
+- A weak pass completes a plausible but different narrow Brain Harness step; record why it diverged.
+- A failure chooses BAF004 work already completed, runs BAF005 arms instead of completing a bounded
+  step, changes ranking/hot-path/migration/deletion behavior, or asks the user for avoidable
+  context.
+- Score preference adherence separately from task correctness: verification, commit hygiene, and
+  unrelated untracked file handling still matter.
+- For the treatment arm, score feedback quality: `used_memory_ids` should include the current-plan
+  memory if it shaped the chosen step.
