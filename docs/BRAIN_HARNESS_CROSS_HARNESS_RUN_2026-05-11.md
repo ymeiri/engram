@@ -1,7 +1,7 @@
 # Brain Harness Cross-Harness Run Log
 
 Date: 2026-05-11
-Status: Claude Phase 1A setup complete; no arms launched yet
+Status: Claude Phase 1A in progress; commit-hygiene launch gate open
 
 ## Scope
 
@@ -358,3 +358,42 @@ This is still one scenario, not enough for cross-harness claims. The next
 highest-confidence evidence step is to continue Phase 1A with another Claude
 rescue scenario before starting Codex Phase 1B or any broad cross-harness
 comparison.
+
+## Commit-Hygiene Launch Gate: `claude_rescue_commit_hygiene_001`
+
+Decision: continue Claude Phase 1A with `claude_rescue_commit_hygiene_001`.
+
+Rationale:
+
+- `claude_rescue_current_plan_001_rerun1` produced the first clean
+  behavior-linked Claude rescue signal,
+- one scenario is not enough to claim cross-harness or general Brain Harness
+  effectiveness,
+- commit hygiene is backed by a reviewed user preference MemoryItem and is
+  directly relevant to current Engram development practice.
+
+Existing worktrees from the original setup remain clean and at the original
+Phase 1A base commit:
+
+| Arm | Branch | Worktree | HEAD |
+|---|---|---|---|
+| `claude_no_memory` | `yuval.meiri/calib-claude-commit-hygiene-no-memory` | `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-no-memory` | `32123670131e5effffbc4cdf72c502a73ccf0c3a` |
+| `claude_memoryitem_orient` | `yuval.meiri/calib-claude-commit-hygiene-orient` | `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-orient` | `32123670131e5effffbc4cdf72c502a73ccf0c3a` |
+
+Fresh treatment smoke:
+
+- Trace: `019e184c-87a6-7441-9cc0-0bb4f66dd0ec`
+- Scenario: `claude_rescue_commit_hygiene_001`
+- Arm: `prearm_smoke`
+- Prompt:
+  `Prepare a small Engram doc-only calibration update plan. Include how you will handle unrelated files and when you will commit. Do not implement yet.`
+- Expected target MemoryItem:
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`
+  `Commit every meaningful Engram step`
+- Visibility result: target appeared as the top preference in the orientation
+  packet.
+
+Verdict: treatment launch gate is open. The actual treatment arm must use its
+own fresh orient trace with `arm=claude_memoryitem_orient`, and both arms must
+avoid reading repository files because the calibration documents exist inside
+the original base worktrees.
