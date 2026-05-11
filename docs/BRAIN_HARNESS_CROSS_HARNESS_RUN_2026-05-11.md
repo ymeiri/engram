@@ -224,3 +224,43 @@ Next benchmark action should be explicitly labeled as either:
   new isolated worktrees and new telemetry labels, or
 - a move to another Phase 1A scenario whose target does not depend on the
   just-corrected "what is next?" state.
+
+## Rerun Registration: `claude_rescue_current_plan_001_rerun1`
+
+Decision: rerun `claude_rescue_current_plan_001` after freshness correction.
+
+Rationale:
+
+- the first treatment arm failed because Engram's active current-plan memory was
+  stale relative to evaluator progress,
+- the stale memory has now been superseded by
+  `019e1826-840f-7453-98e8-bb3e77a5f8e5`,
+- verification orient trace `019e1826-c2eb-75b0-a32d-99af1c816d92` showed the
+  corrected MemoryItem as the top active decision,
+- the rerun directly tests whether Claude can now use the corrected current
+  plan.
+
+Rerun labels:
+
+- scenario: `claude_rescue_current_plan_001_rerun1`
+- no-memory arm: `claude_no_memory_rerun1`
+- treatment arm: `claude_memoryitem_orient_rerun1`
+
+Rerun base commit:
+
+```text
+32123670131e5effffbc4cdf72c502a73ccf0c3a Pre-register cross-harness calibration
+```
+
+This intentionally uses the original scenario base, not the current evaluator
+commit. The freshness correction is in Engram memory, not in the arm worktree.
+Keeping the rerun worktrees at the original base reduces leakage from the
+evaluator run log into the no-memory arm.
+
+Planned worktrees:
+
+- `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-rerun1-no-memory`
+- `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-rerun1-orient`
+
+Before launch, run a fresh `prearm_smoke` check for the rerun treatment label
+and record whether `019e1826-840f-7453-98e8-bb3e77a5f8e5` appears.
