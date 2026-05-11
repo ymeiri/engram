@@ -1,7 +1,7 @@
 # Brain Harness Cross-Harness Run Log
 
 Date: 2026-05-11
-Status: Claude Phase 1A in progress; commit-hygiene scenario scored partial/fail
+Status: Claude Phase 1A in progress; commit-hygiene salience failure reproduced in manual Claude Code
 
 ## Scope
 
@@ -467,3 +467,64 @@ that improves `follow_user_preference` orientation salience. The immediate
 candidate is to ensure reviewed preferences matching the requested intent are
 placed in the compact/hot part of `orient`, then rerun this scenario before
 moving to Codex Phase 1B or broad cross-harness comparison.
+
+## Manual Terminal Validation: `claude_rescue_commit_hygiene_001`
+
+Question: was the commit-hygiene treatment failure caused by Claude Bridge, or
+does it reproduce in real interactive Claude Code?
+
+Manual validation used a fresh worktree at the same Phase 1A base commit:
+
+| Arm | Branch | Worktree | HEAD |
+|---|---|---|---|
+| `claude_manual_terminal` | `yuval.meiri/calib-claude-commit-hygiene-manual-terminal` | `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-manual-terminal` | `32123670131e5effffbc4cdf72c502a73ccf0c3a` |
+
+Transcript export:
+
+- `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-manual-terminal/2026-05-11-215756-controlled-engram-calibration-arm-clauderescue.txt`
+
+Telemetry:
+
+- Required orient trace: `019e1866-62e0-7c61-82c2-6671ebc0f555`
+- Claude-submitted feedback: `019e1866-abad-7463-9e07-17863ddf2c43`
+- Evaluator feedback: `019e1868-0537-7ee3-8c29-d8ebcddd1261`
+
+Manual terminal observations:
+
+- Real Claude Code startup hooks fired and injected the Engram session
+  activation contract twice.
+- The prompt allowed only Engram orient and telemetry. The transcript shows no
+  file-read, Bash, edit, or repo-inspection permission use.
+- Claude called orient and telemetry, then returned a plan.
+- The plan had good generic git hygiene: explicit path-scoped staging, avoid
+  `git add .` / `git add -A`, preserve unrelated dirty files, inspect
+  `git status` and `git diff --staged` before committing, split commits if
+  scope grows.
+- Claude did not cite or use the target reviewed preference
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`.
+- Claude did not mention the known unrelated `AGENTS.md` file.
+- Claude reported that the visible orient slice did not include a
+  commit-hygiene preference and suggested adding one.
+
+Evaluator result: manual terminal validation reproduces the bridge failure.
+The manual trace returned both the current-plan memory
+`019e184f-a861-7dd1-bb6f-7e8b6dcd8d19` and the target reviewed preference
+`019e03be-a9a5-7db2-848d-eb26ef78bcb5`, but Claude did not use the target
+preference behaviorally. Therefore the main failure is not Claude Bridge. It is
+an Engram orientation salience/presentation issue that affects real Claude Code
+as well.
+
+Bridge adequacy conclusion:
+
+- Claude Bridge remains adequate for controlled A/B dogfooding where tool
+  access, leakage, and telemetry labels must be constrained.
+- Manual terminal validation is still required for failures involving UX,
+  startup/stop hooks, MCP result presentation, or tool-output salience.
+- For this scenario, the bridge result is representative enough: the same
+  failure reproduced in interactive Claude Code.
+
+Do not add a duplicate commit-hygiene preference. The reviewed source of truth
+already exists as `019e03be-a9a5-7db2-848d-eb26ef78bcb5`. The next Engram
+implementation step should improve `follow_user_preference` orientation so
+matching reviewed preferences are visible in the compact/hot agent-consumed
+context before lower-priority decisions.
