@@ -94,11 +94,35 @@ system still lacks comparative evidence.
 Before running a scenario, write down:
 
 - the expected helpful memory,
+- the exact target-bearing MemoryItem ID when the scenario depends on hidden or underspecified
+  intent,
 - memory that must not surface or must be rejected,
 - the task output that can be checked,
 - whether the user must judge success.
 
 Skip or redesign scenarios where success cannot be judged after the run.
+
+### 3.4 Target-Visibility Smoke Check
+
+For hidden-target or intentionally underspecified scenarios, do not launch the treatment arm until
+the evaluator verifies that `orient` can actually see the target-bearing memory.
+
+Run an evaluator-side smoke check with the same project, cwd, intent, and `scenario_id`, but use
+`arm=prearm_smoke` so the trace is not confused with a real comparison arm. Inspect the returned
+orientation packet and record:
+
+- the smoke trace ID,
+- the target-bearing MemoryItem ID expected by the pre-registration,
+- whether that MemoryItem appeared in the returned orientation context,
+- any newer current-plan memory that superseded or displaced it.
+
+Fail closed if the target-bearing MemoryItem is absent. Do not run the treatment arm, tune ranking,
+or score the scenario as a valid comparison. Instead, either capture a corrected target-preserving
+MemoryItem and rerun the smoke check, or mark the scenario invalid/confounded before launching any
+arm.
+
+This check protects the experiment, not the using agent. The real treatment arm must still call
+`orient` once in its own fresh thread and submit feedback to its own trace.
 
 ---
 
@@ -232,15 +256,17 @@ For each scenario and arm:
 1. Freeze the prompt and expected outcomes before running.
 2. Record `scenario_id`, `arm`, `intent`, harness, model, cwd, and project.
 3. For implementation-bearing scenarios, record the base commit and checkout/worktree path.
-4. Confirm the arm starts from a clean committed base, except pre-registered unrelated untracked
+4. For hidden-target or underspecified treatment arms, record the passing pre-arm smoke trace ID and
+   target-bearing MemoryItem ID.
+5. Confirm the arm starts from a clean committed base, except pre-registered unrelated untracked
    sentinels.
-5. Run the arm exactly once.
-6. Capture every returned `trace_id`.
-7. Score immediately after the run.
-8. Submit `telemetry(action=submit_feedback)` to the relevant trace.
-9. If the arm has no retrieval trace, first create one with
+6. Run the arm exactly once.
+7. Capture every returned `trace_id`.
+8. Score immediately after the run.
+9. Submit `telemetry(action=submit_feedback)` to the relevant trace.
+10. If the arm has no retrieval trace, first create one with
    `telemetry(action=record_trace, operation=feedback, scenario_id=..., arm=...)`.
-10. Record human/user confirmation when the outcome requires judgment.
+11. Record human/user confirmation when the outcome requires judgment.
 
 Feedback fields:
 
@@ -286,6 +312,7 @@ Then choose exactly one next step.
 | `memoryitem_orient` beats `no_memory`, `bad_memory_used_count` is zero, and `missing_context` is rare | Proceed to read-only M6 inventory/review-export planning. |
 | Helpful memory exists but is not high enough in `orient` or `search` output | Ranking calibration. |
 | Expected helpful memory is absent from active MemoryItems | Capture/promotion tuning or targeted review-gated observation promotion. |
+| Expected hidden target is absent from the pre-arm smoke check | Fix target-preserving capture/protocol; do not score the arm as a valid comparison. |
 | Stale or wrong-scope memory is used | Stop migration work; fix trust, scope, freshness, or ranking first. |
 | Obligation scenario fails because applicable obligations are absent | Tune obligation lifecycle detection or open-obligation surfacing, not the whole `orient` hot path. |
 | Results are ambiguous | Run another small labeled batch before changing architecture. |
