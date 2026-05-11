@@ -200,3 +200,27 @@ launching any treatment arm that depends on "what is next?"
 Do not count `claude_rescue_current_plan_001` as a clean treatment success.
 If rerun, pre-register it as a rerun after memory freshness correction rather
 than silently replacing this attempt.
+
+## Freshness Correction
+
+After recording the failed/partial current-plan attempt, the evaluator captured
+a new current-plan MemoryItem:
+
+- MemoryItem:
+  `019e1826-840f-7453-98e8-bb3e77a5f8e5`
+  `Claude rescue current-plan attempt exposed memory freshness gate`
+- Knowledge commit:
+  `019e1826-8439-77e2-b203-e508565b0942`
+- Superseded stale current-plan memory:
+  `019e1811-30ff-7382-b9c2-57cdf7b05c40`
+
+Verification orient trace `019e1826-c2eb-75b0-a32d-99af1c816d92`
+returned the new MemoryItem as the top active decision. That confirms the
+freshness correction is visible to future treatment arms.
+
+Next benchmark action should be explicitly labeled as either:
+
+- a rerun of `claude_rescue_current_plan_001` after freshness correction, using
+  new isolated worktrees and new telemetry labels, or
+- a move to another Phase 1A scenario whose target does not depend on the
+  just-corrected "what is next?" state.
