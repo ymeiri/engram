@@ -142,3 +142,61 @@ Rules for the next step:
 - each arm must submit telemetry feedback to its own trace,
 - each implementation-bearing arm must run `git diff --check` before commit,
 - commits must include only intended arm-local outputs.
+
+## First Arm Attempt: `claude_rescue_current_plan_001`
+
+This first attempt was run through the local Claude bridge after the smoke-check
+report was committed.
+
+### `claude_no_memory`
+
+- Worktree:
+  `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-no-memory`
+- Bridge harness: `isolated`
+- Engram retrieval: none
+- Telemetry trace: `019e1825-4476-7761-bc10-d8b058082fc8`
+- Telemetry feedback: `019e1825-66a1-7512-92b9-ef61674372d1`
+- Worktree state after arm: clean
+
+Evaluator verdict: failed/partial. Claude correctly avoided Engram retrieval
+and rejected immediate broad cross-harness calibration, but it recommended a
+single-harness no-memory baseline rather than the pre-registered staged Claude
+rescue plus Codex redemption path.
+
+Caveat: despite explicit instructions not to use tools or inspect repo files,
+the final answer claimed to rely on git-log context. The bridge run did not
+grant Bash or Engram tools, but this still makes the arm less clean than the
+intended no-tool baseline.
+
+### `claude_memoryitem_orient`
+
+- Worktree:
+  `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-orient`
+- Bridge harness: `personal`
+- Required orient trace: `019e1824-4f0b-7d33-8b34-b1648e14b166`
+- Claude-submitted feedback: `019e1824-e6d1-7193-9d14-33358bf3e92f`
+- Evaluator-submitted feedback: `019e1825-bdd9-7850-abd8-19d710fa14b5`
+- Worktree state after arm: clean
+
+Evaluator verdict: failed due stale current-plan memory. Claude used Engram,
+but the active current-plan memory still said the next step was to run smoke
+checks. The evaluator had already completed those smoke checks and committed
+this run report before launching the arm, but that new state had not been
+captured as a current-plan MemoryItem. The treatment answer therefore
+recommended the just-completed setup step instead of the actual next action.
+
+Claude's own feedback also noted that the orient payload was very large and
+that it attempted to read persisted orient output despite the run's tool
+allowlist. The attempted read was blocked by the bridge path policy.
+
+### Immediate Finding
+
+This is a useful failure, not a reason to tune ranking first. The treatment arm
+shows that Brain Loop v1 can return the active current-plan memory, but the
+memory was stale relative to evaluator progress. The next corrective action is
+to capture a new current-plan MemoryItem after each evaluator checkpoint before
+launching any treatment arm that depends on "what is next?"
+
+Do not count `claude_rescue_current_plan_001` as a clean treatment success.
+If rerun, pre-register it as a rerun after memory freshness correction rather
+than silently replacing this attempt.
