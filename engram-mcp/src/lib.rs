@@ -128,6 +128,7 @@ pub use tools::{
     SessionStatsRequest,
     SessionStatsResponse,
     SessionStatusArg,
+    TelemetryRequest,
     ToolGetStatsRequest,
     ToolGetStatsResponse,
     ToolIntelStatsRequest,

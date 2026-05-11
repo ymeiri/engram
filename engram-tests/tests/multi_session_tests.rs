@@ -6,17 +6,17 @@
 use anyhow::{bail, Context, Result};
 use serde_json::json;
 use std::net::TcpListener;
-use std::path::PathBuf;
-use std::process::Stdio;
+use std::path::{Path, PathBuf};
+use std::process::{Command as StdCommand, Stdio};
 use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
-use tokio::time::timeout;
 
 /// Global port counter to ensure each test gets unique ports.
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(19000);
+static ENGRAM_BIN: OnceLock<PathBuf> = OnceLock::new();
 
 /// Get a unique port for testing.
 fn get_test_port() -> u16 {
@@ -40,6 +40,10 @@ fn find_available_port() -> u16 {
 
 /// Get the path to the engram binary.
 fn engram_bin() -> PathBuf {
+    ENGRAM_BIN.get_or_init(resolve_engram_bin).clone()
+}
+
+fn resolve_engram_bin() -> PathBuf {
     // Use env var if set (for CI), otherwise find relative to workspace
     if let Ok(path) = std::env::var("ENGRAM_BIN") {
         return PathBuf::from(path);
@@ -52,14 +56,21 @@ fn engram_bin() -> PathBuf {
 
     let workspace_root = manifest_dir.parent().unwrap_or(&manifest_dir);
 
-    // Check debug build first, then release
-    for profile in &["debug", "release"] {
-        let bin_path = workspace_root.join("target").join(profile).join("engram");
-        if bin_path.exists() {
-            return bin_path;
-        }
+    let debug_bin = workspace_root.join("target").join("debug").join("engram");
+    let status = StdCommand::new("cargo")
+        .args(["build", "-p", "engram-cli", "--bin", "engram"])
+        .current_dir(workspace_root)
+        .status()
+        .expect("Failed to build engram binary for multi-session tests");
+    assert!(status.success(), "Failed to build engram binary");
+    if debug_bin.exists() {
+        return debug_bin;
     }
 
+    let release_bin = workspace_root.join("target").join("release").join("engram");
+    if release_bin.exists() {
+        return release_bin;
+    }
     // Fallback: assume it's in PATH
     PathBuf::from("engram")
 }
@@ -68,7 +79,7 @@ fn engram_bin() -> PathBuf {
 struct TestDaemon {
     port: u16,
     child: Child,
-    data_dir: TempDir,
+    _data_dir: TempDir,
 }
 
 impl TestDaemon {
@@ -83,7 +94,7 @@ impl TestDaemon {
         let data_dir = TempDir::new().context("Failed to create temp dir")?;
 
         let child = Command::new(engram_bin())
-            .args(&["serve", "--http", "--port", &port.to_string(), "--memory"])
+            .args(["serve", "--http", "--port", &port.to_string(), "--memory"])
             .env("ENGRAM_DATA_DIR", data_dir.path())
             .env("RUST_LOG", "warn")
             .stdin(Stdio::null())
@@ -96,7 +107,7 @@ impl TestDaemon {
         let daemon = Self {
             port,
             child,
-            data_dir,
+            _data_dir: data_dir,
         };
 
         // Wait for daemon to be ready
@@ -143,23 +154,6 @@ impl Drop for TestDaemon {
     fn drop(&mut self) {
         // Ensure cleanup even if test panics
         let _ = self.child.start_kill();
-    }
-}
-
-/// Test proxy for sending MCP requests via stdio.
-struct TestProxy {
-    stdin: tokio::process::ChildStdin,
-    stdout: BufReader<tokio::process::ChildStdout>,
-    _child: Child, // Keep alive
-}
-
-impl TestProxy {
-    /// Connect to a daemon via the stdio proxy.
-    async fn connect(daemon_port: u16) -> Result<Self> {
-        // Note: We simulate the proxy by sending HTTP requests directly
-        // In a full test, we'd spawn the actual proxy process
-        // For now, we use HTTP client which is what the proxy does internally
-        bail!("TestProxy via stdio not implemented - use TestHttpClient instead")
     }
 }
 
@@ -345,14 +339,19 @@ impl TestHttpClient {
             }
         });
 
-        self.send_request(request).await
+        let response = self.send_request(request).await?;
+        if response.get("error").is_some() {
+            bail!("MCP tool call failed: {}", response);
+        }
+        Ok(response)
     }
 
     /// Create an entity.
     async fn create_entity(&mut self, name: &str, entity_type: &str) -> Result<serde_json::Value> {
         self.call_tool(
-            "entity_create",
+            "entity",
             json!({
+                "action": "create",
                 "name": name,
                 "entity_type": entity_type
             }),
@@ -362,12 +361,12 @@ impl TestHttpClient {
 
     /// List all entities.
     async fn list_entities(&mut self) -> Result<serde_json::Value> {
-        self.call_tool("entity_list", json!({})).await
+        self.call_tool("entity", json!({ "action": "list" })).await
     }
 
     /// Search entities by name.
     async fn search_entities(&mut self, query: &str) -> Result<serde_json::Value> {
-        self.call_tool("entity_search", json!({ "query": query }))
+        self.call_tool("entity", json!({ "action": "search", "query": query }))
             .await
     }
 }
@@ -391,20 +390,27 @@ fn parse_sse_response(body: &str) -> Result<serde_json::Value> {
     }
 }
 
-/// Wait for a condition to become true with timeout.
-async fn wait_for_condition<F, Fut>(condition: F, timeout_duration: Duration) -> Result<()>
-where
-    F: Fn() -> Fut,
-    Fut: std::future::Future<Output = bool>,
-{
-    let start = std::time::Instant::now();
-    while start.elapsed() < timeout_duration {
-        if condition().await {
-            return Ok(());
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    bail!("Condition not met within {:?}", timeout_duration)
+fn git_available() -> bool {
+    StdCommand::new("git")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn run_git(cwd: &Path, args: &[&str]) {
+    let output = StdCommand::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(args)
+        .output()
+        .expect("git should run");
+    assert!(
+        output.status.success(),
+        "git {} failed: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 // =============================================================================
@@ -526,6 +532,97 @@ async fn test_two_sessions_share_search_results() {
         result_str.contains("search-test-beta"),
         "Should find beta entity"
     );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
+async fn test_memory_tool_smoke_over_http_daemon() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+
+    let add_result = client
+        .call_tool(
+            "memory",
+            json!({
+                "action": "add",
+                "kind": "decision",
+                "title": "HTTP memory smoke",
+                "content": "The daemon exposes the memory MCP tool over HTTP.",
+                "origin": "user_stated",
+                "scope_type": "project",
+                "project_name": "engram",
+                "writer_harness": "codex",
+                "model_provider": "openai",
+                "model": "gpt-5.5",
+                "surface": "test"
+            }),
+        )
+        .await
+        .expect("Failed to add memory over HTTP");
+    let add_str = serde_json::to_string(&add_result).unwrap();
+    assert!(add_str.contains("HTTP memory smoke"));
+
+    let orient_result = client
+        .call_tool(
+            "orient",
+            json!({
+                "cwd": "/Users/yuval.meiri/projects/engram",
+                "project": "engram",
+                "agent": "codex",
+                "prompt": "daemon smoke test",
+                "include_recent_commits": true
+            }),
+        )
+        .await
+        .expect("Failed to orient over HTTP");
+    let orient_str = serde_json::to_string(&orient_result).unwrap();
+    assert!(orient_str.contains("HTTP memory smoke"));
+    assert!(orient_str.contains("memory_cursor"));
+
+    if git_available() {
+        let repo_dir = TempDir::new().expect("Failed to create repo temp dir");
+        run_git(repo_dir.path(), &["init"]);
+        run_git(
+            repo_dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:ymeiri/engram.git",
+            ],
+        );
+
+        let detect_result = client
+            .call_tool(
+                "repo",
+                json!({
+                    "action": "detect",
+                    "cwd": repo_dir.path().display().to_string()
+                }),
+            )
+            .await
+            .expect("Failed to detect repo over HTTP");
+        let detect_str = serde_json::to_string(&detect_result).unwrap();
+        assert!(detect_str.contains("engram"));
+        assert!(detect_str.contains("detected_root"));
+
+        let repo_orient_result = client
+            .call_tool(
+                "orient",
+                json!({
+                    "cwd": repo_dir.path().display().to_string(),
+                    "agent": "codex",
+                    "prompt": "repo daemon smoke test",
+                    "include_recent_commits": false
+                }),
+            )
+            .await
+            .expect("Failed to orient with repo context over HTTP");
+        let repo_orient_str = serde_json::to_string(&repo_orient_result).unwrap();
+        assert!(repo_orient_str.contains("repository_context"));
+        assert!(repo_orient_str.contains("engram"));
+    }
 
     daemon.stop().await.expect("Failed to stop daemon");
 }
@@ -743,8 +840,9 @@ async fn test_coordination_conflict_detection_across_sessions() {
     // Session 1 registers for coordination
     let reg1 = client1
         .call_tool(
-            "coord_register",
+            "coord",
             json!({
+                "action": "register",
                 "session_id": session_id_1,
                 "agent": "claude-1",
                 "project": "shared-project",
@@ -757,8 +855,9 @@ async fn test_coordination_conflict_detection_across_sessions() {
     // Session 2 registers with overlapping component
     let reg2 = client2
         .call_tool(
-            "coord_register",
+            "coord",
             json!({
+                "action": "register",
                 "session_id": session_id_2,
                 "agent": "claude-2",
                 "project": "shared-project",
@@ -775,8 +874,9 @@ async fn test_coordination_conflict_detection_across_sessions() {
     // Check conflicts from session 1's perspective
     let conflicts = client1
         .call_tool(
-            "coord_check_conflicts",
+            "coord",
             json!({
+                "action": "check_conflicts",
                 "session_id": session_id_1
             }),
         )
@@ -796,10 +896,16 @@ async fn test_coordination_conflict_detection_across_sessions() {
 
     // Cleanup
     let _ = client1
-        .call_tool("coord_unregister", json!({ "session_id": session_id_1 }))
+        .call_tool(
+            "coord",
+            json!({ "action": "unregister", "session_id": session_id_1 }),
+        )
         .await;
     let _ = client2
-        .call_tool("coord_unregister", json!({ "session_id": session_id_2 }))
+        .call_tool(
+            "coord",
+            json!({ "action": "unregister", "session_id": session_id_2 }),
+        )
         .await;
 
     daemon.stop().await.expect("Failed to stop daemon");

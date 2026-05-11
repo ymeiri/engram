@@ -10,7 +10,6 @@ use engram_index::{KnowledgeConfig, KnowledgeService};
 use engram_mcp::tools::{self, KnowledgeRequestNew, ToolState};
 use engram_store::repos::KnowledgeRepo;
 use engram_store::{connect_and_init, StoreConfig};
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 // =============================================================================
@@ -71,10 +70,10 @@ async fn test_all_doc_types() {
     ];
 
     for doc_type in types {
-        let doc = KnowledgeDoc::new(&format!("Doc {:?}", doc_type), doc_type.clone(), "Content");
+        let doc = KnowledgeDoc::new(format!("Doc {:?}", doc_type), doc_type.clone(), "Content");
         repo.save_doc(&doc)
             .await
-            .expect(&format!("Failed for {:?}", doc_type));
+            .unwrap_or_else(|_| panic!("Failed for {:?}", doc_type));
 
         let retrieved = repo.get_doc(&doc.id).await.unwrap();
         assert_eq!(retrieved.doc_type, doc_type);
@@ -149,9 +148,9 @@ async fn test_list_docs() {
 
     for i in 0..5 {
         let doc = KnowledgeDoc::new(
-            &format!("Doc {}", i),
+            format!("Doc {}", i),
             DocType::Readme,
-            &format!("Content {}", i),
+            format!("Content {}", i),
         );
         repo.save_doc(&doc).await.unwrap();
     }
@@ -238,7 +237,7 @@ async fn test_file_sync_with_doc_link() {
     let doc = KnowledgeDoc::new("Linked Doc", DocType::Readme, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let sync = FileSync::new("docs/linked.md", "repo", "hash123").with_doc(doc.id.clone());
+    let sync = FileSync::new("docs/linked.md", "repo", "hash123").with_doc(doc.id);
 
     repo.save_file_sync(&sync).await.unwrap();
 
@@ -275,7 +274,7 @@ async fn test_list_file_syncs() {
     let repo = setup_repo().await;
 
     for i in 0..5 {
-        let sync = FileSync::new(&format!("docs/file{}.md", i), "repo", &format!("hash{}", i));
+        let sync = FileSync::new(format!("docs/file{}.md", i), "repo", format!("hash{}", i));
         repo.save_file_sync(&sync).await.unwrap();
     }
 
@@ -379,7 +378,7 @@ async fn test_save_and_find_by_alias() {
     let doc = KnowledgeDoc::new("Deployment Guide", DocType::Runbook, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let alias = DocAlias::new("deploy-howto", doc.id.clone());
+    let alias = DocAlias::new("deploy-howto", doc.id);
     repo.save_alias(&alias).await.expect("Failed to save alias");
 
     let found = repo
@@ -397,9 +396,9 @@ async fn test_multiple_aliases() {
     let doc = KnowledgeDoc::new("Setup Guide", DocType::Howto, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let alias1 = DocAlias::new("setup", doc.id.clone());
-    let alias2 = DocAlias::new("installation", doc.id.clone());
-    let alias3 = DocAlias::new("getting-started", doc.id.clone());
+    let alias1 = DocAlias::new("setup", doc.id);
+    let alias2 = DocAlias::new("installation", doc.id);
+    let alias3 = DocAlias::new("getting-started", doc.id);
 
     repo.save_alias(&alias1).await.unwrap();
     repo.save_alias(&alias2).await.unwrap();
@@ -435,7 +434,7 @@ async fn test_delete_alias() {
     let doc = KnowledgeDoc::new("Test Doc", DocType::Readme, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let alias = DocAlias::new("test-alias", doc.id.clone());
+    let alias = DocAlias::new("test-alias", doc.id);
     repo.save_alias(&alias).await.unwrap();
 
     // Verify exists
@@ -463,7 +462,7 @@ async fn test_delete_doc_deletes_aliases() {
     let doc = KnowledgeDoc::new("Cascade Doc", DocType::Readme, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let alias = DocAlias::new("cascade-alias", doc.id.clone());
+    let alias = DocAlias::new("cascade-alias", doc.id);
     repo.save_alias(&alias).await.unwrap();
 
     // Delete doc (should cascade to aliases)
@@ -485,8 +484,8 @@ async fn test_save_and_list_events() {
     let doc = KnowledgeDoc::new("Event Test", DocType::Readme, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let event1 = DocEvent::new(doc.id.clone(), DocEventType::Created, "system");
-    let event2 = DocEvent::new(doc.id.clone(), DocEventType::Reviewed, "user@example.com");
+    let event1 = DocEvent::new(doc.id, DocEventType::Created, "system");
+    let event2 = DocEvent::new(doc.id, DocEventType::Reviewed, "user@example.com");
 
     repo.save_event(&event1)
         .await
@@ -509,12 +508,11 @@ async fn test_event_with_details() {
     let doc = KnowledgeDoc::new("Detail Test", DocType::Readme, "Content");
     repo.save_doc(&doc).await.unwrap();
 
-    let event = DocEvent::new(doc.id.clone(), DocEventType::Merged, "user").with_details(
-        serde_json::json!({
+    let event =
+        DocEvent::new(doc.id, DocEventType::Merged, "user").with_details(serde_json::json!({
             "merged_from": ["doc-a", "doc-b"],
             "reason": "Consolidation"
-        }),
-    );
+        }));
 
     repo.save_event(&event).await.unwrap();
 
@@ -544,7 +542,7 @@ async fn test_knowledge_stats() {
     let sync = FileSync::new("docs/stats.md", "repo", "hash");
     repo.save_file_sync(&sync).await.unwrap();
 
-    let alias = DocAlias::new("stats-alias", doc.id.clone());
+    let alias = DocAlias::new("stats-alias", doc.id);
     repo.save_alias(&alias).await.unwrap();
 
     let stats = repo.stats().await.expect("Failed to get stats");
@@ -792,7 +790,7 @@ async fn test_mcp_knowledge_register() {
 
 #[tokio::test]
 async fn test_mcp_knowledge_import() {
-    let (state, temp_dir) = setup_tool_state().await;
+    let (state, _temp_dir) = setup_tool_state().await;
 
     // Init first
     let req = KnowledgeRequestNew {

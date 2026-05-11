@@ -6,8 +6,6 @@ use engram_core::entity::{EntityType, RelationType};
 use engram_index::EntityService;
 use engram_mcp::tools::{self, EntityObserveRequestNew, EntityRequestNew, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 // =============================================================================
 // Test Fixtures
@@ -59,7 +57,7 @@ async fn test_create_all_entity_types() {
         let entity = service
             .create_entity(name, entity_type.clone(), None)
             .await
-            .expect(&format!("Failed to create {}", name));
+            .unwrap_or_else(|_| panic!("Failed to create {}", name));
 
         assert_eq!(entity.entity_type, entity_type);
     }
@@ -224,7 +222,7 @@ async fn test_all_relationship_types() {
         let rel = service
             .relate("source", rel_type.clone(), &target_name)
             .await
-            .expect(&format!("Failed to create {:?}", rel_type));
+            .unwrap_or_else(|_| panic!("Failed to create {:?}", rel_type));
 
         assert_eq!(rel.relation_type, rel_type);
     }
@@ -473,7 +471,7 @@ async fn test_special_characters_in_entity_name() {
         let entity = service
             .create_entity(name, EntityType::Service, None)
             .await
-            .expect(&format!("Failed to create '{}'", name));
+            .unwrap_or_else(|_| panic!("Failed to create '{}'", name));
 
         assert_eq!(entity.name, name);
     }
@@ -533,7 +531,7 @@ async fn test_keyed_observation_update() {
         .unwrap();
 
     // Create initial observation
-    let (obs1, prev1) = service
+    let (_obs1, prev1) = service
         .add_observation(
             "my-app",
             "Uses session-based auth",

@@ -34,10 +34,13 @@ pub mod repos;
 pub use config::{StorageBackend, StoreConfig};
 pub use error::{StoreError, StoreResult};
 pub use repos::{
-    AliasSearchResult, ArchivedObservation, CoordinationRepo, CoordinationStats, DocumentRepo,
-    EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, ObservationSearchResult,
-    ProjectObservationSearchResult, SessionRepo, TaskObservationSearchResult, ToolIntelStats,
-    ToolRepo, WorkRepo, WorkStats,
+    AliasSearchResult, ArchivedObservation, CoordinationRepo, CoordinationStats,
+    DocumentDeletedOrphanSource, DocumentDetectedReference, DocumentOrphanChunkSample,
+    DocumentOrphanDeleteResult, DocumentOrphanGroup, DocumentOrphanReport,
+    DocumentRecoveryCandidateMatch, DocumentRecoveryClass, DocumentRecoverySummary, DocumentRepo,
+    EntityRepo, EntitySearchResult, EntityStats, KnowledgeRepo, MemoryRepo, ObligationRepo,
+    ObservationSearchResult, ProjectObservationSearchResult, RepositoryRepo, SessionRepo,
+    TaskObservationSearchResult, TelemetryRepo, ToolIntelStats, ToolRepo, WorkRepo, WorkStats,
 };
 
 use surrealdb::engine::any::Any;
@@ -115,6 +118,22 @@ pub async fn init_schema(db: &Db) -> StoreResult<()> {
     // Initialize work schema (Layer 7)
     let work_repo = WorkRepo::new(db.clone());
     work_repo.init_schema().await?;
+
+    // Initialize Memory OS schema
+    let memory_repo = MemoryRepo::new(db.clone());
+    memory_repo.init_schema().await?;
+
+    // Initialize brain harness telemetry schema
+    let telemetry_repo = TelemetryRepo::new(db.clone());
+    telemetry_repo.init_schema().await?;
+
+    // Initialize repository topology schema
+    let repository_repo = RepositoryRepo::new(db.clone());
+    repository_repo.init_schema().await?;
+
+    // Initialize agent obligation schema
+    let obligation_repo = ObligationRepo::new(db.clone());
+    obligation_repo.init_schema().await?;
 
     info!("All schemas initialized");
     Ok(())

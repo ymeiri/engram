@@ -5,10 +5,29 @@
 use crate::parser::{ParsedDocument, Section};
 use engram_core::document::{DocChunk, DocSource};
 use engram_core::id::Id;
+use serde::{Deserialize, Serialize};
+
+/// How a parsed document will be chunked for indexing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChunkingStrategy {
+    /// The document has no indexable content.
+    Empty,
+    /// The document is short enough to preserve as one chunk.
+    WholeDocument,
+    /// The document has markdown headings and will be chunked by section.
+    HeadingSections,
+    /// The document has no markdown headings and will be split as one synthetic section.
+    SyntheticSections,
+}
 
 /// Configuration for the chunker.
 #[derive(Debug, Clone)]
 pub struct ChunkerConfig {
+    /// Maximum character length for indexing a document as one whole-document chunk.
+    /// Set to 0 to always use section-based chunking.
+    pub short_document_char_limit: usize,
+
     /// Minimum heading level to create chunks (1-6).
     /// Level 2 means H2 and below create chunks.
     pub min_chunk_level: u8,
@@ -16,7 +35,8 @@ pub struct ChunkerConfig {
     /// Maximum chunk size in characters.
     pub max_chunk_size: usize,
 
-    /// Minimum chunk size in characters (smaller chunks are merged up).
+    /// Minimum preferred chunk size in characters.
+    /// Small sections are still indexed so short durable facts are not lost.
     pub min_chunk_size: usize,
 
     /// Include parent heading context in chunks.
@@ -26,6 +46,7 @@ pub struct ChunkerConfig {
 impl Default for ChunkerConfig {
     fn default() -> Self {
         Self {
+            short_document_char_limit: 4000,
             min_chunk_level: 2,
             max_chunk_size: 2000,
             min_chunk_size: 100,
@@ -40,37 +61,28 @@ pub fn chunk_document(
     source: &DocSource,
     config: &ChunkerConfig,
 ) -> Vec<DocChunk> {
+    let sections = match chunking_strategy(doc, config) {
+        ChunkingStrategy::Empty => return Vec::new(),
+        ChunkingStrategy::WholeDocument => {
+            return vec![create_whole_document_chunk(doc, source, config)]
+        }
+        ChunkingStrategy::HeadingSections => doc.sections.clone(),
+        ChunkingStrategy::SyntheticSections => vec![synthetic_document_section(doc)],
+    };
+
     let mut chunks = Vec::new();
 
-    for section in &doc.sections {
+    for section in &sections {
         // Skip sections above the minimum chunk level
         if section.level < config.min_chunk_level {
             // But include H1 content if it exists
             if section.level == 1 && !section.content.is_empty() {
-                chunks.push(create_chunk(source.id, section, None));
+                append_section_chunks(&mut chunks, source.id, section, config);
             }
             continue;
         }
 
-        // Handle content size
-        if section.content.len() <= config.max_chunk_size {
-            if section.content.len() >= config.min_chunk_size || section.content.is_empty() {
-                chunks.push(create_chunk(source.id, section, None));
-            }
-            // Small chunks are skipped (will be merged in a future enhancement)
-        } else {
-            // Split large sections into multiple chunks
-            let sub_chunks = split_large_section(section, config.max_chunk_size);
-            for (idx, content) in sub_chunks.into_iter().enumerate() {
-                let mut chunk = create_chunk(source.id, section, None);
-                chunk.content = content;
-                if idx > 0 {
-                    chunk.id = Id::new(); // New ID for split chunks
-                    chunk.heading_path = format!("{} (part {})", section.heading_path, idx + 1);
-                }
-                chunks.push(chunk);
-            }
-        }
+        append_section_chunks(&mut chunks, source.id, section, config);
     }
 
     // Build parent relationships
@@ -79,13 +91,104 @@ pub fn chunk_document(
     chunks
 }
 
+/// Classify how a document will be chunked before embeddings are generated.
+#[must_use]
+pub fn chunking_strategy(doc: &ParsedDocument, config: &ChunkerConfig) -> ChunkingStrategy {
+    let trimmed_content = doc.raw_content.trim();
+    if trimmed_content.is_empty() {
+        return ChunkingStrategy::Empty;
+    }
+
+    if config.short_document_char_limit > 0
+        && trimmed_content.len() <= config.short_document_char_limit
+    {
+        return ChunkingStrategy::WholeDocument;
+    }
+
+    if doc.sections.is_empty() {
+        ChunkingStrategy::SyntheticSections
+    } else {
+        ChunkingStrategy::HeadingSections
+    }
+}
+
+fn append_section_chunks(
+    chunks: &mut Vec<DocChunk>,
+    source_id: Id,
+    section: &Section,
+    config: &ChunkerConfig,
+) {
+    if section.content.len() <= config.max_chunk_size {
+        chunks.push(create_chunk(source_id, section, None, config));
+    } else {
+        // Split large sections into multiple chunks
+        let sub_chunks = split_large_section(section, config.max_chunk_size);
+        for (idx, content) in sub_chunks.into_iter().enumerate() {
+            let mut chunk = create_chunk_with_content(source_id, section, None, content, config);
+            if idx > 0 {
+                chunk.id = Id::new(); // New ID for split chunks
+                chunk.heading_path = format!("{} (part {})", section.heading_path, idx + 1);
+            }
+            chunks.push(chunk);
+        }
+    }
+}
+
+fn create_whole_document_chunk(
+    doc: &ParsedDocument,
+    source: &DocSource,
+    config: &ChunkerConfig,
+) -> DocChunk {
+    let section = synthetic_document_section(doc);
+    create_chunk_with_content(
+        source.id,
+        &section,
+        None,
+        doc.raw_content.trim().to_string(),
+        config,
+    )
+}
+
+fn synthetic_document_section(doc: &ParsedDocument) -> Section {
+    let line_count = doc.raw_content.lines().count().max(1) as u32;
+    Section {
+        heading: doc.title.clone(),
+        level: 1,
+        heading_path: format!("# {}", doc.title),
+        content: doc.raw_content.trim().to_string(),
+        start_line: 1,
+        end_line: line_count,
+    }
+}
+
 /// Create a chunk from a section.
-fn create_chunk(source_id: Id, section: &Section, parent_id: Option<Id>) -> DocChunk {
+fn create_chunk(
+    source_id: Id,
+    section: &Section,
+    parent_id: Option<Id>,
+    config: &ChunkerConfig,
+) -> DocChunk {
+    create_chunk_with_content(
+        source_id,
+        section,
+        parent_id,
+        section.content.clone(),
+        config,
+    )
+}
+
+fn create_chunk_with_content(
+    source_id: Id,
+    section: &Section,
+    parent_id: Option<Id>,
+    content: String,
+    config: &ChunkerConfig,
+) -> DocChunk {
     let mut chunk = DocChunk::new(
         source_id,
         section.heading_path.clone(),
         section.level,
-        section.content.clone(),
+        contextual_chunk_content(&section.heading_path, &content, config),
     )
     .with_lines(section.start_line, section.end_line);
 
@@ -94,6 +197,19 @@ fn create_chunk(source_id: Id, section: &Section, parent_id: Option<Id>) -> DocC
     }
 
     chunk
+}
+
+fn contextual_chunk_content(heading_path: &str, content: &str, config: &ChunkerConfig) -> String {
+    if !config.include_heading_path {
+        return content.to_string();
+    }
+
+    let content = content.trim();
+    if content.is_empty() {
+        heading_path.to_string()
+    } else {
+        format!("{heading_path}\n\n{content}")
+    }
 }
 
 /// Split a large section into multiple chunks.
@@ -206,6 +322,7 @@ This section also has multiple lines.
         let doc = parse_content("test.md".to_string(), content.to_string()).unwrap();
         let source = DocSource::local_file("test.md");
         let config = ChunkerConfig {
+            short_document_char_limit: 0,
             min_chunk_size: 10, // Lower for testing
             ..Default::default()
         };
@@ -218,6 +335,84 @@ This section also has multiple lines.
         let headings: Vec<_> = chunks.iter().map(|c| c.heading_path.as_str()).collect();
         assert!(headings.iter().any(|h| h.contains("Section One")));
         assert!(headings.iter().any(|h| h.contains("Subsection A")));
+    }
+
+    #[test]
+    fn test_short_document_indexes_as_whole_document_chunk() {
+        let content = r#"# Tiny Note
+
+This is a short note with one durable idea.
+
+## Detail
+
+The detail stays with the rest of the note.
+"#;
+
+        let doc = parse_content("tiny.md".to_string(), content.to_string()).unwrap();
+        let source = DocSource::local_file("tiny.md");
+        let chunks = chunk_document(&doc, &source, &ChunkerConfig::default());
+
+        assert_eq!(
+            chunking_strategy(&doc, &ChunkerConfig::default()),
+            ChunkingStrategy::WholeDocument
+        );
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].heading_path, "# Tiny Note");
+        assert!(chunks[0].content.contains("## Detail"));
+        assert!(chunks[0].content.starts_with("# Tiny Note"));
+    }
+
+    #[test]
+    fn test_unstructured_long_document_is_not_dropped() {
+        let content = "unstructured memory line. ".repeat(300);
+        let doc = parse_content("plain.md".to_string(), content).unwrap();
+        let source = DocSource::local_file("plain.md");
+        let config = ChunkerConfig {
+            short_document_char_limit: 0,
+            min_chunk_size: 10,
+            max_chunk_size: 200,
+            ..Default::default()
+        };
+
+        let chunks = chunk_document(&doc, &source, &config);
+
+        assert_eq!(
+            chunking_strategy(&doc, &config),
+            ChunkingStrategy::SyntheticSections
+        );
+        assert!(chunks.len() > 1);
+        assert!(chunks
+            .iter()
+            .all(|chunk| chunk.heading_path.starts_with("# plain")));
+    }
+
+    #[test]
+    fn test_small_non_empty_sections_are_not_dropped() {
+        let content = r#"# Big Document
+
+## Preference
+
+No AI names in commit messages.
+
+## Long Section
+
+Longer material that forces section-based chunking and keeps the document above the whole-document
+threshold for this test.
+"#;
+
+        let doc = parse_content("preferences.md".to_string(), content.to_string()).unwrap();
+        let source = DocSource::local_file("preferences.md");
+        let config = ChunkerConfig {
+            short_document_char_limit: 0,
+            min_chunk_size: 100,
+            ..Default::default()
+        };
+
+        let chunks = chunk_document(&doc, &source, &config);
+
+        assert!(chunks
+            .iter()
+            .any(|chunk| chunk.content.contains("No AI names in commit messages.")));
     }
 
     #[test]

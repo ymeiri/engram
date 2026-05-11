@@ -4,17 +4,45 @@
 
 use engram_core::document::DocSearchResult;
 use engram_core::entity::{EntityType, RelationType};
+use engram_core::harness::HarnessKind;
 use engram_core::knowledge::DocType;
+use engram_core::memory::{
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChange, MemoryChangeType, MemoryCursor,
+    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
+};
+use engram_core::obligation::{
+    AgentObligation, AgentObligationKind, AgentObligationResolution, AgentObligationResolutionKind,
+    AgentObligationStatus, AgentObligationTrigger,
+};
+use engram_core::repository::ProjectRepositoryRole;
 use engram_core::search::SearchLayer;
 use engram_core::session::{EventType, SessionStatus};
+use engram_core::telemetry::{
+    AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
+};
 use engram_core::tool::ToolOutcome;
+use engram_core::Id;
 use engram_index::{
-    CoordinationService, DocumentService, EntityService, KnowledgeService, SearchService,
-    SessionService, ToolIntelService, WorkService,
+    CoordinationService, CurrentPlanCaptureInput, DigestExtractionOptions,
+    DigestExtractionReviewApplyOptions, DigestInventoryOptions, DigestService,
+    DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupPlan,
+    DocumentOrphanCleanupPlanOptions, DocumentOrphanQuarantineReviewApplyOptions,
+    DocumentOrphanQuarantineReviewOptions, DocumentOrphanQuarantineReviewPrioritizationOptions,
+    DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
+    DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
+    GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
+    HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
+    MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
+    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService,
+    ObservationPromotionInput, OrientInput, OrientationPacket, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
+    SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
@@ -35,8 +63,22 @@ pub struct ToolState {
     pub knowledge_service: Arc<RwLock<Option<KnowledgeService>>>,
     /// The work service for project/task management (Layer 7).
     pub work_service: Arc<RwLock<Option<WorkService>>>,
+    /// The Memory OS service.
+    pub memory_service: Arc<RwLock<Option<MemoryService>>>,
+    /// The Memory OS lint service.
+    pub lint_service: Arc<RwLock<Option<LintService>>>,
+    /// The Memory OS graph service.
+    pub graph_service: Arc<RwLock<Option<GraphService>>>,
+    /// The rolling handoff service.
+    pub handoff_service: Arc<RwLock<Option<HandoffService>>>,
+    /// The agent obligation service.
+    pub obligation_service: Arc<RwLock<Option<ObligationService>>>,
+    /// The repository topology service.
+    pub repository_service: Arc<RwLock<Option<RepositoryService>>>,
     /// The unified search service (cross-layer search).
     pub search_service: Arc<RwLock<Option<SearchService>>>,
+    /// The brain harness telemetry service.
+    pub telemetry_service: Arc<RwLock<Option<TelemetryService>>>,
 }
 
 impl ToolState {
@@ -50,7 +92,14 @@ impl ToolState {
             coordination_service: Arc::new(RwLock::new(None)),
             knowledge_service: Arc::new(RwLock::new(None)),
             work_service: Arc::new(RwLock::new(None)),
+            memory_service: Arc::new(RwLock::new(None)),
+            lint_service: Arc::new(RwLock::new(None)),
+            graph_service: Arc::new(RwLock::new(None)),
+            handoff_service: Arc::new(RwLock::new(None)),
+            obligation_service: Arc::new(RwLock::new(None)),
+            repository_service: Arc::new(RwLock::new(None)),
             search_service: Arc::new(RwLock::new(None)),
+            telemetry_service: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -96,9 +145,51 @@ impl ToolState {
         *guard = Some(service);
     }
 
+    /// Initialize with a Memory OS service.
+    pub async fn init_memory(&self, service: MemoryService) {
+        let mut guard = self.memory_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a Memory OS lint service.
+    pub async fn init_lint(&self, service: LintService) {
+        let mut guard = self.lint_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a Memory OS graph service.
+    pub async fn init_graph(&self, service: GraphService) {
+        let mut guard = self.graph_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a rolling handoff service.
+    pub async fn init_handoff(&self, service: HandoffService) {
+        let mut guard = self.handoff_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with an agent obligation service.
+    pub async fn init_obligation(&self, service: ObligationService) {
+        let mut guard = self.obligation_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a repository topology service.
+    pub async fn init_repository(&self, service: RepositoryService) {
+        let mut guard = self.repository_service.write().await;
+        *guard = Some(service);
+    }
+
     /// Initialize with a search service.
     pub async fn init_search(&self, service: SearchService) {
         let mut guard = self.search_service.write().await;
+        *guard = Some(service);
+    }
+
+    /// Initialize with a brain harness telemetry service.
+    pub async fn init_telemetry(&self, service: TelemetryService) {
+        let mut guard = self.telemetry_service.write().await;
         *guard = Some(service);
     }
 }
@@ -207,6 +298,10 @@ pub struct GetStatsResponse {
     pub source_count: u64,
     /// Number of document chunks.
     pub chunk_count: u64,
+    /// Number of chunks attached to a persisted source.
+    pub searchable_chunk_count: u64,
+    /// Number of chunks whose source record is missing.
+    pub orphan_chunk_count: u64,
     /// Embedding vector dimension.
     pub embedding_dimension: usize,
 }
@@ -293,6 +388,8 @@ pub async fn get_stats(state: &ToolState, _request: GetStatsRequest) -> Result<S
     let response = GetStatsResponse {
         source_count: stats.source_count,
         chunk_count: stats.chunk_count,
+        searchable_chunk_count: stats.searchable_chunk_count,
+        orphan_chunk_count: stats.orphan_chunk_count,
         embedding_dimension: stats.embedding_dimension,
     };
 
@@ -1672,6 +1769,14 @@ pub enum EventTypeArg {
     Error,
     Milestone,
     Observation,
+    Prompt,
+    Plan,
+    ToolResult,
+    Test,
+    Preference,
+    Rule,
+    Limitation,
+    HandoffUpdate,
 }
 
 impl From<EventTypeArg> for EventType {
@@ -1684,6 +1789,14 @@ impl From<EventTypeArg> for EventType {
             EventTypeArg::Error => EventType::Error,
             EventTypeArg::Milestone => EventType::Milestone,
             EventTypeArg::Observation => EventType::Observation,
+            EventTypeArg::Prompt => EventType::Prompt,
+            EventTypeArg::Plan => EventType::Plan,
+            EventTypeArg::ToolResult => EventType::ToolResult,
+            EventTypeArg::Test => EventType::Test,
+            EventTypeArg::Preference => EventType::Preference,
+            EventTypeArg::Rule => EventType::Rule,
+            EventTypeArg::Limitation => EventType::Limitation,
+            EventTypeArg::HandoffUpdate => EventType::HandoffUpdate,
         }
     }
 }
@@ -3053,7 +3166,7 @@ pub async fn coord_stats(state: &ToolState, _request: CoordStatsRequest) -> Resu
 pub struct SearchRequest {
     /// The search query.
     #[schemars(
-        description = "Search query - searches entity names, descriptions, observations, session events, documents, and tool usages"
+        description = "Search query - searches memory items, entity names, descriptions, observations, session events, documents, and tool usages"
     )]
     pub query: String,
 
@@ -3069,9 +3182,41 @@ pub struct SearchRequest {
 
     /// Filter to specific layers.
     #[schemars(
-        description = "Filter to specific layers: entity, alias, observation, session_event, document, tool_usage"
+        description = "Filter to specific layers: entity, alias, observation, session_event, document, tool_usage, memory"
     )]
     pub layers: Option<Vec<String>>,
+
+    /// Caller intent for telemetry, e.g. answer_question, plan_work, debug_error.
+    #[schemars(description = "Caller intent for telemetry correlation")]
+    pub intent: Option<String>,
+
+    /// Free-form controlled eval scenario identifier for telemetry.
+    #[schemars(description = "Free-form controlled eval scenario identifier")]
+    pub scenario_id: Option<String>,
+
+    /// Free-form eval or comparison arm for telemetry.
+    #[schemars(description = "Free-form eval or comparison arm")]
+    pub arm: Option<String>,
+
+    /// Agent/harness name for telemetry.
+    #[schemars(description = "Agent or harness name for telemetry")]
+    pub agent: Option<String>,
+
+    /// Session ID for telemetry correlation.
+    #[schemars(description = "Session ID for telemetry correlation")]
+    pub session_id: Option<String>,
+
+    /// Host/application session label for telemetry correlation.
+    #[schemars(description = "Host/application session label for telemetry correlation")]
+    pub external_session_id: Option<String>,
+
+    /// Project name for telemetry correlation.
+    #[schemars(description = "Project name for telemetry correlation")]
+    pub project: Option<String>,
+
+    /// Current working directory for repository-scoped memory filtering.
+    #[schemars(description = "Current working directory for repository-scoped memory filtering")]
+    pub cwd: Option<String>,
 }
 
 fn default_search_limit() -> usize {
@@ -3093,11 +3238,15 @@ pub struct UnifiedSearchResultInfo {
     pub context: Option<String>,
     /// ID for follow-up queries.
     pub id: String,
+    /// Memory trust metadata when this result is a MemoryItem.
+    pub memory_metadata: Option<Value>,
 }
 
 /// Response from unified search.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SearchResponse {
+    /// Trace ID for later telemetry feedback.
+    pub trace_id: Option<String>,
     /// Search results sorted by score.
     pub results: Vec<UnifiedSearchResultInfo>,
     /// Total number of results.
@@ -3126,15 +3275,43 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
             .collect()
     });
 
+    let started = std::time::Instant::now();
     let results = service
-        .search(
+        .search_with_options(
             &request.query,
             request.limit,
             request.min_score,
             layers.as_deref(),
+            SearchOptions {
+                project: request.project.clone(),
+                cwd: request.cwd.clone(),
+            },
         )
         .await
         .map_err(|e| e.to_string())?;
+
+    let returned_result_ids = results.iter().map(|result| result.id.clone()).collect();
+    let trace_id = record_optional_trace(
+        state,
+        BrainHarnessTrace::new(BrainHarnessOperation::Search)
+            .with_session(
+                request
+                    .session_id
+                    .as_deref()
+                    .map(|id| parse_id(id, "session ID"))
+                    .transpose()?,
+            )
+            .with_external_session_id(request.external_session_id.clone())
+            .with_agent(request.agent.clone())
+            .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
+            .with_scenario_id(request.scenario_id.clone())
+            .with_arm(request.arm.clone())
+            .with_query(Some(request.query.clone()))
+            .with_project(request.project.clone())
+            .with_returned_result_ids(returned_result_ids)
+            .with_latency_ms(started.elapsed().as_millis() as u64),
+    )
+    .await?;
 
     // Count results by layer
     let mut by_layer: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -3143,6 +3320,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
     }
 
     let response = SearchResponse {
+        trace_id: trace_id.map(|id| id.to_string()),
         count: results.len(),
         results: results
             .into_iter()
@@ -3153,12 +3331,277 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
                 content: r.content,
                 context: r.context,
                 id: r.id,
+                memory_metadata: r
+                    .memory_metadata
+                    .and_then(|metadata| serde_json::to_value(metadata).ok()),
             })
             .collect(),
         by_layer,
     };
 
     serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+}
+
+async fn record_optional_trace(
+    state: &ToolState,
+    trace: BrainHarnessTrace,
+) -> Result<Option<engram_core::id::Id>, String> {
+    let service_guard = state.telemetry_service.read().await;
+    let Some(service) = service_guard.as_ref() else {
+        return Ok(None);
+    };
+
+    let trace = service
+        .record_trace(trace)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(Some(trace.id))
+}
+
+// =============================================================================
+// Brain Harness Telemetry Tool
+// =============================================================================
+
+/// Request for brain-harness telemetry and agent feedback.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct TelemetryRequest {
+    /// Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval
+    #[schemars(
+        description = "Action: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval"
+    )]
+    pub action: String,
+    /// Trace ID for get_trace, submit_feedback, or list_feedback.
+    pub trace_id: Option<String>,
+    /// Operation for record_trace: orient, search, changes_since, feedback.
+    pub operation: Option<String>,
+    /// Intent for trace correlation: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
+    pub intent: Option<String>,
+    /// Free-form controlled eval scenario identifier for record_trace and list/report filtering.
+    pub scenario_id: Option<String>,
+    /// Free-form eval or comparison arm for record_trace and list/report filtering.
+    pub arm: Option<String>,
+    /// Query, prompt, or short operation context.
+    pub query: Option<String>,
+    /// Project scope.
+    pub project: Option<String>,
+    /// Agent or harness label.
+    pub agent: Option<String>,
+    /// Session ID.
+    pub session_id: Option<String>,
+    /// Host/application session label, such as a Codex Desktop thread ID.
+    pub external_session_id: Option<String>,
+    /// Returned memory IDs for record_trace.
+    #[serde(default)]
+    pub returned_memory_ids: Vec<String>,
+    /// Returned generic result IDs for record_trace.
+    #[serde(default)]
+    pub returned_result_ids: Vec<String>,
+    /// Latency in milliseconds for record_trace.
+    pub latency_ms: Option<u64>,
+    /// Non-fatal operation warnings for record_trace.
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    /// Memory IDs the agent used.
+    #[serde(default)]
+    pub used_memory_ids: Vec<String>,
+    /// Memory IDs the agent rejected.
+    #[serde(default)]
+    pub rejected_memory_ids: Vec<String>,
+    /// Generic result IDs the agent used.
+    #[serde(default)]
+    pub used_result_ids: Vec<String>,
+    /// Generic result IDs the agent rejected.
+    #[serde(default)]
+    pub rejected_result_ids: Vec<String>,
+    /// Memory IDs the agent believes are stale.
+    #[serde(default)]
+    pub stale_memory_ids: Vec<String>,
+    /// Memory IDs the agent believes have wrong scope.
+    #[serde(default)]
+    pub wrong_scope_memory_ids: Vec<String>,
+    /// Context the agent expected but did not receive.
+    pub missing_context: Option<String>,
+    /// Agent-reported usefulness score, 1-5.
+    pub usefulness_score: Option<u8>,
+    /// Agent-reported correctness score, 1-5.
+    pub correctness_score: Option<u8>,
+    /// Agent-reported noise score, 1-5.
+    pub noise_score: Option<u8>,
+    /// Whether the task succeeded after using the retrieved context.
+    pub task_success: Option<bool>,
+    /// Whether known user/project preferences were followed.
+    pub preference_adhered: Option<bool>,
+    /// Number of repeated context questions needed after retrieval.
+    pub repeated_context_questions: Option<u32>,
+    /// Whether the agent used memory later judged harmful, stale, or misleading.
+    pub bad_memory_used: Option<bool>,
+    /// Suggested memory changes from the agent.
+    pub suggested_memory_changes: Option<String>,
+    /// Free-form feedback note.
+    pub note: Option<String>,
+    /// Maximum rows for list actions.
+    pub limit: Option<usize>,
+}
+
+/// Manage brain-harness telemetry and agent feedback.
+pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Result<String, String> {
+    debug!("telemetry_new: action={}", request.action);
+
+    let service_guard = state.telemetry_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Telemetry service not initialized".to_string())?;
+
+    match request.action.as_str() {
+        "record_trace" | "trace" => {
+            let operation = request
+                .operation
+                .as_deref()
+                .map(BrainHarnessOperation::parse)
+                .ok_or("operation required for record_trace")?;
+            let mut trace = BrainHarnessTrace::new(operation)
+                .with_session(parse_optional_id(&request.session_id, "session ID")?)
+                .with_external_session_id(request.external_session_id.clone())
+                .with_agent(request.agent)
+                .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
+                .with_scenario_id(request.scenario_id)
+                .with_arm(request.arm)
+                .with_query(request.query)
+                .with_project(request.project)
+                .with_returned_memory_ids(parse_id_vec(
+                    &request.returned_memory_ids,
+                    "returned memory ID",
+                )?)
+                .with_returned_result_ids(request.returned_result_ids);
+            if let Some(latency_ms) = request.latency_ms {
+                trace = trace.with_latency_ms(latency_ms);
+            }
+            for warning in request.warnings {
+                trace = trace.with_warning(warning);
+            }
+
+            let trace = service
+                .record_trace(trace)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "trace": trace }))
+                .map_err(|e| e.to_string())
+        }
+        "get_trace" => {
+            let trace_id = parse_id(
+                &required(&request.trace_id, "trace_id", "get_trace")?,
+                "trace ID",
+            )?;
+            let trace = service
+                .get_trace(&trace_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "trace": trace }))
+                .map_err(|e| e.to_string())
+        }
+        "list_traces" => {
+            let traces = service
+                .list_traces_scoped(
+                    request.limit,
+                    request.scenario_id.as_deref(),
+                    request.arm.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": traces.len(),
+                "traces": traces
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "submit_feedback" | "feedback_submit" => {
+            let trace_id = parse_id(
+                &required(&request.trace_id, "trace_id", "submit_feedback")?,
+                "trace ID",
+            )?;
+            let mut feedback = AgentFeedback::new(trace_id);
+            feedback.session_id = parse_optional_id(&request.session_id, "session ID")?;
+            feedback.external_session_id = request.external_session_id;
+            feedback.agent = request.agent;
+            feedback.used_memory_ids = parse_id_vec(&request.used_memory_ids, "used memory ID")?;
+            feedback.rejected_memory_ids =
+                parse_id_vec(&request.rejected_memory_ids, "rejected memory ID")?;
+            feedback.used_result_ids = request.used_result_ids;
+            feedback.rejected_result_ids = request.rejected_result_ids;
+            feedback.stale_memory_ids = parse_id_vec(&request.stale_memory_ids, "stale memory ID")?;
+            feedback.wrong_scope_memory_ids =
+                parse_id_vec(&request.wrong_scope_memory_ids, "wrong-scope memory ID")?;
+            feedback.missing_context = request.missing_context;
+            feedback.usefulness_score = request.usefulness_score;
+            feedback.correctness_score = request.correctness_score;
+            feedback.noise_score = request.noise_score;
+            feedback.task_success = request.task_success;
+            feedback.preference_adhered = request.preference_adhered;
+            feedback.repeated_context_questions = request.repeated_context_questions;
+            feedback.bad_memory_used = request.bad_memory_used;
+            feedback.suggested_memory_changes = request.suggested_memory_changes;
+            feedback.note = request.note;
+
+            let feedback = service
+                .submit_feedback(feedback)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "feedback": feedback }))
+                .map_err(|e| e.to_string())
+        }
+        "list_feedback" => {
+            let feedback = if let Some(trace_id) = &request.trace_id {
+                let trace_id = parse_id(trace_id, "trace ID")?;
+                service
+                    .list_feedback_for_trace(&trace_id)
+                    .await
+                    .map_err(|e| e.to_string())?
+            } else {
+                service
+                    .list_feedback_scoped(
+                        request.limit,
+                        request.scenario_id.as_deref(),
+                        request.arm.as_deref(),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?
+            };
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": feedback.len(),
+                "feedback": feedback
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "stats_by_intent" | "stats" => {
+            let stats = service.stats_by_intent().await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": stats.len(),
+                "stats": stats
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "real_session_eval" | "eval_report" => {
+            let report = service
+                .real_session_eval_report_scoped(
+                    request.limit,
+                    request.project.as_deref(),
+                    request.scenario_id.as_deref(),
+                    request.arm.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({ "report": report }))
+                .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval",
+            request.action
+        )),
+    }
+}
+
+fn parse_id_vec(values: &[String], label: &str) -> Result<Vec<engram_core::id::Id>, String> {
+    values.iter().map(|value| parse_id(value, label)).collect()
 }
 
 // ============================================================================
@@ -4532,7 +4975,7 @@ pub async fn work_observe_list(
             observations
                 .into_iter()
                 .filter(|o| {
-                    o.key.as_ref().map_or(false, |k| {
+                    o.key.as_ref().is_some_and(|k| {
                         if pattern.ends_with('*') {
                             k.starts_with(&pattern[..pattern.len() - 1])
                         } else {
@@ -4567,7 +5010,7 @@ pub async fn work_observe_list(
             observations
                 .into_iter()
                 .filter(|o| {
-                    o.key.as_ref().map_or(false, |k| {
+                    o.key.as_ref().is_some_and(|k| {
                         if pattern.ends_with('*') {
                             k.starts_with(&pattern[..pattern.len() - 1])
                         } else {
@@ -5412,7 +5855,7 @@ pub async fn work_observe(
                     observations
                         .into_iter()
                         .filter(|o| {
-                            o.key.as_ref().map_or(false, |k| {
+                            o.key.as_ref().is_some_and(|k| {
                                 if pattern.ends_with('*') {
                                     k.starts_with(&pattern[..pattern.len() - 1])
                                 } else {
@@ -5446,7 +5889,7 @@ pub async fn work_observe(
                     observations
                         .into_iter()
                         .filter(|o| {
-                            o.key.as_ref().map_or(false, |k| {
+                            o.key.as_ref().is_some_and(|k| {
                                 if pattern.ends_with('*') {
                                     k.starts_with(&pattern[..pattern.len() - 1])
                                 } else {
@@ -6493,6 +6936,2598 @@ pub async fn coord_new(state: &ToolState, request: CoordRequestNew) -> Result<St
 }
 
 // =============================================================================
+// Repository Topology Tool
+// =============================================================================
+
+/// Consolidated request for repository topology operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct RepoRequest {
+    /// Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply
+    #[schemars(
+        description = "Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply"
+    )]
+    pub action: String,
+
+    /// Current working directory for detect/context
+    pub cwd: Option<String>,
+
+    /// Repository ID, when targeting a known repository
+    pub repository_id: Option<String>,
+    /// Repository name
+    pub repository_name: Option<String>,
+    /// Repository remote URL
+    pub remote_url: Option<String>,
+    /// Repository default branch
+    pub default_branch: Option<String>,
+    /// Optional description
+    pub description: Option<String>,
+
+    /// Component name for component_add
+    pub component_name: Option<String>,
+    /// Repository-relative component path for component_add
+    pub component_path: Option<String>,
+    /// Component kind for component_add, such as service, app, package, or crate
+    pub component_kind: Option<String>,
+
+    /// Project name for link_project
+    pub project_name: Option<String>,
+    /// Relationship role: primary, dependency, produces, related
+    pub role: Option<String>,
+
+    /// Maximum results for list
+    pub limit: Option<usize>,
+    /// Migration review output path (required for migration_review_export)
+    pub migration_review_path: Option<String>,
+    /// Dry-run mode for migration_review_apply; defaults to true
+    pub dry_run: Option<bool>,
+    /// Create a knowledge commit when migration_review_apply writes records
+    pub create_commit: Option<bool>,
+    /// Writer harness/interface for migration audit commits
+    pub writer_harness: Option<String>,
+    /// Writer harness version
+    pub writer_harness_version: Option<String>,
+    /// Model provider for migration audit commits
+    pub model_provider: Option<String>,
+    /// Model name for migration audit commits
+    pub model: Option<String>,
+    /// Model version or alias
+    pub model_version: Option<String>,
+    /// Surface/interface label
+    pub surface: Option<String>,
+    /// Actor label, e.g. agent, user, importer
+    pub actor: Option<String>,
+    /// Session ID associated with the writer
+    pub writer_session_id: Option<String>,
+    /// Include entity descriptions and observations in migration_inventory
+    pub include_entity_observations: Option<bool>,
+    /// Include session history in migration_inventory
+    pub include_session_history: Option<bool>,
+    /// Include work records in migration_inventory
+    pub include_work_records: Option<bool>,
+}
+
+/// Manage repository topology.
+pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String, String> {
+    debug!("repo: action={}", request.action);
+
+    let service_guard = state.repository_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Repository service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "detect" => {
+            let cwd = required(&request.cwd, "cwd", "detect")?;
+            let detection = service
+                .detect_repository(Path::new(&cwd))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "detection": detection
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "context" => {
+            let cwd = required(&request.cwd, "cwd", "context")?;
+            let context = service
+                .resolve_cwd(Path::new(&cwd))
+                .await
+                .map_err(|e| e.to_string())?;
+            let matched = context.is_some();
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "context": context,
+                "matched": matched
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "register" => {
+            let name = required(&request.repository_name, "repository_name", "register")?;
+            let repository = service
+                .register_repository(
+                    &name,
+                    request.remote_url.as_deref(),
+                    request.default_branch.as_deref(),
+                    request.description.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "repository": repository
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "list" => {
+            let repositories = service
+                .list_repositories(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": repositories.len(),
+                "repositories": repositories
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "component_add" | "add_component" => {
+            let repository_id = request
+                .repository_id
+                .as_deref()
+                .map(|id| parse_id(id, "repository ID"))
+                .transpose()?;
+            let component_name =
+                required(&request.component_name, "component_name", "component_add")?;
+            let component_path =
+                required(&request.component_path, "component_path", "component_add")?;
+
+            let component = service
+                .register_component(
+                    repository_id.as_ref(),
+                    request.repository_name.as_deref(),
+                    &component_name,
+                    &component_path,
+                    request.component_kind.as_deref(),
+                    request.description.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "component": component
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "link_project" | "project_link" => {
+            let repository_id = request
+                .repository_id
+                .as_deref()
+                .map(|id| parse_id(id, "repository ID"))
+                .transpose()?;
+            let project_name = required(&request.project_name, "project_name", "link_project")?;
+            let role = request
+                .role
+                .as_deref()
+                .map(parse_project_repository_role)
+                .transpose()?
+                .unwrap_or(ProjectRepositoryRole::Related);
+
+            let link = service
+                .link_project(
+                    &project_name,
+                    repository_id.as_ref(),
+                    request.repository_name.as_deref(),
+                    role,
+                    request.component_path.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "link": link
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_inventory" => {
+            let inventory = service
+                .migration_inventory(repository_migration_options(&request))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "inventory": inventory
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_export" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_export",
+            )?;
+            let export = service
+                .export_migration_review(
+                    Path::new(&review_path),
+                    repository_migration_options(&request),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_status" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_status",
+            )?;
+            let status = service
+                .migration_review_status(Path::new(&review_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_apply" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_apply",
+            )?;
+            let dry_run = request.dry_run.unwrap_or(true);
+            let create_commit = request.create_commit.unwrap_or(true);
+            let writer = if !dry_run && create_commit {
+                Some(parse_repo_writer(&request)?)
+            } else {
+                None
+            };
+            let apply = service
+                .apply_migration_review(
+                    Path::new(&review_path),
+                    RepositoryMigrationReviewApplyOptions {
+                        dry_run,
+                        writer,
+                        create_commit,
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply",
+            request.action
+        )),
+    }
+}
+
+fn repository_migration_options(request: &RepoRequest) -> RepositoryMigrationOptions {
+    let mut options = RepositoryMigrationOptions::all();
+    options.project_filter = request.project_name.clone();
+    options.limit = request.limit;
+    if let Some(include) = request.include_entity_observations {
+        options.include_entity_observations = include;
+    }
+    if let Some(include) = request.include_session_history {
+        options.include_session_history = include;
+    }
+    if let Some(include) = request.include_work_records {
+        options.include_work_records = include;
+    }
+    options
+}
+
+fn parse_repo_writer(request: &RepoRequest) -> Result<WriterProvenance, String> {
+    let harness = Harness::parse(&required(
+        &request.writer_harness,
+        "writer_harness",
+        &request.action,
+    )?);
+    let model_provider = required(&request.model_provider, "model_provider", &request.action)?;
+    let model_name = required(&request.model, "model", &request.action)?;
+
+    let mut model = ModelIdentity::new(model_provider, model_name);
+    if let Some(version) = &request.model_version {
+        model = model.with_version(version);
+    }
+
+    let mut writer = WriterProvenance::agent(harness, model);
+    if let Some(actor) = &request.actor {
+        writer.actor = actor.clone();
+    }
+    if let Some(surface) = &request.surface {
+        writer = writer.with_surface(surface);
+    }
+    if let Some(version) = &request.writer_harness_version {
+        writer = writer.with_harness_version(version);
+    }
+    if let Some(session_id) = &request.writer_session_id {
+        writer = writer.with_session(parse_id(session_id, "writer session ID")?);
+    }
+
+    Ok(writer)
+}
+
+fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, String> {
+    match value.to_lowercase().as_str() {
+        "primary" => Ok(ProjectRepositoryRole::Primary),
+        "dependency" | "depends_on" => Ok(ProjectRepositoryRole::Dependency),
+        "produces" | "output" => Ok(ProjectRepositoryRole::Produces),
+        "related" => Ok(ProjectRepositoryRole::Related),
+        _ => Err(format!(
+            "Unknown repository project role: '{}'. Valid: primary, dependency, produces, related",
+            value
+        )),
+    }
+}
+
+// =============================================================================
+// Orientation Tool
+// =============================================================================
+
+/// Request an orientation context packet for the current user prompt.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct OrientRequest {
+    /// Current working directory, when known
+    pub cwd: Option<String>,
+    /// Current user prompt or task request
+    pub prompt: Option<String>,
+    /// Explicit project name, when known
+    pub project: Option<String>,
+    /// Agent/harness name
+    pub agent: Option<String>,
+    /// Host/application session label for telemetry correlation
+    pub external_session_id: Option<String>,
+    /// Caller intent for telemetry, e.g. resume_session, plan_work, debug_error
+    pub intent: Option<String>,
+    /// Free-form controlled eval scenario identifier for telemetry
+    pub scenario_id: Option<String>,
+    /// Free-form eval or comparison arm for telemetry
+    pub arm: Option<String>,
+    /// Include recent knowledge commits
+    pub include_recent_commits: Option<bool>,
+    /// Maximum memory items per grouped bucket
+    pub limit: Option<usize>,
+}
+
+const ORIENT_OPEN_OBLIGATION_LIMIT: usize = 5;
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientResponse {
+    #[serde(flatten)]
+    packet: OrientationPacket,
+    obligation_summary: OrientObligationSummary,
+    open_obligations: Vec<OrientOpenObligation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientObligationSummary {
+    available: bool,
+    returned_count: usize,
+    has_more: bool,
+    message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientOpenObligation {
+    id: Id,
+    kind: String,
+    title: String,
+    description: String,
+    trigger_kind: String,
+    trigger_target: Option<String>,
+    trigger_summary: String,
+    required_resolutions: Vec<String>,
+}
+
+enum OrientGitStatusTarget {
+    Present(String),
+    Missing,
+    Unavailable,
+}
+
+/// Build an orientation context packet.
+pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String, String> {
+    debug!(
+        "orient: project={:?}, cwd={:?}",
+        request.project, request.cwd
+    );
+
+    let cwd = request.cwd;
+    let project = request.project;
+    let mut packet = {
+        let service_guard = state.memory_service.read().await;
+        let service = service_guard
+            .as_ref()
+            .ok_or_else(|| "Memory service not initialized".to_string())?;
+
+        service
+            .orient(OrientInput {
+                cwd: cwd.clone(),
+                prompt: request.prompt,
+                project: project.clone(),
+                agent: request.agent,
+                external_session_id: request.external_session_id,
+                intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
+                scenario_id: request.scenario_id,
+                arm: request.arm,
+                include_recent_commits: request.include_recent_commits.unwrap_or(true),
+                limit: request.limit,
+            })
+            .await
+            .map_err(|e| e.to_string())?
+    };
+    let (obligation_summary, open_obligations) =
+        orient_open_obligations(state, project.as_deref(), cwd.as_deref()).await?;
+    apply_obligation_summary_to_packet(&mut packet, &obligation_summary, &open_obligations);
+
+    let response = OrientResponse {
+        packet,
+        obligation_summary,
+        open_obligations,
+    };
+    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+}
+
+async fn orient_open_obligations(
+    state: &ToolState,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> Result<(OrientObligationSummary, Vec<OrientOpenObligation>), String> {
+    let service_guard = state.obligation_service.read().await;
+    let Some(service) = service_guard.as_ref() else {
+        return Ok((
+            OrientObligationSummary {
+                available: false,
+                returned_count: 0,
+                has_more: false,
+                message: None,
+            },
+            Vec::new(),
+        ));
+    };
+
+    let mut obligations = service
+        .list(Some(AgentObligationStatus::Open), None)
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|obligation| obligation_applies_to_orient(obligation, project, cwd))
+        .filter(|obligation| obligation_is_current_for_orient(obligation, cwd))
+        .collect::<Vec<_>>();
+    obligations.sort_by(|left, right| {
+        right
+            .updated_at
+            .cmp(&left.updated_at)
+            .then_with(|| left.title.cmp(&right.title))
+    });
+    let has_more = obligations.len() > ORIENT_OPEN_OBLIGATION_LIMIT;
+    let open_obligations = obligations
+        .into_iter()
+        .take(ORIENT_OPEN_OBLIGATION_LIMIT)
+        .map(OrientOpenObligation::from)
+        .collect::<Vec<_>>();
+    let message = if open_obligations.is_empty() {
+        None
+    } else {
+        let count = if has_more {
+            format!("{}+", open_obligations.len())
+        } else {
+            open_obligations.len().to_string()
+        };
+        Some(format!(
+            "{count} open obligation(s) should be resolved or explicitly skipped before final response."
+        ))
+    };
+
+    Ok((
+        OrientObligationSummary {
+            available: true,
+            returned_count: open_obligations.len(),
+            has_more,
+            message,
+        },
+        open_obligations,
+    ))
+}
+
+fn obligation_applies_to_orient(
+    obligation: &AgentObligation,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match &obligation.scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project { project_name, .. } => {
+            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
+        }
+        MemoryScope::Task { project_name, .. } => project_name
+            .as_deref()
+            .zip(project)
+            .is_some_and(|(item_project, project)| item_project.eq_ignore_ascii_case(project)),
+        MemoryScope::Repository { local_path, .. } => {
+            let Some(cwd) = cwd else {
+                return false;
+            };
+            local_path
+                .as_deref()
+                .is_some_and(|local_path| Path::new(cwd).starts_with(Path::new(local_path)))
+        }
+        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
+            false
+        }
+    }
+}
+
+fn obligation_is_current_for_orient(obligation: &AgentObligation, cwd: Option<&str>) -> bool {
+    if !is_git_status_document_obligation(obligation) {
+        return true;
+    }
+
+    let (Some(cwd), Some(target)) = (cwd, obligation.trigger.target.as_deref()) else {
+        return true;
+    };
+
+    match current_git_status_target(cwd, target) {
+        OrientGitStatusTarget::Present(status_line) => {
+            !is_untracked_root_instruction_file(&status_line, target)
+        }
+        OrientGitStatusTarget::Missing => false,
+        OrientGitStatusTarget::Unavailable => true,
+    }
+}
+
+fn is_git_status_document_obligation(obligation: &AgentObligation) -> bool {
+    obligation.kind == AgentObligationKind::DocumentDisposition
+        && obligation.trigger.kind == "git_status"
+}
+
+fn current_git_status_target(cwd: &str, target: &str) -> OrientGitStatusTarget {
+    let Ok(output) = Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=all")
+        .arg("--")
+        .arg(target)
+        .output()
+    else {
+        return OrientGitStatusTarget::Unavailable;
+    };
+    if !output.status.success() {
+        return OrientGitStatusTarget::Unavailable;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find_map(|line| {
+            let path = parse_orient_git_status_path(line)?;
+            if path == target {
+                Some(line.to_string())
+            } else {
+                None
+            }
+        })
+        .map_or(
+            OrientGitStatusTarget::Missing,
+            OrientGitStatusTarget::Present,
+        )
+}
+
+fn parse_orient_git_status_path(line: &str) -> Option<String> {
+    if line.len() < 4 {
+        return None;
+    }
+    let raw = line[3..].trim();
+    let path = raw.split(" -> ").last().unwrap_or(raw).trim_matches('"');
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+fn is_untracked_root_instruction_file(status_line: &str, target: &str) -> bool {
+    status_line.starts_with("?? ") && is_root_instruction_file(target)
+}
+
+fn is_root_instruction_file(target: &str) -> bool {
+    let normalized = target.replace('\\', "/");
+    if normalized.contains('/') {
+        return false;
+    }
+
+    matches!(
+        normalized.to_ascii_lowercase().as_str(),
+        "agents.md" | "claude.md" | "gemini.md"
+    )
+}
+
+fn apply_obligation_summary_to_packet(
+    packet: &mut OrientationPacket,
+    summary: &OrientObligationSummary,
+    obligations: &[OrientOpenObligation],
+) {
+    let Some(message) = &summary.message else {
+        return;
+    };
+    packet.recommended_actions.push(message.clone());
+    packet.context_pack.push_str("\n\n## Open Obligations\n");
+    for obligation in obligations {
+        packet.context_pack.push_str(&format!(
+            "- {}: {}\n",
+            obligation.title, obligation.description
+        ));
+    }
+}
+
+impl From<AgentObligation> for OrientOpenObligation {
+    fn from(obligation: AgentObligation) -> Self {
+        Self {
+            id: obligation.id,
+            kind: obligation.kind.to_string(),
+            title: obligation.title,
+            description: obligation.description,
+            trigger_kind: obligation.trigger.kind,
+            trigger_target: obligation.trigger.target,
+            trigger_summary: obligation.trigger.summary,
+            required_resolutions: obligation
+                .required_resolution
+                .into_iter()
+                .map(|resolution| resolution.to_string())
+                .collect(),
+        }
+    }
+}
+
+// =============================================================================
+// Harness Tool
+// =============================================================================
+
+/// Request for Memory OS harness policy and adapter operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct HarnessRequest {
+    /// Action: status, doctor, render_policy, render_adapter, install, hook_event
+    #[schemars(
+        description = "Action: status, doctor, render_policy, render_adapter, install, hook_event"
+    )]
+    pub action: String,
+    /// Harness name: claude_code, codex, gemini_cli, cursor, or generic
+    #[schemars(description = "Harness name: claude_code, codex, gemini_cli, cursor, or generic")]
+    pub harness: Option<String>,
+    /// Install root. Defaults to the user's home directory.
+    #[schemars(description = "Install root. Defaults to the user's home directory.")]
+    pub root: Option<String>,
+    /// Adapter name for render_adapter.
+    pub adapter: Option<String>,
+    /// Actually write adapter files. Defaults to false.
+    pub write: Option<bool>,
+    /// Back up and replace user-owned adapters when write=true.
+    pub adopt_user_owned: Option<bool>,
+    /// Claude settings target for install: settings.json, settings.local.json, or snippet-only.
+    pub settings_target: Option<String>,
+    /// MCP tool names observed by the client for doctor/status checks.
+    #[serde(default)]
+    pub observed_mcp_tools: Vec<String>,
+    /// Claude hook event name for hook_event.
+    pub hook_event_name: Option<String>,
+    /// Claude session ID for hook_event.
+    pub session_id: Option<String>,
+    /// Current working directory for hook_event.
+    pub cwd: Option<String>,
+    /// Transcript path for hook_event.
+    pub transcript_path: Option<String>,
+    /// Submitted user prompt for hook_event.
+    pub prompt: Option<String>,
+    /// Tool name for hook_event.
+    pub tool_name: Option<String>,
+    /// Tool error for hook_event.
+    pub tool_error: Option<String>,
+    /// Tool input command for hook_event.
+    pub tool_input_command: Option<String>,
+    /// File path touched by a tool for hook_event.
+    pub file_path: Option<String>,
+    /// Last assistant message for Stop hooks.
+    pub last_assistant_message: Option<String>,
+    /// Compact summary for PostCompact hooks.
+    pub compact_summary: Option<String>,
+    /// Hook trigger or matcher value.
+    pub trigger: Option<String>,
+    /// Session end reason or permission reason.
+    pub reason: Option<String>,
+    /// Whether Stop is already active.
+    pub stop_hook_active: Option<String>,
+    /// Hook write policy: durable or nudge.
+    pub write_policy: Option<String>,
+    /// Project scope override.
+    pub project: Option<String>,
+    /// Writer model provider.
+    pub model_provider: Option<String>,
+    /// Writer model.
+    pub model: Option<String>,
+    /// Surface label.
+    pub surface: Option<String>,
+    /// Actor label.
+    pub actor: Option<String>,
+}
+
+/// Manage Memory OS harness policy and local adapters.
+pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<String, String> {
+    debug!("harness: action={}", request.action);
+
+    let service = HarnessService::new();
+    let harness = request
+        .harness
+        .as_deref()
+        .map(HarnessKind::parse)
+        .unwrap_or_default();
+    let root = request.root.as_deref().map(Path::new);
+
+    match request.action.to_lowercase().as_str() {
+        "status" => {
+            let report = service
+                .status(harness, root, &request.observed_mcp_tools)
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        "doctor" => {
+            let report = service
+                .doctor(harness, root, &request.observed_mcp_tools)
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        "render_policy" | "render" => service.render_policy(harness).map_err(|e| e.to_string()),
+        "render_adapter" => {
+            let adapters = service.render_adapters(harness, request.adapter.as_deref());
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": adapters.len(),
+                "adapters": adapters
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "install" => {
+            let report = service
+                .install_with_options(
+                    harness,
+                    root,
+                    HarnessInstallOptions {
+                        write: request.write.unwrap_or(false),
+                        adopt_user_owned: request.adopt_user_owned.unwrap_or(false),
+                        settings_target: parse_optional_settings_target(&request.settings_target)?,
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        "hook_event" | "hook" => {
+            let memory_guard = state.memory_service.read().await;
+            let obligation_guard = state.obligation_service.read().await;
+            let handoff_guard = state.handoff_service.read().await;
+            let event = HarnessHookEvent {
+                harness,
+                hook_event_name: request
+                    .hook_event_name
+                    .clone()
+                    .unwrap_or_else(|| "Unknown".to_string()),
+                session_id: clean_hook_string(request.session_id),
+                cwd: clean_hook_string(request.cwd),
+                transcript_path: clean_hook_string(request.transcript_path),
+                prompt: clean_hook_string(request.prompt),
+                tool_name: clean_hook_string(request.tool_name),
+                tool_error: clean_hook_string(request.tool_error),
+                tool_input_command: clean_hook_string(request.tool_input_command),
+                file_path: clean_hook_string(request.file_path),
+                last_assistant_message: clean_hook_string(request.last_assistant_message),
+                compact_summary: clean_hook_string(request.compact_summary),
+                trigger: clean_hook_string(request.trigger),
+                reason: clean_hook_string(request.reason),
+                stop_hook_active: request
+                    .stop_hook_active
+                    .as_deref()
+                    .map(|value| value.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false),
+                write_policy: request.write_policy.clone(),
+                project: clean_hook_string(request.project),
+                model_provider: clean_hook_string(request.model_provider),
+                model: clean_hook_string(request.model),
+                surface: clean_hook_string(request.surface),
+                actor: clean_hook_string(request.actor),
+            };
+            let outcome = service
+                .handle_hook_event(
+                    event,
+                    HarnessHookServices {
+                        memory: memory_guard.as_ref(),
+                        obligations: obligation_guard.as_ref(),
+                        handoff: handoff_guard.as_ref(),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&outcome.response).map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: status, doctor, render_policy, render_adapter, install, hook_event",
+            request.action
+        )),
+    }
+}
+
+fn clean_hook_string(value: Option<String>) -> Option<String> {
+    value.map(|value| value.trim().to_string()).filter(|value| {
+        !value.is_empty() && value != "null" && !(value.starts_with("${") && value.ends_with('}'))
+    })
+}
+
+fn parse_optional_settings_target(value: &Option<String>) -> Result<HarnessSettingsTarget, String> {
+    value
+        .as_deref()
+        .map(HarnessSettingsTarget::parse)
+        .transpose()
+        .map(|target| target.unwrap_or_default())
+}
+
+// =============================================================================
+// Lint Tool
+// =============================================================================
+
+/// Request for Memory OS lint operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LintRequest {
+    /// Action: run, list, apply_safe
+    #[schemars(description = "Action: run, list, apply_safe")]
+    pub action: String,
+    /// Optional Memory OS vault root to scan.
+    pub vault_path: Option<String>,
+    /// Maximum findings to return.
+    pub limit: Option<usize>,
+    /// Actually apply safe actions. Defaults to false.
+    pub write: Option<bool>,
+}
+
+/// Run Memory OS lint checks.
+pub async fn lint_new(state: &ToolState, request: LintRequest) -> Result<String, String> {
+    debug!("lint: action={}", request.action);
+
+    let service_guard = state.lint_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Lint service not initialized".to_string())?;
+    let options = LintOptions {
+        vault_path: request.vault_path,
+        limit: request.limit,
+    };
+
+    match request.action.to_lowercase().as_str() {
+        "run" | "list" => {
+            let report = service.run(options).await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        "apply_safe" | "apply-safe" => {
+            let report = if request.write.unwrap_or(false) {
+                service
+                    .apply_safe(options)
+                    .await
+                    .map_err(|e| e.to_string())?
+            } else {
+                service.run(options).await.map_err(|e| e.to_string())?
+            };
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: run, list, apply_safe",
+            request.action
+        )),
+    }
+}
+
+// =============================================================================
+// Graph Tool
+// =============================================================================
+
+/// Request for Memory OS graph traversal.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GraphRequest {
+    /// Action: around, path, subgraph, export
+    #[schemars(description = "Action: around, path, subgraph, export")]
+    pub action: String,
+    /// Start node ID for around/subgraph/path. Plain UUIDs are treated as memory:<id>.
+    pub node: Option<String>,
+    /// Start node ID for path.
+    pub from: Option<String>,
+    /// End node ID for path.
+    pub to: Option<String>,
+    /// Traversal depth for around/subgraph.
+    pub depth: Option<usize>,
+    /// Maximum traversal depth for path.
+    pub max_depth: Option<usize>,
+}
+
+/// Traverse the derived Memory OS graph.
+pub async fn graph_new(state: &ToolState, request: GraphRequest) -> Result<String, String> {
+    debug!("graph: action={}", request.action);
+
+    let service_guard = state.graph_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Graph service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "around" => {
+            let node = required(&request.node, "node", "around")?;
+            let graph = service
+                .around(&node, request.depth.unwrap_or(2))
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&graph).map_err(|e| e.to_string())
+        }
+        "path" => {
+            let from = required(&request.from, "from", "path")?;
+            let to = required(&request.to, "to", "path")?;
+            let path = service
+                .path(&from, &to, request.max_depth.unwrap_or(6))
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&path).map_err(|e| e.to_string())
+        }
+        "subgraph" => {
+            let graph = service
+                .subgraph(request.node.as_deref(), request.depth.unwrap_or(2))
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&graph).map_err(|e| e.to_string())
+        }
+        "export" => {
+            let output = service
+                .export_mermaid(request.node.as_deref(), request.depth.unwrap_or(2))
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(
+                &serde_json::json!({ "format": "mermaid", "content": output }),
+            )
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: around, path, subgraph, export",
+            request.action
+        )),
+    }
+}
+
+// =============================================================================
+// Handoff Tool
+// =============================================================================
+
+/// Request for rolling handoff operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct HandoffRequest {
+    /// Action: get, update, compile
+    #[schemars(description = "Action: get, update, compile")]
+    pub action: String,
+    /// Project scope.
+    pub project: Option<String>,
+    /// Session ID for session-scoped handoffs or compile.
+    pub session_id: Option<String>,
+    /// Handoff Markdown content for update.
+    pub content: Option<String>,
+    /// Next actions for update.
+    #[serde(default)]
+    pub next_actions: Vec<String>,
+    /// Dry-run mode; defaults to true for update/compile.
+    pub dry_run: Option<bool>,
+    /// Writer harness/interface.
+    pub writer_harness: Option<String>,
+    /// Model provider.
+    pub model_provider: Option<String>,
+    /// Model name.
+    pub model: Option<String>,
+    /// Surface/interface label.
+    pub surface: Option<String>,
+}
+
+/// Manage rolling handoffs.
+pub async fn handoff_new(state: &ToolState, request: HandoffRequest) -> Result<String, String> {
+    debug!("handoff: action={}", request.action);
+
+    let service_guard = state.handoff_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Handoff service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "get" => {
+            let session_id = request
+                .session_id
+                .as_deref()
+                .map(|id| parse_id(id, "session ID"))
+                .transpose()?;
+            let result = service
+                .get(request.project.as_deref(), session_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+        }
+        "update" => {
+            let session_id = request
+                .session_id
+                .as_deref()
+                .map(|id| parse_id(id, "session ID"))
+                .transpose()?;
+            let writer = parse_handoff_writer(&request)?;
+            let content = required(&request.content, "content", "update")?;
+            let result = service
+                .update(
+                    request.project,
+                    session_id,
+                    content,
+                    request.next_actions,
+                    writer,
+                    request.dry_run.unwrap_or(true),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+        }
+        "compile" => {
+            let session_id = parse_id(
+                &required(&request.session_id, "session_id", "compile")?,
+                "session ID",
+            )?;
+            let writer = parse_handoff_writer(&request)?;
+            let result = service
+                .compile(
+                    session_id,
+                    request.project,
+                    writer,
+                    request.dry_run.unwrap_or(true),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: get, update, compile",
+            request.action
+        )),
+    }
+}
+
+fn parse_handoff_writer(request: &HandoffRequest) -> Result<WriterProvenance, String> {
+    let harness = Harness::parse(&required(
+        &request.writer_harness,
+        "writer_harness",
+        &request.action,
+    )?);
+    let model_provider = required(&request.model_provider, "model_provider", &request.action)?;
+    let model_name = required(&request.model, "model", &request.action)?;
+    let mut writer =
+        WriterProvenance::agent(harness, ModelIdentity::new(model_provider, model_name));
+    if let Some(surface) = &request.surface {
+        writer = writer.with_surface(surface);
+    }
+    Ok(writer)
+}
+
+// =============================================================================
+// Agent Obligation Tool
+// =============================================================================
+
+/// Request for agent-native obligations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ObligationRequest {
+    /// Action: detect, add, get, list, open, resolve, skip, doctor
+    #[schemars(description = "Action: detect, add, get, list, open, resolve, skip, doctor")]
+    pub action: String,
+    /// Current working directory for detect.
+    pub cwd: Option<String>,
+    /// Prompt/task text for detect.
+    pub prompt: Option<String>,
+    /// Project scope.
+    pub project: Option<String>,
+    /// Maximum obligations to return or create.
+    pub limit: Option<usize>,
+    /// Write detected obligations. Defaults to false for detect.
+    pub write: Option<bool>,
+    /// Obligation ID.
+    pub id: Option<String>,
+    /// Obligation kind.
+    pub kind: Option<String>,
+    /// Obligation title.
+    pub title: Option<String>,
+    /// Obligation description.
+    pub description: Option<String>,
+    /// Status filter.
+    pub status: Option<String>,
+    /// Trigger kind.
+    pub trigger_kind: Option<String>,
+    /// Trigger target.
+    pub trigger_target: Option<String>,
+    /// Trigger summary.
+    pub trigger_summary: Option<String>,
+    /// Required resolution kinds.
+    #[serde(default)]
+    pub required_resolutions: Vec<String>,
+    /// Resolution kind for resolve.
+    pub resolution: Option<String>,
+    /// Resolution or skip summary.
+    pub summary: Option<String>,
+    /// Skip reason.
+    pub reason: Option<String>,
+    /// Evidence references.
+    #[serde(default)]
+    pub evidence: Vec<MemoryEvidenceRequest>,
+    /// Writer harness/interface.
+    pub writer_harness: Option<String>,
+    /// Model provider.
+    pub model_provider: Option<String>,
+    /// Model name.
+    pub model: Option<String>,
+    /// Surface/interface label.
+    pub surface: Option<String>,
+    /// Actor label.
+    pub actor: Option<String>,
+    /// Writer session ID.
+    pub writer_session_id: Option<String>,
+}
+
+/// Manage agent-native obligations.
+pub async fn obligations_new(
+    state: &ToolState,
+    request: ObligationRequest,
+) -> Result<String, String> {
+    debug!("obligations: action={}", request.action);
+
+    let service_guard = state.obligation_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Obligation service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "detect" => {
+            let writer = parse_obligation_writer(&request)?;
+            let detection = service
+                .detect(ObligationDetectOptions {
+                    cwd: request.cwd,
+                    prompt: request.prompt,
+                    project: request.project,
+                    writer,
+                    write: request.write.unwrap_or(false),
+                    limit: request.limit,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&detection).map_err(|e| e.to_string())
+        }
+        "add" => {
+            let writer = parse_obligation_writer(&request)?;
+            let scope = request
+                .project
+                .as_deref()
+                .map(MemoryScope::project)
+                .unwrap_or(MemoryScope::Global);
+            let mut trigger = AgentObligationTrigger::new(
+                request
+                    .trigger_kind
+                    .clone()
+                    .unwrap_or_else(|| "agent_decision".to_string()),
+                required(&request.trigger_summary, "trigger_summary", "add")?,
+            );
+            if let Some(target) = &request.trigger_target {
+                trigger = trigger.with_target(target);
+            }
+            let mut obligation = AgentObligation::new(
+                AgentObligationKind::parse(&required(&request.kind, "kind", "add")?),
+                required(&request.title, "title", "add")?,
+                required(&request.description, "description", "add")?,
+                scope,
+                trigger,
+                writer,
+            );
+            for resolution in &request.required_resolutions {
+                obligation = obligation
+                    .with_required_resolution(AgentObligationResolutionKind::parse(resolution));
+            }
+            for evidence in request.evidence {
+                obligation = obligation.with_evidence(parse_evidence(evidence)?);
+            }
+            let obligation = service.add(obligation).await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
+        }
+        "get" => {
+            let id = parse_id(&required(&request.id, "id", "get")?, "obligation ID")?;
+            let obligation = service.get(id).await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "found": obligation.is_some(),
+                "obligation": obligation
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "list" | "open" => {
+            let status = if request.action.to_lowercase() == "open" {
+                Some(AgentObligationStatus::Open)
+            } else {
+                request
+                    .status
+                    .as_deref()
+                    .map(|status| {
+                        AgentObligationStatus::parse(status)
+                            .ok_or_else(|| format!("Invalid status: {status}"))
+                    })
+                    .transpose()?
+            };
+            let obligations = service
+                .list(status, request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligations).map_err(|e| e.to_string())
+        }
+        "resolve" => {
+            let id = parse_id(&required(&request.id, "id", "resolve")?, "obligation ID")?;
+            let resolution = AgentObligationResolution::new(
+                AgentObligationResolutionKind::parse(&required(
+                    &request.resolution,
+                    "resolution",
+                    "resolve",
+                )?),
+                required(&request.summary, "summary", "resolve")?,
+                request.actor.as_deref().unwrap_or("agent"),
+            );
+            let obligation = service
+                .resolve(id, resolution)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
+        }
+        "skip" => {
+            let id = parse_id(&required(&request.id, "id", "skip")?, "obligation ID")?;
+            let obligation = service
+                .skip(
+                    id,
+                    required(&request.reason, "reason", "skip")?,
+                    request.actor.unwrap_or_else(|| "agent".to_string()),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
+        }
+        "doctor" => {
+            let report = service
+                .doctor(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: detect, add, get, list, open, resolve, skip, doctor",
+            request.action
+        )),
+    }
+}
+
+fn parse_obligation_writer(request: &ObligationRequest) -> Result<WriterProvenance, String> {
+    let session_id = request
+        .writer_session_id
+        .as_deref()
+        .map(|id| parse_id(id, "writer_session_id"))
+        .transpose()?;
+    let mut writer = WriterProvenance::agent(
+        Harness::parse(request.writer_harness.as_deref().unwrap_or("generic")),
+        ModelIdentity::new(
+            request.model_provider.as_deref().unwrap_or("unknown"),
+            request.model.as_deref().unwrap_or("unknown"),
+        ),
+    );
+    writer.surface = request.surface.clone();
+    writer.actor = request.actor.clone().unwrap_or_else(|| "agent".to_string());
+    writer.session_id = session_id;
+    Ok(writer)
+}
+
+// =============================================================================
+// Memory OS Vault Tool
+// =============================================================================
+
+/// Request for dedicated Memory OS vault operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct VaultRequest {
+    /// Action to perform: init, compile, status, page
+    #[schemars(description = "Action: init, compile, status, page")]
+    pub action: String,
+
+    /// Vault root path.
+    #[schemars(description = "Vault root path")]
+    pub vault_path: Option<String>,
+
+    /// Page path relative to the vault root. If no extension is supplied, .md is used.
+    #[schemars(description = "Vault page path relative to the vault root")]
+    pub page: Option<String>,
+}
+
+/// Manage the generated Memory OS Markdown vault.
+pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<String, String> {
+    debug!("vault: action={}", request.action);
+
+    let service_guard = state.memory_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Memory service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "init" => {
+            let vault_path = required(&request.vault_path, "vault_path", "init")?;
+            let init = service
+                .init_vault(Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "init": init
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "compile" => {
+            let vault_path = required(&request.vault_path, "vault_path", "compile")?;
+            let export = service
+                .export_vault(Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "status" => {
+            let vault_path = required(&request.vault_path, "vault_path", "status")?;
+            let status = service
+                .vault_status(Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "page" => {
+            let vault_path = required(&request.vault_path, "vault_path", "page")?;
+            let page = required(&request.page, "page", "page")?;
+            let page = service
+                .vault_page(Path::new(&vault_path), &page)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "found": page.is_some(),
+                "page": page
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: init, compile, status, page",
+            request.action
+        )),
+    }
+}
+
+// =============================================================================
+// Digest Source Tool
+// =============================================================================
+
+/// Request for digest source inventory, review batches, and extraction plans.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DigestRequest {
+    /// Action to perform: inventory, review_export, review_apply, extraction_plan, source_index
+    #[schemars(
+        description = "Action: inventory, review_export, review_apply, extraction_plan, source_index"
+    )]
+    pub action: String,
+
+    /// Root directory to scan, such as ~/notes
+    #[schemars(description = "Root directory to scan")]
+    pub root_path: Option<String>,
+
+    /// Review export output directory (required for review_export)
+    pub output_path: Option<String>,
+
+    /// Review batch directory (required for review_apply)
+    pub review_path: Option<String>,
+
+    /// Maximum candidate digest files to return
+    pub limit: Option<usize>,
+
+    /// Include files normally treated as operational artifacts
+    pub include_operational: Option<bool>,
+
+    /// Maximum bytes to read from any accepted source for extraction_plan
+    pub max_source_bytes: Option<usize>,
+
+    /// Maximum candidate memory excerpts per accepted source for extraction_plan
+    pub max_candidates_per_source: Option<usize>,
+
+    /// Maximum characters copied into each extraction candidate for extraction_plan
+    pub max_candidate_chars: Option<usize>,
+
+    /// Actually index reviewed source_only digest documents for source_index; defaults to false
+    pub write: Option<bool>,
+}
+
+/// Inventory digest-like source files and process review-gated digest batches.
+pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<String, String> {
+    debug!("digest: action={}", request.action);
+
+    match request.action.to_lowercase().as_str() {
+        "inventory" => {
+            let root_path = required(&request.root_path, "root_path", "inventory")?;
+            let mut options = DigestInventoryOptions::new(Path::new(&root_path));
+            options.limit = request.limit;
+            options.include_operational = request.include_operational.unwrap_or(false);
+            let inventory = DigestService::new()
+                .inventory(options)
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "inventory": inventory
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "review_export" => {
+            let root_path = required(&request.root_path, "root_path", "review_export")?;
+            let output_path = required(&request.output_path, "output_path", "review_export")?;
+            let mut options = DigestInventoryOptions::new(Path::new(&root_path));
+            options.limit = request.limit;
+            options.include_operational = request.include_operational.unwrap_or(false);
+            let export = DigestService::new()
+                .export_review_batch(Path::new(&output_path), options)
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "review_apply" => {
+            let review_path = request
+                .review_path
+                .as_ref()
+                .or(request.output_path.as_ref())
+                .ok_or_else(|| "review_path required for review_apply".to_string())?;
+            let apply = DigestService::new()
+                .apply_review_batch(Path::new(review_path))
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "extraction_plan" => {
+            let review_path = required(&request.review_path, "review_path", "extraction_plan")?;
+            let output_path = required(&request.output_path, "output_path", "extraction_plan")?;
+            let defaults = DigestExtractionOptions::default();
+            let plan = DigestService::new()
+                .plan_extraction(
+                    Path::new(&review_path),
+                    Path::new(&output_path),
+                    DigestExtractionOptions {
+                        max_source_bytes: request
+                            .max_source_bytes
+                            .unwrap_or(defaults.max_source_bytes),
+                        max_candidates_per_source: request
+                            .max_candidates_per_source
+                            .unwrap_or(defaults.max_candidates_per_source),
+                        max_candidate_chars: request
+                            .max_candidate_chars
+                            .unwrap_or(defaults.max_candidate_chars),
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "source_index" => {
+            let review_path = required(&request.review_path, "review_path", "source_index")?;
+            let defaults = DigestSourceIndexOptions::default();
+            let plan = DigestService::new()
+                .plan_source_index(
+                    Path::new(&review_path),
+                    DigestSourceIndexOptions {
+                        max_source_bytes: request
+                            .max_source_bytes
+                            .unwrap_or(defaults.max_source_bytes),
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+
+            let write = request.write.unwrap_or(false);
+            let mut indexed_documents = 0usize;
+            if write {
+                let service_guard = state.doc_service.read().await;
+                let service = service_guard
+                    .as_ref()
+                    .ok_or_else(|| "Document service not initialized".to_string())?;
+                for document in &plan.documents {
+                    service
+                        .index_content(
+                            &document.document_path,
+                            Some(document.title.clone()),
+                            document.indexed_content.clone(),
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    indexed_documents += 1;
+                }
+            }
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan,
+                "dry_run": !write,
+                "indexed_documents": indexed_documents
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply, extraction_plan, source_index",
+            request.action
+        )),
+    }
+}
+
+// =============================================================================
+// Memory OS Tool
+// =============================================================================
+
+/// Consolidated request for Memory OS operations.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryRequestNew {
+    /// Action to perform: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
+    #[schemars(
+        description = "Action: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
+    )]
+    pub action: String,
+
+    /// Memory item ID (for get)
+    #[schemars(description = "Memory item ID (for get)")]
+    pub id: Option<String>,
+
+    /// Memory kind (for add): preference, rule, decision, limitation, project_fact, repository_fact, task_fact, user_fact, session_insight, handoff
+    #[schemars(description = "Memory kind (for add)")]
+    pub kind: Option<String>,
+
+    /// Short title (for add)
+    #[schemars(description = "Short title (for add)")]
+    pub title: Option<String>,
+
+    /// Markdown-safe content (for add)
+    #[schemars(description = "Markdown-safe content (for add)")]
+    pub content: Option<String>,
+
+    /// Claim origin (for add): user_stated, user_corrected, agent_observed, agent_inferred, tool_result, imported, migrated, generated_summary
+    #[schemars(description = "Claim origin (required for add)")]
+    pub origin: Option<String>,
+
+    /// Optional lifecycle status override: active, needs_review, superseded, archived, rejected
+    #[schemars(description = "Optional lifecycle status override")]
+    pub status: Option<String>,
+
+    /// Optional confidence override, clamped to 0.0-1.0
+    #[schemars(description = "Optional confidence override, 0.0-1.0")]
+    pub confidence: Option<f32>,
+
+    /// Tags for filtering
+    #[schemars(description = "Tags for filtering")]
+    #[serde(default)]
+    pub tags: Vec<String>,
+
+    /// Scope type (for add): global, user, project, task, entity, repository, session, custom
+    #[schemars(description = "Scope type (required for add)")]
+    pub scope_type: Option<String>,
+
+    /// Project ID for project/task scope
+    pub project_id: Option<String>,
+    /// Project name for project/task scope
+    pub project_name: Option<String>,
+    /// Task ID for task scope
+    pub task_id: Option<String>,
+    /// Task name for task scope
+    pub task_name: Option<String>,
+    /// Entity ID for entity scope
+    pub entity_id: Option<String>,
+    /// Entity name for entity scope
+    pub entity_name: Option<String>,
+    /// Source entity name for promote_observation
+    pub source_entity_name: Option<String>,
+    /// Source observation key for promote_observation
+    pub observation_key: Option<String>,
+    /// Repository ID for repository scope
+    pub repository_id: Option<String>,
+    /// Repository remote URL for repository scope
+    pub remote_url: Option<String>,
+    /// Local checkout path for repository scope
+    pub local_path: Option<String>,
+    /// Session ID for session scope
+    pub scope_session_id: Option<String>,
+    /// Custom scope name
+    pub scope_name: Option<String>,
+
+    /// Writer harness/interface: claude_code, codex, gemini_cli, chatgpt, cursor, or custom
+    #[schemars(description = "Writer harness/interface (required for add and commit)")]
+    pub writer_harness: Option<String>,
+    /// Writer harness version
+    pub writer_harness_version: Option<String>,
+    /// Model provider, e.g. openai or anthropic
+    #[schemars(description = "Model provider (required for add and commit)")]
+    pub model_provider: Option<String>,
+    /// Model name
+    #[schemars(description = "Model name (required for add and commit)")]
+    pub model: Option<String>,
+    /// Model version or alias
+    pub model_version: Option<String>,
+    /// Surface/interface label
+    pub surface: Option<String>,
+    /// Actor label, e.g. agent, user, importer
+    pub actor: Option<String>,
+    /// Session ID associated with the writer
+    pub writer_session_id: Option<String>,
+    /// Host/application session label for telemetry correlation.
+    pub external_session_id: Option<String>,
+
+    /// Evidence backing the memory item
+    #[schemars(
+        description = "Evidence records as objects with kind, target, optional summary, and optional excerpt. String entries are accepted as legacy note evidence, but structured evidence is preferred."
+    )]
+    #[serde(default)]
+    pub evidence: Vec<MemoryEvidenceRequest>,
+
+    /// Status filter for list
+    #[schemars(description = "Status filter for list")]
+    pub status_filter: Option<String>,
+
+    /// Maximum results for list/review/changes_since
+    pub limit: Option<usize>,
+
+    /// Knowledge commit message (for commit)
+    pub message: Option<String>,
+    /// Parent commit ID (for commit)
+    pub parent_id: Option<String>,
+    /// Session ID that produced the commit (for commit)
+    pub session_id: Option<String>,
+    /// Memory changes to include in a commit
+    #[serde(default)]
+    pub changes: Vec<MemoryChangeRequest>,
+
+    /// Cursor commit ID (for changes_since)
+    pub commit_id: Option<String>,
+    /// Cursor timestamp in RFC3339 format (required for changes_since)
+    pub timestamp: Option<String>,
+    /// Project name for changes_since relevance scoring.
+    pub relevance_project: Option<String>,
+    /// Current working directory for changes_since relevance scoring.
+    pub cwd: Option<String>,
+    /// Query/prompt text for changes_since relevance scoring.
+    pub query: Option<String>,
+    /// Caller intent for changes_since telemetry correlation.
+    pub intent: Option<String>,
+    /// Archive reason for archive action.
+    pub archive_reason: Option<String>,
+    /// Actor/harness archiving the item for archive action.
+    pub archived_by: Option<String>,
+    /// Reviewer identity for promote/reject/supersede actions.
+    pub reviewer: Option<String>,
+    /// Review rationale for promote/reject/supersede actions.
+    pub rationale: Option<String>,
+    /// Existing memory item ID replaced by `id` for supersede action.
+    pub supersedes_id: Option<String>,
+
+    /// Markdown vault root path (required for export_vault)
+    pub vault_path: Option<String>,
+    /// Migration review output path (required for migration_review_export)
+    pub migration_review_path: Option<String>,
+    /// Exclude sources already decided in generated review batches under this path
+    pub exclude_reviewed_path: Option<String>,
+    /// Digest extraction review path (required for digest_extraction_apply)
+    pub digest_extraction_path: Option<String>,
+    /// Dry-run mode for migration_review_apply or digest_extraction_apply; defaults to true
+    pub dry_run: Option<bool>,
+    /// Create a knowledge commit when an apply action writes records
+    pub create_commit: Option<bool>,
+
+    /// Include entity observations in migration_inventory
+    pub include_entity_observations: Option<bool>,
+    /// Include session history in migration_inventory
+    pub include_session_history: Option<bool>,
+    /// Include work observations in migration_inventory
+    pub include_work_observations: Option<bool>,
+}
+
+/// Evidence request for Memory OS items.
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryEvidenceRequest {
+    /// Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review
+    pub kind: String,
+    /// Stable evidence target: ID, path, URL, or commit SHA
+    pub target: String,
+    /// Optional summary
+    pub summary: Option<String>,
+    /// Optional excerpt or selector
+    pub excerpt: Option<String>,
+}
+
+impl JsonSchema for MemoryEvidenceRequest {
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MemoryEvidenceRequest".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "description": "Evidence backing a Memory OS item.",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "description": "Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review"
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Stable evidence target: ID, path, URL, or commit SHA"
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Optional human-readable summary"
+                },
+                "excerpt": {
+                    "type": "string",
+                    "description": "Optional excerpt or selector"
+                }
+            },
+            "required": ["kind", "target"],
+            "additionalProperties": false
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for MemoryEvidenceRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum EvidenceInput {
+            Object {
+                kind: String,
+                target: String,
+                summary: Option<String>,
+                excerpt: Option<String>,
+            },
+            Text(String),
+        }
+
+        match EvidenceInput::deserialize(deserializer)? {
+            EvidenceInput::Object {
+                kind,
+                target,
+                summary,
+                excerpt,
+            } => Ok(Self {
+                kind,
+                target,
+                summary,
+                excerpt,
+            }),
+            EvidenceInput::Text(target) => Ok(Self {
+                kind: "note".to_string(),
+                target,
+                summary: None,
+                excerpt: None,
+            }),
+        }
+    }
+}
+
+/// Knowledge commit change request.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryChangeRequest {
+    /// Change type: added, updated, superseded, archived, rejected, linked, unlinked
+    pub change_type: String,
+    /// Changed memory item ID
+    pub item_id: Option<String>,
+    /// Human-readable title
+    pub title: String,
+    /// Short change summary
+    pub summary: String,
+    /// Content hash before the change
+    pub before_hash: Option<String>,
+    /// Content hash after the change
+    pub after_hash: Option<String>,
+}
+
+/// Consolidated Memory OS handler.
+pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<String, String> {
+    debug!("memory: action={}", request.action);
+
+    let service_guard = state.memory_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Memory service not initialized".to_string())?;
+
+    match request.action.to_lowercase().as_str() {
+        "add" => {
+            let kind = MemoryKind::parse(&required(&request.kind, "kind", "add")?);
+            let title = required(&request.title, "title", "add")?;
+            let content = required(&request.content, "content", "add")?;
+            let origin = parse_claim_origin(&required(&request.origin, "origin", "add")?)?;
+            let scope = parse_memory_scope(&request)?;
+            let writer = parse_writer(&request)?;
+
+            let mut item = MemoryItem::new(kind, title, content, scope, origin, writer);
+            for evidence in request.evidence {
+                item = item.with_evidence(parse_evidence(evidence)?);
+            }
+            if let Some(confidence) = request.confidence {
+                item = item.with_confidence(confidence);
+            }
+            if let Some(status) = &request.status {
+                item = item.with_status(parse_memory_status(status)?);
+            }
+            for tag in request.tags {
+                item = item.with_tag(tag);
+            }
+
+            let item = service
+                .capture_memory(item)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "capture_current_plan" | "capture-current-plan" => {
+            if request.supersedes_id.is_some() {
+                return Err(
+                    "capture_current_plan automatically supersedes older same-scope current-plan memory; explicit supersedes_id is not accepted".to_string(),
+                );
+            }
+            let kind = request
+                .kind
+                .as_deref()
+                .map(MemoryKind::parse)
+                .unwrap_or(MemoryKind::Decision);
+            let title = required(&request.title, "title", "capture_current_plan")?;
+            let content = required(&request.content, "content", "capture_current_plan")?;
+            let origin = request
+                .origin
+                .as_deref()
+                .map(parse_claim_origin)
+                .transpose()?
+                .unwrap_or(ClaimOrigin::AgentObserved);
+            if let Some(status) = &request.status {
+                let status = parse_memory_status(status)?;
+                if status != MemoryStatus::Active {
+                    return Err(
+                        "capture_current_plan always writes active memory; use memory(action=add) for other statuses"
+                            .to_string(),
+                    );
+                }
+            }
+            let mut scope_request = request.clone();
+            if scope_request.scope_type.is_none() && scope_request.project_name.is_some() {
+                scope_request.scope_type = Some("project".to_string());
+            }
+            let scope = parse_memory_scope(&scope_request)?;
+            let writer = parse_writer(&request)?;
+            let session_id = request
+                .session_id
+                .as_deref()
+                .map(|id| parse_id(id, "session ID"))
+                .transpose()?;
+            let parent_id = request
+                .parent_id
+                .as_deref()
+                .map(|id| parse_id(id, "parent commit ID"))
+                .transpose()?;
+            let evidence = request
+                .evidence
+                .into_iter()
+                .map(parse_evidence)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let capture = service
+                .capture_current_plan(CurrentPlanCaptureInput {
+                    kind,
+                    title,
+                    content,
+                    scope,
+                    origin,
+                    writer,
+                    evidence,
+                    confidence: request.confidence,
+                    tags: request.tags,
+                    create_commit: request.create_commit.unwrap_or(true),
+                    commit_message: request.message,
+                    session_id,
+                    parent_id,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": capture.item,
+                "commit": capture.commit
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "get" => {
+            let id = parse_id(&required(&request.id, "id", "get")?, "memory item ID")?;
+            let item = service
+                .get_memory(&id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Memory item not found: {id}"))?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "list" => {
+            let status = request
+                .status_filter
+                .as_deref()
+                .map(parse_memory_status)
+                .transpose()?;
+            let items = service
+                .list_memory(status, request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": items.len(),
+                "items": items
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "review" => {
+            let items = service
+                .list_memory_needing_review(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": items.len(),
+                "items": items
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "promote" => {
+            let id = parse_id(
+                &required(&request.id, "id", "promote")?,
+                "memory item ID",
+            )?;
+            let reviewer = required(&request.reviewer, "reviewer", "promote")?;
+            let rationale = required(&request.rationale, "rationale", "promote")?;
+            let item = service
+                .promote_memory(&id, reviewer, rationale)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "promote_observation" | "promote-observation" => {
+            let source_entity_name = required(
+                &request
+                    .source_entity_name
+                    .clone()
+                    .or_else(|| request.entity_name.clone()),
+                "source_entity_name",
+                "promote_observation",
+            )?;
+            let observation_key = required(
+                &request.observation_key,
+                "observation_key",
+                "promote_observation",
+            )?;
+            let kind = MemoryKind::parse(&required(
+                &request.kind,
+                "kind",
+                "promote_observation",
+            )?);
+            let title = required(&request.title, "title", "promote_observation")?;
+            let origin = parse_claim_origin(&required(
+                &request.origin,
+                "origin",
+                "promote_observation",
+            )?)?;
+            let scope = parse_memory_scope(&request)?;
+            let writer = parse_writer(&request)?;
+            let status = request
+                .status
+                .as_deref()
+                .map(parse_memory_status)
+                .transpose()?
+                .unwrap_or(MemoryStatus::Active);
+
+            let entity_service_guard = state.entity_service.read().await;
+            let entity_service = entity_service_guard
+                .as_ref()
+                .ok_or_else(|| "Entity service not initialized".to_string())?;
+            let observation = entity_service
+                .get_observation_by_key(&source_entity_name, &observation_key)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| {
+                    format!(
+                        "Observation not found: entity='{source_entity_name}', key='{observation_key}'"
+                    )
+                })?;
+
+            let item = service
+                .promote_observation_to_memory(
+                    &observation,
+                    ObservationPromotionInput {
+                        kind,
+                        title,
+                        content: request.content.clone(),
+                        scope,
+                        origin,
+                        writer,
+                        status,
+                        confidence: request.confidence,
+                        tags: request.tags.clone(),
+                        reviewer: request.reviewer.clone(),
+                        rationale: request.rationale.clone(),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item,
+                "source_observation": {
+                    "id": observation.id.to_string(),
+                    "entity": source_entity_name,
+                    "key": observation.key,
+                    "source": observation.source
+                }
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "reject" => {
+            let id = parse_id(&required(&request.id, "id", "reject")?, "memory item ID")?;
+            let reviewer = required(&request.reviewer, "reviewer", "reject")?;
+            let rationale = required(&request.rationale, "rationale", "reject")?;
+            let item = service
+                .reject_memory(&id, reviewer, rationale)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "supersede" => {
+            let new_id = parse_id(
+                &required(&request.id, "id", "supersede")?,
+                "replacement memory item ID",
+            )?;
+            let old_id = parse_id(
+                &required(&request.supersedes_id, "supersedes_id", "supersede")?,
+                "superseded memory item ID",
+            )?;
+            let reviewer = required(&request.reviewer, "reviewer", "supersede")?;
+            let rationale = required(&request.rationale, "rationale", "supersede")?;
+            let (item, superseded_item) = service
+                .supersede_memory(&new_id, &old_id, reviewer, rationale)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item,
+                "superseded_item": superseded_item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "commit" => {
+            let writer = parse_writer(&request)?;
+            let message = required(&request.message, "message", "commit")?;
+            let session_id = request
+                .session_id
+                .as_deref()
+                .map(|id| parse_id(id, "session ID"))
+                .transpose()?;
+            let parent_id = request
+                .parent_id
+                .as_deref()
+                .map(|id| parse_id(id, "parent commit ID"))
+                .transpose()?;
+            let changes = request
+                .changes
+                .into_iter()
+                .map(parse_memory_change)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let commit = service
+                .commit_changes(writer, message, changes, session_id, parent_id)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "commit": commit
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "cursor" => {
+            let cursor = service.current_cursor().await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "cursor": cursor
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "changes_since" => {
+            let timestamp = parse_rfc3339(&required(&request.timestamp, "timestamp", "changes_since")?)?;
+            let commit_id = request
+                .commit_id
+                .as_deref()
+                .map(|id| parse_id(id, "commit ID"))
+                .transpose()?;
+            let writer_session_id = request
+                .writer_session_id
+                .as_deref()
+                .map(|id| parse_id(id, "writer session ID"))
+                .transpose()?;
+            let cursor = MemoryCursor {
+                commit_id,
+                timestamp,
+            };
+
+            let changes = service
+                .changes_since_with_options(
+                    cursor,
+                    request.limit,
+                    MemoryChangesSinceOptions {
+                        writer_harness: request.writer_harness.clone(),
+                        model: request.model.clone(),
+                        surface: request.surface.clone(),
+                        writer_session_id,
+                        project: request.relevance_project.clone().or(request.project_name.clone()),
+                        cwd: request.cwd.clone(),
+                        query: request.query.clone(),
+                        intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
+                        external_session_id: request.external_session_id.clone(),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "since": changes.since,
+                "next_cursor": changes.next_cursor,
+                "trace_id": changes.trace_id,
+                "item_count": changes.items.len(),
+                "commit_count": changes.commits.len(),
+                "item_relevance": changes.item_relevance,
+                "items": changes.items,
+                "commits": changes.commits
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "log" => {
+            let commits = service
+                .list_commits(request.limit)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": commits.len(),
+                "commits": commits
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "diff" => {
+            let id = parse_id(&required(&request.commit_id, "commit_id", "diff")?, "commit ID")?;
+            let commit = service
+                .get_commit(&id)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Knowledge commit not found: {id}"))?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "commit": commit
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "writer_stats" | "writer-stats" => {
+            let stats = service.writer_stats().await.map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "count": stats.len(),
+                "stats": stats
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "archive" => {
+            let id = parse_id(&required(&request.id, "id", "archive")?, "memory item ID")?;
+            let reason = required(&request.archive_reason, "archive_reason", "archive")?;
+            let item = service
+                .archive_memory(&id, reason, request.archived_by)
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "item": item
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "export_vault" => {
+            let vault_path = required(&request.vault_path, "vault_path", "export_vault")?;
+            let export = service
+                .export_vault(std::path::Path::new(&vault_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_inventory" => {
+            let mut options = MigrationInventoryOptions::all();
+            options.project_filter = request.project_name.clone();
+            options.limit = request.limit;
+            options.exclude_reviewed_path = request.exclude_reviewed_path.clone();
+            if let Some(include) = request.include_entity_observations {
+                options.include_entity_observations = include;
+            }
+            if let Some(include) = request.include_session_history {
+                options.include_session_history = include;
+            }
+            if let Some(include) = request.include_work_observations {
+                options.include_work_observations = include;
+            }
+
+            let inventory = service
+                .migration_inventory(options)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "inventory": inventory
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_export" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_export",
+            )?;
+            let mut options = MigrationInventoryOptions::all();
+            options.project_filter = request.project_name.clone();
+            options.limit = request.limit;
+            options.exclude_reviewed_path = request.exclude_reviewed_path.clone();
+            if let Some(include) = request.include_entity_observations {
+                options.include_entity_observations = include;
+            }
+            if let Some(include) = request.include_session_history {
+                options.include_session_history = include;
+            }
+            if let Some(include) = request.include_work_observations {
+                options.include_work_observations = include;
+            }
+
+            let export = service
+                .export_migration_review(std::path::Path::new(&review_path), options)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_status" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_status",
+            )?;
+            let status = service
+                .migration_review_status(std::path::Path::new(&review_path))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "migration_review_apply" => {
+            let review_path = required(
+                &request.migration_review_path,
+                "migration_review_path",
+                "migration_review_apply",
+            )?;
+            let writer = parse_writer(&request)?;
+            let apply = service
+                .apply_migration_review(
+                    std::path::Path::new(&review_path),
+                    MigrationReviewApplyOptions {
+                        dry_run: request.dry_run.unwrap_or(true),
+                        writer,
+                        create_commit: request.create_commit.unwrap_or(true),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "digest_extraction_apply" => {
+            let extraction_path = required(
+                &request.digest_extraction_path,
+                "digest_extraction_path",
+                "digest_extraction_apply",
+            )?;
+            let writer = parse_writer(&request)?;
+            let apply = service
+                .apply_digest_extraction_review(
+                    std::path::Path::new(&extraction_path),
+                    DigestExtractionReviewApplyOptions {
+                        dry_run: request.dry_run.unwrap_or(true),
+                        writer,
+                        create_commit: request.create_commit.unwrap_or(true),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "apply": apply
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "distill_session" => {
+            let session_id = parse_id(
+                &required(&request.session_id, "session_id", "distill_session")?,
+                "session ID",
+            )?;
+            let writer = parse_writer(&request)?;
+            let distillation = service
+                .distill_session(session_id, writer)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "distillation": distillation
+            }))
+            .map_err(|e| e.to_string())
+        }
+        _ => Err(format!(
+            "Unknown action: '{}'. Valid actions: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
+            request.action
+        )),
+    }
+}
+
+fn required(value: &Option<String>, field: &str, action: &str) -> Result<String, String> {
+    value
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| format!("{field} required for {action}"))
+}
+
+fn parse_id(value: &str, label: &str) -> Result<engram_core::id::Id, String> {
+    engram_core::id::Id::parse(value).map_err(|e| format!("Invalid {label}: {e}"))
+}
+
+fn parse_optional_id(
+    value: &Option<String>,
+    label: &str,
+) -> Result<Option<engram_core::id::Id>, String> {
+    value.as_deref().map(|id| parse_id(id, label)).transpose()
+}
+
+fn parse_rfc3339(value: &str) -> Result<time::OffsetDateTime, String> {
+    time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .map_err(|e| format!("Invalid RFC3339 timestamp: {e}"))
+}
+
+fn parse_writer(request: &MemoryRequestNew) -> Result<WriterProvenance, String> {
+    let harness = Harness::parse(&required(
+        &request.writer_harness,
+        "writer_harness",
+        &request.action,
+    )?);
+    let model_provider = required(&request.model_provider, "model_provider", &request.action)?;
+    let model_name = required(&request.model, "model", &request.action)?;
+
+    let mut model = ModelIdentity::new(model_provider, model_name);
+    if let Some(version) = &request.model_version {
+        model = model.with_version(version);
+    }
+
+    let mut writer = WriterProvenance::agent(harness, model);
+    if let Some(actor) = &request.actor {
+        writer.actor = actor.clone();
+    }
+    if let Some(surface) = &request.surface {
+        writer = writer.with_surface(surface);
+    }
+    if let Some(version) = &request.writer_harness_version {
+        writer = writer.with_harness_version(version);
+    }
+    if let Some(session_id) = &request.writer_session_id {
+        writer = writer.with_session(parse_id(session_id, "writer session ID")?);
+    }
+
+    Ok(writer)
+}
+
+fn parse_memory_scope(request: &MemoryRequestNew) -> Result<MemoryScope, String> {
+    let scope_type = required(&request.scope_type, "scope_type", &request.action)?;
+    match scope_type.to_lowercase().as_str() {
+        "global" => Ok(MemoryScope::Global),
+        "user" => Ok(MemoryScope::User),
+        "project" => Ok(MemoryScope::Project {
+            project_id: parse_optional_id(&request.project_id, "project ID")?,
+            project_name: required(&request.project_name, "project_name", "project scope")?,
+        }),
+        "task" => Ok(MemoryScope::Task {
+            project_id: parse_optional_id(&request.project_id, "project ID")?,
+            project_name: request.project_name.clone(),
+            task_id: parse_optional_id(&request.task_id, "task ID")?,
+            task_name: required(&request.task_name, "task_name", "task scope")?,
+        }),
+        "entity" => Ok(MemoryScope::Entity {
+            entity_id: parse_optional_id(&request.entity_id, "entity ID")?,
+            entity_name: required(&request.entity_name, "entity_name", "entity scope")?,
+        }),
+        "repository" => {
+            if request.remote_url.is_none() && request.local_path.is_none() {
+                return Err(
+                    "remote_url or local_path required for repository scope".to_string(),
+                );
+            }
+            Ok(MemoryScope::Repository {
+                repository_id: parse_optional_id(&request.repository_id, "repository ID")?,
+                remote_url: request.remote_url.clone(),
+                local_path: request.local_path.clone(),
+            })
+        }
+        "session" => Ok(MemoryScope::Session {
+            session_id: parse_id(
+                &required(&request.scope_session_id, "scope_session_id", "session scope")?,
+                "scope session ID",
+            )?,
+        }),
+        "custom" => Ok(MemoryScope::Custom {
+            name: required(&request.scope_name, "scope_name", "custom scope")?,
+        }),
+        _ => Err(format!(
+            "Unknown scope_type: '{}'. Valid: global, user, project, task, entity, repository, session, custom",
+            scope_type
+        )),
+    }
+}
+
+fn parse_memory_status(value: &str) -> Result<MemoryStatus, String> {
+    match value.to_lowercase().as_str() {
+        "active" => Ok(MemoryStatus::Active),
+        "needs_review" | "needsreview" => Ok(MemoryStatus::NeedsReview),
+        "superseded" => Ok(MemoryStatus::Superseded),
+        "archived" => Ok(MemoryStatus::Archived),
+        "rejected" => Ok(MemoryStatus::Rejected),
+        _ => Err(format!(
+            "Unknown memory status: '{}'. Valid: active, needs_review, superseded, archived, rejected",
+            value
+        )),
+    }
+}
+
+fn parse_claim_origin(value: &str) -> Result<ClaimOrigin, String> {
+    match value.to_lowercase().as_str() {
+        "user_stated" => Ok(ClaimOrigin::UserStated),
+        "user_corrected" => Ok(ClaimOrigin::UserCorrected),
+        "agent_observed" => Ok(ClaimOrigin::AgentObserved),
+        "agent_inferred" => Ok(ClaimOrigin::AgentInferred),
+        "tool_result" => Ok(ClaimOrigin::ToolResult),
+        "imported" => Ok(ClaimOrigin::Imported),
+        "migrated" => Ok(ClaimOrigin::Migrated),
+        "generated_summary" => Ok(ClaimOrigin::GeneratedSummary),
+        other if !other.is_empty() => Ok(ClaimOrigin::Custom(other.to_string())),
+        _ => Err("origin must not be empty".to_string()),
+    }
+}
+
+fn parse_evidence_kind(value: &str) -> EvidenceKind {
+    match value.to_lowercase().as_str() {
+        "session_event" => EvidenceKind::SessionEvent,
+        "tool_call" => EvidenceKind::ToolCall,
+        "file" => EvidenceKind::File,
+        "git_commit" => EvidenceKind::GitCommit,
+        "url" => EvidenceKind::Url,
+        "document" => EvidenceKind::Document,
+        "observation" => EvidenceKind::Observation,
+        "manual_review" => EvidenceKind::ManualReview,
+        other => EvidenceKind::Custom(other.to_string()),
+    }
+}
+
+fn parse_evidence(request: MemoryEvidenceRequest) -> Result<EvidenceRef, String> {
+    if request.target.trim().is_empty() {
+        return Err("evidence target must not be empty".to_string());
+    }
+
+    let mut evidence = EvidenceRef::new(parse_evidence_kind(&request.kind), request.target);
+    if let Some(summary) = request.summary {
+        evidence = evidence.with_summary(summary);
+    }
+    if let Some(excerpt) = request.excerpt {
+        evidence = evidence.with_excerpt(excerpt);
+    }
+    Ok(evidence)
+}
+
+fn parse_memory_change_type(value: &str) -> Result<MemoryChangeType, String> {
+    match value.to_lowercase().as_str() {
+        "added" => Ok(MemoryChangeType::Added),
+        "updated" => Ok(MemoryChangeType::Updated),
+        "superseded" => Ok(MemoryChangeType::Superseded),
+        "archived" => Ok(MemoryChangeType::Archived),
+        "rejected" => Ok(MemoryChangeType::Rejected),
+        "linked" => Ok(MemoryChangeType::Linked),
+        "unlinked" => Ok(MemoryChangeType::Unlinked),
+        _ => Err(format!(
+            "Unknown memory change type: '{}'. Valid: added, updated, superseded, archived, rejected, linked, unlinked",
+            value
+        )),
+    }
+}
+
+fn parse_memory_change(request: MemoryChangeRequest) -> Result<MemoryChange, String> {
+    if request.title.trim().is_empty() {
+        return Err("change title must not be empty".to_string());
+    }
+    if request.summary.trim().is_empty() {
+        return Err("change summary must not be empty".to_string());
+    }
+
+    let mut change = MemoryChange::new(
+        parse_memory_change_type(&request.change_type)?,
+        request.title,
+        request.summary,
+    );
+    if let Some(item_id) = request.item_id {
+        change = change.with_item(parse_id(&item_id, "memory item ID")?);
+    }
+    if request.before_hash.is_some() || request.after_hash.is_some() {
+        change = change.with_hashes(request.before_hash, request.after_hash);
+    }
+    Ok(change)
+}
+
+// =============================================================================
 // Phase 4: Consolidated Knowledge Management Tool
 // =============================================================================
 
@@ -6787,8 +9822,16 @@ fn parse_event_type(event_type: &str) -> Result<EventType, String> {
         "file_change" => Ok(EventType::FileChange),
         "tool_use" => Ok(EventType::ToolUse),
         "milestone" => Ok(EventType::Milestone),
+        "prompt" => Ok(EventType::Prompt),
+        "plan" => Ok(EventType::Plan),
+        "tool_result" => Ok(EventType::ToolResult),
+        "test" => Ok(EventType::Test),
+        "preference" => Ok(EventType::Preference),
+        "rule" => Ok(EventType::Rule),
+        "limitation" => Ok(EventType::Limitation),
+        "handoff_update" => Ok(EventType::HandoffUpdate),
         _ => Err(format!(
-            "Unknown event_type: '{}'. Valid: decision, observation, error, command, file_change, tool_use, milestone",
+            "Unknown event_type: '{}'. Valid: decision, observation, error, command, file_change, tool_use, milestone, prompt, plan, tool_result, test, preference, rule, limitation, handoff_update",
             event_type
         )),
     }
@@ -7006,8 +10049,10 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
 /// Consolidated request for all document operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DocsRequestNew {
-    /// Action to perform: search, index, stats
-    #[schemars(description = "Action: search, index, stats")]
+    /// Action to perform: search, index, plan, orphan_report, reindex_plan, reindex_execute, cleanup_plan, cleanup_execute, quarantine_review_export, quarantine_review_status, quarantine_review_prioritize, quarantine_review_apply, stats
+    #[schemars(
+        description = "Action: search, index, plan, orphan_report, reindex_plan, reindex_execute, cleanup_plan, cleanup_execute, quarantine_review_export, quarantine_review_status, quarantine_review_prioritize, quarantine_review_apply, stats"
+    )]
     pub action: String,
 
     /// Search query (for search action)
@@ -7018,9 +10063,128 @@ pub struct DocsRequestNew {
     #[schemars(description = "Path to file or directory (for index)")]
     pub path: Option<String>,
 
+    /// JSON reindex plan path (for reindex_execute)
+    #[schemars(description = "JSON reindex plan path (for reindex_execute/cleanup_plan)")]
+    pub plan_path: Option<String>,
+
+    /// JSON reindex plan path (for cleanup_plan)
+    #[schemars(description = "JSON reindex plan path (for cleanup_plan)")]
+    pub reindex_plan_path: Option<String>,
+
+    /// JSON write execution report path (for cleanup_plan)
+    #[schemars(description = "JSON write execution report path (for cleanup_plan)")]
+    pub execution_report_path: Option<String>,
+
+    /// JSON cleanup plan path (for cleanup_execute)
+    #[schemars(
+        description = "JSON cleanup plan path (for cleanup_execute/quarantine_review_export)"
+    )]
+    pub cleanup_plan_path: Option<String>,
+
+    /// Output file or directory path for generated reports/review batches.
+    #[schemars(description = "Output path for generated reports or review batches")]
+    pub output_path: Option<String>,
+
+    /// Generated review batch directory path.
+    #[schemars(description = "Review batch directory path")]
+    pub review_path: Option<String>,
+
     /// Max results (for search action)
-    #[schemars(description = "Maximum results (for search)")]
+    #[schemars(
+        description = "Maximum results (for search) or orphan groups (for orphan_report/reindex_plan)"
+    )]
     pub limit: Option<usize>,
+
+    /// Sample chunks per orphan group (for orphan_report/reindex_plan)
+    #[schemars(description = "Sample chunks per orphan group (for orphan_report/reindex_plan)")]
+    pub sample_limit: Option<usize>,
+
+    /// Current file or directory paths to scan for fingerprint matches (for orphan_report/reindex_plan)
+    #[schemars(
+        description = "Current file or directory paths to scan (for orphan_report/reindex_plan)"
+    )]
+    #[serde(default)]
+    pub scan_paths: Vec<String>,
+
+    /// Digest review batch roots to scan for reviewed source matches (for orphan_report/reindex_plan)
+    #[schemars(description = "Digest review batch roots to scan (for orphan_report/reindex_plan)")]
+    #[serde(default)]
+    pub digest_review_paths: Vec<String>,
+
+    /// Maximum candidate files or digest sources to read (for orphan_report/reindex_plan)
+    #[schemars(description = "Maximum candidate files to read (for orphan_report/reindex_plan)")]
+    pub max_candidate_files: Option<usize>,
+
+    /// Maximum bytes to read per candidate file (for orphan_report/reindex_plan)
+    #[schemars(description = "Maximum bytes per candidate file (for orphan_report/reindex_plan)")]
+    pub max_file_bytes: Option<usize>,
+
+    /// Include already decided pages for quarantine_review_prioritize.
+    #[schemars(description = "Include decided pages for quarantine_review_prioritize")]
+    pub include_decided: Option<bool>,
+
+    /// Include duplicate content fingerprints for quarantine_review_prioritize.
+    #[schemars(
+        description = "Include duplicate content fingerprints for quarantine_review_prioritize"
+    )]
+    pub include_duplicate_fingerprints: Option<bool>,
+
+    /// Maximum excerpt bytes per item for quarantine_review_prioritize.
+    #[schemars(description = "Maximum excerpt bytes per item for quarantine_review_prioritize")]
+    pub max_excerpt_bytes: Option<usize>,
+
+    /// Execute writes for reindex_execute/cleanup_execute. Defaults to false, which means dry-run.
+    #[schemars(
+        description = "Perform writes for reindex_execute/cleanup_execute; default is dry-run"
+    )]
+    pub execute: Option<bool>,
+
+    /// Approve all selected source actions for write-mode reindex_execute.
+    #[schemars(description = "Approve all selected source actions for write-mode reindex_execute")]
+    pub all: Option<bool>,
+
+    /// Exact source paths to include for reindex_execute.
+    #[schemars(description = "Exact source paths to include for reindex_execute")]
+    #[serde(default)]
+    pub source_paths: Vec<String>,
+
+    /// Action filters for reindex_execute.
+    #[schemars(description = "Action filters for reindex_execute")]
+    #[serde(default)]
+    pub reindex_actions: Vec<String>,
+
+    /// Maximum bytes to read per digest source for reindex_execute.
+    #[schemars(description = "Maximum bytes per digest source for reindex_execute")]
+    pub max_source_bytes: Option<usize>,
+
+    /// Maximum selected source actions to process for reindex_execute.
+    #[schemars(description = "Maximum selected source actions to process for reindex_execute")]
+    pub max_actions: Option<usize>,
+
+    /// Approve deleting delete_after_successful_reindex groups for cleanup_execute.
+    #[schemars(description = "Approve deleting delete candidates for cleanup_execute")]
+    pub delete_candidates: Option<bool>,
+
+    /// Approve all delete candidates for cleanup_execute write mode.
+    #[schemars(description = "Approve all delete candidates for cleanup_execute write mode")]
+    pub all_delete_candidates: Option<bool>,
+
+    /// Exact missing source IDs to include for cleanup_execute.
+    #[schemars(description = "Exact missing source IDs to include for cleanup_execute")]
+    #[serde(default)]
+    pub cleanup_source_ids: Vec<String>,
+
+    /// Maximum selected cleanup groups to process for cleanup_execute.
+    #[schemars(description = "Maximum selected cleanup groups to process for cleanup_execute")]
+    pub max_groups: Option<usize>,
+
+    /// Maximum chunks to include per group for quarantine_review_export.
+    #[schemars(description = "Maximum chunks per group for quarantine_review_export")]
+    pub max_chunks_per_group: Option<usize>,
+
+    /// Maximum content bytes per chunk for quarantine_review_export.
+    #[schemars(description = "Maximum content bytes per chunk for quarantine_review_export")]
+    pub max_chunk_bytes: Option<usize>,
 
     /// Minimum score threshold (for search action)
     #[schemars(description = "Minimum similarity score 0.0-1.0 (for search)")]
@@ -7088,21 +10252,337 @@ pub async fn docs_new(state: &ToolState, request: DocsRequestNew) -> Result<Stri
             };
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
+        "plan" => {
+            let path_str = request.path.ok_or("path required for plan")?;
+            let plan = service
+                .plan_path(std::path::Path::new(&path_str))
+                .await
+                .map_err(|e| e.to_string())?;
+            let documents_planned = plan.documents.len();
+            let chunks_planned = plan.total_chunks();
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan,
+                "dry_run": true,
+                "documents_planned": documents_planned,
+                "chunks_planned": chunks_planned
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "orphan_report" | "recovery" => {
+            let limit = request.limit.unwrap_or(20);
+            let sample_limit = request.sample_limit.unwrap_or(3);
+            let report = service
+                .orphan_recovery_report(DocumentRecoveryOptions {
+                    group_limit: limit,
+                    sample_limit_per_group: sample_limit,
+                    scan_paths: request.scan_paths.into_iter().map(Into::into).collect(),
+                    digest_review_paths: request
+                        .digest_review_paths
+                        .into_iter()
+                        .map(Into::into)
+                        .collect(),
+                    max_candidate_files: request.max_candidate_files.unwrap_or(5000),
+                    max_file_bytes: request.max_file_bytes.unwrap_or(1024 * 1024),
+                    ..Default::default()
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "report": report,
+                "read_only": true
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "reindex_plan" => {
+            let limit = request.limit.unwrap_or(20);
+            let sample_limit = request.sample_limit.unwrap_or(3);
+            let plan = service
+                .orphan_reindex_plan(DocumentRecoveryOptions {
+                    group_limit: limit,
+                    sample_limit_per_group: sample_limit,
+                    scan_paths: request.scan_paths.into_iter().map(Into::into).collect(),
+                    digest_review_paths: request
+                        .digest_review_paths
+                        .into_iter()
+                        .map(Into::into)
+                        .collect(),
+                    max_candidate_files: request.max_candidate_files.unwrap_or(5000),
+                    max_file_bytes: request.max_file_bytes.unwrap_or(1024 * 1024),
+                    ..Default::default()
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan,
+                "read_only": true
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "reindex_execute" => {
+            let plan_path = request
+                .plan_path
+                .as_ref()
+                .or(request.path.as_ref())
+                .ok_or("plan_path required for reindex_execute")?;
+            let execute = request.execute.unwrap_or(false);
+            if execute && !request.all.unwrap_or(false) && request.source_paths.is_empty() {
+                return Err(
+                    "write mode requires explicit approval: set all=true or provide source_paths"
+                        .to_string(),
+                );
+            }
+            let plan_contents = std::fs::read_to_string(plan_path).map_err(|e| e.to_string())?;
+            let plan: DocumentReindexPlan =
+                serde_json::from_str(&plan_contents).map_err(|e| e.to_string())?;
+            let actions = parse_reindex_action_filters(&request.reindex_actions)?;
+            let defaults = DigestSourceIndexOptions::default();
+            let report = service
+                .execute_orphan_reindex_plan(
+                    &plan,
+                    DocumentReindexExecutionOptions {
+                        dry_run: !execute,
+                        source_paths: request.source_paths,
+                        actions,
+                        digest_review_paths: request
+                            .digest_review_paths
+                            .into_iter()
+                            .map(Into::into)
+                            .collect(),
+                        max_source_bytes: request
+                            .max_source_bytes
+                            .unwrap_or(defaults.max_source_bytes),
+                        max_actions: request.max_actions,
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "report": report,
+                "dry_run": !execute,
+                "orphan_cleanup_performed": false
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "cleanup_plan" => {
+            let reindex_plan_path = request.reindex_plan_path.as_ref().or(request.plan_path.as_ref());
+            let reindex_plan = reindex_plan_path
+                .map(|path| {
+                    std::fs::read_to_string(path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|contents| {
+                            serde_json::from_str::<DocumentReindexPlan>(&contents)
+                                .map_err(|e| e.to_string())
+                        })
+                })
+                .transpose()?;
+            let execution_report = request
+                .execution_report_path
+                .as_ref()
+                .map(|path| {
+                    std::fs::read_to_string(path)
+                        .map_err(|e| e.to_string())
+                        .and_then(|contents| {
+                            serde_json::from_str::<DocumentReindexExecutionReport>(&contents)
+                                .map_err(|e| e.to_string())
+                        })
+                })
+                .transpose()?;
+            let limit = request.limit.unwrap_or(20);
+            let sample_limit = request.sample_limit.unwrap_or(3);
+            let plan = service
+                .orphan_cleanup_plan(DocumentOrphanCleanupPlanOptions {
+                    recovery: DocumentRecoveryOptions {
+                        group_limit: limit,
+                        sample_limit_per_group: sample_limit,
+                        scan_paths: request.scan_paths.into_iter().map(Into::into).collect(),
+                        digest_review_paths: request
+                            .digest_review_paths
+                            .into_iter()
+                            .map(Into::into)
+                            .collect(),
+                        max_candidate_files: request.max_candidate_files.unwrap_or(5000),
+                        max_file_bytes: request.max_file_bytes.unwrap_or(1024 * 1024),
+                        ..Default::default()
+                    },
+                    reindex_plan,
+                    execution_report,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "plan": plan,
+                "read_only": true
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "quarantine_review_export" => {
+            let cleanup_plan_path = request
+                .cleanup_plan_path
+                .as_ref()
+                .or(request.plan_path.as_ref())
+                .ok_or("cleanup_plan_path required for quarantine_review_export")?;
+            let output_path = request
+                .output_path
+                .as_ref()
+                .ok_or("output_path required for quarantine_review_export")?;
+            let plan_contents =
+                std::fs::read_to_string(cleanup_plan_path).map_err(|e| e.to_string())?;
+            let plan: DocumentOrphanCleanupPlan =
+                serde_json::from_str(&plan_contents).map_err(|e| e.to_string())?;
+            let export = service
+                .export_orphan_quarantine_review(
+                    &plan,
+                    Path::new(output_path),
+                    DocumentOrphanQuarantineReviewOptions {
+                        max_groups: request.max_groups,
+                        max_chunks_per_group: request.max_chunks_per_group,
+                        max_chunk_bytes: request.max_chunk_bytes.unwrap_or(16 * 1024),
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "export": export,
+                "read_only": true,
+                "writes_generated_review_pages": true
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "quarantine_review_status" => {
+            let review_path = request
+                .review_path
+                .as_ref()
+                .or(request.output_path.as_ref())
+                .ok_or("review_path required for quarantine_review_status")?;
+            let status = service
+                .orphan_quarantine_review_status(Path::new(review_path))
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "status": status,
+                "read_only": true
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "quarantine_review_prioritize" => {
+            let review_path = request
+                .review_path
+                .as_ref()
+                .or(request.output_path.as_ref())
+                .ok_or("review_path required for quarantine_review_prioritize")?;
+            let report = service
+                .prioritize_orphan_quarantine_review(
+                    Path::new(review_path),
+                    DocumentOrphanQuarantineReviewPrioritizationOptions {
+                        limit: request.limit,
+                        include_decided: request.include_decided.unwrap_or(false),
+                        include_duplicate_fingerprints: request
+                            .include_duplicate_fingerprints
+                            .unwrap_or(false),
+                        max_excerpt_bytes: request.max_excerpt_bytes.unwrap_or(800),
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "report": report,
+                "read_only": true,
+                "writes_review_pages": false
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "quarantine_review_apply" => {
+            let review_path = request
+                .review_path
+                .as_ref()
+                .or(request.output_path.as_ref())
+                .ok_or("review_path required for quarantine_review_apply")?;
+            if request.execute.unwrap_or(false) {
+                return Err(
+                    "quarantine_review_apply currently supports dry-run only; omit execute or set execute=false"
+                        .to_string(),
+                );
+            }
+            let report = service
+                .apply_orphan_quarantine_review(
+                    Path::new(review_path),
+                    DocumentOrphanQuarantineReviewApplyOptions::default(),
+                )
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "report": report,
+                "dry_run": true
+            }))
+            .map_err(|e| e.to_string())
+        }
+        "cleanup_execute" => {
+            let cleanup_plan_path = request
+                .cleanup_plan_path
+                .as_ref()
+                .or(request.plan_path.as_ref())
+                .ok_or("cleanup_plan_path required for cleanup_execute")?;
+            let execute = request.execute.unwrap_or(false);
+            if execute
+                && (!request.delete_candidates.unwrap_or(false)
+                    || (!request.all_delete_candidates.unwrap_or(false)
+                        && request.cleanup_source_ids.is_empty()))
+            {
+                return Err(
+                    "write mode requires explicit approval: set delete_candidates=true and either all_delete_candidates=true or cleanup_source_ids"
+                        .to_string(),
+                );
+            }
+            let plan_contents =
+                std::fs::read_to_string(cleanup_plan_path).map_err(|e| e.to_string())?;
+            let plan: DocumentOrphanCleanupPlan =
+                serde_json::from_str(&plan_contents).map_err(|e| e.to_string())?;
+            let report = service
+                .execute_orphan_cleanup_plan(
+                    &plan,
+                    DocumentOrphanCleanupExecutionOptions {
+                        dry_run: !execute,
+                        approve_delete_candidates: request.delete_candidates.unwrap_or(false),
+                        missing_source_ids: request.cleanup_source_ids,
+                        max_groups: request.max_groups,
+                    },
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serde_json::to_string_pretty(&serde_json::json!({
+                "report": report,
+                "dry_run": !execute
+            }))
+            .map_err(|e| e.to_string())
+        }
         "stats" => {
             let stats = service.stats().await.map_err(|e| e.to_string())?;
 
             let response = GetStatsResponse {
                 source_count: stats.source_count,
                 chunk_count: stats.chunk_count,
+                searchable_chunk_count: stats.searchable_chunk_count,
+                orphan_chunk_count: stats.orphan_chunk_count,
                 embedding_dimension: stats.embedding_dimension,
             };
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: search, index, stats",
+            "Unknown action: '{}'. Valid actions: search, index, plan, orphan_report, reindex_plan, reindex_execute, cleanup_plan, cleanup_execute, quarantine_review_export, quarantine_review_status, quarantine_review_prioritize, quarantine_review_apply, stats",
             request.action
         )),
     }
+}
+
+fn parse_reindex_action_filters(actions: &[String]) -> Result<Vec<DocumentReindexAction>, String> {
+    actions
+        .iter()
+        .map(|action| {
+            DocumentReindexAction::parse(action).ok_or_else(|| {
+                format!(
+                    "Unknown reindex action '{}'. Valid: reindex_file, reindex_digest_reviewed_source, inspect_existing_source",
+                    action
+                )
+            })
+        })
+        .collect()
 }
 
 // =============================================================================

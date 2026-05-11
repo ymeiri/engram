@@ -1,12 +1,16 @@
 //! Unified search service for cross-layer search.
 //!
 //! Provides a single entry point for searching across all knowledge layers:
-//! entities, aliases, observations, session events, documents, and tool usages.
+//! entities, aliases, observations, session events, documents, tool usages, and memory items.
 
 use crate::error::IndexResult;
+use crate::memory_ranker::{
+    memory_scope_label, rank_memory_items, MemoryRankContext, RankedMemoryItem,
+};
+use engram_core::memory::MemoryStatus;
 use engram_core::search::{SearchLayer, SearchResultSource, UnifiedSearchResult};
 use engram_embed::Embedder;
-use engram_store::{Db, DocumentRepo, EntityRepo, SessionRepo, ToolRepo};
+use engram_store::{Db, DocumentRepo, EntityRepo, MemoryRepo, SessionRepo, ToolRepo};
 use std::collections::HashMap;
 use tracing::{debug, info};
 
@@ -30,7 +34,17 @@ pub struct SearchService {
     session_repo: SessionRepo,
     doc_repo: DocumentRepo,
     tool_repo: ToolRepo,
+    memory_repo: MemoryRepo,
     embedder: Option<Embedder>,
+}
+
+/// Optional context for scoped search behavior.
+#[derive(Debug, Clone, Default)]
+pub struct SearchOptions {
+    /// Project scope for MemoryItem filtering.
+    pub project: Option<String>,
+    /// Current working directory for repository-scoped MemoryItem filtering.
+    pub cwd: Option<String>,
 }
 
 impl SearchService {
@@ -40,7 +54,8 @@ impl SearchService {
             entity_repo: EntityRepo::new(db.clone()),
             session_repo: SessionRepo::new(db.clone()),
             doc_repo: DocumentRepo::new(db.clone()),
-            tool_repo: ToolRepo::new(db),
+            tool_repo: ToolRepo::new(db.clone()),
+            memory_repo: MemoryRepo::new(db),
             embedder: None,
         }
     }
@@ -51,7 +66,8 @@ impl SearchService {
             entity_repo: EntityRepo::new(db.clone()),
             session_repo: SessionRepo::new(db.clone()),
             doc_repo: DocumentRepo::new(db.clone()),
-            tool_repo: ToolRepo::new(db),
+            tool_repo: ToolRepo::new(db.clone()),
+            memory_repo: MemoryRepo::new(db),
             embedder: Some(embedder),
         }
     }
@@ -81,6 +97,25 @@ impl SearchService {
         min_score: Option<f32>,
         layers: Option<&[SearchLayer]>,
     ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        self.search_with_options(
+            query,
+            limit_per_layer,
+            min_score,
+            layers,
+            SearchOptions::default(),
+        )
+        .await
+    }
+
+    /// Search across all layers with optional context.
+    pub async fn search_with_options(
+        &self,
+        query: &str,
+        limit_per_layer: usize,
+        min_score: Option<f32>,
+        layers: Option<&[SearchLayer]>,
+        options: SearchOptions,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
         info!(
             "Unified search: query='{}', limit={}, layers={:?}",
             query, limit_per_layer, layers
@@ -90,13 +125,14 @@ impl SearchService {
         let layers = layers.map(|l| l.to_vec()).unwrap_or_else(SearchLayer::all);
 
         // Run searches in parallel using tokio::join!
-        let (entities, aliases, observations, events, docs, tool_usages) = tokio::join!(
+        let (entities, aliases, observations, events, docs, tool_usages, memory_items) = tokio::join!(
             self.search_entities_if_enabled(&layers, query, limit_per_layer),
             self.search_aliases_if_enabled(&layers, query, limit_per_layer),
             self.search_observations_if_enabled(&layers, query, limit_per_layer),
             self.search_events_if_enabled(&layers, query, limit_per_layer),
             self.search_docs_if_enabled(&layers, query, limit_per_layer),
             self.search_tool_usages_if_enabled(&layers, query, limit_per_layer),
+            self.search_memory_if_enabled(&layers, query, limit_per_layer, &options),
         );
 
         // Collect all results
@@ -107,6 +143,7 @@ impl SearchService {
         results.extend(events?);
         results.extend(docs?);
         results.extend(tool_usages?);
+        results.extend(memory_items?);
 
         // Filter by minimum score
         let mut results: Vec<_> = results
@@ -482,12 +519,47 @@ impl SearchService {
         Ok(results)
     }
 
+    async fn search_memory_if_enabled(
+        &self,
+        layers: &[SearchLayer],
+        query: &str,
+        limit: usize,
+        options: &SearchOptions,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        if !layers.contains(&SearchLayer::Memory) {
+            return Ok(Vec::new());
+        }
+        debug!("Searching memory items: {}", query);
+
+        let ranked = rank_memory_items(
+            self.memory_repo
+                .list_memory_items(Some(MemoryStatus::Active), None)
+                .await?,
+            MemoryRankContext::search(
+                options.project.as_deref(),
+                options.cwd.as_deref(),
+                Some(query),
+            ),
+        );
+
+        Ok(ranked
+            .into_iter()
+            .take(limit)
+            .map(memory_result_for_ranked)
+            .collect())
+    }
+
     /// Get statistics about what can be searched.
     pub async fn stats(&self) -> IndexResult<SearchStats> {
         let entity_stats = self.entity_repo.stats().await?;
         let session_stats = self.session_repo.stats().await?;
         let doc_stats = self.doc_repo.stats().await?;
         let tool_stats = self.tool_repo.stats().await?;
+        let memory_count = self
+            .memory_repo
+            .list_memory_items(Some(MemoryStatus::Active), None)
+            .await?
+            .len() as u64;
 
         Ok(SearchStats {
             entity_count: entity_stats.entity_count,
@@ -496,6 +568,7 @@ impl SearchService {
             session_event_count: session_stats.total_events as u64,
             document_chunk_count: doc_stats.chunk_count,
             tool_usage_count: tool_stats.usage_count,
+            memory_item_count: memory_count,
         })
     }
 }
@@ -515,4 +588,33 @@ pub struct SearchStats {
     pub document_chunk_count: u64,
     /// Number of tool usages.
     pub tool_usage_count: u64,
+    /// Number of active Memory OS items.
+    pub memory_item_count: u64,
+}
+
+fn memory_result_for_ranked(ranked: RankedMemoryItem) -> UnifiedSearchResult {
+    let item = ranked.item;
+    let snippet = truncate_snippet(&item.content, 200);
+    let metadata = item.trust_metadata();
+    let context = format!(
+        "memory: {}, status: {}, review_state: {}, freshness: {}, scope: {}, evidence_count: {}, writer: {}/{}",
+        item.kind,
+        metadata.status,
+        metadata.review_state,
+        metadata.freshness,
+        memory_scope_label(&item.scope),
+        metadata.evidence_count,
+        metadata.writer.harness,
+        metadata.writer.model
+    );
+
+    UnifiedSearchResult::new(
+        SearchResultSource::Memory,
+        ranked.score,
+        item.title,
+        snippet,
+        item.id.to_string(),
+    )
+    .with_context(context)
+    .with_memory_metadata(metadata)
 }

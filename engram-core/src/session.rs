@@ -158,6 +158,22 @@ pub enum EventType {
     Milestone,
     /// An observation or note.
     Observation,
+    /// User prompt.
+    Prompt,
+    /// Agent plan.
+    Plan,
+    /// Tool result.
+    ToolResult,
+    /// Test run or validation result.
+    Test,
+    /// User or project preference.
+    Preference,
+    /// Rule.
+    Rule,
+    /// Limitation or constraint.
+    Limitation,
+    /// Handoff update.
+    HandoffUpdate,
     /// Custom event type.
     Custom(String),
 }
@@ -172,6 +188,14 @@ impl std::fmt::Display for EventType {
             Self::Error => write!(f, "error"),
             Self::Milestone => write!(f, "milestone"),
             Self::Observation => write!(f, "observation"),
+            Self::Prompt => write!(f, "prompt"),
+            Self::Plan => write!(f, "plan"),
+            Self::ToolResult => write!(f, "tool_result"),
+            Self::Test => write!(f, "test"),
+            Self::Preference => write!(f, "preference"),
+            Self::Rule => write!(f, "rule"),
+            Self::Limitation => write!(f, "limitation"),
+            Self::HandoffUpdate => write!(f, "handoff_update"),
             Self::Custom(s) => write!(f, "{}", s),
         }
     }
@@ -189,6 +213,14 @@ impl EventType {
             "error" => Self::Error,
             "milestone" => Self::Milestone,
             "observation" | "note" => Self::Observation,
+            "prompt" => Self::Prompt,
+            "plan" => Self::Plan,
+            "tool_result" | "toolresult" => Self::ToolResult,
+            "test" | "tests" => Self::Test,
+            "preference" => Self::Preference,
+            "rule" => Self::Rule,
+            "limitation" | "constraint" => Self::Limitation,
+            "handoff_update" | "handoffupdate" => Self::HandoffUpdate,
             other => Self::Custom(other.to_string()),
         }
     }

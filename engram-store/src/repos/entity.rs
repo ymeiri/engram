@@ -313,7 +313,7 @@ impl EntityRepo {
         let records: Vec<EntityRecord> = result.take(0)?;
 
         if let Some(record) = records.into_iter().next() {
-            Ok(Some(self.record_to_entity(id.clone(), record)?))
+            Ok(Some(self.record_to_entity(*id, record)?))
         } else {
             Ok(None)
         }

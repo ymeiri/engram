@@ -98,7 +98,7 @@ impl EntityService {
         self.repo.save_entity(&entity).await?;
 
         // Automatically add the entity name as an alias
-        let alias = Alias::new(name, entity.id.clone());
+        let alias = Alias::new(name, entity.id);
         self.repo.add_alias(&alias).await?;
 
         info!("Created entity: {} ({})", entity.id, entity.name);
@@ -318,7 +318,7 @@ impl EntityService {
             .await?
             .ok_or_else(|| IndexError::NotFound(format!("Entity not found: {}", entity_name)))?;
 
-        let mut obs = Observation::new(entity.id.clone(), content);
+        let mut obs = Observation::new(entity.id, content);
         if let Some(k) = key {
             obs = obs.with_key(k);
         }

@@ -4,10 +4,16 @@
 //! session events, documents, and tool usages with a single query.
 
 use engram_core::entity::EntityType;
+use engram_core::memory::{
+    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryFreshness, MemoryItem, MemoryKind,
+    MemoryReviewState, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
+};
 use engram_core::search::SearchLayer;
 use engram_core::session::EventType;
 use engram_core::tool::ToolOutcome;
-use engram_index::{EntityService, SearchService, SessionService, ToolIntelService};
+use engram_index::{
+    EntityService, MemoryService, SearchOptions, SearchService, SessionService, ToolIntelService,
+};
 use engram_store::{connect_and_init, StoreConfig};
 
 // =============================================================================
@@ -51,6 +57,24 @@ async fn setup_search_service() -> (
         session_service,
         tool_intel_service,
     )
+}
+
+async fn setup_search_and_memory_service() -> (SearchService, MemoryService) {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config).await.expect("Failed to connect");
+
+    let memory_service = MemoryService::new(db.clone());
+    memory_service
+        .init_schema()
+        .await
+        .expect("Failed to init memory service");
+
+    (SearchService::new(db), memory_service)
+}
+
+fn writer() -> WriterProvenance {
+    WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-5.5"))
+        .with_surface("search-test")
 }
 
 // =============================================================================
@@ -298,6 +322,185 @@ async fn test_search_finds_tool_usages() {
         .expect("Failed to search");
 
     assert!(!results.is_empty(), "Should find tool usage by context");
+}
+
+// =============================================================================
+// MemoryItem Search Tests
+// =============================================================================
+
+#[tokio::test]
+async fn test_search_finds_active_memory_items() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let item = MemoryItem::new(
+        MemoryKind::Decision,
+        "MemoryItem is canonical",
+        "Unified search should return MemoryItems as first-class results.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "search-test"));
+    let item = memory_service.capture_memory(item).await.unwrap();
+
+    let results = search_service
+        .search(
+            "canonical MemoryItem",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+        )
+        .await
+        .expect("Failed to search");
+
+    assert!(results
+        .iter()
+        .any(|result| result.id == item.id.to_string()));
+    assert!(results
+        .iter()
+        .all(|result| result.source.to_string() == "memory"));
+    let result = results
+        .iter()
+        .find(|result| result.id == item.id.to_string())
+        .expect("matching memory result should be present");
+    let metadata = result
+        .memory_metadata
+        .as_ref()
+        .expect("memory result should carry trust metadata");
+    assert_eq!(metadata.memory_id, item.id);
+    assert_eq!(metadata.status, MemoryStatus::Active);
+    assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
+    assert_eq!(metadata.freshness, MemoryFreshness::Unscheduled);
+    assert_eq!(metadata.claim_origin, ClaimOrigin::UserStated);
+    assert_eq!(metadata.evidence_count, 1);
+    assert_eq!(metadata.writer.harness, Harness::Codex);
+    assert!(result
+        .context
+        .as_deref()
+        .unwrap()
+        .contains("review_state: reviewed"));
+}
+
+#[tokio::test]
+async fn test_memory_search_metadata_reports_review_and_evidence() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let item = MemoryItem::new(
+        MemoryKind::Decision,
+        "Reviewed memory metadata",
+        "Unified search should expose reviewed evidence-backed trust metadata.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "unit-test-review",
+    ));
+    let item = memory_service.capture_memory(item).await.unwrap();
+
+    let results = search_service
+        .search(
+            "reviewed evidence-backed trust metadata",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+        )
+        .await
+        .expect("Failed to search");
+
+    let metadata = results
+        .iter()
+        .find(|result| result.id == item.id.to_string())
+        .and_then(|result| result.memory_metadata.as_ref())
+        .expect("memory result should carry trust metadata");
+    assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
+    assert!(metadata.reviewed);
+    assert!(metadata.has_evidence);
+    assert_eq!(metadata.evidence_count, 1);
+    assert_eq!(metadata.evidence_kinds, vec![EvidenceKind::ManualReview]);
+}
+
+#[tokio::test]
+async fn test_memory_search_filters_non_active_items() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Preference,
+                "Needs review preference",
+                "Do not retrieve unreviewed telemetry preference through unified search.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentInferred,
+                writer(),
+            )
+            .with_status(MemoryStatus::NeedsReview),
+        )
+        .await
+        .unwrap();
+
+    let results = search_service
+        .search(
+            "unreviewed telemetry preference",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+        )
+        .await
+        .expect("Failed to search");
+
+    assert!(
+        results.is_empty(),
+        "needs_review memory should not be searched"
+    );
+}
+
+#[tokio::test]
+async fn test_memory_search_respects_project_scope_when_provided() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Engram telemetry policy",
+                "Telemetry retrieval policy belongs to Engram.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "search-test")),
+        )
+        .await
+        .unwrap();
+    memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Other telemetry policy",
+                "Telemetry retrieval policy belongs to another project.",
+                MemoryScope::project("other"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "search-test")),
+        )
+        .await
+        .unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "telemetry retrieval policy",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].title, "Engram telemetry policy");
 }
 
 // =============================================================================

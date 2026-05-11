@@ -48,7 +48,7 @@ async fn create_tool(services: &TestServices, name: &str) {
         .entity_service
         .create_entity(name, EntityType::Tool, Some(&format!("{} tool", name)))
         .await
-        .expect(&format!("Failed to create tool '{}'", name));
+        .unwrap_or_else(|_| panic!("Failed to create tool '{}'", name));
 }
 
 // =============================================================================
@@ -108,7 +108,7 @@ async fn test_all_outcome_types() {
             .tool_intel_service
             .log_usage("test-tool", "test context", outcome.clone(), None)
             .await
-            .expect(&format!("Failed with {:?}", outcome));
+            .unwrap_or_else(|_| panic!("Failed with {:?}", outcome));
 
         assert_eq!(usage.outcome, outcome);
     }
@@ -539,7 +539,7 @@ async fn test_special_characters_in_tool_name() {
             .tool_intel_service
             .log_usage(name, "context", ToolOutcome::Success, None)
             .await
-            .expect(&format!("Failed with '{}'", name));
+            .unwrap_or_else(|_| panic!("Failed with '{}'", name));
 
         // Verify usage was logged by checking the context
         assert_eq!(usage.context, "context");
@@ -578,7 +578,7 @@ async fn test_many_usages_for_tool() {
                 None,
             )
             .await
-            .expect(&format!("Failed at usage {}", i));
+            .unwrap_or_else(|_| panic!("Failed at usage {}", i));
     }
 
     let stats = services

@@ -39,7 +39,14 @@ criterion/
 *.log
 
 # Claude Code local settings
-.claude/
+.claude/*
+!.claude/
+!.claude/settings.json
+!.claude/engram-settings-snippet.json
+!.claude/commands/
+!.claude/commands/engram-*.md
+!.claude/hooks/
+!.claude/hooks/engram-*.sh
 
 # Environment
 .env

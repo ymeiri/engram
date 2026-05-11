@@ -16,17 +16,33 @@
 //! - [`coordination`] - Session coordination (Layer 5): parallel awareness
 //! - [`knowledge`] - Document intelligence (Layer 6): canonical resolver
 //! - [`work`] - Work management (Layer 7): projects, tasks, PRs
+//! - [`memory`] - Memory OS ontology: provenance, scope, lifecycle, commits
+//! - [`repository`] - Git repository topology and local checkout mapping
+//! - [`harness`] - Agent harness policy and adapter contracts
+//! - [`obligation`] - Agent-native session obligations
+//! - [`telemetry`] - Brain-harness traces and agent feedback
+//! - [`brain_harness_eval`] - Controlled Brain Harness eval outcome schema
+//! - [`lint`] - Memory health and migration-safety linting
+//! - [`graph`] - Memory OS graph traversal types
 //! - [`id`] - ID types and generation
 //! - [`error`] - Error types
 
+pub mod brain_harness_eval;
 pub mod coordination;
 pub mod document;
 pub mod entity;
 pub mod error;
+pub mod graph;
+pub mod harness;
 pub mod id;
 pub mod knowledge;
+pub mod lint;
+pub mod memory;
+pub mod obligation;
+pub mod repository;
 pub mod search;
 pub mod session;
+pub mod telemetry;
 pub mod tool;
 pub mod work;
 

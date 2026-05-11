@@ -77,7 +77,7 @@ impl ToolIntelService {
         let mut usage = ToolUsage::new(tool_entity.id, context, outcome);
 
         if let Some(sid) = session_id {
-            usage = usage.with_session(sid.clone());
+            usage = usage.with_session(*sid);
         }
 
         self.repo.save_usage(&usage).await?;
@@ -119,7 +119,7 @@ impl ToolIntelService {
             .with_switched_to(to_entity.id);
 
         if let Some(sid) = session_id {
-            usage = usage.with_session(sid.clone());
+            usage = usage.with_session(*sid);
         }
 
         self.repo.save_usage(&usage).await?;
@@ -172,10 +172,9 @@ impl ToolIntelService {
                 std::collections::HashMap::new();
 
             for usage in similar_usages {
-                let entry =
-                    tool_stats
-                        .entry(usage.tool_id.clone())
-                        .or_insert((0, 0, String::new()));
+                let entry = tool_stats
+                    .entry(usage.tool_id)
+                    .or_insert((0, 0, String::new()));
                 entry.0 += 1; // total
                 if usage.outcome == ToolOutcome::Success {
                     entry.1 += 1; // success
@@ -362,12 +361,7 @@ impl ToolIntelService {
 
                     // Only create preference if success rate is decent
                     if confidence >= 0.5 {
-                        let pref = ToolPreference::new(
-                            &context,
-                            tool.id.clone(),
-                            confidence,
-                            total as u32,
-                        );
+                        let pref = ToolPreference::new(&context, tool.id, confidence, total as u32);
                         self.repo.save_preference(&pref).await?;
                         learned += 1;
                     }
@@ -401,7 +395,7 @@ impl ToolIntelService {
             if confidence >= 0.5 {
                 let pref = ToolPreference::new(
                     &usage.context,
-                    usage.tool_id.clone(),
+                    usage.tool_id,
                     confidence,
                     tool_usages.len() as u32,
                 );

@@ -3,6 +3,7 @@
 //! Provides types for the unified search tool that searches
 //! across all knowledge layers with a single query.
 
+use crate::memory::MemoryTrustMetadata;
 use serde::{Deserialize, Serialize};
 
 /// Source layer for a search result.
@@ -21,6 +22,8 @@ pub enum SearchResultSource {
     Document,
     /// Tool usage context match
     ToolUsage,
+    /// Memory OS item match
+    Memory,
 }
 
 impl std::fmt::Display for SearchResultSource {
@@ -32,6 +35,7 @@ impl std::fmt::Display for SearchResultSource {
             Self::SessionEvent => write!(f, "session_event"),
             Self::Document => write!(f, "document"),
             Self::ToolUsage => write!(f, "tool_usage"),
+            Self::Memory => write!(f, "memory"),
         }
     }
 }
@@ -51,6 +55,9 @@ pub struct UnifiedSearchResult {
     pub context: Option<String>,
     /// ID for follow-up queries
     pub id: String,
+    /// Memory trust metadata when this result is a MemoryItem.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_metadata: Option<MemoryTrustMetadata>,
 }
 
 impl UnifiedSearchResult {
@@ -69,12 +76,19 @@ impl UnifiedSearchResult {
             content: content.into(),
             context: None,
             id: id.into(),
+            memory_metadata: None,
         }
     }
 
     /// Add context to the result.
     pub fn with_context(mut self, context: impl Into<String>) -> Self {
         self.context = Some(context.into());
+        self
+    }
+
+    /// Add MemoryItem trust metadata to the result.
+    pub fn with_memory_metadata(mut self, metadata: MemoryTrustMetadata) -> Self {
+        self.memory_metadata = Some(metadata);
         self
     }
 }
@@ -95,6 +109,8 @@ pub enum SearchLayer {
     Document,
     /// Tool usage history
     ToolUsage,
+    /// Memory OS items
+    Memory,
 }
 
 impl SearchLayer {
@@ -107,6 +123,7 @@ impl SearchLayer {
             "session_event" | "session" => Some(Self::SessionEvent),
             "document" | "doc" => Some(Self::Document),
             "tool_usage" | "tool" => Some(Self::ToolUsage),
+            "memory" | "memory_item" | "memoryitem" => Some(Self::Memory),
             _ => None,
         }
     }
@@ -120,6 +137,7 @@ impl SearchLayer {
             Self::SessionEvent,
             Self::Document,
             Self::ToolUsage,
+            Self::Memory,
         ]
     }
 }
@@ -133,6 +151,7 @@ impl std::fmt::Display for SearchLayer {
             Self::SessionEvent => write!(f, "session_event"),
             Self::Document => write!(f, "document"),
             Self::ToolUsage => write!(f, "tool_usage"),
+            Self::Memory => write!(f, "memory"),
         }
     }
 }
