@@ -251,7 +251,8 @@ Feedback fields:
 | `repeated_context_questions` | Count avoidable questions asking for context Engram should have supplied. |
 | `bad_memory_used` | True if the agent acted on stale, wrong-scope, or misleading memory. |
 | `missing_context` | Short text naming expected context that was absent or too buried to use. |
-| `used_memory_ids` | Memory IDs that materially affected the answer or implementation. |
+| `used_memory_ids` | Memory IDs that materially affected the answer, implementation, safety decision, or plan. Include current-plan, preference, and rule memories used indirectly. Leave empty only when no returned memory influenced behavior. |
+| `rejected_memory_ids` | Returned memory IDs considered but not used because they were stale, noisy, wrong-scope, or irrelevant. |
 | `stale_memory_ids` | Memory IDs surfaced but judged stale. |
 | `wrong_scope_memory_ids` | Memory IDs surfaced for the wrong project/repository/task scope. |
 | `note` | Include whether the agent would likely have succeeded without memory: `yes`, `no`, or `unclear`. |

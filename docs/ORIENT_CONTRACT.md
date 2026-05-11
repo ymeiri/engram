@@ -38,6 +38,11 @@ the next agent decision better without forcing the agent to choose among special
   response.
 - Include key behavioral fields when known: `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, and `missing_context`.
+- Include `used_memory_ids` for every returned memory item that materially shaped the answer,
+  implementation, safety decision, or plan. This includes current-plan, preference, and rule items
+  used indirectly; leave it empty only when no returned memory influenced behavior.
+- Include `rejected_memory_ids` for returned memory items that were considered but not used because
+  they were stale, noisy, wrong-scope, or irrelevant.
 - Treat agent feedback as a weak signal, not ground truth; correlate it with the transcript, tests,
   user judgment, or later memory edits before using it for ranking or migration decisions.
 

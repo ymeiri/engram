@@ -626,7 +626,9 @@ Implemented spike:
 - Generated harness adapters now instruct agents to preserve `trace_id` values returned by
   `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
   with `task_success`, `preference_adhered`, `repeated_context_questions`, `bad_memory_used`, and
-  `missing_context` when those outcomes or gaps can be judged.
+  `missing_context` when those outcomes or gaps can be judged. They also instruct agents to include
+  `used_memory_ids` for returned memory that materially shaped the answer, implementation, safety
+  decision, or plan, and `rejected_memory_ids` for returned memory that was considered but not used.
 
 `intent` should not become a rigid ontology for every possible memory workflow. It remains a
 caller-supplied workflow slice. Custom memory experiments should use free-form `scenario_id` and
