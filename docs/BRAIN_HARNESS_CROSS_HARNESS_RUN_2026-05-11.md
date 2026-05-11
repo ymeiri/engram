@@ -131,9 +131,14 @@ Rules for the next step:
 - launch Claude Code in the scenario-specific worktree only,
 - do not let one arm inspect another arm's worktree, output, transcript, or
   commit,
+- for `claude_rescue_current_plan_001`, instruct both arms not to inspect repo
+  files or use non-required tools, because the pre-registration document now
+  exists in every worktree and contains the target facts,
 - no-memory arms must not use Engram retrieval before completing the task,
 - treatment arms must call `orient` once in their own fresh Claude session with
   `arm=claude_memoryitem_orient`,
+- the `claude_rescue_current_plan_001` treatment arm may use only its required
+  `orient` and `telemetry` calls before answering,
 - each arm must submit telemetry feedback to its own trace,
 - each implementation-bearing arm must run `git diff --check` before commit,
 - commits must include only intended arm-local outputs.
