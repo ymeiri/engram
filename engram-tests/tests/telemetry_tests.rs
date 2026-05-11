@@ -630,6 +630,87 @@ async fn mcp_telemetry_filters_traces_feedback_and_eval_by_scenario_and_arm() {
 }
 
 #[tokio::test]
+async fn mcp_real_session_eval_reports_applied_filters() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let target_project = "engram";
+    let scenario_id = "bounded_autonomous_followthrough_004";
+    let arm = "memoryitem_orient";
+
+    for (label, project, arm, task_success) in [
+        ("target", target_project, arm, true),
+        ("other-project", "engram-other", arm, false),
+        ("other-arm", target_project, "no_memory_same_harness", false),
+    ] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("orient".to_string());
+        trace_request.intent = Some("implement_change".to_string());
+        trace_request.project = Some(project.to_string());
+        trace_request.scenario_id = Some(scenario_id.to_string());
+        trace_request.arm = Some(arm.to_string());
+        trace_request.query = Some(format!("{label} eval report"));
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+        let mut feedback_request = telemetry_request("submit_feedback");
+        feedback_request.trace_id = Some(trace_id);
+        feedback_request.task_success = Some(task_success);
+
+        tools::telemetry_new(&state, feedback_request)
+            .await
+            .expect("submit_feedback should work");
+    }
+
+    let unfiltered_response = tools::telemetry_new(&state, telemetry_request("real_session_eval"))
+        .await
+        .expect("unfiltered real_session_eval should work");
+    let unfiltered_json = parse_json(&unfiltered_response);
+    let unfiltered_report = &unfiltered_json["report"];
+    assert_eq!(unfiltered_report["trace_count"], 3);
+    assert!(unfiltered_report["applied_filters"]["project"].is_null());
+    assert!(unfiltered_report["applied_filters"]["scenario_id"].is_null());
+    assert!(unfiltered_report["applied_filters"]["arm"].is_null());
+
+    let mut filtered_request = telemetry_request("real_session_eval");
+    filtered_request.project = Some(target_project.to_string());
+    filtered_request.scenario_id = Some(scenario_id.to_string());
+    filtered_request.arm = Some(arm.to_string());
+
+    let filtered_response = tools::telemetry_new(&state, filtered_request)
+        .await
+        .expect("filtered real_session_eval should work");
+    let filtered_json = parse_json(&filtered_response);
+    let filtered_report = &filtered_json["report"];
+    assert_eq!(filtered_report["trace_count"], 1);
+    assert_eq!(filtered_report["feedback_count"], 1);
+    assert_eq!(filtered_report["task_success_count"], 1);
+    assert_eq!(filtered_report["task_failure_count"], 0);
+    assert_eq!(
+        filtered_report["applied_filters"]["project"],
+        target_project
+    );
+    assert_eq!(
+        filtered_report["applied_filters"]["scenario_id"],
+        scenario_id
+    );
+    assert_eq!(filtered_report["applied_filters"]["arm"], arm);
+}
+
+#[tokio::test]
 async fn mcp_orient_tags_trace_with_scenario_and_arm() {
     let (telemetry, memory) = setup_services().await;
     memory

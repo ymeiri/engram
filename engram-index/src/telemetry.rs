@@ -4,7 +4,8 @@ use crate::error::{IndexError, IndexResult};
 use engram_core::id::Id;
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessTrace, IntentTelemetryStats, RealSessionConfidenceGate,
-    RealSessionEvalArmRow, RealSessionEvalIntentRow, RealSessionEvalReport,
+    RealSessionEvalAppliedFilters, RealSessionEvalArmRow, RealSessionEvalIntentRow,
+    RealSessionEvalReport,
 };
 use engram_store::{Db, TelemetryRepo};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -62,11 +63,11 @@ impl TelemetryService {
         arm: Option<&str>,
     ) -> IndexResult<Vec<BrainHarnessTrace>> {
         let traces = self.repo.list_traces(limit).await?;
-        if !has_scope_filter(scenario_id, arm) {
+        if !has_scope_filter(None, scenario_id, arm) {
             return Ok(traces);
         }
 
-        Ok(filter_traces_by_scope(traces, scenario_id, arm))
+        Ok(filter_traces_by_scope(traces, None, scenario_id, arm))
     }
 
     /// Submit agent feedback for a trace.
@@ -109,12 +110,12 @@ impl TelemetryService {
         scenario_id: Option<&str>,
         arm: Option<&str>,
     ) -> IndexResult<Vec<AgentFeedback>> {
-        if !has_scope_filter(scenario_id, arm) {
+        if !has_scope_filter(None, scenario_id, arm) {
             return self.list_feedback(limit).await;
         }
 
         let traces = self.repo.list_traces(limit).await?;
-        let traces = filter_traces_by_scope(traces, scenario_id, arm);
+        let traces = filter_traces_by_scope(traces, None, scenario_id, arm);
         let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
         let feedback = self.repo.list_feedback(limit).await?;
 
@@ -235,23 +236,31 @@ impl TelemetryService {
             sample_limit,
             &traces,
             &feedback,
+            RealSessionEvalAppliedFilters::default(),
         ))
     }
 
-    /// Build a read-only report over traces scoped by optional scenario and arm filters.
+    /// Build a read-only report over traces scoped by optional project, scenario, and arm filters.
     pub async fn real_session_eval_report_scoped(
         &self,
         limit: Option<usize>,
+        project: Option<&str>,
         scenario_id: Option<&str>,
         arm: Option<&str>,
     ) -> IndexResult<RealSessionEvalReport> {
-        if !has_scope_filter(scenario_id, arm) {
+        let applied_filters = applied_filters(project, scenario_id, arm);
+        if !has_any_filter(&applied_filters) {
             return self.real_session_eval_report(limit).await;
         }
 
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
         let traces = self.repo.list_traces(Some(sample_limit)).await?;
-        let traces = filter_traces_by_scope(traces, scenario_id, arm);
+        let traces = filter_traces_by_scope(
+            traces,
+            applied_filters.project.as_deref(),
+            applied_filters.scenario_id.as_deref(),
+            applied_filters.arm.as_deref(),
+        );
         let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
         let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
         let feedback = feedback
@@ -263,6 +272,7 @@ impl TelemetryService {
             sample_limit,
             &traces,
             &feedback,
+            applied_filters,
         ))
     }
 }
@@ -451,6 +461,7 @@ fn build_real_session_eval_report(
     sample_limit: usize,
     traces: &[BrainHarnessTrace],
     feedback: &[AgentFeedback],
+    applied_filters: RealSessionEvalAppliedFilters,
 ) -> RealSessionEvalReport {
     let mut aggregation = aggregate_traces(traces);
     aggregate_feedback(
@@ -498,7 +509,13 @@ fn build_real_session_eval_report(
         intents,
         arms,
     };
-    let mut report = report_from_rows(sample_limit, traces.len(), feedback.len(), rows);
+    let mut report = report_from_rows(
+        sample_limit,
+        traces.len(),
+        feedback.len(),
+        applied_filters,
+        rows,
+    );
     report.confidence_gate = confidence_gate(&report);
     report.recommendations = recommendations(&report);
     report
@@ -600,11 +617,13 @@ fn report_from_rows(
     sample_limit: usize,
     trace_count: usize,
     feedback_count: usize,
+    applied_filters: RealSessionEvalAppliedFilters,
     rows: ReportRows,
 ) -> RealSessionEvalReport {
     RealSessionEvalReport {
         generated_at: OffsetDateTime::now_utc(),
         sample_limit,
+        applied_filters,
         trace_count,
         feedback_count,
         feedback_coverage: coverage(feedback_count, trace_count),
@@ -978,28 +997,49 @@ fn has_text(value: Option<&str>) -> bool {
     value.is_some_and(|text| !text.trim().is_empty())
 }
 
-fn has_scope_filter(scenario_id: Option<&str>, arm: Option<&str>) -> bool {
-    normalized_label_ref(scenario_id).is_some() || normalized_label_ref(arm).is_some()
+fn has_scope_filter(project: Option<&str>, scenario_id: Option<&str>, arm: Option<&str>) -> bool {
+    normalized_label_ref(project).is_some()
+        || normalized_label_ref(scenario_id).is_some()
+        || normalized_label_ref(arm).is_some()
 }
 
 fn filter_traces_by_scope(
     traces: Vec<BrainHarnessTrace>,
+    project: Option<&str>,
     scenario_id: Option<&str>,
     arm: Option<&str>,
 ) -> Vec<BrainHarnessTrace> {
     traces
         .into_iter()
-        .filter(|trace| trace_matches_scope(trace, scenario_id, arm))
+        .filter(|trace| trace_matches_scope(trace, project, scenario_id, arm))
         .collect()
 }
 
 fn trace_matches_scope(
     trace: &BrainHarnessTrace,
+    project: Option<&str>,
     scenario_id: Option<&str>,
     arm: Option<&str>,
 ) -> bool {
-    label_matches(trace.scenario_id.as_deref(), scenario_id)
+    label_matches(trace.project.as_deref(), project)
+        && label_matches(trace.scenario_id.as_deref(), scenario_id)
         && label_matches(trace.arm.as_deref(), arm)
+}
+
+fn applied_filters(
+    project: Option<&str>,
+    scenario_id: Option<&str>,
+    arm: Option<&str>,
+) -> RealSessionEvalAppliedFilters {
+    RealSessionEvalAppliedFilters {
+        project: normalized_label(project),
+        scenario_id: normalized_label(scenario_id),
+        arm: normalized_label(arm),
+    }
+}
+
+fn has_any_filter(filters: &RealSessionEvalAppliedFilters) -> bool {
+    filters.project.is_some() || filters.scenario_id.is_some() || filters.arm.is_some()
 }
 
 fn label_matches(actual: Option<&str>, expected: Option<&str>) -> bool {

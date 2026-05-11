@@ -376,6 +376,17 @@ pub struct IntentTelemetryStats {
     pub rejected_memory_count: usize,
 }
 
+/// Filters applied while building a real-session telemetry eval report.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RealSessionEvalAppliedFilters {
+    /// Project filter, when supplied.
+    pub project: Option<String>,
+    /// Scenario identifier filter, when supplied.
+    pub scenario_id: Option<String>,
+    /// Arm filter, when supplied.
+    pub arm: Option<String>,
+}
+
 /// Read-only report over persisted real-session traces and feedback.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealSessionEvalReport {
@@ -384,6 +395,8 @@ pub struct RealSessionEvalReport {
     pub generated_at: OffsetDateTime,
     /// Maximum recent traces and feedback rows considered.
     pub sample_limit: usize,
+    /// Effective project, scenario_id, and arm filters used for the report.
+    pub applied_filters: RealSessionEvalAppliedFilters,
     /// Number of traces in the sample.
     pub trace_count: usize,
     /// Number of feedback records in the sample.
