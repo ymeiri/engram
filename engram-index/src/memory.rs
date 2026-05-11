@@ -342,6 +342,10 @@ pub struct OrientationPacket {
     pub repository_context: Option<RepositoryContext>,
     /// Memory cursor for later changes_since checks.
     pub memory_cursor: MemoryCursor,
+    /// Stable IDs for high-priority hot-context memory items.
+    pub hot_context_ids: Vec<Id>,
+    /// Compact hot-context memory items surfaced before the large context pack.
+    pub hot_context_items: Vec<BrainLoopItem>,
     /// Markdown context pack.
     pub context_pack: String,
     /// Brain Loop v1 projection generated from the scoped orient result.
@@ -1151,7 +1155,7 @@ impl MemoryService {
         }
 
         let scope = scope_label(effective_project, input.cwd.as_deref());
-        let context_pack = build_context_pack(ContextPackParts {
+        let context_pack_parts = ContextPackParts {
             scope: &scope,
             cursor: &cursor,
             resolution: &resolution,
@@ -1168,7 +1172,10 @@ impl MemoryService {
             commits: &recent_commits,
             ambiguities: &ambiguities,
             recommended_actions: &recommended_actions,
-        });
+        };
+        let hot_context_items = build_hot_context_items(&context_pack_parts);
+        let hot_context_ids = hot_context_items.iter().map(|item| item.id).collect();
+        let context_pack = build_context_pack(&context_pack_parts);
         let brain_loop = build_brain_loop(BrainLoopParts {
             scope: &scope,
             resolution: &resolution,
@@ -1227,6 +1234,8 @@ impl MemoryService {
             resolution,
             repository_context,
             memory_cursor: cursor,
+            hot_context_ids,
+            hot_context_items,
             context_pack,
             brain_loop,
             active_decisions,
@@ -1939,7 +1948,7 @@ fn compact_brain_loop_summary(content: &str) -> String {
     format!("{summary}...")
 }
 
-fn build_context_pack(parts: ContextPackParts<'_>) -> String {
+fn build_context_pack(parts: &ContextPackParts<'_>) -> String {
     let mut lines = vec![
         format!("# Context Pack: {}", parts.scope),
         String::new(),
@@ -1972,6 +1981,13 @@ fn build_context_pack(parts: ContextPackParts<'_>) -> String {
     lines.join("\n")
 }
 
+fn build_hot_context_items(parts: &ContextPackParts<'_>) -> Vec<BrainLoopItem> {
+    intent_matched_reviewed_preferences(parts)
+        .into_iter()
+        .map(|item| brain_loop_item(item, "Intent-matched reviewed preference for this request."))
+        .collect()
+}
+
 fn append_hot_context_section(lines: &mut Vec<String>, parts: &ContextPackParts<'_>) {
     let hot_preferences = intent_matched_reviewed_preferences(parts);
     if hot_preferences.is_empty() {
@@ -1984,10 +2000,21 @@ fn append_hot_context_section(lines: &mut Vec<String>, parts: &ContextPackParts<
         "- Intent-matched reviewed preferences. Read these before lower-priority memory."
             .to_string(),
     );
+    let ids = hot_preferences
+        .iter()
+        .map(|item| item.id.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    lines.push(format!(
+        "- Use these memory IDs in telemetry used_memory_ids when they shape behavior: {ids}"
+    ));
     lines.push("### Reviewed Preferences".to_string());
     for item in hot_preferences {
         let metadata = item.trust_metadata();
-        lines.push(format!("- {}: {}", item.title, item.content));
+        lines.push(format!(
+            "- Memory {}: {}: {}",
+            item.id, item.title, item.content
+        ));
         lines.push(format!(
             "  - Trust: status={}, review_state={}, freshness={}, origin={}, confidence={:.2}, evidence_count={}, writer={}/{}",
             metadata.status,
@@ -3704,6 +3731,11 @@ mod tests {
 
         assert_eq!(
             packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(preference.id)
+        );
+        assert_eq!(packet.hot_context_ids, vec![preference.id]);
+        assert_eq!(
+            packet.hot_context_items.first().map(|item| item.id),
             Some(preference.id)
         );
     }

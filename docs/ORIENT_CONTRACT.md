@@ -19,7 +19,9 @@ the next agent decision better without forcing the agent to choose among special
 - Return the Brain Loop v1 projection from the same selected memory as the raw orientation arrays.
 - For `intent=follow_user_preference`, repeat prompt-matching reviewed preferences in a top
   `Hot Context` section before lower-priority decision sections so the agent-visible preview
-  includes the preference that should shape behavior.
+  includes the preference that should shape behavior, and surface their stable IDs in
+  top-level `hot_context_ids` / `hot_context_items` before the larger `context_pack` so agents can
+  reliably populate `used_memory_ids`.
 - Surface already-open, currently applicable obligations as a compact summary and bounded list.
 - Keep graph traversal, obligation detection, lint, migration, and raw entity observation lookup out
   of the normal `orient` hot path.

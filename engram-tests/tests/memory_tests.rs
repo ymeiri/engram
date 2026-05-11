@@ -1118,9 +1118,13 @@ async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
     preference.scope_type = Some("project".to_string());
     preference.project_name = Some("engram".to_string());
     preference.evidence = manual_review_evidence("Reviewed commit-hygiene preference.");
-    tools::memory_new(&state, preference)
+    let preference_response = tools::memory_new(&state, preference)
         .await
         .expect("preference add should work");
+    let preference_id = parse_json(&preference_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     let response = tools::orient(
         &state,
@@ -1142,6 +1146,13 @@ async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
     )
     .await
     .expect("orient should work");
+    let hot_ids_index = response
+        .find("\"hot_context_ids\"")
+        .expect("hot_context_ids should be top-level output");
+    let context_pack_index = response
+        .find("\"context_pack\"")
+        .expect("context_pack should be top-level output");
+    assert!(hot_ids_index < context_pack_index);
     let json = parse_json(&response);
     let context_pack = json["context_pack"].as_str().unwrap();
     let hot_index = context_pack
@@ -1156,6 +1167,15 @@ async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
 
     assert!(hot_index < preference_index);
     assert!(preference_index < decisions_index);
+    assert_eq!(
+        json["hot_context_ids"][0].as_str(),
+        Some(preference_id.as_str())
+    );
+    assert_eq!(
+        json["hot_context_items"][0]["id"].as_str(),
+        Some(preference_id.as_str())
+    );
+    assert!(context_pack.contains(&format!("Memory {preference_id}:")));
     assert_eq!(
         json["brain_loop"]["top_items"][0]["title"],
         "Commit every meaningful Engram step"
