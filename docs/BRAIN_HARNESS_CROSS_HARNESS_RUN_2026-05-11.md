@@ -264,3 +264,27 @@ Planned worktrees:
 
 Before launch, run a fresh `prearm_smoke` check for the rerun treatment label
 and record whether `019e1826-840f-7453-98e8-bb3e77a5f8e5` appears.
+
+### Rerun Setup Result
+
+Rerun worktrees were created from the planned base commit:
+
+| Arm | Branch | Worktree | HEAD |
+|---|---|---|---|
+| `claude_no_memory_rerun1` | `yuval.meiri/calib-claude-current-plan-rerun1-no-memory` | `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-rerun1-no-memory` | `32123670131e5effffbc4cdf72c502a73ccf0c3a` |
+| `claude_memoryitem_orient_rerun1` | `yuval.meiri/calib-claude-current-plan-rerun1-orient` | `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-rerun1-orient` | `32123670131e5effffbc4cdf72c502a73ccf0c3a` |
+
+Both worktrees were clean immediately after creation.
+
+Fresh treatment smoke:
+
+- Trace: `019e1835-b4fe-7612-ba40-a792f2feb707`
+- Scenario: `claude_rescue_current_plan_001_rerun1`
+- Arm: `prearm_smoke`
+- Expected target MemoryItem:
+  `019e1826-840f-7453-98e8-bb3e77a5f8e5`
+  `Claude rescue current-plan attempt exposed memory freshness gate`
+- Visibility result: target appeared as the top active decision.
+
+Verdict: rerun treatment launch gate is open. The actual treatment arm must use
+its own fresh orient trace with `arm=claude_memoryitem_orient_rerun1`.
