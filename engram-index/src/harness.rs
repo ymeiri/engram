@@ -932,7 +932,7 @@ fn hook_additional_context(
                 .to_string(),
         ),
         "stop" => lines.push(
-            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, and rejected_memory_ids for the relevant trace_id."
+            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
                 .to_string(),
         ),
         "precompact" | "postcompact" => lines.push(
@@ -1897,9 +1897,10 @@ Lifecycle contract:
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids` when those outcomes or attribution judgments can be made. Use
-  `used_memory_ids` for returned memory that shaped the answer, implementation, safety decision, or
-  plan; leave it empty only when no returned memory influenced behavior.
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before major decisions, call `memory(action=changes_since)` with the orientation cursor.
 - After non-obvious discoveries, record source-grounded memory or a session event.
 - When the current method, plan, or next action should survive resume, use
@@ -1927,7 +1928,8 @@ fn claude_resume_session_command() -> String {
 3. Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
    outcome, gap, and attribution fields before final response when memory quality can be judged.
    Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
-   returned memory considered but not used.
+   returned memory considered but not used. Include `stale_memory_ids` and
+   `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 4. If a rolling handoff exists, inspect `handoff(action=get)`.
 5. Check `memory(action=changes_since)` during the session before major decisions.
 6. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
@@ -1982,7 +1984,7 @@ CONTEXT="<engram_session_activation source=\"$SOURCE\" project=\"$PROJECT_NAME\"
 Engram is the durable Memory OS for this Claude Code session.
 Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, and agent=claude_code.
 Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
-Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, and rejected_memory_ids before final response when those outcomes or attribution judgments can be made.
+Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids before final response when those outcomes or attribution judgments can be made.
 Use used_memory_ids for returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned memory influenced behavior.
 Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
 When the current method, plan, or next action should survive resume, use memory(action=capture_current_plan) with compact content and file/tool/manual-review evidence.
@@ -2024,7 +2026,7 @@ fi
 cat <<'EOF'
 {{
   "continue": true,
-  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, and rejected_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
 }}
 EOF
 "#
@@ -2176,9 +2178,10 @@ Workflow:
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids` when those outcomes or attribution judgments can be made. Use
-  `used_memory_ids` for returned memory that shaped the answer, implementation, safety decision, or
-  plan; leave it empty only when no returned memory influenced behavior.
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
@@ -2209,7 +2212,8 @@ Steps:
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
-  returned memory considered but not used.
+  returned memory considered but not used. Include `stale_memory_ids` and
+  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2239,9 +2243,10 @@ Follow this soft lifecycle contract:
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids` when those outcomes or attribution judgments can be made. Use
-  `used_memory_ids` for returned memory that shaped the answer, implementation, safety decision, or
-  plan; leave it empty only when no returned memory influenced behavior.
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
@@ -2276,7 +2281,8 @@ Steps:
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
-  returned memory considered but not used.
+  returned memory considered but not used. Include `stale_memory_ids` and
+  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2327,9 +2333,10 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
 - Keep returned `trace_id` values from `orient` or `search` and call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids` before final response when those outcomes or attribution judgments can be
-  made. Use `used_memory_ids` for returned memory that shaped the answer, implementation, safety
-  decision, or plan; leave it empty only when no returned memory influenced behavior.
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` before final
+  response when those outcomes or attribution judgments can be made. Use `used_memory_ids` for
+  returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty
+  only when no returned memory influenced behavior.
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Gemini CLI, Claude Code, Codex, and other harnesses
   can be distinguished.
@@ -2368,9 +2375,10 @@ Workflow:
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids` when those outcomes or attribution judgments can be made. Use
-  `used_memory_ids` for returned memory that shaped the answer, implementation, safety decision, or
-  plan; leave it empty only when no returned memory influenced behavior.
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
@@ -2406,7 +2414,8 @@ Steps:
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
-  returned memory considered but not used.
+  returned memory considered but not used. Include `stale_memory_ids` and
+  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2456,9 +2465,10 @@ fn agents_snippet() -> String {
 - Keep returned `trace_id` values from `orient` or `search` and call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids` before final response when those outcomes or attribution judgments can be
-  made. Use `used_memory_ids` for returned memory that shaped the answer, implementation, safety
-  decision, or plan; leave it empty only when no returned memory influenced behavior.
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` before final
+  response when those outcomes or attribution judgments can be made. Use `used_memory_ids` for
+  returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty
+  only when no returned memory influenced behavior.
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Claude Code, Codex, and other harnesses can be
   distinguished.
@@ -2495,7 +2505,8 @@ Lifecycle:
 - before final response: submit `telemetry(action=submit_feedback)` for relevant `trace_id`
   values with outcome, gap, and attribution fields when memory quality can be judged; include
   `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for returned
-  memory considered but not used
+  memory considered but not used; include `stale_memory_ids` and `wrong_scope_memory_ids` for
+  rejected memory specifically judged stale or out of scope
 - before context compaction/context loss: update handoff and persist compact durable memory
 - session end/handoff: compile handoff and knowledge commit candidate
 - commit workflows: consult memory for relevant preferences/rules
@@ -2752,6 +2763,8 @@ mod tests {
         assert!(adapters[0].contents.contains("missing_context"));
         assert!(adapters[0].contents.contains("used_memory_ids"));
         assert!(adapters[0].contents.contains("rejected_memory_ids"));
+        assert!(adapters[0].contents.contains("stale_memory_ids"));
+        assert!(adapters[0].contents.contains("wrong_scope_memory_ids"));
     }
 
     #[test]

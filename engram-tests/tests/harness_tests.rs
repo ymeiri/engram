@@ -108,6 +108,8 @@ async fn test_mcp_harness_render_adapter_mentions_feedback_trace_id() {
     assert!(contents.contains("missing_context"));
     assert!(contents.contains("used_memory_ids"));
     assert!(contents.contains("rejected_memory_ids"));
+    assert!(contents.contains("stale_memory_ids"));
+    assert!(contents.contains("wrong_scope_memory_ids"));
 }
 
 #[tokio::test]
