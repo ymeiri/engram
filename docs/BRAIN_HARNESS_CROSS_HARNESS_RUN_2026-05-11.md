@@ -288,3 +288,73 @@ Fresh treatment smoke:
 
 Verdict: rerun treatment launch gate is open. The actual treatment arm must use
 its own fresh orient trace with `arm=claude_memoryitem_orient_rerun1`.
+
+### Rerun Arm Results
+
+#### `claude_no_memory_rerun1`
+
+- Worktree:
+  `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-rerun1-no-memory`
+- Bridge harness: `isolated`
+- Engram retrieval: none
+- Telemetry trace: `019e1837-ae0b-79d2-be99-9a14d612a2d8`
+- Evaluator feedback: `019e1837-c011-7730-ad41-b9c422084303`
+- Worktree state after arm: clean
+
+Output summary:
+
+- Claude said the prompt did not contain enough project-specific evidence to
+  determine the correct next measurement step.
+- It requested the current calibration plan, most recent measurement output, or
+  permission to read relevant files/memory.
+- It did not claim repo, git, or memory context.
+
+Evaluator verdict: clean expected baseline failure. The arm did not fabricate
+context and did not answer the project-specific continuity question.
+
+#### `claude_memoryitem_orient_rerun1`
+
+- Worktree:
+  `/Users/yuval.meiri/projects/engram-calib-claude-current-plan-rerun1-orient`
+- Bridge harness: `personal`
+- Required orient trace: `019e1836-c6b2-76c3-95d4-0541cf100217`
+- Claude-submitted feedback: `019e1837-59de-7b81-85ba-7c7bbbaef01a`
+- Evaluator feedback: `019e1837-ebc5-70c3-bcd2-b9a0c1f2d6a7`
+- Worktree state after arm: clean
+
+Output summary:
+
+- Claude said the next measurement step is to complete
+  `claude_rescue_current_plan_001_rerun1` cleanly.
+- It said not to proceed to scenarios `002+`, Phase 1B, cross-arm aggregation,
+  or the original superseded `001` attempt until this trace lands.
+
+Evaluator verdict: treatment success relative to no-memory. The answer used the
+corrected current-plan guidance and showed behavior-linked improvement over the
+baseline.
+
+Caveats:
+
+- The treatment answer did not explicitly mention every blocked category in the
+  current-plan memory, such as M6 apply/deletion, ranking changes, and broad
+  cross-harness benchmarking.
+- Claude's own telemetry feedback listed `019e1811-30ff-7382-b9c2-57cdf7b05c40`
+  as used, but that memory is superseded and was not the corrected target. The
+  evaluator feedback treats `019e1826-840f-7453-98e8-bb3e77a5f8e5` as the
+  behavior-shaping memory and marks `019e1811-30ff-7382-b9c2-57cdf7b05c40` as
+  stale attribution noise.
+
+### Rerun Finding
+
+`claude_rescue_current_plan_001_rerun1` provides the first clean behavior-linked
+Claude rescue signal for the current-plan continuity scenario:
+
+- no-memory could not answer without project context,
+- `memoryitem_orient` answered the immediate next step after the freshness
+  correction,
+- no harmful memory use was observed in evaluator scoring.
+
+This is still one scenario, not enough for cross-harness claims. The next
+highest-confidence evidence step is to continue Phase 1A with another Claude
+rescue scenario before starting Codex Phase 1B or any broad cross-harness
+comparison.
