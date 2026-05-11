@@ -1,7 +1,7 @@
 # Brain Harness Cross-Harness Run Log
 
 Date: 2026-05-11
-Status: Claude Phase 1A in progress; commit-hygiene launch gate open
+Status: Claude Phase 1A in progress; commit-hygiene scenario scored partial/fail
 
 ## Scope
 
@@ -397,3 +397,73 @@ Verdict: treatment launch gate is open. The actual treatment arm must use its
 own fresh orient trace with `arm=claude_memoryitem_orient`, and both arms must
 avoid reading repository files because the calibration documents exist inside
 the original base worktrees.
+
+### Arm Results
+
+#### `claude_no_memory`
+
+- Worktree:
+  `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-no-memory`
+- Bridge harness: `isolated`
+- Engram retrieval: none
+- Evaluator trace: `019e184e-c68e-7470-a8af-807dc491cacc`
+- Evaluator feedback: `019e184e-d79d-7ea3-854c-1bd8b2eb5857`
+- Worktree state after arm: clean
+
+Output summary:
+
+- Claude proposed a generic doc-only plan.
+- It said unrelated files should be left untouched and separate issues should
+  be noted rather than fixed inline.
+- It said it would make one commit after the small doc-only batch is complete.
+- It did not mention the reviewed project preference to commit every meaningful
+  Engram step, and it did not mention the known unrelated `AGENTS.md` file.
+
+Evaluator verdict: expected baseline limitation. The answer was reasonable
+generic commit hygiene, but it lacked the project-specific preference and known
+unrelated-file disposition that memory should provide.
+
+#### `claude_memoryitem_orient`
+
+- Worktree:
+  `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-orient`
+- Bridge harness: `personal`
+- Required orient trace: `019e184d-ad1a-7ac3-a7a8-4e747f08c936`
+- Claude-submitted feedback: `019e184e-050c-7910-a4c6-e8190c759855`
+- Evaluator feedback: `019e184e-f30e-7ab3-82c0-4c8c1d12bd58`
+- Worktree state after arm: clean
+
+Output summary:
+
+- Claude produced a stronger generic hygiene plan than the baseline: avoid
+  `git add .`, use path-scoped staging, preserve unrelated dirty files, and
+  avoid entangling unrelated changes in files it needs to edit.
+- Claude did not cite or use the target preference
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`.
+- Claude did not mention the known unrelated `AGENTS.md` file.
+- Claude reported that no commit-hygiene memory was visible and suggested
+  adding one, even though the orient trace returned the existing reviewed
+  preference.
+
+Evaluator verdict: partial/fail, not a clean treatment rescue. The trace
+contains the target memory, but the model did not use it. This points to an
+orientation presentation problem: the intent-relevant preference can be present
+in `returned_memory_ids` while still not being visible or salient enough in the
+agent-consumed context.
+
+### Commit-Hygiene Finding
+
+`claude_rescue_commit_hygiene_001` should not be counted as a clean Claude
+rescue success:
+
+- no-memory lacked project-specific preference context, as expected,
+- treatment retrieved the target memory at the telemetry level,
+- treatment did not use the target memory behaviorally,
+- the failure mode is likely context-pack noise/salience/truncation, not a
+  missing-memory or stale-memory problem.
+
+Next benchmark step should be a narrowly labeled rerun or implementation slice
+that improves `follow_user_preference` orientation salience. The immediate
+candidate is to ensure reviewed preferences matching the requested intent are
+placed in the compact/hot part of `orient`, then rerun this scenario before
+moving to Codex Phase 1B or broad cross-harness comparison.
