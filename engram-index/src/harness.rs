@@ -687,8 +687,11 @@ impl HarnessService {
         }
 
         let open_obligations = if let Some(service) = services.obligations {
-            match service.doctor(Some(8)).await {
-                Ok(report) => report.open.len(),
+            match service
+                .list_open_for_context(project.as_deref(), event.cwd.as_deref())
+                .await
+            {
+                Ok(obligations) => obligations.len(),
                 Err(error) => {
                     warnings.push(format!("obligation doctor failed: {error}"));
                     0
@@ -3190,13 +3193,36 @@ mod tests {
         obligations.init_schema().await.unwrap();
         let handoff = crate::handoff::HandoffService::new(db);
         handoff.init_schema().await.unwrap();
+        let service = HarnessService::new();
 
-        let outcome = HarnessService::new()
+        let unrelated_outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("Implement the design and commit it.".to_string()),
+                    cwd: Some("/tmp/unrelated-project".to_string()),
+                    project: Some("unrelated-project".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(unrelated_outcome.obligations_written >= 1);
+
+        let outcome = service
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
                     hook_event_name: "Stop".to_string(),
                     cwd: Some(root.path().display().to_string()),
+                    project: Some("engram-stop-hook-smoke".to_string()),
                     write_policy: Some("durable".to_string()),
                     stop_hook_active: false,
                     ..HarnessHookEvent::default()
@@ -3215,10 +3241,17 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("obligations_written=1"));
+        assert!(outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("open_obligations=1"));
 
         let doctor = obligations.doctor(Some(8)).await.unwrap();
-        assert_eq!(doctor.open.len(), 1);
-        assert!(doctor.open[0].title.contains("docs/SESSION_FINDINGS.md"));
+        assert!(doctor.open.len() > 1);
+        assert!(doctor
+            .open
+            .iter()
+            .any(|obligation| obligation.title.contains("docs/SESSION_FINDINGS.md")));
     }
 
     #[tokio::test]

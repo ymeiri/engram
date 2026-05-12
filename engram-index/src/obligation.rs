@@ -97,6 +97,29 @@ impl ObligationService {
         Ok(self.repo.list_obligations(status, limit).await?)
     }
 
+    /// List open obligations that apply to the current project/cwd context.
+    pub async fn list_open_for_context(
+        &self,
+        project: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<AgentObligation>> {
+        let mut obligations = self
+            .repo
+            .list_obligations(Some(AgentObligationStatus::Open), None)
+            .await?
+            .into_iter()
+            .filter(|obligation| obligation_applies_to_context(obligation, project, cwd))
+            .filter(|obligation| obligation_is_current_for_context(obligation, cwd))
+            .collect::<Vec<_>>();
+        obligations.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.title.cmp(&right.title))
+        });
+        Ok(obligations)
+    }
+
     /// Detect obligations from the current task/worktree.
     pub async fn detect(
         &self,
@@ -221,6 +244,109 @@ fn obligation_scope(project: Option<&str>, cwd: Option<&str>) -> MemoryScope {
     } else {
         MemoryScope::Global
     }
+}
+
+fn obligation_applies_to_context(
+    obligation: &AgentObligation,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match &obligation.scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project { project_name, .. } => {
+            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
+        }
+        MemoryScope::Task { project_name, .. } => project_name
+            .as_deref()
+            .zip(project)
+            .is_some_and(|(item_project, project)| item_project.eq_ignore_ascii_case(project)),
+        MemoryScope::Repository { local_path, .. } => {
+            let Some(cwd) = cwd else {
+                return false;
+            };
+            local_path
+                .as_deref()
+                .is_some_and(|local_path| Path::new(cwd).starts_with(Path::new(local_path)))
+        }
+        MemoryScope::Custom { name } => cwd.is_some_and(|cwd| name == &format!("cwd:{cwd}")),
+        MemoryScope::Entity { .. } | MemoryScope::Session { .. } => false,
+    }
+}
+
+fn obligation_is_current_for_context(obligation: &AgentObligation, cwd: Option<&str>) -> bool {
+    if !is_git_status_document_obligation(obligation) {
+        return true;
+    }
+
+    let (Some(cwd), Some(target)) = (cwd, obligation.trigger.target.as_deref()) else {
+        return true;
+    };
+
+    match current_git_status_target(cwd, target) {
+        GitStatusTarget::Present(status_line) => {
+            !is_untracked_root_instruction_file(&status_line, target)
+        }
+        GitStatusTarget::Missing => false,
+        GitStatusTarget::Unavailable => true,
+    }
+}
+
+fn is_git_status_document_obligation(obligation: &AgentObligation) -> bool {
+    obligation.kind == AgentObligationKind::DocumentDisposition
+        && obligation.trigger.kind == "git_status"
+}
+
+enum GitStatusTarget {
+    Present(String),
+    Missing,
+    Unavailable,
+}
+
+fn current_git_status_target(cwd: &str, target: &str) -> GitStatusTarget {
+    let Ok(output) = Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=all")
+        .arg("--")
+        .arg(target)
+        .output()
+    else {
+        return GitStatusTarget::Unavailable;
+    };
+    if !output.status.success() {
+        return GitStatusTarget::Unavailable;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find_map(|line| {
+            let path = parse_git_status_path(line)?;
+            if path == target {
+                Some(line.to_string())
+            } else {
+                None
+            }
+        })
+        .map_or(GitStatusTarget::Missing, GitStatusTarget::Present)
+}
+
+fn is_untracked_root_instruction_file(status_line: &str, target: &str) -> bool {
+    status_line.starts_with("?? ") && is_root_instruction_file(target)
+}
+
+fn is_root_instruction_file(target: &str) -> bool {
+    let normalized = target.replace('\\', "/");
+    if normalized.contains('/') {
+        return false;
+    }
+
+    matches!(
+        normalized.to_ascii_lowercase().as_str(),
+        "agents.md" | "claude.md" | "gemini.md"
+    )
 }
 
 fn detect_document_obligations(
