@@ -2649,3 +2649,20 @@ Follow-up finding:
 - Existing `feedback_coverage` semantics can exceed 1.0 for subgroups with multiple feedback
   records per trace. This is pre-existing behavior and was intentionally preserved by BAF006, but
   it is another measurement ambiguity to consider in a later, focused telemetry cleanup.
+
+Scope-noise follow-up:
+
+- Root cause: active MemoryItems were already project-scoped through the shared ranker, but
+  `orient` listed recent Memory OS knowledge commits without filtering those commits through the
+  scopes of the MemoryItems they changed.
+- Fix: `f347edf` filters `recent_knowledge_commits` by changed MemoryItem scope for scoped
+  orientations. Unscoped orientations retain the previous broad recent-commit behavior.
+- Regression: `orient_recent_knowledge_commits_respect_explicit_project_scope` creates both Engram
+  and `voice-layer` current-plan commits, then asserts explicit `project=engram` orientation
+  includes only the Engram commit.
+- Live verification: after rebuilding `engram-cli`, installing the refreshed binary, and restarting
+  the daemon on port 8765, `orient(project=engram)` used commit `f347edf` and no longer surfaced the
+  unrelated `voice-layer` current-plan knowledge commit.
+- Remaining telemetry ambiguity: subgroup `feedback_coverage` can still exceed 1.0 when multiple
+  feedback records attach to the same trace. Keep that as a separate cleanup; it is not a reason for
+  ranking or hot-path changes.
