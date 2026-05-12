@@ -8,7 +8,9 @@ use crate::digest::{
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions,
 };
 use crate::error::{IndexError, IndexResult};
-use crate::memory_ranker::{rank_memory_item, rank_memory_items, MemoryRankContext};
+use crate::memory_ranker::{
+    memory_scope_matches, rank_memory_item, rank_memory_items, MemoryRankContext,
+};
 use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, MigrationReviewStatus, MigrationService,
@@ -826,6 +828,63 @@ impl MemoryService {
         Ok(self.repo.list_knowledge_commits(limit).await?)
     }
 
+    async fn list_commits_relevant_to_scope(
+        &self,
+        limit: Option<usize>,
+        project: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<KnowledgeCommit>> {
+        let mut commits = self.list_commits(None).await?;
+        if project.is_none() && cwd.is_none() {
+            if let Some(limit) = limit {
+                commits.truncate(limit);
+            }
+            return Ok(commits);
+        }
+
+        let context = MemoryRankContext::orientation(project, cwd, None);
+        let mut item_scope_cache = HashMap::new();
+        let mut scoped_commits = Vec::new();
+        for commit in commits {
+            if self
+                .knowledge_commit_matches_scope(&commit, context, &mut item_scope_cache)
+                .await?
+            {
+                scoped_commits.push(commit);
+                if limit.is_some_and(|limit| scoped_commits.len() == limit) {
+                    break;
+                }
+            }
+        }
+        Ok(scoped_commits)
+    }
+
+    async fn knowledge_commit_matches_scope(
+        &self,
+        commit: &KnowledgeCommit,
+        context: MemoryRankContext<'_>,
+        item_scope_cache: &mut HashMap<Id, bool>,
+    ) -> IndexResult<bool> {
+        for item_id in commit.changes.iter().filter_map(|change| change.item_id) {
+            let matches = if let Some(matches) = item_scope_cache.get(&item_id) {
+                *matches
+            } else {
+                let matches = self
+                    .repo
+                    .get_memory_item(&item_id)
+                    .await?
+                    .as_ref()
+                    .is_some_and(|item| memory_scope_matches(item, context));
+                item_scope_cache.insert(item_id, matches);
+                matches
+            };
+            if matches {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Aggregate memory records by writer provenance.
     pub async fn writer_stats(&self) -> IndexResult<Vec<MemoryWriterStat>> {
         let mut stats: std::collections::BTreeMap<(String, String, String, Option<String>), usize> =
@@ -1093,17 +1152,22 @@ impl MemoryService {
         if input.include_recent_commits {
             attach_recent_git_commits(&mut repository_context)?;
         }
-        let recent_commits = if input.include_recent_commits {
-            self.list_commits(Some(limit)).await?
-        } else {
-            Vec::new()
-        };
         let resolution = resolve_orientation_project(
             input.project.as_deref(),
             input.cwd.as_deref(),
             repository_context.as_ref(),
         );
         let effective_project = resolution.selected_project.as_deref();
+        let recent_commits = if input.include_recent_commits {
+            self.list_commits_relevant_to_scope(
+                Some(limit),
+                effective_project,
+                input.cwd.as_deref(),
+            )
+            .await?
+        } else {
+            Vec::new()
+        };
 
         let relevant_active = filter_relevant(
             active,
@@ -3678,6 +3742,62 @@ mod tests {
             MemoryStatus::Active,
             "resume guard should not mutate existing records"
         );
+    }
+
+    #[tokio::test]
+    async fn orient_recent_knowledge_commits_respect_explicit_project_scope() {
+        let service = setup_service().await;
+
+        let mut engram_plan = current_plan_input(
+            "engram",
+            "Engram scope-noise plan",
+            "Investigate Engram orientation scope noise before larger ranking claims.",
+        );
+        engram_plan.create_commit = true;
+        let engram_capture = service.capture_current_plan(engram_plan).await.unwrap();
+        let engram_commit = engram_capture
+            .commit
+            .expect("Engram current plan should create a commit");
+
+        let mut voice_layer_plan = current_plan_input(
+            "voice-layer",
+            "Voice Layer calibration plan",
+            "Run a fresh Claude calibration for the voice-layer project.",
+        );
+        voice_layer_plan.create_commit = true;
+        let voice_layer_capture = service
+            .capture_current_plan(voice_layer_plan)
+            .await
+            .unwrap();
+        let voice_layer_commit = voice_layer_capture
+            .commit
+            .expect("voice-layer current plan should create a commit");
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some("How should we proceed with Engram after BAF006?".to_string()),
+                include_recent_commits: true,
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        let commit_ids = packet
+            .recent_knowledge_commits
+            .iter()
+            .map(|commit| commit.id)
+            .collect::<Vec<_>>();
+        assert!(commit_ids.contains(&engram_commit.id));
+        assert!(!commit_ids.contains(&voice_layer_commit.id));
+        assert!(!packet
+            .context_pack
+            .contains("Capture current plan: Voice Layer calibration plan"));
+        assert!(!packet
+            .active_decisions
+            .iter()
+            .any(|item| item.id == voice_layer_capture.item.id));
     }
 
     #[tokio::test]
