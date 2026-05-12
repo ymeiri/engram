@@ -3197,3 +3197,213 @@ baseline arms. A valid next protocol should satisfy all of these constraints:
 
 Do not use this run to justify orient hot-path expansion, graph/obligation/lint/raw-observation
 default retrieval, M6 write/apply, deletion, or legacy cleanup.
+
+## Live Blind Continuity 002 Protocol: 2026-05-12
+
+Status: protocol template. This section intentionally contains no evaluator target facts.
+
+Purpose: rerun the discriminative continuity probe after repairing the target-visibility leak found
+in `live_discriminative_continuity_001`. The run should test whether a fresh agent can recover
+post-worktree current-plan facts through Engram MemoryItems when those facts are not present in
+baseline-visible repository files, prompts, or committed docs.
+
+Protocol order:
+
+1. Commit this protocol template before creating arm worktrees.
+2. Create fresh `no_memory`, `static_instructions`, and `memoryitem_orient` worktrees from the
+   committed protocol state.
+3. Only after the worktrees exist, capture the evaluator target facts into Engram MemoryItems.
+4. Do not write the target facts into repository files, prompts, comments, branch names, commit
+   messages, or user-facing instructions before all arm transcripts are collected.
+5. Before launching arms, run a target-visibility check from each arm worktree for every hidden
+   target phrase. Any hit outside Engram is a protocol failure and aborts the run.
+
+Planned worktrees:
+
+| Arm | Branch | Worktree |
+| --- | --- | --- |
+| `no_memory` | `yuval.meiri/live-blind-continuity-002-no-memory` | `/Users/yuval.meiri/projects/engram-live-blind-continuity-002-no-memory` |
+| `static_instructions` | `yuval.meiri/live-blind-continuity-002-static-instructions` | `/Users/yuval.meiri/projects/engram-live-blind-continuity-002-static-instructions` |
+| `memoryitem_orient` | `yuval.meiri/live-blind-continuity-002-memoryitem-orient` | `/Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient` |
+
+### Shared Task
+
+The final answer from each arm should answer these questions only:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+No arm should edit files, create commits, change runtime code, run M6 inventory/apply, delete
+artifacts, alter harness settings, inspect sibling worktrees, or use prior transcript context.
+
+### Target Visibility Rules
+
+- The evaluator target facts must exist only in Engram MemoryItems and evaluator-private notes until
+  all transcripts are returned.
+- Baseline arms may inspect allowed repository context, but the target facts must not be discoverable
+  there. If a baseline recovers a target fact from repo context, score it as leakage, not continuity.
+- Treatment feedback must include `used_memory_ids` for every MemoryItem that directly shaped the
+  answer. If a current-plan MemoryItem shaped the answer but was not exposed as a hot-context ID,
+  the feedback note must say so explicitly.
+- Every scored target fact should record source provenance as one of: `engram_memory`,
+  `static_prompt`, `repo_context`, `inference`, or `unknown`.
+
+### Arm Prompt: `no_memory`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-blind-continuity-002-no-memory.
+
+This is a controlled no-memory benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not read engram-tests/tests/brain_harness_eval_tests.rs.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and non-Brain-Harness-plan
+repository context:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `static_instructions`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-blind-continuity-002-static-instructions.
+
+This is a controlled static-instructions benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not read engram-tests/tests/brain_harness_eval_tests.rs.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Static instruction excerpt:
+- Read actual code before describing behavior.
+- Make only requested changes.
+- After modifying code, run the relevant test command.
+- Before destructive actions, confirm with the user.
+- If the request is genuinely ambiguous, ask; otherwise proceed.
+- Brain Harness work should stay evidence-gated. Do not treat deterministic tests as live behavior
+  evidence.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and the static instruction
+excerpt:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `memoryitem_orient`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient.
+
+This is a controlled MemoryItem-orient benchmark arm.
+
+Rules:
+- Use Engram MCP only through orient and telemetry feedback for this task.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not read engram-tests/tests/brain_harness_eval_tests.rs.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+- Preserve every orient trace_id.
+
+First call Engram orient for resume continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient
+- agent: codex
+- intent: resume_session
+- scenario_id: live_blind_continuity_002
+- arm: memoryitem_orient
+- prompt: "What is the current Engram Brain Harness plan, evidence gate, and next action?"
+
+Then call Engram orient for preference continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient
+- agent: codex
+- intent: follow_user_preference
+- scenario_id: live_blind_continuity_002
+- arm: memoryitem_orient
+- prompt: "What workflow or evaluation preference should constrain the next Engram validation step?"
+
+Task:
+Answer these four questions using only the retrieved Engram context plus this prompt:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+Before the final answer, submit telemetry feedback for each orient trace_id. Include:
+- task_success
+- preference_adhered
+- repeated_context_questions
+- bad_memory_used
+- used_memory_ids for any returned MemoryItems that directly informed the answer
+- rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids when applicable
+- missing_context if Engram failed to provide a target fact
+
+If the answer is underdetermined even after orient, say exactly what is missing instead of inventing
+it.
+```
+
+### Scoring Rubric
+
+Pass criteria for `memoryitem_orient`:
+
+- recovers the hidden current-plan and evidence-gate target facts from Engram;
+- keeps hot-path expansion, graph/obligation/lint/raw-observation default retrieval, M6 write/apply,
+  deletion, and legacy cleanup blocked unless the hidden target explicitly changes a gate;
+- identifies the hidden workflow or evaluation preference;
+- submits feedback for both orient traces with accurate memory attribution;
+- asks zero repeated context questions.
+
+Baseline interpretation:
+
+- `no_memory` and `static_instructions` should answer underdetermined unless they independently
+  recover target facts without Engram.
+- If a baseline recovers a target from repository context, the run fails as a target-leak protocol
+  failure.
+- If a baseline guesses a target fact without evidence, score the answer separately from source
+  provenance and do not treat it as continuity evidence.
+
+Claim boundary:
+
+- A clean pass supports Engram continuity only for this sealed target-fact recovery task.
+- It does not prove cross-harness generality, ranking optimality, hot-path expansion readiness,
+  migration write/apply readiness, deletion safety, or legacy-layer removal readiness.
