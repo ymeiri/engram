@@ -344,9 +344,10 @@ models both resume-current-plan continuity and durable preference recall against
 `static_instructions` baselines, while checking trace-level feedback/outcome coverage. This validates
 the benchmark instrument shape; it does not replace live dogfood evidence.
 
-Next gate: run a live or cross-harness version of the same discriminative continuity target, or use
-the fixture to drive a bounded code-bearing work slice where the preference constrains a non-trivial
-implementation decision.
+Current gate: `live_discriminative_continuity_001` is pre-registered with `no_memory`,
+`static_instructions`, and `memoryitem_orient` arms. Execute fresh sessions from the registered
+worktrees, then score against the target-fact rubric before making ranking, hot-path, migration, or
+deletion claims.
 
 ---
 

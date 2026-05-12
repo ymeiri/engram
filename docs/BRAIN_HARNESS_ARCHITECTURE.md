@@ -909,7 +909,9 @@ Proceed in this order from the current checkpoint:
 10. Treat the 2026-05-12 discriminative continuity fixture as benchmark-instrument validation, not
     live behavior evidence: it proves the eval can compare `no_memory`, `static_instructions`, and
     `memory_items` against known target MemoryItems while checking telemetry attribution quality.
-11. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+11. Execute the pre-registered `live_discriminative_continuity_001` arms before making further
+    ranking, hot-path, migration, deletion, or legacy-simplification claims.
+12. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

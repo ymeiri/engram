@@ -2872,3 +2872,216 @@ Claim boundary:
   Engram in unconstrained runs.
 - The next evidence step should be either the full `brain_harness_eval_tests` suite plus hygiene
   checks, or a pre-registered live dogfood run that reuses the same target facts and arms.
+
+## Live Discriminative Continuity 001 Pre-registration: 2026-05-12
+
+Purpose: run the live version of the deterministic discriminative continuity fixture from commit
+`4e8f723`. This is a controlled live dogfood probe, not a broad benchmark. It tests whether a fresh
+agent can recover two current target facts through Engram MemoryItems better than `no_memory` and
+`static_instructions` controls.
+
+Base commit for all arms: `4e8f723` (`Add discriminative continuity benchmark fixture`).
+
+Worktrees:
+
+| Arm | Branch | Worktree |
+| --- | --- | --- |
+| `no_memory` | `yuval.meiri/live-discriminative-no-memory` | `/Users/yuval.meiri/projects/engram-live-discriminative-no-memory` |
+| `static_instructions` | `yuval.meiri/live-discriminative-static-instructions` | `/Users/yuval.meiri/projects/engram-live-discriminative-static-instructions` |
+| `memoryitem_orient` | `yuval.meiri/live-discriminative-memoryitem-orient` | `/Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient` |
+
+Evaluator-only target facts:
+
+1. Current plan target: deterministic discriminative continuity fixture is implemented and committed
+   in `4e8f723`; the next evidence step is a live or cross-harness version using the same target
+   facts and arms.
+2. Safety gate target: do not expand `orient` hot path with graph, obligations, lint, or raw
+   observations; do not run M6 write/apply, deletion, or legacy cleanup.
+3. Workflow preference target: after every meaningful Engram implementation, validation, or
+   documentation step, create a focused commit and keep unrelated user-owned files such as root
+   `AGENTS.md` out of commits unless explicitly requested.
+
+The arms must not read this dogfood report. The report is evaluator-only and contains target facts.
+
+### Shared Task
+
+The final answer from each arm should answer these questions only:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+No arm should edit files, create commits, change runtime code, run M6 inventory/apply, delete
+artifacts, alter harness settings, or inspect sibling worktrees.
+
+### Arm Prompt: `no_memory`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-discriminative-no-memory.
+
+This is a controlled no-memory benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and non-Brain-Harness-plan
+repository context:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `static_instructions`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-discriminative-static-instructions.
+
+This is a controlled static-instructions benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Static instruction excerpt:
+- Read actual code before describing behavior.
+- Make only requested changes.
+- After modifying code, run the relevant test command.
+- Before destructive actions, confirm with the user.
+- If the request is genuinely ambiguous, ask; otherwise proceed.
+- Brain Harness work should stay evidence-gated. Do not treat deterministic tests as live behavior
+  evidence.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and the static instruction
+excerpt:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `memoryitem_orient`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient.
+
+This is a controlled MemoryItem-orient benchmark arm.
+
+Rules:
+- Use Engram MCP only through orient and telemetry feedback for this task.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+- Preserve every orient trace_id.
+
+First call Engram orient for resume continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient
+- agent: codex
+- intent: resume_session
+- scenario_id: live_discriminative_continuity_001
+- arm: memoryitem_orient
+- prompt: "What is the current Engram Brain Harness plan, current evidence gate, and next action?"
+
+Then call Engram orient for preference continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient
+- agent: codex
+- intent: follow_user_preference
+- scenario_id: live_discriminative_continuity_001
+- arm: memoryitem_orient
+- prompt: "What user workflow preference should constrain the next Engram implementation or validation step?"
+
+Task:
+Answer these four questions using only the retrieved Engram context plus this prompt:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+Before the final answer, submit telemetry feedback for each orient trace_id. Include:
+- task_success
+- preference_adhered
+- repeated_context_questions
+- bad_memory_used
+- used_memory_ids for any returned MemoryItems that directly informed the answer
+- rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids when applicable
+- missing_context if Engram failed to provide a target fact
+
+If the answer is underdetermined even after orient, say exactly what is missing instead of inventing
+it.
+```
+
+### Scoring Rubric
+
+Each arm is judged by an evaluator after the transcript is returned.
+
+Pass criteria for `memoryitem_orient`:
+
+- identifies the live discriminative benchmark as the next step, not another deterministic fixture
+  or broad architecture change;
+- keeps hot-path expansion, graph/obligation/lint/raw-observation default retrieval, M6 write/apply,
+  deletion, and legacy cleanup blocked;
+- identifies the focused-commit workflow preference and the `AGENTS.md` exclusion constraint;
+- submits feedback for both orient traces with `used_memory_ids` when target MemoryItems are used;
+- asks zero repeated context questions.
+
+Baseline interpretation:
+
+- `no_memory` and `static_instructions` may pass only if they independently recover all target facts
+  without Engram. If either baseline says the answer is underdetermined, that is a clean control
+  failure, not a protocol failure.
+- The expected discriminative pattern is: `memoryitem_orient` passes, and at least one baseline
+  misses or marks missing the current-plan target or workflow-preference target.
+
+Telemetry expectation:
+
+- Treatment should produce two orient traces with
+  `scenario_id=live_discriminative_continuity_001` and `arm=memoryitem_orient`.
+- Evaluator scoring should later record or summarize baseline outcomes so the live report can
+  separate trace coverage, feedback density, outcome coverage, and memory attribution.
+
+Required user/evaluator return values:
+
+- the three fresh thread links or terminal exports;
+- for the treatment arm, the two orient trace IDs and feedback IDs if visible;
+- any deviations from the prompts, especially accidental use of Engram in a baseline or accidental
+  reading of this dogfood report.
+
+Claim boundary:
+
+- A clean pass supports Engram continuity for this narrow target-fact recovery task.
+- It does not prove cross-harness generality, ranking optimality, hot-path expansion readiness,
+  migration write/apply readiness, deletion safety, or legacy-layer removal readiness.
