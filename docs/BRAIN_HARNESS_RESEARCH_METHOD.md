@@ -344,10 +344,15 @@ models both resume-current-plan continuity and durable preference recall against
 `static_instructions` baselines, while checking trace-level feedback/outcome coverage. This validates
 the benchmark instrument shape; it does not replace live dogfood evidence.
 
-Current gate: `live_discriminative_continuity_001` is pre-registered with `no_memory`,
-`static_instructions`, and `memoryitem_orient` arms. Execute fresh sessions from the registered
-worktrees, then score against the target-fact rubric before making ranking, hot-path, migration, or
-deletion claims.
+2026-05-12 live update: `live_discriminative_continuity_001` produced a useful but non-dispositive
+result. `memoryitem_orient` passed and `static_instructions` failed cleanly, but `no_memory` also
+passed by reading allowed repository context in `engram-tests/tests/brain_harness_eval_tests.rs`.
+That file contained the same target facts the live benchmark intended to hide.
+
+Current gate: repair target visibility before running the next live discriminative continuity arm.
+The next target facts must be available through Engram MemoryItems and evaluator notes only, not
+through allowed repository files. Do not make ranking, hot-path, migration, deletion, or
+legacy-simplification claims from the leaked-protocol run.
 
 ---
 

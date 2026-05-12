@@ -909,9 +909,13 @@ Proceed in this order from the current checkpoint:
 10. Treat the 2026-05-12 discriminative continuity fixture as benchmark-instrument validation, not
     live behavior evidence: it proves the eval can compare `no_memory`, `static_instructions`, and
     `memory_items` against known target MemoryItems while checking telemetry attribution quality.
-11. Execute the pre-registered `live_discriminative_continuity_001` arms before making further
-    ranking, hot-path, migration, deletion, or legacy-simplification claims.
-12. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+11. Treat the first `live_discriminative_continuity_001` run as a protocol-leak finding, not a
+    MemoryItem-advantage finding: `memoryitem_orient` passed, `static_instructions` failed cleanly,
+    and `no_memory` passed by reading allowed repository fixture context that contained target
+    facts.
+12. Repair target visibility before the next live discriminative continuity run. Target facts should
+    live only in Engram MemoryItems and evaluator notes, not in baseline-visible repository files.
+13. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

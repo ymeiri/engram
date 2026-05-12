@@ -3085,3 +3085,115 @@ Claim boundary:
 - A clean pass supports Engram continuity for this narrow target-fact recovery task.
 - It does not prove cross-harness generality, ranking optimality, hot-path expansion readiness,
   migration write/apply readiness, deletion safety, or legacy-layer removal readiness.
+
+## Live Discriminative Continuity 001 Scoring: 2026-05-12
+
+Evaluator trace: `019e1d67-535a-7a00-b038-8e2084a66550`.
+
+Supplied transcripts:
+
+| Arm | Thread | Transcript |
+| --- | --- | --- |
+| `memoryitem_orient` | `codex://threads/019e1d5c-cd14-7ea0-ac3f-d05e36c3533c` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-04-41-019e1d5c-cd14-7ea0-ac3f-d05e36c3533c.jsonl` |
+| `static_instructions` | `codex://threads/019e1d5d-3e89-7000-97f7-36c1935b1bab` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-05-10-019e1d5d-3e89-7000-97f7-36c1935b1bab.jsonl` |
+| `no_memory` | `codex://threads/019e1d5d-ab42-7bb2-ac7e-41eb448d6dd1` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-05-38-019e1d5d-ab42-7bb2-ac7e-41eb448d6dd1.jsonl` |
+
+### Arm Outcomes
+
+| Arm | Target-current plan | Safety gates | Workflow preference | Repeated context questions | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `memoryitem_orient` | Pass | Pass | Pass | 0 | Treatment behaved as expected, with one attribution gap. |
+| `static_instructions` | Missed; answered underdetermined | Pass | Missed | 0 | Clean control failure. |
+| `no_memory` | Pass | Pass | Pass | 0 | Behavioral pass, but via protocol leakage from allowed repo context. |
+
+Treatment trace IDs:
+
+- `resume_session`: `019e1d5d-1fdc-7251-8dd3-3a5abc70d6e7`
+- `follow_user_preference`: `019e1d5d-3620-79d2-ad08-41595834a019`
+
+Treatment feedback IDs:
+
+- `019e1d5d-c1b4-71d0-a460-fdc0126eb6a8`
+- `019e1d5d-db00-7282-8a65-9d8e9ba16faa`
+
+Treatment assessment:
+
+- The `memoryitem_orient` arm identified the live discriminative benchmark as the next step,
+  preserved the blocked-action list, identified the focused-commit preference, and submitted
+  telemetry feedback for both orient traces.
+- The `follow_user_preference` feedback correctly included used MemoryItem
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`.
+- The `resume_session` feedback marked success but sent `used_memory_ids=[]` while its note said
+  the current-plan MemoryItem shaped the answer. This is an attribution-quality gap, not an answer
+  failure.
+
+Static-control assessment:
+
+- The `static_instructions` arm did not call tools and did not invent target facts. It correctly
+  answered that the next Brain Harness step was underdetermined from the static prompt alone.
+- This is a clean control failure and supports the view that generic static instructions do not
+  carry the current-plan target.
+
+No-memory-control assessment:
+
+- The `no_memory` arm obeyed the no-Engram constraint and did not read the evaluator-only dogfood
+  report, architecture document, or research-method document.
+- It recovered the target facts by reading allowed repository context, especially
+  `engram-tests/tests/brain_harness_eval_tests.rs`, where the deterministic fixture embeds the
+  current-plan target, safety gates, and workflow preference.
+- This means the arm's behavioral pass is not evidence that no-memory continuity is adequate. It is
+  evidence that the live protocol leaked target facts through an allowed file.
+
+### Telemetry Report
+
+`telemetry(action=real_session_eval, project=engram,
+scenario_id=live_discriminative_continuity_001)` reported:
+
+- `trace_count=4`
+- `feedback_count=2`
+- `feedback_coverage=0.5`
+- `memory_judgment_feedback_count=1`
+- `outcome_feedback_count=2`
+- `task_success_count=2`
+- `bad_memory_used_count=0`
+- `repeated_context_question_count=0`
+
+The four traces include two evaluator-orient traces plus the two treatment-orient traces. The two
+baseline arms did not create telemetry traces by design, so telemetry alone cannot compare all
+three arms. The transcript score above is still required for cross-arm interpretation.
+
+### Decision
+
+Hypothesis H1, "MemoryItem orient materially outperforms both baselines on this live task", is not
+supported by this run. The treatment passed, and the static baseline failed cleanly, but the
+`no_memory` baseline also passed after recovering the target from allowed repo files.
+
+Hypothesis H2, "the current live protocol leaks evaluator target facts into baseline-visible
+context", is supported. The deterministic fixture was committed before the live worktrees were cut,
+and that fixture contained the same target facts the live benchmark was trying to hide.
+
+The correct interpretation is:
+
+- Engram `orient` can recover and apply the target current-plan and preference facts in this
+  scenario.
+- This run does not establish a discriminative MemoryItem advantage over `no_memory`.
+- The next evidence step must repair target visibility before running more live arms.
+
+### Next Gate
+
+Before running another live discriminative continuity benchmark, make the target facts invisible to
+baseline arms. A valid next protocol should satisfy all of these constraints:
+
+- the target current-plan and preference facts exist only in Engram MemoryItems and evaluator notes,
+  not in allowed repository files;
+- arm worktrees are cut before the evaluator captures the new target facts, or the target facts are
+  created after worktree setup without committing them to files the arms can read;
+- baseline prompts either forbid reading known eval fixture files or the fixture files contain no
+  evaluator target facts;
+- baseline scoring records whether target facts came from repo context, static prompt text, or
+  memory retrieval;
+- treatment feedback must include `used_memory_ids` whenever a returned MemoryItem shaped the
+  answer, including current-plan MemoryItems.
+
+Do not use this run to justify orient hot-path expansion, graph/obligation/lint/raw-observation
+default retrieval, M6 write/apply, deletion, or legacy cleanup.
