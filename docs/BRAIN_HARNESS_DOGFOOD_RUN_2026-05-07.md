@@ -3407,3 +3407,100 @@ Claim boundary:
 - A clean pass supports Engram continuity only for this sealed target-fact recovery task.
 - It does not prove cross-harness generality, ranking optimality, hot-path expansion readiness,
   migration write/apply readiness, deletion safety, or legacy-layer removal readiness.
+
+## Live Blind Continuity 002 Scoring: 2026-05-12
+
+Evaluator trace: `019e1d7c-75a4-72c3-a5b9-a41806e3e6a2`.
+
+Supplied transcripts:
+
+| Arm | Thread | Transcript |
+| --- | --- | --- |
+| `no_memory` | `codex://threads/019e1d76-e420-72f3-a6f6-8aab7ee6fcbc` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-33-11-019e1d76-e420-72f3-a6f6-8aab7ee6fcbc.jsonl` |
+| `static_instructions` | `codex://threads/019e1d77-7bd6-77c3-868e-91d934e6aaf5` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-33-50-019e1d77-7bd6-77c3-868e-91d934e6aaf5.jsonl` |
+| `memoryitem_orient` | `codex://threads/019e1d77-f20b-7960-be5a-e13553b9bd16` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-34-20-019e1d77-f20b-7960-be5a-e13553b9bd16.jsonl` |
+
+Environment note: Codex Desktop session metadata points at internal `.codex/worktrees/...`
+checkouts, while tool calls in the transcripts used the intended `/Users/yuval.meiri/projects/...`
+arm worktrees. The arm worktrees were still clean at score time.
+
+### Arm Outcomes
+
+| Arm | Current plan and evidence gate | Blocked actions | Workflow/eval preference | Source provenance | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `no_memory` | Missed; answered underdetermined | Partial generic recovery | Static/prompt-constrained only | `static_prompt`, `repo_context` for generic gates | Clean control failure; no hidden-target leak detected. |
+| `static_instructions` | Missed; answered underdetermined | Prompt-rule recovery | Static/prompt-constrained only | `static_prompt` | Clean control failure; no hidden-target leak detected. |
+| `memoryitem_orient` | Pass | Pass | Pass | `engram_memory` | Behavioral pass, with current-plan attribution failure. |
+
+The sealed target marker and hidden target facts were recovered only by the `memoryitem_orient` arm.
+Both baseline arms said the current plan was underdetermined rather than inventing it. This is the
+expected discriminative pattern and shows that the previous target-visibility leak was repaired for
+this run.
+
+### Treatment Telemetry
+
+Treatment trace IDs:
+
+- `resume_session`: `019e1d78-4993-7a02-964d-845f220f9d43`
+- `follow_user_preference`: `019e1d78-8815-7ba1-a8ff-084845af4862`
+
+Treatment feedback IDs:
+
+- `019e1d79-ebc6-7df2-9b28-ae1df1cfbb98`
+- `019e1d7a-0649-7d43-8e08-9210817ed8f1`
+
+Telemetry report from `telemetry(action=real_session_eval, project=engram,
+scenario_id=live_blind_continuity_002)`:
+
+- `trace_count=3`
+- `feedback_count=2`
+- `feedback_coverage=0.6666666865348816`
+- `outcome_feedback_count=2`
+- `task_success_count=2`
+- `bad_memory_used_count=0`
+- `repeated_context_question_count=0`
+- `missing_context_count=2`
+- `used_memory_count=1`
+
+The treatment feedback preserved both trace IDs and reported success. It correctly identified the
+reviewed commit-hygiene preference ID (`019e03be-a9a5-7db2-848d-eb26ef78bcb5`) when that preference
+was returned explicitly.
+
+Attribution gap: the current-plan MemoryItem shaped the answer, but the treatment could not include
+its ID in `used_memory_ids`. It submitted `used_memory_ids=[]` for `resume_session` and used
+`missing_context` to explain that the current-plan facts were visible while the current-plan
+MemoryItem ID was not exposed in a usable hot-context field. The evaluator knows the current-plan
+MemoryItem was `019e1d71-9078-7d70-b3a5-1a543176d269`, but the participating agent did not have a
+reliable visible ID path.
+
+### Decision
+
+Hypothesis H1, "MemoryItem orient materially outperforms both baselines on sealed target-fact
+recovery", is supported for this narrow live run:
+
+- `no_memory` did not recover the hidden current plan;
+- `static_instructions` did not recover the hidden current plan;
+- `memoryitem_orient` recovered the hidden current plan, evidence gate, blocked actions, and
+  provenance-scoring preference from Engram.
+
+Hypothesis H2, "target facts leak through baseline-visible repository context", is not supported in
+this run. Baseline recovery did not include the sealed target facts, and a prior marker search found
+no repository hits before arms were launched.
+
+This is not a clean full benchmark pass because the telemetry attribution contract failed for the
+current-plan MemoryItem. The behavior supports Engram continuity; the telemetry still underreports
+the MemoryItem that made the answer possible.
+
+### Next Gate
+
+Before scaling sealed-target runs, fix or explicitly account for current-plan attribution:
+
+- ensure `orient` exposes active current-plan MemoryItem IDs in a field agents can reliably submit
+  in `used_memory_ids`; or
+- provide a dedicated feedback helper that lets an agent mark "active current-plan item used" without
+  copying IDs from prose.
+
+After that attribution fix, rerun a sealed live batch with the same target-visibility discipline and
+with enough samples to approach the real-session telemetry confidence gate. Do not use this single
+run to justify orient hot-path expansion, graph/obligation/lint/raw-observation default retrieval,
+M6 write/apply, deletion, or legacy cleanup.

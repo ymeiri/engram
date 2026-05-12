@@ -349,10 +349,16 @@ result. `memoryitem_orient` passed and `static_instructions` failed cleanly, but
 passed by reading allowed repository context in `engram-tests/tests/brain_harness_eval_tests.rs`.
 That file contained the same target facts the live benchmark intended to hide.
 
-Current gate: repair target visibility before running the next live discriminative continuity arm.
-The next target facts must be available through Engram MemoryItems and evaluator notes only, not
-through allowed repository files. Do not make ranking, hot-path, migration, deletion, or
-legacy-simplification claims from the leaked-protocol run.
+2026-05-12 sealed-target update: `live_blind_continuity_002` repaired the target-visibility leak
+for a narrow live run. `no_memory` and `static_instructions` both marked the current plan
+underdetermined, while `memoryitem_orient` recovered the sealed current plan, evidence gate, blocked
+actions, and provenance-scoring preference from Engram. The remaining failure is telemetry
+attribution quality: the current-plan MemoryItem shaped the treatment answer, but the participating
+agent could not submit that MemoryItem ID in `used_memory_ids`.
+
+Current gate: fix or explicitly account for current-plan MemoryItem attribution before scaling the
+sealed-target benchmark. Do not make ranking, hot-path, migration, deletion, or legacy-simplification
+claims from one sealed live run.
 
 ---
 

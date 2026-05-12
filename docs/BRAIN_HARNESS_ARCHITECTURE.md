@@ -913,9 +913,13 @@ Proceed in this order from the current checkpoint:
     MemoryItem-advantage finding: `memoryitem_orient` passed, `static_instructions` failed cleanly,
     and `no_memory` passed by reading allowed repository fixture context that contained target
     facts.
-12. Repair target visibility before the next live discriminative continuity run. Target facts should
-    live only in Engram MemoryItems and evaluator notes, not in baseline-visible repository files.
-13. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+12. Treat `live_blind_continuity_002` as narrow positive evidence for sealed target-fact recovery:
+    both baselines missed the hidden current plan, while `memoryitem_orient` recovered it from
+    Engram.
+13. Do not treat `live_blind_continuity_002` as a clean full pass until current-plan MemoryItem
+    attribution is fixed or explicitly accounted for; the treatment answer used the current-plan
+    item but could not submit that item ID in `used_memory_ids`.
+14. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
