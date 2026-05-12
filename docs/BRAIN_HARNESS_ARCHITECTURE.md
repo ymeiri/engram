@@ -641,6 +641,11 @@ Implemented spike:
   counts, warnings, and a conservative confidence gate. The gate requires behavioral outcome
   feedback in addition to relevance signals; migration writes still require explicit user
   approval.
+- Report coverage semantics are trace-based: `feedback_coverage` means traces with at least one
+  linked feedback record divided by traces, and `feedback_records_per_trace` separately exposes
+  feedback density when multiple feedback records attach to one trace. Outcome feedback and memory
+  attribution also expose trace-level counts so scope correctness, task outcome, and feedback
+  presence are not conflated.
 - Generated harness adapters now instruct agents to preserve `trace_id` values returned by
   `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
   with `task_success`, `preference_adhered`, `repeated_context_questions`, `bad_memory_used`, and

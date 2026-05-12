@@ -2787,3 +2787,40 @@ Claim update:
 - The next high-confidence code direction remains telemetry semantics cleanup: keep the
   multi-feedback subgroup `feedback_coverage` ambiguity separate from scope correctness, and improve
   trace joinability by setting `external_session_id` when the host thread/session ID is known.
+
+## Telemetry Semantics Cleanup 001: 2026-05-12
+
+Purpose: implement the bounded post-consultation telemetry cleanup without changing `orient`
+ranking, hot-path retrieval, graph/obligation/lint behavior, migration, or deletion.
+
+Implemented semantics:
+
+- `feedback_coverage` is now trace-level coverage: traces with at least one linked feedback record
+  divided by traces. This should not exceed 1.0.
+- `feedback_trace_count` exposes the numerator behind trace-level coverage.
+- `feedback_records_per_trace` preserves feedback density and can exceed 1.0 when multiple feedback
+  records attach to the same trace.
+- `memory_judgment_trace_count` and `memory_judgment_trace_coverage` separate trace-level memory
+  attribution from feedback-record-level `memory_judgment_feedback_count`.
+- `outcome_trace_count` and `outcome_coverage` separate behavioral outcome coverage from raw
+  `outcome_feedback_count`.
+- Feedback reports now include external-session feedback counts so joinability can be checked on
+  both trace and feedback records.
+
+Regression:
+
+- `real_session_eval_report_separates_trace_coverage_from_feedback_density` creates two traces in
+  one arm, attaches two feedback records to only one trace, and verifies:
+  - `feedback_count=2`
+  - `feedback_trace_count=1`
+  - `feedback_coverage=0.5`
+  - `feedback_records_per_trace=1.0`
+  - `outcome_trace_count=1`
+  - `outcome_coverage=0.5`
+
+Claim boundary:
+
+- This improves measurement semantics only. It is not behavioral evidence that MemoryItem retrieval
+  beats no-memory or static instruction files.
+- The next evidence step remains a discriminative continuity benchmark design after this code path
+  is installed and live-smoked.

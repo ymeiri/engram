@@ -401,12 +401,21 @@ pub struct RealSessionEvalReport {
     pub trace_count: usize,
     /// Number of feedback records in the sample.
     pub feedback_count: usize,
-    /// Feedback records divided by traces.
+    /// Number of traces in the sample that have at least one linked feedback record.
+    pub feedback_trace_count: usize,
+    /// Traces with feedback divided by traces. This is capped by trace count and cannot exceed 1.0.
     pub feedback_coverage: f32,
+    /// Feedback records divided by traces. This can exceed 1.0 when a trace receives multiple
+    /// feedback records.
+    pub feedback_records_per_trace: f32,
     /// Feedback records with at least one explicit memory attribution judgment.
     pub memory_judgment_feedback_count: usize,
     /// Feedback records with memory attribution judgments divided by feedback records.
     pub memory_judgment_coverage: f32,
+    /// Number of traces with at least one explicit memory attribution judgment.
+    pub memory_judgment_trace_count: usize,
+    /// Traces with memory attribution judgments divided by memory-bearing traces.
+    pub memory_judgment_trace_coverage: f32,
     /// Feedback records for memory-bearing traces that omitted memory attribution judgments.
     pub unjudged_memory_feedback_count: usize,
     /// Number of distinct intent buckets in the sample.
@@ -421,6 +430,12 @@ pub struct RealSessionEvalReport {
     pub distinct_external_session_count: usize,
     /// Traces that did not provide an external session label.
     pub unspecified_external_session_trace_count: usize,
+    /// Feedback records with a caller-supplied external session label.
+    pub external_session_feedback_count: usize,
+    /// Number of distinct caller-supplied external session labels on feedback records.
+    pub distinct_external_session_feedback_count: usize,
+    /// Feedback records that did not provide an external session label.
+    pub unspecified_external_session_feedback_count: usize,
     /// Trace counts grouped by operation.
     pub operation_counts: BTreeMap<String, usize>,
     /// Number of distinct non-empty scenario identifiers in the sample.
@@ -459,6 +474,10 @@ pub struct RealSessionEvalReport {
     pub scored_feedback_count: usize,
     /// Feedback records with at least one behavioral outcome field.
     pub outcome_feedback_count: usize,
+    /// Number of traces with at least one linked feedback record carrying behavioral outcome fields.
+    pub outcome_trace_count: usize,
+    /// Traces with behavioral outcome feedback divided by traces.
+    pub outcome_coverage: f32,
     /// Feedback records that reported task success.
     pub task_success_count: usize,
     /// Feedback records that reported task failure.
@@ -490,8 +509,12 @@ pub struct RealSessionEvalIntentRow {
     pub trace_count: usize,
     /// Number of feedback records linked to this intent.
     pub feedback_count: usize,
-    /// Feedback records divided by traces for this intent.
+    /// Number of traces for this intent with at least one linked feedback record.
+    pub feedback_trace_count: usize,
+    /// Traces with feedback divided by traces for this intent.
     pub feedback_coverage: f32,
+    /// Feedback records divided by traces for this intent.
+    pub feedback_records_per_trace: f32,
     /// Average latency, when any traces recorded latency.
     pub avg_latency_ms: Option<f32>,
     /// Average usefulness score, when feedback included one.
@@ -526,6 +549,10 @@ pub struct RealSessionEvalIntentRow {
     pub scored_feedback_count: usize,
     /// Feedback records with at least one behavioral outcome field for this intent.
     pub outcome_feedback_count: usize,
+    /// Traces for this intent with at least one behavioral outcome feedback record.
+    pub outcome_trace_count: usize,
+    /// Traces with behavioral outcome feedback divided by traces for this intent.
+    pub outcome_coverage: f32,
     /// Feedback records that reported task success for this intent.
     pub task_success_count: usize,
     /// Feedback records that reported task failure for this intent.
@@ -549,10 +576,18 @@ pub struct RealSessionEvalArmRow {
     pub trace_count: usize,
     /// Number of feedback records linked to this arm.
     pub feedback_count: usize,
-    /// Feedback records divided by traces for this arm.
+    /// Number of traces for this arm with at least one linked feedback record.
+    pub feedback_trace_count: usize,
+    /// Traces with feedback divided by traces for this arm.
     pub feedback_coverage: f32,
+    /// Feedback records divided by traces for this arm.
+    pub feedback_records_per_trace: f32,
     /// Feedback records with at least one behavioral outcome field.
     pub outcome_feedback_count: usize,
+    /// Traces for this arm with at least one behavioral outcome feedback record.
+    pub outcome_trace_count: usize,
+    /// Traces with behavioral outcome feedback divided by traces for this arm.
+    pub outcome_coverage: f32,
     /// Feedback records that reported task success.
     pub task_success_count: usize,
     /// Feedback records that reported task failure.

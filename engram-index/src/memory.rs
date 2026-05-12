@@ -2023,7 +2023,7 @@ fn build_context_pack(parts: &ContextPackParts<'_>) -> String {
     }
     append_resolution_section(&mut lines, parts.resolution);
     append_repository_section(&mut lines, parts.repository_context);
-    append_hot_context_section(&mut lines, &parts);
+    append_hot_context_section(&mut lines, parts);
     append_memory_section(&mut lines, "Active Decisions", parts.decisions);
     append_memory_section(&mut lines, "Active Rules", parts.rules);
     append_memory_section(&mut lines, "Preferences", parts.preferences);

@@ -295,6 +295,109 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
 }
 
 #[tokio::test]
+async fn real_session_eval_report_separates_trace_coverage_from_feedback_density() {
+    let (telemetry, _) = setup_services().await;
+    let used_memory_id = engram_core::Id::new();
+
+    let trace_with_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some("telemetry_semantics_cleanup_001".to_string()))
+                .with_arm(Some("memoryitem_orient".to_string()))
+                .with_external_session_id(Some("codex://threads/telemetry-cleanup".to_string()))
+                .with_returned_memory_ids(vec![used_memory_id]),
+        )
+        .await
+        .expect("trace with feedback should be recorded");
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some("telemetry_semantics_cleanup_001".to_string()))
+                .with_arm(Some("memoryitem_orient".to_string()))
+                .with_returned_memory_ids(vec![engram_core::Id::new()]),
+        )
+        .await
+        .expect("trace without feedback should be recorded");
+
+    let mut attribution_feedback = AgentFeedback::new(trace_with_feedback.id);
+    attribution_feedback.used_memory_ids = vec![used_memory_id];
+    telemetry
+        .submit_feedback(attribution_feedback)
+        .await
+        .expect("attribution feedback should be accepted");
+
+    let mut outcome_feedback = AgentFeedback::new(trace_with_feedback.id);
+    outcome_feedback.task_success = Some(true);
+    outcome_feedback.bad_memory_used = Some(false);
+    telemetry
+        .submit_feedback(outcome_feedback)
+        .await
+        .expect("outcome feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report_scoped(
+            Some(100),
+            Some("engram"),
+            Some("telemetry_semantics_cleanup_001"),
+            Some("memoryitem_orient"),
+        )
+        .await
+        .expect("scoped report should build");
+
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 2);
+    assert_eq!(report.feedback_trace_count, 1);
+    assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.feedback_records_per_trace, 1.0);
+    assert_eq!(report.memory_judgment_feedback_count, 1);
+    assert_eq!(report.memory_judgment_trace_count, 1);
+    assert_eq!(report.memory_judgment_trace_coverage, 0.5);
+    assert_eq!(report.outcome_feedback_count, 1);
+    assert_eq!(report.outcome_trace_count, 1);
+    assert_eq!(report.outcome_coverage, 0.5);
+    assert_eq!(report.external_session_feedback_count, 2);
+    assert_eq!(report.distinct_external_session_feedback_count, 1);
+    assert_eq!(report.unspecified_external_session_feedback_count, 0);
+
+    let intent_row = report
+        .intents
+        .iter()
+        .find(|row| row.intent == "implement_change")
+        .expect("implement_change row should exist");
+    assert_eq!(intent_row.trace_count, 2);
+    assert_eq!(intent_row.feedback_count, 2);
+    assert_eq!(intent_row.feedback_trace_count, 1);
+    assert_eq!(intent_row.feedback_coverage, 0.5);
+    assert_eq!(intent_row.feedback_records_per_trace, 1.0);
+    assert_eq!(intent_row.outcome_feedback_count, 1);
+    assert_eq!(intent_row.outcome_trace_count, 1);
+    assert_eq!(intent_row.outcome_coverage, 0.5);
+
+    let arm_row = report
+        .arms
+        .iter()
+        .find(|row| row.arm == "memoryitem_orient")
+        .expect("memoryitem_orient arm row should exist");
+    assert_eq!(arm_row.trace_count, 2);
+    assert_eq!(arm_row.feedback_count, 2);
+    assert_eq!(arm_row.feedback_trace_count, 1);
+    assert_eq!(arm_row.feedback_coverage, 0.5);
+    assert_eq!(arm_row.feedback_records_per_trace, 1.0);
+    assert_eq!(arm_row.outcome_feedback_count, 1);
+    assert_eq!(arm_row.outcome_trace_count, 1);
+    assert_eq!(arm_row.outcome_coverage, 0.5);
+
+    assert!(report
+        .recommendations
+        .iter()
+        .any(|recommendation| recommendation.contains("feedback_records_per_trace")));
+}
+
+#[tokio::test]
 async fn real_session_eval_report_tracks_memory_judgment_attribution_gaps() {
     let (telemetry, _) = setup_services().await;
     let scenario_id = "bounded_autonomous_followthrough_006";
