@@ -2623,3 +2623,29 @@ Integration status:
   migration write-apply, deletion, or broad legacy simplification.
 - After integration and restart, use `real_session_eval` to verify the new attribution-quality
   fields on live dogfood traces before starting a larger behavior claim.
+
+Post-restart live verification:
+
+- A Codex restart alone did not refresh the running Engram MCP implementation; the live report
+  initially lacked the three new fields because `/Users/yuval.meiri/.local/bin/engram` and the
+  daemon were still on an older binary.
+- Rebuilt `engram-cli`, installed `target/debug/engram` to
+  `/Users/yuval.meiri/.local/bin/engram`, restarted the daemon on port 8765, and reran
+  `telemetry(action=real_session_eval)`.
+- Filtered BAF006 report now returns `memory_judgment_feedback_count=3`,
+  `memory_judgment_coverage=1.0`, and `unjudged_memory_feedback_count=0`.
+- Project-level report over the recent Engram sample now returns
+  `memory_judgment_feedback_count=9`, `memory_judgment_coverage=1.0`,
+  `unjudged_memory_feedback_count=0`, and `wrong_scope_memory_count=1`.
+- The wrong-scope count came from a `voice-layer` current-plan memory surfaced during this Engram
+  verification and rejected in feedback as wrong-scope.
+
+Follow-up finding:
+
+- The new attribution fields are live and usable.
+- The live check exposed a separate scope-noise signal worth investigating before any larger
+  ranking or hot-path claim: `orient` can still surface at least one unrelated project current-plan
+  memory in an Engram task.
+- Existing `feedback_coverage` semantics can exceed 1.0 for subgroups with multiple feedback
+  records per trace. This is pre-existing behavior and was intentionally preserved by BAF006, but
+  it is another measurement ambiguity to consider in a later, focused telemetry cleanup.

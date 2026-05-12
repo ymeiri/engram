@@ -894,11 +894,14 @@ Proceed in this order from the current checkpoint:
    `memoryitem_orient` advantage; it exposed the need to measure attribution quality explicitly.
 6. Treat BAF005 as confounded by current-plan supersession; fix the protocol with a pre-arm target
    visibility check before relying on underspecified continuation tasks.
-7. Verify the integrated BAF006 attribution-quality telemetry fields in live `real_session_eval`
-   output after restart before making larger behavior claims.
-8. Do not treat BAF006 as support for ranking, hot-path, M6 write-apply, deletion, or broad
+7. Treat post-restart BAF006 live verification as passed only after the installed Engram binary and
+   daemon have been refreshed; a Codex restart alone may leave MCP on an older binary.
+8. Investigate the new scope-noise evidence before making larger behavior claims: an Engram
+   verification orientation surfaced a `voice-layer` current-plan memory that had to be marked
+   wrong-scope.
+9. Do not treat BAF006 as support for ranking, hot-path, M6 write-apply, deletion, or broad
    legacy-simplification changes.
-9. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+10. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
