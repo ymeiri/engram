@@ -633,6 +633,29 @@ impl HarnessService {
                     }
                 }
             }
+            "stop" => {
+                if let Some(service) = services.obligations {
+                    let detection = service
+                        .detect(crate::obligation::ObligationDetectOptions {
+                            cwd: event.cwd.clone(),
+                            prompt: None,
+                            project: project.clone(),
+                            writer: writer.clone(),
+                            write: write_durable && !event.stop_hook_active,
+                            limit: Some(16),
+                        })
+                        .await;
+                    match detection {
+                        Ok(detection) => {
+                            obligations_written += detection.written.len();
+                            warnings.extend(detection.warnings);
+                        }
+                        Err(error) => {
+                            warnings.push(format!("obligation detection failed: {error}"))
+                        }
+                    }
+                }
+            }
             "sessionend" => {
                 if write_durable {
                     if let Some(service) = services.handoff {
@@ -932,7 +955,7 @@ fn hook_additional_context(
                 .to_string(),
         ),
         "stop" => lines.push(
-            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
+            "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
                 .to_string(),
         ),
         "precompact" | "postcompact" => lines.push(
@@ -3146,6 +3169,56 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("open_obligations="));
+    }
+
+    #[tokio::test]
+    async fn hook_event_stop_detects_changed_document_obligations() {
+        let root = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .arg("init")
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        fs::create_dir_all(root.path().join("docs")).unwrap();
+        fs::write(root.path().join("docs/SESSION_FINDINGS.md"), "# Findings\n").unwrap();
+
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let memory = crate::memory::MemoryService::new(db.clone());
+        memory.init_schema().await.unwrap();
+        let obligations = crate::obligation::ObligationService::new(db.clone());
+        obligations.init_schema().await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "Stop".to_string(),
+                    cwd: Some(root.path().display().to_string()),
+                    write_policy: Some("durable".to_string()),
+                    stop_hook_active: false,
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.obligations_written, 1);
+        assert!(outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("obligations_written=1"));
+
+        let doctor = obligations.doctor(Some(8)).await.unwrap();
+        assert_eq!(doctor.open.len(), 1);
+        assert!(doctor.open[0].title.contains("docs/SESSION_FINDINGS.md"));
     }
 
     #[tokio::test]
