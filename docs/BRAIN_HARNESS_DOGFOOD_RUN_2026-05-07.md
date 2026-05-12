@@ -2666,3 +2666,51 @@ Scope-noise follow-up:
 - Remaining telemetry ambiguity: subgroup `feedback_coverage` can still exceed 1.0 when multiple
   feedback records attach to the same trace. Keep that as a separate cleanup; it is not a reason for
   ranking or hot-path changes.
+
+## Scope Noise Live Recheck 001 Pre-Registration: 2026-05-12
+
+Scenario ID: `scope_noise_live_recheck_001`
+
+Purpose: run a live, post-fix diagnostic dogfood sample to see whether explicit `project=engram`
+orientation remains scoped after `f347edf`, especially with recent knowledge commits enabled.
+
+Research question:
+
+- Does live `orient(project=engram, cwd=/Users/yuval.meiri/projects/engram)` avoid surfacing
+  unrelated `voice-layer` current-plan memory or knowledge commits across several realistic
+  intents?
+
+Hypotheses:
+
+- H1: after `f347edf`, explicit Engram orientation returns only Engram-scoped or global/user memory
+  and no wrong-scope memory judgments are needed.
+- H0: at least one live orientation still returns unrelated project memory, requiring
+  `wrong_scope_memory_ids` feedback.
+
+Method:
+
+- Use the installed daemon on port 8765, not only unit tests.
+- Run four live `orient` calls under this scenario: `plan_work`, `resume_session`,
+  `implement_change`, and `verify_decision`.
+- Keep `project=engram`, `cwd=/Users/yuval.meiri/projects/engram`, and recent knowledge commits
+  enabled through the MCP default.
+- Inspect each returned context for `voice-layer`, `Voice Layer`, and unrelated current-plan
+  knowledge commits.
+- Submit feedback for every trace with explicit `used_memory_ids`; use `wrong_scope_memory_ids`
+  only if a returned MemoryItem is actually judged wrong-scope.
+- Score the scenario through `telemetry(action=real_session_eval, scenario_id=...)`.
+
+Success criteria:
+
+- `trace_count=4` or more for the scenario.
+- `feedback_count` equals `trace_count`.
+- `memory_judgment_coverage=1.0`.
+- `wrong_scope_memory_count=0`.
+- `unjudged_memory_feedback_count=0`.
+- No returned context contains unrelated `voice-layer` current-plan guidance.
+
+Limits:
+
+- This is a live diagnostic sample, not a controlled no-memory comparison.
+- It can increase confidence in the scope-noise fix, but it does not justify ranking, graph,
+  obligation hot-path, M6 write-apply, deletion, or broad legacy-simplification changes.
