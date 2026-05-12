@@ -2566,3 +2566,60 @@ Evaluator rubric:
   unrelated untracked file handling still matter.
 - For the treatment arm, score whether `orient` helped preserve the workflow constraints and
   whether feedback includes MemoryItem IDs that actually shaped behavior.
+
+## Bounded Autonomous Follow-Through 006 Score: 2026-05-12
+
+Scenario ID: `bounded_autonomous_followthrough_006`
+
+Inputs:
+
+- No-memory control thread: `codex://threads/019e1b29-d2d2-71c3-90d1-0f16c2892e8f`
+- MemoryItem orient treatment thread: `codex://threads/019e1b2a-2ddc-7d93-a3a2-a6298fd6292f`
+
+Verdict: scoreable, both arms passed, and H1 is not supported. The null is not rejected because the
+no-memory arm also completed the implementation, tests, and commit hygiene successfully. The
+treatment arm produced the stronger patch and should be integrated as the curated implementation,
+but that is an implementation-quality choice rather than evidence that `memoryitem_orient`
+materially improved the agent outcome.
+
+Arm outcomes:
+
+| Arm | Result | Commit | Verification | Notes |
+|---|---|---|---|---|
+| `no_memory` | Pass | `7bace998567da0d57806c4eeed7040902e101172` | `cargo test -p engram-tests --test telemetry_tests`; `git diff --check`; `cargo fmt --all --check` in evaluator rerun | Completed the additive telemetry fields and regression coverage without observed Engram MCP use. |
+| `memoryitem_orient` | Pass | `f022acc9a479ef23f6180c9912150f802d3a55ef` | `cargo test -p engram-tests --test telemetry_tests`; `git diff --check`; `cargo fmt --all --check` in evaluator rerun | Used `orient`, submitted feedback, and produced clearer scoped regression coverage. |
+
+Treatment telemetry evidence:
+
+- Treatment trace: `019e1b2a-9c28-7940-a1bc-e1d7b5244b7c`
+- Treatment feedback: `019e1b35-5cb5-73c0-bb24-1e193f93f77a`
+- Evaluator trace: `019e1b36-c3b1-73e0-bdc1-1548a6069eeb`
+
+Implementation comparison:
+
+- Both arms added `memory_judgment_feedback_count`, `memory_judgment_coverage`, and
+  `unjudged_memory_feedback_count` to `RealSessionEvalReport`.
+- Both arms preserved empty attribution feedback as valid and added a recommendation only when a
+  feedback record is attached to a memory-bearing trace but contains no explicit
+  used/rejected/stale/wrong-scope memory judgment.
+- The treatment patch is preferred for integration because it isolates the attribution predicates
+  and covers scoped report behavior, including out-of-scope feedback that should not affect the
+  report.
+
+Caveats:
+
+- The no-memory arm did not submit optional baseline telemetry, so the comparison is based on
+  transcript, commit, and evaluator verification evidence rather than symmetric telemetry records.
+- Both spawned worktrees left untracked `.codex/` and `AGENTS.md` artifacts, but neither committed
+  them.
+- The treatment feedback recorded a KnowledgeCommit ID in `used_memory_ids` instead of the exact
+  MemoryItem ID returned by `orient`. This is a feedback precision issue to keep measuring, not a
+  task failure.
+
+Next decision:
+
+- Integrate the treatment patch `f022acc9a479ef23f6180c9912150f802d3a55ef`.
+- Do not use BAF006 as justification for `orient` ranking changes, graph/obligation hot-path work,
+  migration write-apply, deletion, or broad legacy simplification.
+- After integration and restart, use `real_session_eval` to verify the new attribution-quality
+  fields on live dogfood traces before starting a larger behavior claim.

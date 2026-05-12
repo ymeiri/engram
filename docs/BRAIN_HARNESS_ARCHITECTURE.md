@@ -540,9 +540,11 @@ Follow-up checkpoint:
 - `claude_rescue_commit_hygiene_001` with Hot Context IDs produced a clean narrow Claude Code
   validation pass for durable preference recall and structured `used_memory_ids`.
 
-Next confidence scenario: `bounded_autonomous_followthrough_006`, a small code-bearing telemetry
-attribution-quality task where success depends on preserving non-obvious Engram workflow
-preferences and safety gates while adding measurement support for feedback attribution gaps.
+`bounded_autonomous_followthrough_006` used a small code-bearing telemetry attribution-quality
+task. Both arms passed, H1 was not supported, and the curated treatment patch is preferred for
+integration because it has stronger scoped regression coverage. The result improves measurement of
+memory-attribution gaps, but it does not justify ranking, hot-path, migration, deletion, or broad
+legacy-simplification changes.
 
 ---
 
@@ -892,9 +894,11 @@ Proceed in this order from the current checkpoint:
    `memoryitem_orient` advantage; it exposed the need to measure attribution quality explicitly.
 6. Treat BAF005 as confounded by current-plan supersession; fix the protocol with a pre-arm target
    visibility check before relying on underspecified continuation tasks.
-7. Run the pre-registered BAF006 attribution-quality telemetry scenario before any ranking,
-   hot-path, M6 write-apply, deletion, or broad legacy-simplification change.
-8. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+7. Integrate the curated BAF006 attribution-quality telemetry patch, then verify the live
+   `real_session_eval` output after restart before making larger behavior claims.
+8. Do not treat BAF006 as support for ranking, hot-path, M6 write-apply, deletion, or broad
+   legacy-simplification changes.
+9. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
