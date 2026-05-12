@@ -453,11 +453,15 @@ Recommended next instrument:
 6. Only then choose between more dogfood, read-only M6 inventory, or a narrowly justified
    implementation change.
 
-BAF004 pre-registration:
+Current next application:
 
-- `bounded_autonomous_followthrough_004` is pre-registered as the next confidence scenario.
-- The work slice is small and code-bearing: make scoped `real_session_eval` reports echo their
-  effective `project`, `scenario_id`, and `arm` filters through `applied_filters`.
-- The prompt intentionally leaves the commit-hygiene preference and safety-gate discipline only
-  partially stated, so the treatment can test whether `orient` preserves non-obvious workflow
-  context rather than merely following a fully specified implementation checklist.
+- `bounded_autonomous_followthrough_004` landed scoped `real_session_eval.applied_filters` and
+  exposed a feedback-attribution gap, but it did not show a material `memoryitem_orient` advantage.
+- `bounded_autonomous_followthrough_005` was confounded by current-plan supersession and should not
+  be used as evidence for ranking or hot-path expansion.
+- The Claude Code Hot Context ID rerun closed one narrow preference-attribution gap by making stable
+  MemoryItem IDs available to feedback, but it does not prove broad cross-harness benefit.
+- `bounded_autonomous_followthrough_006` is pre-registered as the next confidence scenario. The
+  work slice is small and code-bearing: add report-level attribution-quality signals to
+  `RealSessionEvalReport` so future dogfood scoring can see when memory-bearing traces received
+  feedback without explicit used/rejected/stale/wrong-scope memory IDs.

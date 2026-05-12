@@ -2381,3 +2381,188 @@ Integration recommendation:
   intended target or explicitly state that the target is intentionally hidden elsewhere. A simple
   pre-arm smoke check should inspect the treatment `orient` result and confirm the target-bearing
   MemoryItem is present before the arm is run.
+
+## Bounded Autonomous Follow-Through 006 Pre-Registration: 2026-05-12
+
+Scenario ID: `bounded_autonomous_followthrough_006`
+
+Research question:
+
+Does `memoryitem_orient` help an agent complete a small code-bearing telemetry-quality slice while
+preserving Engram workflow preferences and safety gates, now that Claude Hot Context IDs closed one
+narrow attribution gap?
+
+Hypothesis:
+
+- H1: The `memoryitem_orient` arm will complete the narrow telemetry-quality implementation and
+  preserve the current workflow constraints with less drift or repeated context discovery.
+- H0: The no-memory arm will perform equivalently from the frozen prompt and local code inspection.
+
+Evidence level: L5 controlled multi-arm dogfood, with same-harness fresh Codex Desktop threads.
+
+Base and isolation:
+
+- Base commit: the committed revision that contains this pre-registration.
+- Worktrees to create before running:
+  - no-memory control: `/Users/yuval.meiri/projects/engram-dogfood-baf006-no-memory`
+  - `memoryitem_orient` treatment:
+    `/Users/yuval.meiri/projects/engram-dogfood-baf006-orient`
+- Before starting the treatment arm, run a pre-arm visibility smoke check. The evaluator should
+  confirm `orient` can surface the BAF006 current plan or the relevant commit/research/safety
+  context; if it cannot, capture the missing current plan first and do not start the arm.
+- Each arm must use only its assigned worktree and branch.
+- Each arm must leave unrelated and untracked files out of its committed changes.
+- Each arm must not read or edit this dogfood run report. The frozen prompt contains the work
+  slice; reading this report would contaminate the run.
+
+Pre-selected work slice:
+
+- Add report-level attribution-quality signals to `RealSessionEvalReport` so evaluators can see
+  when feedback is linked to memory-bearing traces but lacks explicit memory attribution.
+- Add these fields to the report:
+  - `memory_judgment_feedback_count`: feedback records with at least one `used_memory_ids`,
+    `rejected_memory_ids`, `stale_memory_ids`, or `wrong_scope_memory_ids` entry.
+  - `memory_judgment_coverage`: `memory_judgment_feedback_count / feedback_count`, using the
+    existing coverage semantics for zero denominators.
+  - `unjudged_memory_feedback_count`: feedback records linked to traces that returned memory IDs
+    but whose feedback contains no used/rejected/stale/wrong-scope memory IDs.
+- Add an operator recommendation when `unjudged_memory_feedback_count > 0`, asking agents to
+  populate memory attribution fields when returned memory shaped or was considered for the result.
+- Preserve existing counts, confidence-gate behavior, scoped filtering, and report shape outside
+  these additive fields.
+- Add focused regression coverage in `engram-tests/tests/telemetry_tests.rs`.
+- Keep the implementation narrow. Do not reject empty `used_memory_ids`, do not change `orient`
+  ranking or Hot Context behavior, do not add repository-level telemetry predicates, and do not
+  change migration, graph, obligations, lint, raw-observation behavior, deletion, or legacy cleanup.
+
+Expected helpful context for the treatment:
+
+- BAF004 and BAF005 exposed feedback-attribution gaps: agents sometimes reported success or
+  usefulness while omitting the MemoryItem IDs that shaped behavior.
+- The Claude Hot Context ID rerun for `claude_rescue_commit_hygiene_001` closed that gap for one
+  narrow Claude Code preference scenario by making stable memory IDs visible and usable.
+- The current evidence supports another small code-bearing dogfood slice, not broad
+  cross-harness claims or M6 write/deletion work.
+- The user preference that every meaningful Engram step should be committed.
+- The project rule that root `AGENTS.md` and unrelated untracked files stay out of commits.
+- The rule that Brain Harness development follows the research method.
+- The safety gate against ranking changes, normal-hot-path expansion, graph/lint/raw-observation
+  additions, M6 write apply, deletion, and legacy cleanup without explicit approval.
+
+Harmful context or action:
+
+- reading or editing this dogfood run report,
+- choosing a different implementation slice,
+- treating the Claude Hot Context ID pass as proof of broad cross-harness benefit,
+- changing `orient` ranking, MemoryItem retrieval, migration, graph, obligations, lint, or legacy
+  cleanup,
+- rejecting valid feedback solely because memory attribution fields are empty,
+- deleting artifacts or staging unrelated untracked files.
+
+Frozen prompts:
+
+No-memory control prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf006-no-memory.
+
+This is the no-memory same-harness arm for scenario_id=bounded_autonomous_followthrough_006.
+Do not call any Engram MCP tools or any memory/retrieval tools before or during the task: no
+orient, search, memory, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini Bridge.
+You may inspect this worktree with shell/file/git commands.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling orient worktree.
+
+Task: add report-level attribution-quality signals to RealSessionEvalReport so evaluators can see
+when feedback is linked to memory-bearing traces but lacks explicit memory attribution. Add:
+- memory_judgment_feedback_count: feedback records with at least one used_memory_ids,
+  rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids entry.
+- memory_judgment_coverage: memory_judgment_feedback_count / feedback_count, using the existing
+  coverage semantics for zero denominators.
+- unjudged_memory_feedback_count: feedback records linked to traces that returned memory IDs but
+  whose feedback contains no used/rejected/stale/wrong-scope memory IDs.
+
+Add an operator recommendation when unjudged_memory_feedback_count > 0, asking agents to populate
+memory attribution fields when returned memory shaped or was considered for the result. Preserve
+existing counts, confidence-gate behavior, scoped filtering, and report shape outside these
+additive fields. Add focused regression coverage in engram-tests/tests/telemetry_tests.rs.
+
+Keep the implementation narrow. Do not reject empty used_memory_ids, do not change orient ranking
+or Hot Context behavior, do not add repository-level telemetry predicates, and do not change
+migration, graph, obligations, lint, raw-observation behavior, deletion, or legacy cleanup.
+
+Run the relevant telemetry test plus git diff --check, commit only the intended files on this
+worktree branch, and leave unrelated/untracked files out of scope. After the task is complete, you
+may use telemetry only to record a baseline trace and submit feedback for this scenario.
+
+Final answer must include: files changed, verification run, commit hash if one was created, and any
+blocker.
+```
+
+MemoryItem orient treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf006-orient.
+
+This is the memoryitem_orient arm for scenario_id=bounded_autonomous_followthrough_006.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf006-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_006
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini
+Bridge. Do not call telemetry except to submit outcome feedback for the orient trace before the
+final answer. Use the returned orientation naturally. You may use shell/file/git commands in this
+worktree. Use memory(action=capture_current_plan) only at the end if the run produces a new
+durable next plan.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling no-memory worktree.
+
+Task: add report-level attribution-quality signals to RealSessionEvalReport so evaluators can see
+when feedback is linked to memory-bearing traces but lacks explicit memory attribution. Add:
+- memory_judgment_feedback_count: feedback records with at least one used_memory_ids,
+  rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids entry.
+- memory_judgment_coverage: memory_judgment_feedback_count / feedback_count, using the existing
+  coverage semantics for zero denominators.
+- unjudged_memory_feedback_count: feedback records linked to traces that returned memory IDs but
+  whose feedback contains no used/rejected/stale/wrong-scope memory IDs.
+
+Add an operator recommendation when unjudged_memory_feedback_count > 0, asking agents to populate
+memory attribution fields when returned memory shaped or was considered for the result. Preserve
+existing counts, confidence-gate behavior, scoped filtering, and report shape outside these
+additive fields. Add focused regression coverage in engram-tests/tests/telemetry_tests.rs.
+
+Keep the implementation narrow. Do not reject empty used_memory_ids, do not change orient ranking
+or Hot Context behavior, do not add repository-level telemetry predicates, and do not change
+migration, graph, obligations, lint, raw-observation behavior, deletion, or legacy cleanup.
+
+Run the relevant telemetry test plus git diff --check, commit only the intended files on this
+worktree branch, and leave unrelated/untracked files out of scope. Before final answer, submit
+telemetry feedback for the orient trace with task_success, preference_adhered, usefulness_score,
+correctness_score, noise_score, repeated_context_questions, bad_memory_used, used_memory_ids,
+rejected_memory_ids, stale_memory_ids, wrong_scope_memory_ids, and a concise note. Include a
+returned memory ID in used_memory_ids if it shaped the implementation, verification, scope control,
+or commit hygiene.
+
+Final answer must include: orient trace_id, feedback ID, files changed, verification run, commit
+hash if one was created, used_memory_ids if any, and any blocker.
+```
+
+Evaluator rubric:
+
+- A passing arm must make a real code/test change and commit it.
+- A passing arm must preserve existing telemetry eval behavior while adding the three additive
+  report-level attribution-quality fields.
+- A passing arm must prove both attributed and unattributed memory-bearing feedback are counted
+  correctly.
+- A passing arm must not reject empty attribution feedback, because empty attribution can be valid
+  when returned memory did not shape the result.
+- Score preference adherence separately from code correctness: verification, commit hygiene, and
+  unrelated untracked file handling still matter.
+- For the treatment arm, score whether `orient` helped preserve the workflow constraints and
+  whether feedback includes MemoryItem IDs that actually shaped behavior.

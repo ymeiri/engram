@@ -91,7 +91,7 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
-Research checkpoint, 2026-05-10:
+Research checkpoint, current through 2026-05-12:
 
 - The first matched same-harness dogfood batch is recorded in
   `docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md`.
@@ -105,9 +105,17 @@ Research checkpoint, 2026-05-10:
 - `bounded_autonomous_followthrough_002` fixed those protocol flaws with isolated worktrees and a
   pre-selected doc-only work slice. Both arms passed; no material `memoryitem_orient` advantage was
   observed.
-- The next discriminating evidence step should not be another doc-only task. Use a harder
-  code-bearing follow-through slice before changing `orient`, migration, graph/lint/raw-observation
-  exposure, obligation detection, or legacy deletion.
+- `bounded_autonomous_followthrough_003` and `bounded_autonomous_followthrough_004` were
+  code-bearing telemetry slices. Both arms passed in both scenarios, but neither showed a material
+  `memoryitem_orient` outcome advantage because the prompts carried most decisive context.
+- `bounded_autonomous_followthrough_005` was confounded by current-plan supersession: both arms
+  completed useful narrow work, but the treatment did not receive the intended target-bearing
+  current-plan memory.
+- The Claude Code Hot Context ID rerun closed one narrow preference-attribution gap, but it does
+  not prove broad cross-harness benefit.
+- The next discriminating evidence step remains a harder code-bearing follow-through slice before
+  changing `orient`, migration, graph/lint/raw-observation exposure, obligation detection, or
+  legacy deletion.
 
 ---
 
@@ -523,10 +531,18 @@ Follow-up checkpoint:
 - `bounded_autonomous_followthrough_003` used a code-bearing scoped telemetry-filtering task. Both
   arms passed and the leaner patch landed, but there was still no material outcome advantage for
   `memoryitem_orient`.
+- `bounded_autonomous_followthrough_004` used a code-bearing applied-filter telemetry-reporting
+  task. Both arms passed; the curated implementation landed, but the scenario exposed a feedback
+  attribution gap.
+- `bounded_autonomous_followthrough_005` used an underspecified continuation task. It was
+  scoreable but confounded because the target-bearing current-plan memory had been superseded before
+  the treatment arm ran.
+- `claude_rescue_commit_hygiene_001` with Hot Context IDs produced a clean narrow Claude Code
+  validation pass for durable preference recall and structured `used_memory_ids`.
 
-Next confidence scenario: `bounded_autonomous_followthrough_004`, a small code-bearing telemetry
-reporting task where success depends on preserving non-obvious Engram workflow preferences and
-safety gates that are not fully restated in the task prompt.
+Next confidence scenario: `bounded_autonomous_followthrough_006`, a small code-bearing telemetry
+attribution-quality task where success depends on preserving non-obvious Engram workflow
+preferences and safety gates while adding measurement support for feedback attribution gaps.
 
 ---
 
@@ -872,11 +888,13 @@ Proceed in this order from the current checkpoint:
    so it does not justify broad implementation changes.
 4. Treat BAF003 as a stronger code-bearing pass for the protocol and scoped telemetry fix, but not
    as evidence for `orient` ranking, hot-path, migration, or legacy-simplification changes.
-5. Run the pre-registered BAF004 applied-filter-reporting scenario with the filtered telemetry
-   capability, then decide whether to keep gathering dogfood, run read-only M6
-   inventory/review-export as provisional evidence, or make a narrowly justified implementation
-   change.
-6. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+5. Treat BAF004 as useful telemetry-reporting implementation evidence, but not as a material
+   `memoryitem_orient` advantage; it exposed the need to measure attribution quality explicitly.
+6. Treat BAF005 as confounded by current-plan supersession; fix the protocol with a pre-arm target
+   visibility check before relying on underspecified continuation tasks.
+7. Run the pre-registered BAF006 attribution-quality telemetry scenario before any ranking,
+   hot-path, M6 write-apply, deletion, or broad legacy-simplification change.
+8. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
