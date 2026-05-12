@@ -2714,3 +2714,76 @@ Limits:
 - This is a live diagnostic sample, not a controlled no-memory comparison.
 - It can increase confidence in the scope-noise fix, but it does not justify ranking, graph,
   obligation hot-path, M6 write-apply, deletion, or broad legacy-simplification changes.
+
+## Scope Noise Live Recheck 001 Score: 2026-05-12
+
+Verdict: pass for the narrow live diagnostic. Do not treat this as a controlled benchmark or as
+evidence for unrelated Brain Harness hot-path changes.
+
+Run shape:
+
+- Scenario: `scope_noise_live_recheck_001`
+- Project/cwd: `engram`, `/Users/yuval.meiri/projects/engram`
+- Operation: live MCP `orient`
+- Installed daemon path: the same daemon path used after `f347edf` was installed and restarted
+- Arms judged:
+  - `preregistration`: trace `019e1c63-06c7-70e1-9264-7a1f18929dbf`, feedback
+    `019e1c64-1136-7332-862d-d03fdd4b9faf`
+  - `resume_session_probe`: trace `019e1c64-2961-7f42-8973-efe6e100ca25`, feedback
+    `019e1c66-ee10-7090-96ea-08f45e411779`
+  - `resume_session`: trace `019e1c65-74d3-7bb1-b73a-c3da6c970a1e`, feedback
+    `019e1c65-afa2-7d51-a918-052186c28df6`
+  - `implement_change`: trace `019e1c65-c866-7e41-9016-12be0feb4ede`, feedback
+    `019e1c65-eb84-75c0-9aa2-59b3741e931f`
+  - `verify_decision`: trace `019e1c66-04f4-7540-acb8-5f477a920343`, feedback
+    `019e1c66-2fd0-71a2-bd1f-79b9124921ef`
+
+Protocol note: the pre-registration expected four or more traces and every trace judged. The live
+run produced one extra in-scenario `resume_session_probe` trace. It was judged rather than dropped
+because it used the same scenario, explicit project, and live post-fix orientation path. This should
+be treated as a protocol expansion, not as a clean four-arm controlled run.
+
+Report metrics from `telemetry(action=real_session_eval, project=engram,
+scenario_id=scope_noise_live_recheck_001, limit=50)`:
+
+- `trace_count=5`
+- `feedback_count=5`
+- `feedback_coverage=1.0`
+- `memory_judgment_feedback_count=5`
+- `memory_judgment_coverage=1.0`
+- `unjudged_memory_feedback_count=0`
+- `wrong_scope_memory_count=0`
+- `stale_memory_count=0`
+- `bad_memory_used_count=0`
+- `task_success_count=5`
+- `preference_adhered_count=5`
+- `warning_count=0`
+- `returned_memory_count=94`
+- `used_memory_count=14`
+
+Confidence gate: failed as expected for a small live diagnostic sample. The telemetry report requires
+at least 20 real-session traces and 10 feedback records; this run had five of each.
+
+Scope result:
+
+- All judged traces selected explicit `project=engram`.
+- Recent repository commits were Engram branch commits such as `05b67bc`, `08f26a7`, `f347edf`,
+  `709336e`, and `57dc349`.
+- Recent Memory OS knowledge commits no longer included the unrelated `voice-layer` current-plan
+  knowledge commit that motivated the fix.
+- The word `voice-layer` still appeared inside the Engram current-plan memory as the known prior
+  bug example. That was not counted as wrong-scope because it was not returned as independent
+  `voice-layer` project guidance.
+- The `verify_decision` trace returned graph/obligation/migration-related Engram memories because
+  the prompt explicitly asked whether the evidence justified changes in those areas. That is
+  relevant Engram context, not scope leakage.
+
+Claim update:
+
+- This increases confidence that commit `f347edf` fixed the identified recent-knowledge-commit
+  scope path for explicit Engram orientation.
+- It does not prove ranking quality, Claude Code harness quality, no-memory superiority/inferiority,
+  graph or obligation hot-path readiness, migration apply readiness, or deletion safety.
+- The next high-confidence code direction remains telemetry semantics cleanup: keep the
+  multi-feedback subgroup `feedback_coverage` ambiguity separate from scope correctness, and improve
+  trace joinability by setting `external_session_id` when the host thread/session ID is known.
