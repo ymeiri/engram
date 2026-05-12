@@ -1,7 +1,7 @@
 # Brain Harness Cross-Harness Run Log
 
 Date: 2026-05-11
-Status: Claude Phase 1A in progress; Hot Context fixed commit-hygiene salience behavior, with residual protocol and telemetry-ID gaps
+Status: Claude Phase 1A in progress; Hot Context IDs produced a clean commit-hygiene validation pass
 
 ## Scope
 
@@ -589,3 +589,74 @@ expected commit-hygiene plan. The remaining evidence points to two next
 implementation needs: expose `hot_context_ids` or equivalent compact IDs near
 the top of `orient`, and improve hook/eval handling so disallowed tool attempts
 and malformed feedback are captured as first-class scoring signals.
+
+## Hot Context ID Manual Rerun: `claude_rescue_commit_hygiene_001`
+
+Question: after installing commit `84e799e` and restarting the daemon, do
+top-level `hot_context_ids` close the remaining attribution gap from the
+previous manual terminal run?
+
+Manual validation used a fresh worktree at the current Hot Context ID commit:
+
+| Arm | Branch | Worktree | HEAD |
+|---|---|---|---|
+| `claude_manual_terminal_hot_context_ids` | `yuval.meiri/calib-claude-commit-hygiene-hotids-rerun` | `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-hotids-rerun` | `84e799e2ac723b8111f7ef9454814fde474dacdd` |
+
+Pre-arm smoke:
+
+- Trace: `019e18b8-900c-7073-aba6-a56757603d8e`
+- Result: live `orient` returned
+  `hot_context_ids=["019e03be-a9a5-7db2-848d-eb26ef78bcb5"]`.
+
+Transcript export:
+
+- `/Users/yuval.meiri/projects/engram-calib-claude-commit-hygiene-hotids-rerun/2026-05-12-102145-controlled-engram-calibration-arm.txt`
+
+Telemetry:
+
+- Required orient trace: `019e1b0e-b140-7400-8bcd-f7a6d201e10b`
+- Claude-submitted feedback: `019e1b0f-1c80-7842-8de6-6fd87ee192a6`
+- Feedback fields:
+  - `used_memory_ids=["019e03be-a9a5-7db2-848d-eb26ef78bcb5"]`
+  - `task_success=true`
+  - `preference_adhered=true`
+  - `usefulness_score=5`
+  - `correctness_score=5`
+  - `noise_score=1`
+
+Manual terminal observations:
+
+- Real Claude Code startup hooks fired and injected the Engram session
+  activation contract twice.
+- The transcript shows exactly two Engram calls: the required `orient` call and
+  the required telemetry feedback call.
+- No visible `Read`, shell, git, search, graph, obligations, handoff, or
+  `memory(changes_since)` call occurred during the controlled task.
+- Server-side telemetry confirms a single Claude orient trace with
+  `intent=follow_user_preference`, `scenario_id=claude_rescue_commit_hygiene_001`,
+  and `arm=claude_manual_terminal_hot_context_ids`.
+- The orient trace returned the reviewed commit-hygiene preference
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`.
+- Claude explicitly cited the source as an `orient` Hot Context preference and
+  named the same memory ID.
+- Claude's plan included doc-only scope, one logical documentation topic per
+  pass, explicit exclusion of unrelated user-owned files such as `AGENTS.md`,
+  explicit path staging rather than `git add -A` or `git add .`, and one focused
+  commit after each meaningful documentation step.
+- Claude stated that the Hot Context ID shaped both the unrelated-file rule and
+  the per-step commit cadence, then submitted that exact ID in structured
+  `used_memory_ids`.
+
+Evaluator result: clean validation pass for the commit-hygiene Hot Context ID
+scenario. This rerun closes the previous telemetry-attribution gap: Claude used
+the reviewed preference behaviorally, preserved the unrelated-file constraint,
+and submitted the stable memory ID in structured telemetry. It also avoided the
+previous disallowed read-tool attempt and did not produce malformed feedback.
+
+This remains one narrow Claude Code scenario. It supports the claim that
+`hot_context_ids` fixed this preference-salience and attribution failure, but it
+does not prove broad cross-harness benefit or justify migration writes,
+deletion, or hot-path expansion. The next evidence step should move to a small
+code-bearing dogfood slice where success depends on preserving non-obvious
+Engram workflow preferences and safety gates while doing real implementation
+work.
