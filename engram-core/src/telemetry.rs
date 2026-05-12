@@ -403,6 +403,12 @@ pub struct RealSessionEvalReport {
     pub feedback_count: usize,
     /// Feedback records divided by traces.
     pub feedback_coverage: f32,
+    /// Feedback records with at least one explicit memory attribution judgment.
+    pub memory_judgment_feedback_count: usize,
+    /// Feedback records with memory attribution judgments divided by feedback records.
+    pub memory_judgment_coverage: f32,
+    /// Feedback records for memory-bearing traces that omitted memory attribution judgments.
+    pub unjudged_memory_feedback_count: usize,
     /// Number of distinct intent buckets in the sample.
     pub distinct_intent_count: usize,
     /// Number of distinct operations in the sample.

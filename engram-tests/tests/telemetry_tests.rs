@@ -225,6 +225,9 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
     assert_eq!(report.trace_count, 2);
     assert_eq!(report.feedback_count, 1);
     assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.memory_judgment_feedback_count, 1);
+    assert_eq!(report.memory_judgment_coverage, 1.0);
+    assert_eq!(report.unjudged_memory_feedback_count, 0);
     assert_eq!(report.operation_counts["orient"], 1);
     assert_eq!(report.operation_counts["search"], 1);
     assert_eq!(report.distinct_scenario_count, 1);
@@ -289,6 +292,112 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
         .recommendations
         .iter()
         .any(|recommendation| recommendation.contains("Keep M6 write-apply blocked")));
+}
+
+#[tokio::test]
+async fn real_session_eval_report_tracks_memory_judgment_attribution_gaps() {
+    let (telemetry, _) = setup_services().await;
+    let scenario_id = "bounded_autonomous_followthrough_006";
+    let arm = "memoryitem_orient";
+    let judged_memory_id = engram_core::Id::new();
+    let unjudged_memory_id = engram_core::Id::new();
+    let out_of_scope_memory_id = engram_core::Id::new();
+
+    let judged_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_memory_ids(vec![judged_memory_id]),
+        )
+        .await
+        .expect("judged trace should be recorded");
+    let unjudged_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_memory_ids(vec![unjudged_memory_id]),
+        )
+        .await
+        .expect("unjudged trace should be recorded");
+    let out_of_scope_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram-other".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_memory_ids(vec![out_of_scope_memory_id]),
+        )
+        .await
+        .expect("out-of-scope trace should be recorded");
+    let result_only_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_result_ids(vec!["result-only".to_string()]),
+        )
+        .await
+        .expect("result-only trace should be recorded");
+
+    let mut judged_feedback = AgentFeedback::new(judged_trace.id);
+    judged_feedback.rejected_memory_ids = vec![judged_memory_id];
+    telemetry
+        .submit_feedback(judged_feedback)
+        .await
+        .expect("judged feedback should be accepted");
+
+    let mut unjudged_feedback = AgentFeedback::new(unjudged_trace.id);
+    unjudged_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(unjudged_feedback)
+        .await
+        .expect("unjudged feedback should be accepted");
+
+    let mut out_of_scope_feedback = AgentFeedback::new(out_of_scope_trace.id);
+    out_of_scope_feedback.task_success = Some(false);
+    telemetry
+        .submit_feedback(out_of_scope_feedback)
+        .await
+        .expect("out-of-scope feedback should be accepted");
+
+    let mut result_only_feedback = AgentFeedback::new(result_only_trace.id);
+    result_only_feedback.used_result_ids = vec!["result-only".to_string()];
+    telemetry
+        .submit_feedback(result_only_feedback)
+        .await
+        .expect("result-only feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(100))
+        .await
+        .expect("real-session report should build");
+    assert_eq!(report.feedback_count, 4);
+    assert_eq!(report.memory_judgment_feedback_count, 1);
+    assert_eq!(report.memory_judgment_coverage, 0.25);
+    assert_eq!(report.unjudged_memory_feedback_count, 2);
+    assert!(report
+        .recommendations
+        .iter()
+        .any(|recommendation| recommendation.contains("memory attribution fields")));
+
+    let scoped_report = telemetry
+        .real_session_eval_report_scoped(Some(100), Some("engram"), Some(scenario_id), Some(arm))
+        .await
+        .expect("scoped real-session report should build");
+    assert_eq!(scoped_report.trace_count, 3);
+    assert_eq!(scoped_report.feedback_count, 3);
+    assert_eq!(scoped_report.memory_judgment_feedback_count, 1);
+    assert!((scoped_report.memory_judgment_coverage - (1.0_f32 / 3.0)).abs() < f32::EPSILON);
+    assert_eq!(scoped_report.unjudged_memory_feedback_count, 1);
 }
 
 #[tokio::test]

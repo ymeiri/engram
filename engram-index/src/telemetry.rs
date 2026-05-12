@@ -511,10 +511,14 @@ fn build_real_session_eval_report(
         intents,
         arms,
     };
+    let memory_judgment_feedback_count = count_memory_judgment_feedback(feedback);
+    let unjudged_memory_feedback_count = count_unjudged_memory_feedback(traces, feedback);
     let mut report = report_from_rows(
         sample_limit,
         traces.len(),
         feedback.len(),
+        memory_judgment_feedback_count,
+        unjudged_memory_feedback_count,
         applied_filters,
         rows,
     );
@@ -619,6 +623,8 @@ fn report_from_rows(
     sample_limit: usize,
     trace_count: usize,
     feedback_count: usize,
+    memory_judgment_feedback_count: usize,
+    unjudged_memory_feedback_count: usize,
     applied_filters: RealSessionEvalAppliedFilters,
     rows: ReportRows,
 ) -> RealSessionEvalReport {
@@ -629,6 +635,9 @@ fn report_from_rows(
         trace_count,
         feedback_count,
         feedback_coverage: coverage(feedback_count, trace_count),
+        memory_judgment_feedback_count,
+        memory_judgment_coverage: coverage(memory_judgment_feedback_count, feedback_count),
+        unjudged_memory_feedback_count,
         distinct_intent_count: rows.intents.len(),
         distinct_operation_count: rows.operation_counts.len(),
         unspecified_intent_trace_count: rows.unspecified_intent_trace_count,
@@ -805,6 +814,13 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
                 .to_string(),
         );
     }
+    if report.unjudged_memory_feedback_count > 0 {
+        recommendations.push(
+            "Ask agents to populate memory attribution fields when returned memory shaped or was \
+             considered for the result."
+                .to_string(),
+        );
+    }
     if report.warning_count > 0 {
         recommendations.push(
             "Inspect trace warnings before treating latency or retrieval quality as healthy."
@@ -827,6 +843,38 @@ fn sum_rows(
     value: impl Fn(&RealSessionEvalIntentRow) -> usize,
 ) -> usize {
     rows.iter().map(value).sum()
+}
+
+fn count_memory_judgment_feedback(feedback: &[AgentFeedback]) -> usize {
+    feedback
+        .iter()
+        .filter(|item| has_memory_judgment(item))
+        .count()
+}
+
+fn count_unjudged_memory_feedback(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> usize {
+    let memory_bearing_trace_ids = traces
+        .iter()
+        .filter(|trace| !trace.returned_memory_ids.is_empty())
+        .map(|trace| trace.id)
+        .collect::<HashSet<_>>();
+
+    feedback
+        .iter()
+        .filter(|item| {
+            memory_bearing_trace_ids.contains(&item.trace_id) && !has_memory_judgment(item)
+        })
+        .count()
+}
+
+fn has_memory_judgment(feedback: &AgentFeedback) -> bool {
+    !feedback.used_memory_ids.is_empty()
+        || !feedback.rejected_memory_ids.is_empty()
+        || !feedback.stale_memory_ids.is_empty()
+        || !feedback.wrong_scope_memory_ids.is_empty()
 }
 
 fn add_outcome_counts_to_intent_row(row: &mut RealSessionEvalIntentRow, feedback: &AgentFeedback) {
