@@ -352,12 +352,12 @@ That file contained the same target facts the live benchmark intended to hide.
 2026-05-12 sealed-target update: `live_blind_continuity_002` repaired the target-visibility leak
 for a narrow live run. `no_memory` and `static_instructions` both marked the current plan
 underdetermined, while `memoryitem_orient` recovered the sealed current plan, evidence gate, blocked
-actions, and provenance-scoring preference from Engram. The remaining failure is telemetry
-attribution quality: the current-plan MemoryItem shaped the treatment answer, but the participating
-agent could not submit that MemoryItem ID in `used_memory_ids`.
+actions, and provenance-scoring preference from Engram. Manual transcript inspection is sufficient
+to close this behavioral checkpoint. The remaining attribution gap is instrumentation backlog:
+telemetry underreported the current-plan MemoryItem that made the answer possible.
 
-Current gate: fix or explicitly account for current-plan MemoryItem attribution before scaling the
-sealed-target benchmark. Do not make ranking, hot-path, migration, deletion, or legacy-simplification
+Current gate: move to the next product-facing Brain Harness slice while keeping attribution repair
+as measurement backlog. Do not make ranking, hot-path, migration, deletion, or legacy-simplification
 claims from one sealed live run.
 
 ---

@@ -916,10 +916,12 @@ Proceed in this order from the current checkpoint:
 12. Treat `live_blind_continuity_002` as narrow positive evidence for sealed target-fact recovery:
     both baselines missed the hidden current plan, while `memoryitem_orient` recovered it from
     Engram.
-13. Do not treat `live_blind_continuity_002` as a clean full pass until current-plan MemoryItem
-    attribution is fixed or explicitly accounted for; the treatment answer used the current-plan
-    item but could not submit that item ID in `used_memory_ids`.
-14. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+13. Treat the `live_blind_continuity_002` current-plan attribution gap as instrumentation backlog,
+    not a blocker for product work. Manual transcript inspection closed the behavioral checkpoint.
+14. Move next to a product-facing Brain Harness capability. The highest-confidence gap is lifecycle
+    follow-through for newly created or updated project documents: agents should ingest, register,
+    record, or explicitly skip those documents before final response.
+15. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

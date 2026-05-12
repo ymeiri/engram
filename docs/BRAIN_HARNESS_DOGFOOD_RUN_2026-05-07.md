@@ -3487,20 +3487,28 @@ Hypothesis H2, "target facts leak through baseline-visible repository context", 
 this run. Baseline recovery did not include the sealed target facts, and a prior marker search found
 no repository hits before arms were launched.
 
-This is not a clean full benchmark pass because the telemetry attribution contract failed for the
-current-plan MemoryItem. The behavior supports Engram continuity; the telemetry still underreports
-the MemoryItem that made the answer possible.
+The behavior supports Engram continuity for this narrow sealed-target task. Manual transcript
+inspection is sufficient to close the behavioral checkpoint. The telemetry attribution contract is
+still imperfect: it underreports the current-plan MemoryItem that made the answer possible.
 
-### Next Gate
+### Instrumentation Backlog
 
-Before scaling sealed-target runs, fix or explicitly account for current-plan attribution:
+Before relying on automated dashboards or large unattended sealed-target batches, fix or explicitly
+account for current-plan attribution:
 
 - ensure `orient` exposes active current-plan MemoryItem IDs in a field agents can reliably submit
   in `used_memory_ids`; or
 - provide a dedicated feedback helper that lets an agent mark "active current-plan item used" without
   copying IDs from prose.
 
-After that attribution fix, rerun a sealed live batch with the same target-visibility discipline and
-with enough samples to approach the real-session telemetry confidence gate. Do not use this single
-run to justify orient hot-path expansion, graph/obligation/lint/raw-observation default retrieval,
-M6 write/apply, deletion, or legacy cleanup.
+This is instrumentation work, not a product blocker for the next Brain Harness slice.
+
+### Next Product Gate
+
+Move forward to a product-facing Brain Harness capability while keeping the same claim boundary. The
+strongest queued product-facing gap is agent lifecycle follow-through: harnesses can expose memory
+tools, but they still do not reliably ensure that newly created or updated project documents are
+ingested, registered, recorded, or explicitly skipped before the final response.
+
+Do not use this single run to justify orient hot-path expansion,
+graph/obligation/lint/raw-observation default retrieval, M6 write/apply, deletion, or legacy cleanup.
