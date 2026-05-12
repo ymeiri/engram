@@ -2824,3 +2824,51 @@ Claim boundary:
   beats no-memory or static instruction files.
 - The next evidence step remains a discriminative continuity benchmark design after this code path
   is installed and live-smoked.
+
+## Discriminative Continuity Benchmark 001: 2026-05-12
+
+Purpose: add an executable benchmark fixture for the next evidence gate after telemetry semantics
+cleanup. The target is not a broad live claim; it is a deterministic check that the benchmark
+instrument can distinguish `memory_items` from `no_memory` and `static_instructions` when the
+scenario depends on target MemoryItems.
+
+Implemented fixture:
+
+- `discriminative_continuity_benchmark_separates_memoryitems_from_static_instructions`
+  creates two target MemoryItems:
+  - a current-plan decision saying telemetry semantics cleanup is complete and the next action is a
+    discriminative continuity benchmark, with graph/obligation/lint/raw-observation hot-path,
+    M6 write/apply, deletion, and legacy cleanup still blocked;
+  - the durable user preference to commit every meaningful Engram step while keeping unrelated
+    user-owned files such as root `AGENTS.md` out of commits unless explicitly requested.
+- It scores two continuity scenarios:
+  - `resume_continuity_discriminative_001`
+  - `follow_preference_discriminative_001`
+- Each scenario has three arms:
+  - `no_memory`
+  - `static_instructions`
+  - `memory_items`
+
+Passing condition:
+
+- both baseline arms must record the expected target MemoryItem as missing context;
+- the `memory_items` arm must retrieve and use the expected MemoryItem without repeated context
+  questions or bad-memory use;
+- the generated telemetry report must show complete trace-level feedback and outcome coverage using
+  the cleaned-up fields: `feedback_trace_count`, `feedback_records_per_trace`,
+  `outcome_trace_count`, and `outcome_coverage`.
+
+Focused validation:
+
+- `cargo test -p engram-tests --test brain_harness_eval_tests \
+  discriminative_continuity_benchmark_separates_memoryitems_from_static_instructions -- --nocapture`
+  passed.
+
+Claim boundary:
+
+- This is deterministic fixture evidence that the benchmark protocol can represent a discriminative
+  continuity task and verify telemetry attribution quality.
+- It is not yet live dogfood evidence that Codex Desktop or Claude Code will behave better with
+  Engram in unconstrained runs.
+- The next evidence step should be either the full `brain_harness_eval_tests` suite plus hygiene
+  checks, or a pre-registered live dogfood run that reuses the same target facts and arms.

@@ -338,9 +338,15 @@ Current update: BAF002 showed both arms could preserve commit hygiene and scope 
 narrow doc-only work slice, so it did not repeat the earlier preference advantage as a meaningful
 arm difference.
 
-Next gate: repeat the preference advantage inside a harder bounded work slice where the preference
-must constrain a non-trivial implementation decision, not only a direct preference question or a
-fully specified documentation edit.
+2026-05-12 update: the deterministic
+`discriminative_continuity_benchmark_separates_memoryitems_from_static_instructions` fixture now
+models both resume-current-plan continuity and durable preference recall against `no_memory` and
+`static_instructions` baselines, while checking trace-level feedback/outcome coverage. This validates
+the benchmark instrument shape; it does not replace live dogfood evidence.
+
+Next gate: run a live or cross-harness version of the same discriminative continuity target, or use
+the fixture to drive a bounded code-bearing work slice where the preference constrains a non-trivial
+implementation decision.
 
 ---
 

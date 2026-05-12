@@ -906,7 +906,10 @@ Proceed in this order from the current checkpoint:
    wrong-scope feedback before changing ranking or the hot path.
 9. Do not treat BAF006 as support for ranking, hot-path, M6 write-apply, deletion, or broad
    legacy-simplification changes.
-10. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+10. Treat the 2026-05-12 discriminative continuity fixture as benchmark-instrument validation, not
+    live behavior evidence: it proves the eval can compare `no_memory`, `static_instructions`, and
+    `memory_items` against known target MemoryItems while checking telemetry attribution quality.
+11. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
