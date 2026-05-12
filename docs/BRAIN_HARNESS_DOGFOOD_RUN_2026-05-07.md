@@ -2616,9 +2616,9 @@ Caveats:
   MemoryItem ID returned by `orient`. This is a feedback precision issue to keep measuring, not a
   task failure.
 
-Next decision:
+Integration status:
 
-- Integrate the treatment patch `f022acc9a479ef23f6180c9912150f802d3a55ef`.
+- Integrated the treatment patch as `a41b2f9` on `yuval.meiri/memory-os-phase0`.
 - Do not use BAF006 as justification for `orient` ranking changes, graph/obligation hot-path work,
   migration write-apply, deletion, or broad legacy simplification.
 - After integration and restart, use `real_session_eval` to verify the new attribution-quality

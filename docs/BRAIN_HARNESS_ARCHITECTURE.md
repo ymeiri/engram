@@ -541,8 +541,8 @@ Follow-up checkpoint:
   validation pass for durable preference recall and structured `used_memory_ids`.
 
 `bounded_autonomous_followthrough_006` used a small code-bearing telemetry attribution-quality
-task. Both arms passed, H1 was not supported, and the curated treatment patch is preferred for
-integration because it has stronger scoped regression coverage. The result improves measurement of
+task. Both arms passed, H1 was not supported, and the curated treatment patch was integrated
+because it has stronger scoped regression coverage. The result improves measurement of
 memory-attribution gaps, but it does not justify ranking, hot-path, migration, deletion, or broad
 legacy-simplification changes.
 
@@ -894,8 +894,8 @@ Proceed in this order from the current checkpoint:
    `memoryitem_orient` advantage; it exposed the need to measure attribution quality explicitly.
 6. Treat BAF005 as confounded by current-plan supersession; fix the protocol with a pre-arm target
    visibility check before relying on underspecified continuation tasks.
-7. Integrate the curated BAF006 attribution-quality telemetry patch, then verify the live
-   `real_session_eval` output after restart before making larger behavior claims.
+7. Verify the integrated BAF006 attribution-quality telemetry fields in live `real_session_eval`
+   output after restart before making larger behavior claims.
 8. Do not treat BAF006 as support for ranking, hot-path, M6 write-apply, deletion, or broad
    legacy-simplification changes.
 9. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.

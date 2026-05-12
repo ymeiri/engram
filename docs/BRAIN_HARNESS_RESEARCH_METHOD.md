@@ -461,8 +461,8 @@ Current next application:
   be used as evidence for ranking or hot-path expansion.
 - The Claude Code Hot Context ID rerun closed one narrow preference-attribution gap by making stable
   MemoryItem IDs available to feedback, but it does not prove broad cross-harness benefit.
-- `bounded_autonomous_followthrough_006` is scoreable and both arms passed. The treatment patch is
-  preferred for integration because it gives stronger scoped regression coverage, but H1 is not
-  supported because the no-memory arm also completed the work. The result should be used to improve
-  measurement quality, not to justify ranking, hot-path, migration, deletion, or broad
-  legacy-simplification changes.
+- `bounded_autonomous_followthrough_006` is scoreable and both arms passed. The treatment patch was
+  integrated because it gives stronger scoped regression coverage, but H1 is not supported because
+  the no-memory arm also completed the work. The result should be used to improve measurement
+  quality, not to justify ranking, hot-path, migration, deletion, or broad legacy-simplification
+  changes.
