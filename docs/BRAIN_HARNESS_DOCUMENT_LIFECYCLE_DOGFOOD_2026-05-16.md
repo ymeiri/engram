@@ -93,3 +93,68 @@ The next evidence step should validate the same lifecycle on a non-temporary pro
 main Engram checkout, resolving the obligation by recording/registering/indexing the document rather
 than skipping it. If that stays low-friction, the lifecycle can become the default Codex document
 follow-through practice before re-enabling Claude hooks.
+
+## Main Checkout Follow-Up
+
+Status: passed.
+
+This report itself is now the non-temporary project document for the next lifecycle check. The
+resolution was stronger than the scratch run:
+
+- detect the changed report as a durable document,
+- surface the report obligation through scoped doctor,
+- register or index the report where supported by the current tools,
+- record the result as durable Memory OS evidence,
+- resolve the document obligation without using `skipped_with_reason`.
+
+Detection wrote the report obligation:
+
+```text
+019e323a-233a-7a62-856a-b18bf3dd67ac
+```
+
+It also wrote a commit-preference obligation, which was resolved after checking the reviewed
+project preference memory:
+
+```text
+019e03be-a9a5-7db2-848d-eb26ef78bcb5
+```
+
+The report was registered in the knowledge registry:
+
+```text
+019e323a-70d3-7fc0-a749-d32b20e6aea9
+```
+
+`docs(index)` also succeeded for this file:
+
+```json
+{ "documents_indexed": 1, "chunks_created": 1, "warnings": [] }
+```
+
+The follow-up was recorded as Memory OS evidence:
+
+```text
+019e323a-9a8c-79d1-8ad9-fd461dbeb257
+```
+
+The report obligation was resolved as `knowledge_registered`. A scoped doctor call for the main
+checkout then returned:
+
+```json
+{ "open": [], "warnings": [] }
+```
+
+Because writing this section is itself another durable document edit, a final validation detect pass
+created one more report obligation:
+
+```text
+019e323b-2d6d-7210-bdc3-2a7621607d50
+```
+
+That follow-up obligation was handled the same way: re-index the final report content and resolve it
+as an indexed document. This confirms the behavior, but it also exposes a loop-avoidance design point
+for future work: final-response obligation checks should avoid repeatedly creating new obligations
+for the same already-addressed document update within one turn.
+
+The pre-existing untracked root `AGENTS.md` remained untouched and out of the task commit.
