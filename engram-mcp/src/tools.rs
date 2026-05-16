@@ -8076,7 +8076,11 @@ pub async fn obligations_new(
         }
         "doctor" => {
             let report = service
-                .doctor(request.limit)
+                .doctor(
+                    request.project.as_deref(),
+                    request.cwd.as_deref(),
+                    request.limit,
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())

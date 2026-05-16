@@ -171,6 +171,53 @@ async fn test_mcp_obligations_detect_write_and_doctor() {
 }
 
 #[tokio::test]
+async fn test_mcp_obligations_doctor_scopes_to_project_and_cwd() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+    let docs_dir = repo.path().join("docs");
+    fs::create_dir_all(&docs_dir).expect("docs dir should be created");
+    fs::write(docs_dir.join("current.md"), "# Current\n").expect("doc should be written");
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "git_status",
+        "docs/current.md",
+        "Review current Engram note",
+    )
+    .await;
+    add_document_obligation(
+        &state,
+        "other-project",
+        "git_status",
+        "docs/current.md",
+        "Review other project note",
+    )
+    .await;
+
+    let mut doctor_request = request("doctor");
+    doctor_request.project = Some("engram".to_string());
+    doctor_request.cwd = Some(repo.path().display().to_string());
+    let doctor_response = tools::obligations_new(&state, doctor_request)
+        .await
+        .expect("scoped doctor should work");
+    let doctor = parse_json(&doctor_response);
+    let open = doctor["open"].as_array().unwrap();
+
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0]["title"], "Review current Engram note");
+    assert!(doctor["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|warning| warning
+            .as_str()
+            .unwrap()
+            .contains("Review current Engram note")));
+}
+
+#[tokio::test]
 async fn test_mcp_obligations_add_resolve_and_skip() {
     let state = setup_tool_state().await;
 

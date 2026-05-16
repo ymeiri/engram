@@ -8168,7 +8168,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 ObligationCommands::Doctor { limit, json } => {
-                    let report = service.doctor(limit).await?;
+                    let report = service.doctor(None, None, limit).await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {

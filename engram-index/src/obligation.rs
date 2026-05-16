@@ -216,11 +216,22 @@ impl ObligationService {
     }
 
     /// Return open-obligation diagnostics.
-    pub async fn doctor(&self, limit: Option<usize>) -> IndexResult<ObligationDoctorReport> {
-        let open = self
-            .repo
-            .list_obligations(Some(AgentObligationStatus::Open), limit)
-            .await?;
+    pub async fn doctor(
+        &self,
+        project: Option<&str>,
+        cwd: Option<&str>,
+        limit: Option<usize>,
+    ) -> IndexResult<ObligationDoctorReport> {
+        let mut open = if project.is_some() || cwd.is_some() {
+            self.list_open_for_context(project, cwd).await?
+        } else {
+            self.repo
+                .list_obligations(Some(AgentObligationStatus::Open), None)
+                .await?
+        };
+        if let Some(limit) = limit {
+            open.truncate(limit);
+        }
         let warnings = open
             .iter()
             .map(|obligation| {

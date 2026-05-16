@@ -3246,7 +3246,7 @@ mod tests {
             .unwrap()
             .contains("open_obligations=1"));
 
-        let doctor = obligations.doctor(Some(8)).await.unwrap();
+        let doctor = obligations.doctor(None, None, Some(8)).await.unwrap();
         assert!(doctor.open.len() > 1);
         assert!(doctor
             .open
