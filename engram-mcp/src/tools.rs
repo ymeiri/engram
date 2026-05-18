@@ -8047,7 +8047,7 @@ pub async fn obligations_new(
         }
         "resolve" => {
             let id = parse_id(&required(&request.id, "id", "resolve")?, "obligation ID")?;
-            let resolution = AgentObligationResolution::new(
+            let mut resolution = AgentObligationResolution::new(
                 AgentObligationResolutionKind::parse(&required(
                     &request.resolution,
                     "resolution",
@@ -8056,6 +8056,9 @@ pub async fn obligations_new(
                 required(&request.summary, "summary", "resolve")?,
                 request.actor.as_deref().unwrap_or("agent"),
             );
+            for evidence in request.evidence {
+                resolution = resolution.with_evidence(parse_evidence(evidence)?);
+            }
             let obligation = service
                 .resolve(id, resolution)
                 .await

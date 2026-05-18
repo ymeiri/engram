@@ -251,14 +251,27 @@ async fn test_mcp_obligations_detect_is_content_idempotent_after_resolution() {
     resolve.id = Some(first_id);
     resolve.resolution = Some("indexed_document".to_string());
     resolve.summary = Some("Indexed the report.".to_string());
+    resolve.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "review:report-indexed".to_string(),
+        summary: Some("caller supplied resolution evidence".to_string()),
+        excerpt: None,
+    }];
     let resolved_response = tools::obligations_new(&state, resolve)
         .await
         .expect("resolve should work");
     let resolved = parse_json(&resolved_response);
-    assert!(resolved["resolution"]["evidence"][0]["summary"]
-        .as_str()
-        .unwrap()
-        .contains("document_content_fingerprint=git-sha1:"));
+    let resolution_evidence = resolved["resolution"]["evidence"].as_array().unwrap();
+    assert!(resolution_evidence
+        .iter()
+        .any(|evidence| evidence["summary"].as_str().unwrap()
+            == "caller supplied resolution evidence"));
+    assert!(resolution_evidence
+        .iter()
+        .any(|evidence| evidence["summary"]
+            .as_str()
+            .unwrap()
+            .contains("document_content_fingerprint=git-sha1:")));
 
     let same_response = tools::obligations_new(&state, detect())
         .await
@@ -311,6 +324,12 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
     resolve.resolution = Some("indexed_document".to_string());
     resolve.summary = Some("Indexed the document.".to_string());
     resolve.actor = Some("agent".to_string());
+    resolve.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "review:docs-example-indexed".to_string(),
+        summary: Some("resolver preserved this evidence".to_string()),
+        excerpt: Some("indexed docs/example.md".to_string()),
+    }];
     let resolve_response = tools::obligations_new(&state, resolve)
         .await
         .expect("resolve should work");
@@ -318,6 +337,22 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
     assert_eq!(resolved["id"], id);
     assert_eq!(resolved["status"], "resolved");
     assert_eq!(resolved["resolution"]["kind"], "indexed_document");
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["kind"],
+        "manual_review"
+    );
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["target"],
+        "review:docs-example-indexed"
+    );
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["summary"],
+        "resolver preserved this evidence"
+    );
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["excerpt"],
+        "indexed docs/example.md"
+    );
 
     let mut add_second = with_writer(request("add"));
     add_second.project = Some("engram".to_string());
