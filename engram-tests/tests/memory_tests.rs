@@ -949,6 +949,14 @@ async fn test_mcp_orient_returns_context_packet() {
         json["brain_loop"]["top_items"][0]["trust"]["memory_id"],
         json["active_decisions"][0]["id"]
     );
+    assert_eq!(
+        json["used_memory_candidate_ids"][0],
+        json["brain_loop"]["top_items"][0]["id"]
+    );
+    assert!(json["context_pack"]
+        .as_str()
+        .unwrap()
+        .contains("used_memory_candidate_ids"));
     assert!(json["memory_cursor"]["timestamp"].is_string());
 }
 
@@ -1175,6 +1183,11 @@ async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
         json["hot_context_items"][0]["id"].as_str(),
         Some(preference_id.as_str())
     );
+    assert!(json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id.as_str() == Some(preference_id.as_str())));
     assert!(context_pack.contains(&format!("Memory {preference_id}:")));
     assert_eq!(
         json["brain_loop"]["top_items"][0]["title"],

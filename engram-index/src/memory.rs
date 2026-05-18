@@ -348,6 +348,8 @@ pub struct OrientationPacket {
     pub hot_context_ids: Vec<Id>,
     /// Compact hot-context memory items surfaced before the large context pack.
     pub hot_context_items: Vec<BrainLoopItem>,
+    /// Memory IDs selected by orient as candidates for telemetry `used_memory_ids`.
+    pub used_memory_candidate_ids: Vec<Id>,
     /// Markdown context pack.
     pub context_pack: String,
     /// Brain Loop v1 projection generated from the scoped orient result.
@@ -1239,7 +1241,6 @@ impl MemoryService {
         };
         let hot_context_items = build_hot_context_items(&context_pack_parts);
         let hot_context_ids = hot_context_items.iter().map(|item| item.id).collect();
-        let context_pack = build_context_pack(&context_pack_parts);
         let brain_loop = build_brain_loop(BrainLoopParts {
             scope: &scope,
             resolution: &resolution,
@@ -1254,6 +1255,8 @@ impl MemoryService {
             review_needed: &relevant_review,
             ambiguities: &ambiguities,
         });
+        let used_memory_candidate_ids = used_memory_candidate_ids(&brain_loop, &hot_context_items);
+        let context_pack = build_context_pack(&context_pack_parts, &used_memory_candidate_ids);
 
         let returned_memory_ids = returned_orientation_memory_ids(&[
             &active_decisions,
@@ -1300,6 +1303,7 @@ impl MemoryService {
             memory_cursor: cursor,
             hot_context_ids,
             hot_context_items,
+            used_memory_candidate_ids,
             context_pack,
             brain_loop,
             active_decisions,
@@ -1959,6 +1963,19 @@ fn brain_loop_item(item: &MemoryItem, reason: &str) -> BrainLoopItem {
     }
 }
 
+fn used_memory_candidate_ids(
+    brain_loop: &BrainLoop,
+    hot_context_items: &[BrainLoopItem],
+) -> Vec<Id> {
+    let mut ids = Vec::new();
+    for item in hot_context_items.iter().chain(&brain_loop.top_items) {
+        if !ids.contains(&item.id) {
+            ids.push(item.id);
+        }
+    }
+    ids
+}
+
 fn brain_loop_compiled_context(
     scope: &str,
     resolution: &OrientationResolution,
@@ -2012,7 +2029,7 @@ fn compact_brain_loop_summary(content: &str) -> String {
     format!("{summary}...")
 }
 
-fn build_context_pack(parts: &ContextPackParts<'_>) -> String {
+fn build_context_pack(parts: &ContextPackParts<'_>, used_memory_candidate_ids: &[Id]) -> String {
     let mut lines = vec![
         format!("# Context Pack: {}", parts.scope),
         String::new(),
@@ -2020,6 +2037,16 @@ fn build_context_pack(parts: &ContextPackParts<'_>) -> String {
     ];
     if let Some(commit_id) = parts.cursor.commit_id {
         lines.push(format!("- Latest knowledge commit: {commit_id}"));
+    }
+    if !used_memory_candidate_ids.is_empty() {
+        let ids = used_memory_candidate_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push(format!(
+            "- used_memory_candidate_ids: {ids}; submit the subset that shaped your answer in telemetry used_memory_ids."
+        ));
     }
     append_resolution_section(&mut lines, parts.resolution);
     append_repository_section(&mut lines, parts.repository_context);
@@ -3661,6 +3688,16 @@ mod tests {
                 && item.title == "Global preference"
                 && item.trust.memory_id == item.id
         }));
+        assert_eq!(
+            packet.used_memory_candidate_ids,
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>()
+        );
+        assert!(packet.context_pack.contains("used_memory_candidate_ids"));
     }
 
     #[tokio::test]
