@@ -3512,3 +3512,85 @@ ingested, registered, recorded, or explicitly skipped before the final response.
 
 Do not use this single run to justify orient hot-path expansion,
 graph/obligation/lint/raw-observation default retrieval, M6 write/apply, deletion, or legacy cleanup.
+
+## BAF007 Pre-Registration: Sealed Memory-Obligate Code Slice
+
+Status: pre-registered, sealed target not repo-visible before scoring.
+
+Scenario ID: `bounded_autonomous_followthrough_007`
+
+Base commit: `d9925b96013e8b942a764e5a8a179b48130fcc74`
+
+Intent: `implement_change`
+
+Arms:
+
+- `no_memory`
+- `static_instructions`
+- `memoryitem_orient`
+
+### Research Question
+
+Can Brain Loop v1 let an agent recover and act on a prior-session, code-bearing Engram work target
+that is not available from repository-visible context, while baseline arms correctly treat the task
+as underdetermined?
+
+### Hypotheses
+
+- H1: `memoryitem_orient` retrieves the sealed target MemoryItem, uses it to complete a small
+  code-bearing Engram change, verifies the change, commits only intended files, and submits accurate
+  telemetry attribution.
+- H0: `memoryitem_orient` does not materially outperform baselines, either because it misses the
+  target, the baselines recover enough context without memory, or all arms reasonably mark the task
+  underdetermined.
+- H2: the target leaks through repository-visible context, recent git history, static instructions,
+  or prompt wording; if so, the run is invalid and must not be used as evidence for memory benefit.
+
+### Sealing Rules
+
+The exact target marker and target facts are held only in a project-scoped Engram MemoryItem before
+arm execution. They are intentionally not reproduced in this report, the arm prompts, or any
+repo-visible document until after scoring.
+
+Before launching arms, the evaluator must:
+
+- search the repository-visible tree for exact target phrases;
+- search recent git history for exact target phrases;
+- run a pre-arm `orient` smoke check with `arm=prearm_smoke`;
+- proceed only if the target MemoryItem is visible to `orient` and absent from repo-visible context.
+
+### Arm Rules
+
+Baseline arms must not call Engram tools or inspect sibling worktrees. They should answer
+underdetermined if the sealed target is not recoverable from the prompt and allowed repository
+context.
+
+The treatment arm must call `orient` once with this scenario ID and `arm=memoryitem_orient`, preserve
+the returned trace ID, use any relevant returned MemoryItem naturally, and submit telemetry feedback
+with `used_memory_ids` before completion.
+
+All implementation-bearing arms must start from isolated clean worktrees at the same base commit.
+
+### Scoring
+
+The treatment passes only if it:
+
+- retrieves and uses the sealed target MemoryItem;
+- implements the target without expanding `orient`, running M6, deleting data, re-enabling Claude
+  hooks, or broadening ranking/migration scope;
+- runs the relevant validation;
+- commits only intended tracked files;
+- leaves unrelated user-owned files untouched;
+- submits complete feedback for the treatment trace.
+
+Baselines pass as controls only if they do not recover the sealed target and do not fabricate it.
+
+If any baseline recovers the target from allowed non-memory context, score the run as a protocol
+leak, not as Brain Harness evidence.
+
+### Claim Boundary
+
+A clean BAF007 pass supports only this narrow claim: Engram can carry a sealed, prior-session
+code-bearing target through `orient` into a fresh agent run. It does not justify hot-path expansion,
+graph/obligation/lint/raw-observation default retrieval, M6 write/apply, deletion, legacy cleanup,
+or Claude hook re-enablement.
