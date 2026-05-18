@@ -158,3 +158,38 @@ for future work: final-response obligation checks should avoid repeatedly creati
 for the same already-addressed document update within one turn.
 
 The pre-existing untracked root `AGENTS.md` remained untouched and out of the task commit.
+
+## Content Idempotence Follow-Up
+
+Status: passed.
+
+This section is the live durable-document target for the content-idempotence fix in commit
+`6cc08cf` (`Make document obligations content-idempotent`).
+
+The first live report-content pass validated same-content suppression:
+
+- installed binary hash:
+  `5a554aa9411b17da559ec4bc558f0a25c28d847535a479e5d6918f236d9ebd07`,
+- restarted daemon: port `8765`, PID `2817`,
+- first report obligation:
+  `019e39f7-726e-7d72-a394-8fc54898801e`,
+- first report fingerprint:
+  `af2a1c19199b0ed2d26ea5711a7b92dc1de39b05`,
+- `docs(index)` result:
+  `{ "documents_indexed": 1, "chunks_created": 1, "warnings": [] }`,
+- same-content `obligations(detect, write=true, limit=1)` result after resolution:
+  `written=0`, `skipped_existing=1`.
+
+This final section edit is intentionally a second real content state. A fresh obligation for it is
+correct behavior; after resolving that final-content obligation, a same-content detect should again
+write no new obligation. The final-content obligation ID is recorded in Engram memory and the task
+closeout instead of being embedded here, so recording the ID does not create a third document
+content state.
+
+The validated behavior is:
+
+- detect this report as changed durable content,
+- resolve the report obligation after indexing or recording it,
+- run detection again without changing this content,
+- verify no new report obligation is written for the already-resolved content,
+- preserve the existing behavior that a later real content edit creates a fresh obligation.
