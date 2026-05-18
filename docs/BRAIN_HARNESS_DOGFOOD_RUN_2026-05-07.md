@@ -3594,3 +3594,66 @@ A clean BAF007 pass supports only this narrow claim: Engram can carry a sealed, 
 code-bearing target through `orient` into a fresh agent run. It does not justify hot-path expansion,
 graph/obligation/lint/raw-observation default retrieval, M6 write/apply, deletion, legacy cleanup,
 or Claude hook re-enablement.
+
+## BAF007 Scoring: Sealed Resolve-Evidence Target
+
+Status: passed, discriminating.
+
+Accepted code commit: `9967f3a` (`Preserve obligation resolve evidence`)
+
+Treatment worktree commit: `db0e6b82e746751b195c965d276069dd69e17a7a`
+
+Sealed MemoryItem: `019e3a42-5721-70f1-a1c5-c337acca01b0`
+
+Sealed marker: `BAF007-SEAL-RESOLVE-EVIDENCE-PRESERVE-CALLER-EVIDENCE`
+
+Target after scoring disclosure: preserve caller-provided resolution evidence for
+`obligations(resolve)` while keeping the public MCP request shape unchanged. Resolved obligations
+must include caller evidence plus any service-added document content fingerprint evidence.
+
+### Arm Outcomes
+
+- `no_memory`: passed as a control. The arm found only the redacted pre-registration protocol in
+  repo-visible context and ended underdetermined. It made no edits and no commit.
+- `static_instructions`: passed as a control. The arm found only the redacted pre-registration
+  protocol and ended underdetermined. It made no edits, ran no tests, and made no commit.
+- `memoryitem_orient`: passed as treatment. The arm called `orient` with trace
+  `019e3a47-2da0-7dc3-a1fe-ecf0447b6164`, recovered the sealed target, implemented the narrow
+  evidence-preservation fix, verified it, and committed only `engram-mcp/src/tools.rs` and
+  `engram-tests/tests/obligation_tests.rs`.
+
+### Validation
+
+The accepted main-branch commit passed:
+
+- `cargo fmt --all --check`
+- `cargo test -p engram-index obligation`
+- `cargo test -p engram-tests --test obligation_tests`
+- `cargo check -p engram-cli`
+- `cargo check --workspace`
+- `git diff --check`
+
+Claude Bridge reviewed the extracted transcripts and treatment commit as a read-only judge. Its
+verdict was discriminating: both baselines correctly failed to recover target facts, while the
+treatment recovered the target through `orient` and shipped a correctly scoped patch. Claude's only
+acceptance condition was the `cargo check -p engram-cli` gate, which passed; the extra workspace
+check also passed.
+
+### Caveats
+
+The run exposed an attribution-surface gap. The treatment used the sealed MemoryItem content, but
+its initial feedback reported `used_memory_ids=[]` because the orient packet did not expose the
+MemoryItem ID in a machine-friendly attribution field. The evaluator submitted correction feedback
+`019e3a55-ed31-73b0-87a3-1dd374b4d9a8` with
+`used_memory_ids=[019e3a42-5721-70f1-a1c5-c337acca01b0]`. This should be treated as an Engram
+observability issue, not a treatment behavior failure.
+
+The run supports only a narrow claim: Engram can carry a sealed code-bearing target into a fresh
+Codex run through `orient`. It does not justify re-enabling Claude hooks, expanding `orient`,
+running M6 write/apply, deleting artifacts, changing ranking, or simplifying legacy paths.
+
+### Next Follow-Up
+
+Fix the orient attribution surface so MemoryItem IDs used to shape a response are available to the
+agent as explicit `used_memory_ids` candidates. This should be handled as a focused observability
+improvement before using automated feedback dashboards as evidence for larger Brain Harness claims.
