@@ -218,6 +218,65 @@ async fn test_mcp_obligations_doctor_scopes_to_project_and_cwd() {
 }
 
 #[tokio::test]
+async fn test_mcp_obligations_detect_is_content_idempotent_after_resolution() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+    let docs_dir = repo.path().join("docs");
+    fs::create_dir_all(&docs_dir).expect("docs dir should be created");
+    let doc_path = docs_dir.join("report.md");
+    fs::write(&doc_path, "# Report\n").expect("doc should be written");
+
+    let detect = || {
+        let mut request = with_writer(request("detect"));
+        request.project = Some("engram".to_string());
+        request.cwd = Some(repo.path().display().to_string());
+        request.write = Some(true);
+        request
+    };
+
+    let first_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("first detect should work");
+    let first = parse_json(&first_response);
+    let first_written = first["written"].as_array().unwrap();
+    assert_eq!(first_written.len(), 1);
+    assert!(first_written[0]["evidence"][0]["summary"]
+        .as_str()
+        .unwrap()
+        .contains("document_content_fingerprint=git-sha1:"));
+    let first_id = first_written[0]["id"].as_str().unwrap().to_string();
+
+    let mut resolve = request("resolve");
+    resolve.id = Some(first_id);
+    resolve.resolution = Some("indexed_document".to_string());
+    resolve.summary = Some("Indexed the report.".to_string());
+    let resolved_response = tools::obligations_new(&state, resolve)
+        .await
+        .expect("resolve should work");
+    let resolved = parse_json(&resolved_response);
+    assert!(resolved["resolution"]["evidence"][0]["summary"]
+        .as_str()
+        .unwrap()
+        .contains("document_content_fingerprint=git-sha1:"));
+
+    let same_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("same-content detect should work");
+    let same = parse_json(&same_response);
+    assert_eq!(same["written"].as_array().unwrap().len(), 0);
+    assert_eq!(same["skipped_existing"].as_array().unwrap().len(), 1);
+
+    fs::write(&doc_path, "# Report\n\nSecond edit.\n").expect("doc should be changed");
+    let changed_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("changed-content detect should work");
+    let changed = parse_json(&changed_response);
+    assert_eq!(changed["written"].as_array().unwrap().len(), 1);
+    assert_eq!(changed["skipped_existing"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn test_mcp_obligations_add_resolve_and_skip() {
     let state = setup_tool_state().await;
 

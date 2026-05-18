@@ -11,9 +11,11 @@ use engram_core::obligation::{
 use engram_core::Id;
 use engram_store::{Db, ObligationRepo};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+const DOCUMENT_FINGERPRINT_PREFIX: &str = "document_content_fingerprint=git-sha1:";
 
 /// Options for detecting obligations from session cues.
 #[derive(Debug, Clone)]
@@ -41,7 +43,8 @@ pub struct ObligationDetection {
     pub candidates: Vec<AgentObligation>,
     /// Obligations written during this run.
     pub written: Vec<AgentObligation>,
-    /// Candidate obligations skipped because an equivalent open obligation exists.
+    /// Candidate obligations skipped because an equivalent open obligation exists
+    /// or the same document content was already resolved or skipped.
     pub skipped_existing: Vec<AgentObligation>,
     /// Non-fatal warnings.
     pub warnings: Vec<String>,
@@ -161,9 +164,15 @@ impl ObligationService {
                 .await?;
             let mut existing_keys: HashSet<_> =
                 existing.iter().map(AgentObligation::dedupe_key).collect();
+            let closed_document_fingerprints =
+                self.closed_document_fingerprints_by_dedupe_key().await?;
 
             for candidate in candidates.iter().cloned() {
                 if existing_keys.contains(&candidate.dedupe_key()) {
+                    skipped_existing.push(candidate);
+                    continue;
+                }
+                if closed_document_fingerprints_match(&candidate, &closed_document_fingerprints) {
                     skipped_existing.push(candidate);
                     continue;
                 }
@@ -193,7 +202,7 @@ impl ObligationService {
             .get_obligation(&id)
             .await?
             .ok_or_else(|| IndexError::NotFound(format!("obligation {id}")))?;
-        obligation.resolve(resolution);
+        obligation.resolve(with_current_document_fingerprint(&obligation, resolution));
         self.repo.save_obligation(&obligation).await?;
         Ok(obligation)
     }
@@ -211,6 +220,7 @@ impl ObligationService {
             .await?
             .ok_or_else(|| IndexError::NotFound(format!("obligation {id}")))?;
         obligation.skip(reason, actor);
+        append_current_document_fingerprint_to_resolution(&mut obligation);
         self.repo.save_obligation(&obligation).await?;
         Ok(obligation)
     }
@@ -242,6 +252,34 @@ impl ObligationService {
             })
             .collect();
         Ok(ObligationDoctorReport { open, warnings })
+    }
+
+    async fn closed_document_fingerprints_by_dedupe_key(
+        &self,
+    ) -> IndexResult<HashMap<String, HashSet<String>>> {
+        let resolved = self
+            .repo
+            .list_obligations(Some(AgentObligationStatus::Resolved), None)
+            .await?;
+        let skipped = self
+            .repo
+            .list_obligations(Some(AgentObligationStatus::Skipped), None)
+            .await?;
+        let mut fingerprints_by_key: HashMap<String, HashSet<String>> = HashMap::new();
+
+        for obligation in resolved.into_iter().chain(skipped) {
+            if !is_git_status_document_obligation(&obligation) {
+                continue;
+            }
+            if let Some(fingerprint) = resolution_document_fingerprint(&obligation) {
+                fingerprints_by_key
+                    .entry(obligation.dedupe_key())
+                    .or_default()
+                    .insert(fingerprint);
+            }
+        }
+
+        Ok(fingerprints_by_key)
     }
 }
 
@@ -305,6 +343,23 @@ fn obligation_is_current_for_context(obligation: &AgentObligation, cwd: Option<&
 fn is_git_status_document_obligation(obligation: &AgentObligation) -> bool {
     obligation.kind == AgentObligationKind::DocumentDisposition
         && obligation.trigger.kind == "git_status"
+}
+
+fn closed_document_fingerprints_match(
+    candidate: &AgentObligation,
+    closed_document_fingerprints: &HashMap<String, HashSet<String>>,
+) -> bool {
+    if !is_git_status_document_obligation(candidate) {
+        return false;
+    }
+
+    let Some(candidate_fingerprint) = obligation_document_fingerprint(candidate) else {
+        return false;
+    };
+
+    closed_document_fingerprints
+        .get(&candidate.dedupe_key())
+        .is_some_and(|fingerprints| fingerprints.contains(&candidate_fingerprint))
 }
 
 enum GitStatusTarget {
@@ -436,6 +491,11 @@ fn document_obligation(
     writer: WriterProvenance,
 ) -> AgentObligation {
     let absolute = absolutize(cwd, path);
+    let mut file_evidence = EvidenceRef::new(EvidenceKind::File, absolute.to_string_lossy());
+    if let Some(fingerprint) = document_fingerprint(&absolute) {
+        file_evidence =
+            file_evidence.with_summary(format!("{DOCUMENT_FINGERPRINT_PREFIX}{fingerprint}"));
+    }
     AgentObligation::new(
         AgentObligationKind::DocumentDisposition,
         format!("Resolve document memory status for {path}"),
@@ -450,9 +510,91 @@ fn document_obligation(
     .with_required_resolution(AgentObligationResolutionKind::KnowledgeRegistered)
     .with_required_resolution(AgentObligationResolutionKind::HandoffLinked)
     .with_required_resolution(AgentObligationResolutionKind::SkippedWithReason)
-    .with_evidence(EvidenceRef::new(EvidenceKind::File, absolute.to_string_lossy()))
+    .with_evidence(file_evidence)
     .with_tag("document")
     .with_tag("agent-native")
+}
+
+fn with_current_document_fingerprint(
+    obligation: &AgentObligation,
+    mut resolution: AgentObligationResolution,
+) -> AgentObligationResolution {
+    if let Some(evidence) = current_document_fingerprint_evidence(obligation) {
+        resolution.evidence.push(evidence);
+    }
+    resolution
+}
+
+fn append_current_document_fingerprint_to_resolution(obligation: &mut AgentObligation) {
+    let Some(evidence) = current_document_fingerprint_evidence(obligation) else {
+        return;
+    };
+    if let Some(resolution) = &mut obligation.resolution {
+        resolution.evidence.push(evidence);
+    }
+}
+
+fn current_document_fingerprint_evidence(obligation: &AgentObligation) -> Option<EvidenceRef> {
+    if !is_git_status_document_obligation(obligation) {
+        return None;
+    }
+    let target = document_file_evidence_target(obligation)?;
+    let fingerprint = document_fingerprint(Path::new(&target))?;
+    Some(
+        EvidenceRef::new(EvidenceKind::File, target)
+            .with_summary(format!("{DOCUMENT_FINGERPRINT_PREFIX}{fingerprint}")),
+    )
+}
+
+fn document_file_evidence_target(obligation: &AgentObligation) -> Option<String> {
+    obligation.evidence.iter().find_map(|evidence| {
+        if matches!(&evidence.kind, EvidenceKind::File) {
+            Some(evidence.target.clone())
+        } else {
+            None
+        }
+    })
+}
+
+fn obligation_document_fingerprint(obligation: &AgentObligation) -> Option<String> {
+    obligation
+        .evidence
+        .iter()
+        .find_map(evidence_document_fingerprint)
+}
+
+fn resolution_document_fingerprint(obligation: &AgentObligation) -> Option<String> {
+    obligation
+        .resolution
+        .as_ref()?
+        .evidence
+        .iter()
+        .find_map(evidence_document_fingerprint)
+}
+
+fn evidence_document_fingerprint(evidence: &EvidenceRef) -> Option<String> {
+    if !matches!(&evidence.kind, EvidenceKind::File) {
+        return None;
+    }
+    evidence
+        .summary
+        .as_deref()?
+        .strip_prefix(DOCUMENT_FINGERPRINT_PREFIX)
+        .map(ToString::to_string)
+}
+
+fn document_fingerprint(path: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("hash-object")
+        .arg("--")
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let fingerprint = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!fingerprint.is_empty()).then_some(fingerprint)
 }
 
 fn detect_prompt_obligations(
@@ -740,5 +882,72 @@ mod tests {
         assert_eq!(first.written.len(), 1);
         assert_eq!(second.written.len(), 0);
         assert_eq!(second.skipped_existing.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn write_detection_is_idempotent_for_closed_document_content() {
+        let dir = tempfile::tempdir().unwrap();
+        Command::new("git")
+            .arg("init")
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        fs::create_dir_all(dir.path().join("docs")).unwrap();
+        let doc_path = dir.path().join("docs/report.md");
+        fs::write(&doc_path, "# Report\n").unwrap();
+
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let service = ObligationService::new(db);
+        service.init_schema().await.unwrap();
+
+        let options = || ObligationDetectOptions {
+            cwd: Some(dir.path().display().to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            writer: writer(),
+            write: true,
+            limit: None,
+        };
+
+        let first = service.detect(options()).await.unwrap();
+        assert_eq!(first.written.len(), 1);
+        assert!(obligation_document_fingerprint(&first.written[0]).is_some());
+
+        let resolved = service
+            .resolve(
+                first.written[0].id,
+                AgentObligationResolution::new(
+                    AgentObligationResolutionKind::IndexedDocument,
+                    "Indexed report.",
+                    "agent",
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(resolution_document_fingerprint(&resolved).is_some());
+
+        let same_content = service.detect(options()).await.unwrap();
+        assert_eq!(same_content.written.len(), 0);
+        assert_eq!(same_content.skipped_existing.len(), 1);
+
+        fs::write(&doc_path, "# Report\n\nSecond edit.\n").unwrap();
+        let changed_content = service.detect(options()).await.unwrap();
+        assert_eq!(changed_content.written.len(), 1);
+        assert_eq!(changed_content.skipped_existing.len(), 0);
+
+        let skipped = service
+            .skip(
+                changed_content.written[0].id,
+                "Document already recorded elsewhere.",
+                "agent",
+            )
+            .await
+            .unwrap();
+        assert!(resolution_document_fingerprint(&skipped).is_some());
+
+        let same_skipped_content = service.detect(options()).await.unwrap();
+        assert_eq!(same_skipped_content.written.len(), 0);
+        assert_eq!(same_skipped_content.skipped_existing.len(), 1);
     }
 }
