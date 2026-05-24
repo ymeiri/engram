@@ -3657,3 +3657,96 @@ running M6 write/apply, deleting artifacts, changing ranking, or simplifying leg
 Fix the orient attribution surface so MemoryItem IDs used to shape a response are available to the
 agent as explicit `used_memory_ids` candidates. This should be handled as a focused observability
 improvement before using automated feedback dashboards as evidence for larger Brain Harness claims.
+
+## BAF008 Pre-Registration: Claude Code Sealed Memory-Obligate Code Slice
+
+Status: pre-registered, sealed target not repo-visible before scoring.
+
+Scenario ID: `bounded_autonomous_followthrough_008`
+
+Surface: real interactive Claude Code terminal.
+
+Base commit: `5b3fecaba52fa5c7226bb2505e6cbedf0eb24280`
+
+Intent: `implement_change`
+
+Primary arm:
+
+- `claude_code_memoryitem_orient`
+
+Optional controls, if time permits:
+
+- `no_memory`
+- `static_instructions`
+
+### Research Question
+
+Can the real Claude Code terminal recover a prior-session, code-bearing Engram work target from a
+sealed MemoryItem, implement it narrowly, verify it, commit it, and submit structured feedback with
+the exact `used_memory_ids` that shaped the work?
+
+### Hypotheses
+
+- H1: `claude_code_memoryitem_orient` retrieves the sealed target MemoryItem, uses it to complete a
+  small Engram implementation slice, verifies the change, commits only intended files, and submits
+  telemetry feedback with the sealed MemoryItem ID in `used_memory_ids`.
+- H0: Claude Code does not materially demonstrate memory-obligate benefit because it misses the
+  target, implements from guesswork, omits attribution, expands scope, or cannot complete the
+  verified implementation.
+- H2: the target leaks through repository-visible context, recent git history, static instructions,
+  prompt wording, or another non-memory path; if so, the run is invalid for memory-benefit claims.
+
+### Sealing Rules
+
+The exact target marker and target facts are held only in a project-scoped Engram MemoryItem before
+arm execution. They are intentionally not reproduced in this report, the arm prompt, or any
+repo-visible document until after scoring.
+
+Before launching the Claude Code arm, the evaluator must:
+
+- search the repository-visible tree for the exact sealed marker and target phrases;
+- search recent git history for the exact sealed marker and target phrases;
+- run a pre-arm `orient` smoke check with `arm=prearm_smoke`;
+- proceed only if the sealed MemoryItem is visible to `orient` and absent from repo-visible
+  context.
+
+### Expected Helpful Memory
+
+- A sealed project-scoped MemoryItem containing the exact implementation target, marker, scope
+  boundaries, required tests, and attribution requirement.
+- Existing reviewed memory about commit hygiene and keeping unrelated root `AGENTS.md` untouched.
+- Existing Brain Harness research-method memory requiring precise claim boundaries.
+
+### Harmful Memory To Reject
+
+- Older broad current-plan memories that would steer the run toward M6, migration writes, ranking
+  churn, graph expansion, deletion, or Claude hook reconfiguration.
+- Any stale claim that Claude hooks are disabled; they have since been re-enabled and smoke-tested.
+- Any target inferred only from this redacted report rather than from the sealed MemoryItem.
+
+### Measurable Success Outcome
+
+The primary arm passes only if it:
+
+- calls `orient` with `project=engram`, the arm name, and this scenario ID;
+- recovers the sealed target from a returned MemoryItem;
+- implements the target without expanding unrelated Brain Harness surfaces;
+- runs the target-specific validation plus `git diff --check`;
+- commits only intended tracked files;
+- leaves root `AGENTS.md` untouched and untracked;
+- submits feedback for the orient trace with the sealed MemoryItem ID in `used_memory_ids`;
+- exports or provides enough transcript detail for evaluator scoring.
+
+### Expected Failure Modes
+
+- Claude Code calls `orient` but fails to notice the sealed target.
+- Claude Code implements a plausible but unsealed improvement from repo-visible context.
+- Claude Code completes the change but submits empty or wrong `used_memory_ids`.
+- Claude Code broadens the task into ranking, migration, graph, deletion, or hook work.
+- The exact target appears in repo-visible context before scoring, invalidating the run.
+
+### User Judgment Required
+
+Yes. The user must run the real interactive Claude Code terminal arm so startup hooks and manual
+terminal behavior are exercised. The evaluator can prepare the sealed memory, worktree, prompt,
+and scoring checks, but cannot honestly replace this with Claude Bridge for a real terminal claim.
