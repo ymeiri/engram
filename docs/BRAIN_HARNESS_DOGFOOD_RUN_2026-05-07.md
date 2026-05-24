@@ -3750,3 +3750,67 @@ The primary arm passes only if it:
 Yes. The user must run the real interactive Claude Code terminal arm so startup hooks and manual
 terminal behavior are exercised. The evaluator can prepare the sealed memory, worktree, prompt,
 and scoring checks, but cannot honestly replace this with Claude Bridge for a real terminal claim.
+
+## BAF008 Scoring: Claude Code Sealed Feedback-Attribution Target
+
+Status: passed for the primary real Claude Code terminal arm.
+
+Accepted code commit: `5f3f74a` (`Warn on unattributed memory feedback`)
+
+Treatment worktree: `/Users/yuval.meiri/projects/engram-dogfood-baf008-claude-orient`
+
+Treatment branch: `yuval.meiri/dogfood-baf008-claude-orient`
+
+Sealed MemoryItem: `019e5912-c803-7c90-9fdd-6875859fbcb7`
+
+Sealed marker: `BAF008-SEAL-FEEDBACK-MEMORY-ATTRIBUTION-WARNING`
+
+Target after scoring disclosure: add a non-blocking `warnings` array to
+`telemetry(action=submit_feedback)` responses when the linked trace returned memory IDs and the
+feedback contains no memory judgment fields. The warning must be advisory only: do not reject empty
+`used_memory_ids`, do not change telemetry storage schema, do not change public request parameters,
+and do not change `orient` ranking or retrieval.
+
+### Arm Outcome
+
+- `claude_code_memoryitem_orient`: passed. The real interactive Claude Code terminal called
+  `orient` with trace `019e591b-2ab3-72b1-ba1a-bf32da4a399d`, recovered sealed MemoryItem
+  `019e5912-c803-7c90-9fdd-6875859fbcb7`, implemented the narrow MCP response warning, verified
+  it, and committed only `engram-mcp/src/tools.rs` and
+  `engram-tests/tests/telemetry_tests.rs`.
+
+Claude submitted feedback `019e5924-6ac5-7dd1-bf98-4455be12f480` for the treatment trace with
+`used_memory_ids=["019e5912-c803-7c90-9fdd-6875859fbcb7"]`,
+`task_success=true`, `preference_adhered=true`, `repeated_context_questions=0`,
+`bad_memory_used=false`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`.
+
+### Validation
+
+The evaluator inspected the accepted patch and reran the target validation in the treatment
+worktree:
+
+- `cargo fmt --all --check`
+- `cargo test -p engram-tests --test telemetry_tests`
+- `cargo check -p engram-cli`
+- `git diff --check`
+
+All checks passed. The worktree was clean after the Claude commit.
+
+### Scope And Caveats
+
+This run is stronger than a connectivity smoke: it exercised real interactive Claude Code, real
+startup/final hooks, a sealed prior-session MemoryItem, implementation, validation, commit hygiene,
+and structured memory attribution.
+
+This run is still not a broad benchmark. The optional no-memory and static-instructions controls
+were not run, so the claim should stay narrow: real Claude Code can recover and act on a sealed
+code-bearing Engram MemoryItem through `orient`, and can submit the exact sealed MemoryItem ID in
+`used_memory_ids` when prompted. It does not justify M6 write/apply, migration writes, deletion,
+legacy cleanup, graph expansion, ranking changes, or broader hot-path changes.
+
+Claude's stop hook reported transient open obligations after final response, but a follow-up scoped
+`obligations.doctor(project=engram,cwd=/Users/yuval.meiri/projects/engram-dogfood-baf008-claude-orient)`
+returned `open=[]` and `warnings=[]`.
+
+The live daemon binary still needed to be rebuilt and restarted after accepting `5f3f74a`; before
+that restart, live `submit_feedback` responses would not yet include the new `warnings` field.
