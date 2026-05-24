@@ -218,6 +218,57 @@ async fn test_mcp_obligations_doctor_scopes_to_project_and_cwd() {
 }
 
 #[tokio::test]
+async fn test_mcp_obligations_list_scopes_to_project_before_limit() {
+    let state = setup_tool_state().await;
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "manual",
+        "docs/engram.md",
+        "Review Engram note",
+    )
+    .await;
+    add_document_obligation(
+        &state,
+        "dd-source",
+        "manual",
+        "docs/dd-source.md",
+        "Review dd-source note",
+    )
+    .await;
+
+    let mut list_request = request("list");
+    list_request.project = Some("engram".to_string());
+    list_request.limit = Some(1);
+    let list_response = tools::obligations_new(&state, list_request)
+        .await
+        .expect("scoped list should work");
+    let list = parse_json(&list_response);
+    let obligations = list.as_array().unwrap();
+
+    assert_eq!(obligations.len(), 1);
+    assert_eq!(obligations[0]["title"], "Review Engram note");
+    assert_eq!(
+        obligations[0]["scope"]["project_name"], "engram",
+        "list(project=engram) must not leak other project obligations"
+    );
+
+    let mut open_request = request("open");
+    open_request.project = Some("engram".to_string());
+    open_request.limit = Some(1);
+    let open_response = tools::obligations_new(&state, open_request)
+        .await
+        .expect("scoped open list should work");
+    let open = parse_json(&open_response);
+    let open_obligations = open.as_array().unwrap();
+
+    assert_eq!(open_obligations.len(), 1);
+    assert_eq!(open_obligations[0]["title"], "Review Engram note");
+    assert_eq!(open_obligations[0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
 async fn test_mcp_obligations_detect_is_content_idempotent_after_resolution() {
     let state = setup_tool_state().await;
     let repo = tempdir().expect("temp repo should be created");

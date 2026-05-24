@@ -8160,7 +8160,7 @@ async fn main() -> Result<()> {
                                 .ok_or_else(|| anyhow::anyhow!("Invalid status: {}", value))
                         })
                         .transpose()?;
-                    let obligations = service.list(status, limit).await?;
+                    let obligations = service.list(status, None, None, limit).await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&obligations)?);
                     } else {

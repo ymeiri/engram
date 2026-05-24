@@ -8040,7 +8040,12 @@ pub async fn obligations_new(
                     .transpose()?
             };
             let obligations = service
-                .list(status, request.limit)
+                .list(
+                    status,
+                    request.project.as_deref(),
+                    request.cwd.as_deref(),
+                    request.limit,
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&obligations).map_err(|e| e.to_string())

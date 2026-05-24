@@ -95,9 +95,25 @@ impl ObligationService {
     pub async fn list(
         &self,
         status: Option<AgentObligationStatus>,
+        project: Option<&str>,
+        cwd: Option<&str>,
         limit: Option<usize>,
     ) -> IndexResult<Vec<AgentObligation>> {
-        Ok(self.repo.list_obligations(status, limit).await?)
+        if project.is_none() && cwd.is_none() {
+            return Ok(self.repo.list_obligations(status, limit).await?);
+        }
+
+        let mut obligations = self
+            .repo
+            .list_obligations(status, None)
+            .await?
+            .into_iter()
+            .filter(|obligation| obligation_applies_to_context(obligation, project, cwd))
+            .collect::<Vec<_>>();
+        if let Some(limit) = limit {
+            obligations.truncate(limit);
+        }
+        Ok(obligations)
     }
 
     /// List open obligations that apply to the current project/cwd context.
