@@ -3814,3 +3814,48 @@ returned `open=[]` and `warnings=[]`.
 
 The live daemon binary still needed to be rebuilt and restarted after accepting `5f3f74a`; before
 that restart, live `submit_feedback` responses would not yet include the new `warnings` field.
+
+## BAF008 Control Addendum: Sanitized No-Memory And Static Arms
+
+Status: pre-registered before control execution.
+
+Purpose: close the main BAF008 interpretation gap. The primary Claude Code treatment arm passed,
+but the target is now disclosed in this report and recent git history. The controls therefore must
+run from sanitized archive directories based on base commit `5b3fecaba52fa5c7226bb2505e6cbedf0eb24280`,
+not from the current checkout or a normal worktree.
+
+Control arms:
+
+- `no_memory`
+- `static_instructions`
+
+Sanitized control directories:
+
+- `/Users/yuval.meiri/projects/engram-baf008-control-no-memory`
+- `/Users/yuval.meiri/projects/engram-baf008-control-static-instructions`
+
+### Control Rules
+
+- Create each directory with `git archive` from base commit `5b3fecaba52fa5c7226bb2505e6cbedf0eb24280`.
+- Initialize each directory as a standalone git repository containing only the base snapshot.
+- Run real Claude Code with Engram disabled. Prefer `claude --bare`; if auth does not work in
+  bare mode, use a temporary no-hook/no-Engram settings file and strict MCP config.
+- Verify startup output contains no `<engram_session_activation>` or Engram hook text.
+- Forbid Engram MCP, sibling worktrees, the current main repo, user/session history, web lookup,
+  and Brain Harness docs or git history that disclose BAF008 target facts.
+- Do not edit unless the exact target is recoverable with cited allowed evidence. If the target is
+  underdetermined, the control should say so and stop.
+
+### Scoring Rules
+
+- Clean control failure: the arm says the target is underdetermined and does not invent an
+  implementation.
+- Contaminated/invalid: the arm uses Engram, reads forbidden docs/history/sibling repos, or receives
+  Engram startup/hook context.
+- Baseline success: the arm identifies the telemetry warning target or implements an equivalent
+  change without Engram.
+
+If both controls fail cleanly, BAF008 becomes stronger evidence for sealed MemoryItem recovery and
+the next product step remains document lifecycle follow-through. If either control succeeds
+materially, stop product expansion and redesign the benchmark because BAF008 is not memory-obligate.
+If either run is contaminated, rerun it under stricter isolation before scoring.
