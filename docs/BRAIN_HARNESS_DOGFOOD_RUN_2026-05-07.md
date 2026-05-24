@@ -3859,3 +3859,67 @@ If both controls fail cleanly, BAF008 becomes stronger evidence for sealed Memor
 the next product step remains document lifecycle follow-through. If either control succeeds
 materially, stop product expansion and redesign the benchmark because BAF008 is not memory-obligate.
 If either run is contaminated, rerun it under stricter isolation before scoring.
+
+## BAF008 Control Scoring: Sanitized Claude Code Baselines
+
+Status: passed as clean controls.
+
+Scored transcripts:
+
+- `no_memory`: `/Users/yuval.meiri/projects/engram-baf008-control-results/no-memory-strict.stream.jsonl`
+- `static_instructions`: `/Users/yuval.meiri/projects/engram-baf008-control-results/static-instructions-strict.stream.jsonl`
+
+Strict sanitized control directories:
+
+- `/Users/yuval.meiri/projects/engram-baf008-control-no-memory-strict`
+- `/Users/yuval.meiri/projects/engram-baf008-control-static-instructions-strict`
+
+The first non-strict `no_memory` attempt is not scored. It ran with no Engram hooks or MCP, but a
+broad search surfaced forbidden Brain Harness report content inside the archive snapshot. The
+stricter rerun removed `.claude/`, `CLAUDE.md`, `AGENTS.engram.md`, and
+`docs/BRAIN_HARNESS*.md` before initializing the standalone control repositories.
+
+`claude --bare` was attempted first and provided clean startup isolation, but it could not
+authenticate in this environment. The scored fallback used real Claude Code with
+`--setting-sources local`, `--strict-mcp-config`, an empty MCP config, `--no-session-persistence`,
+and only `Bash`, `Read`, `Grep`, and `Glob` tools. Startup records for both scored runs showed
+`mcp_servers=[]` and no Engram hook events, `<engram_session_activation>`, or Engram MCP calls.
+
+### Pre-Arm Leak Checks
+
+Before running the scored controls, both strict directories were checked for the sealed marker and
+target phrases:
+
+- `BAF008`
+- `BAF008-SEAL-FEEDBACK-MEMORY-ATTRIBUTION-WARNING`
+- `unattributed memory feedback`
+- `memory-attribution warning`
+- `memory attribution warning`
+- `warnings array`
+
+No matches were found in either strict directory. Each directory's local git history contained only
+the sanitized base snapshot commit, and `git log --all --grep` for BAF008 target terms returned no
+matches.
+
+### Arm Outcome
+
+| Arm | Result | Target recovered? | Notes |
+| --- | --- | --- | --- |
+| `no_memory` | Clean control failure | No | Found only BAF002-BAF004 references in the allowed implementation-plan doc and one BAF006 test prompt string. It concluded the exact BAF008 target was underdetermined and did not guess. |
+| `static_instructions` | Clean control failure | No | Same allowed repo evidence plus generic static rules. It concluded the static rules were procedural only and contained no BAF008 target content. |
+
+Neither control identified the telemetry feedback warning target, the sealed marker, or an
+equivalent implementation. Neither arm edited files, ran implementation tests, or committed.
+
+### Interpretation
+
+These controls strengthen the narrow BAF008 claim: the successful real Claude Code treatment arm
+appears to have depended on Engram MemoryItem recovery through `orient`, not on repo-visible target
+facts or generic static instructions.
+
+The claim remains deliberately narrow. BAF008 supports sealed MemoryItem recovery for one
+code-bearing Claude Code task. It does not justify M6 write/apply, migration writes, deletion,
+legacy cleanup, graph expansion, ranking changes, Claude hook expansion, or broader `orient`
+hot-path changes.
+
+The next product step remains document lifecycle follow-through.
