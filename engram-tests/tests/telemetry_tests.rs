@@ -1149,3 +1149,155 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     assert_eq!(trace.query.as_deref(), Some("intent aware telemetry"));
     assert_eq!(trace.project.as_deref(), Some("engram"));
 }
+
+#[tokio::test]
+async fn mcp_submit_feedback_warns_when_returned_memory_is_unattributed() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let returned_memory_id = engram_core::Id::new();
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("orient".to_string());
+    trace_request.intent = Some("implement_change".to_string());
+    trace_request.query = Some("recover sealed target".to_string());
+    trace_request.returned_memory_ids = vec![returned_memory_id.to_string()];
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id.clone());
+    feedback_request.task_success = Some(true);
+    feedback_request.note = Some("forgot to attribute used memory".to_string());
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    let warnings = feedback_json["warnings"]
+        .as_array()
+        .expect("warnings array should be present");
+    assert_eq!(warnings.len(), 1);
+    let warning = warnings[0].as_str().unwrap();
+    assert!(
+        warning.contains("used_memory_ids"),
+        "warning should reference used_memory_ids: {warning}"
+    );
+    assert!(
+        warning.contains("returned memory"),
+        "warning should describe the linked trace situation: {warning}"
+    );
+    assert_eq!(feedback_json["feedback"]["trace_id"], trace_id);
+
+    let mut attributed_request = telemetry_request("submit_feedback");
+    attributed_request.trace_id = Some(trace_id);
+    attributed_request.used_memory_ids = vec![returned_memory_id.to_string()];
+    attributed_request.task_success = Some(true);
+
+    let attributed_response = tools::telemetry_new(&state, attributed_request)
+        .await
+        .expect("attributed submit_feedback should work");
+    let attributed_json = parse_json(&attributed_response);
+    assert_eq!(
+        attributed_json["warnings"].as_array().unwrap().len(),
+        0,
+        "no warning when used_memory_ids is populated"
+    );
+}
+
+#[tokio::test]
+async fn mcp_submit_feedback_skips_warning_when_trace_returned_no_memory() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("search".to_string());
+    trace_request.intent = Some("answer_question".to_string());
+    trace_request.query = Some("no memory returned".to_string());
+    trace_request.returned_result_ids = vec!["result-1".to_string()];
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id);
+    feedback_request.used_result_ids = vec!["result-1".to_string()];
+    feedback_request.task_success = Some(true);
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    assert_eq!(
+        feedback_json["warnings"].as_array().unwrap().len(),
+        0,
+        "no warning when linked trace returned no memory IDs"
+    );
+}
+
+#[tokio::test]
+async fn mcp_submit_feedback_skips_warning_when_only_rejected_memory_is_set() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let returned_memory_id = engram_core::Id::new();
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("orient".to_string());
+    trace_request.intent = Some("implement_change".to_string());
+    trace_request.query = Some("memory judged not useful".to_string());
+    trace_request.returned_memory_ids = vec![returned_memory_id.to_string()];
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id);
+    feedback_request.rejected_memory_ids = vec![returned_memory_id.to_string()];
+    feedback_request.task_success = Some(true);
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    assert_eq!(
+        feedback_json["warnings"].as_array().unwrap().len(),
+        0,
+        "no warning when rejected_memory_ids is populated"
+    );
+}

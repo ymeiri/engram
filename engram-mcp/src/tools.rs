@@ -3546,8 +3546,31 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 .submit_feedback(feedback)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({ "feedback": feedback }))
-                .map_err(|e| e.to_string())
+
+            let mut warnings: Vec<String> = Vec::new();
+            let has_memory_judgment = !feedback.used_memory_ids.is_empty()
+                || !feedback.rejected_memory_ids.is_empty()
+                || !feedback.stale_memory_ids.is_empty()
+                || !feedback.wrong_scope_memory_ids.is_empty();
+            if !has_memory_judgment {
+                if let Ok(Some(trace)) = service.get_trace(&trace_id).await {
+                    if !trace.returned_memory_ids.is_empty() {
+                        warnings.push(
+                            "Linked trace returned memory IDs but feedback included no memory \
+                             attribution. Populate used_memory_ids, rejected_memory_ids, \
+                             stale_memory_ids, or wrong_scope_memory_ids when returned memory \
+                             shaped or was considered for the result."
+                                .to_string(),
+                        );
+                    }
+                }
+            }
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "feedback": feedback,
+                "warnings": warnings,
+            }))
+            .map_err(|e| e.to_string())
         }
         "list_feedback" => {
             let feedback = if let Some(trace_id) = &request.trace_id {
