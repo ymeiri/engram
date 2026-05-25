@@ -193,3 +193,27 @@ The validated behavior is:
 - run detection again without changing this content,
 - verify no new report obligation is written for the already-resolved content,
 - preserve the existing behavior that a later real content edit creates a fresh obligation.
+
+## Codex Adapter Follow-Through Contract
+
+Status: passed for the generated Codex harness adapter.
+
+Commit `d26432d` (`Clarify Codex document lifecycle follow-through`) tightened the generated
+`codex-memory-session` adapter so the default Codex memory-session guidance now spells out the full
+document lifecycle:
+
+- after creating or updating a durable project document, call
+  `obligations(action=detect, write=true, project=..., cwd=...)`,
+- resolve document obligations by indexing, registering, recording compact memory, handoff-linking,
+  or explicitly skipping with a reason,
+- before final response, run detection with `write=true` plus `obligations(action=doctor)`,
+- rerun detection if the document content changes again after resolution.
+
+Validation for the adapter change passed with focused harness tests, MCP harness tests,
+`cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`.
+
+This report section is the live durable-document target for the follow-through dogfood. The expected
+disposition is to detect this changed report, index/register it, resolve the document obligation,
+and verify that same-content detection writes no fresh obligation. Dynamic obligation and telemetry
+IDs are recorded in Engram memory rather than embedded here, so the report content does not need a
+third edit just to cite runtime IDs.
