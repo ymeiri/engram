@@ -8204,7 +8204,12 @@ async fn main() -> Result<()> {
                 } => {
                     let id = Id::parse(&id)
                         .map_err(|e| anyhow::anyhow!("Invalid obligation ID: {}", e))?;
-                    let obligation = service.skip(id, reason, actor).await?;
+                    let resolution = AgentObligationResolution::new(
+                        AgentObligationResolutionKind::SkippedWithReason,
+                        reason,
+                        actor,
+                    );
+                    let obligation = service.skip(id, resolution).await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&obligation)?);
                     } else {

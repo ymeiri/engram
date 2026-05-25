@@ -227,16 +227,14 @@ impl ObligationService {
     pub async fn skip(
         &self,
         id: Id,
-        reason: impl Into<String>,
-        actor: impl Into<String>,
+        resolution: AgentObligationResolution,
     ) -> IndexResult<AgentObligation> {
         let mut obligation = self
             .repo
             .get_obligation(&id)
             .await?
             .ok_or_else(|| IndexError::NotFound(format!("obligation {id}")))?;
-        obligation.skip(reason, actor);
-        append_current_document_fingerprint_to_resolution(&mut obligation);
+        obligation.skip_with_resolution(with_current_document_fingerprint(&obligation, resolution));
         self.repo.save_obligation(&obligation).await?;
         Ok(obligation)
     }
@@ -539,15 +537,6 @@ fn with_current_document_fingerprint(
         resolution.evidence.push(evidence);
     }
     resolution
-}
-
-fn append_current_document_fingerprint_to_resolution(obligation: &mut AgentObligation) {
-    let Some(evidence) = current_document_fingerprint_evidence(obligation) else {
-        return;
-    };
-    if let Some(resolution) = &mut obligation.resolution {
-        resolution.evidence.push(evidence);
-    }
 }
 
 fn current_document_fingerprint_evidence(obligation: &AgentObligation) -> Option<EvidenceRef> {
@@ -955,8 +944,11 @@ mod tests {
         let skipped = service
             .skip(
                 changed_content.written[0].id,
-                "Document already recorded elsewhere.",
-                "agent",
+                AgentObligationResolution::new(
+                    AgentObligationResolutionKind::SkippedWithReason,
+                    "Document already recorded elsewhere.",
+                    "agent",
+                ),
             )
             .await
             .unwrap();

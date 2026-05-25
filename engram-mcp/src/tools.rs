@@ -8095,12 +8095,16 @@ pub async fn obligations_new(
         }
         "skip" => {
             let id = parse_id(&required(&request.id, "id", "skip")?, "obligation ID")?;
+            let mut resolution = AgentObligationResolution::new(
+                AgentObligationResolutionKind::SkippedWithReason,
+                required(&request.reason, "reason", "skip")?,
+                request.actor.as_deref().unwrap_or("agent"),
+            );
+            for evidence in request.evidence {
+                resolution = resolution.with_evidence(parse_evidence(evidence)?);
+            }
             let obligation = service
-                .skip(
-                    id,
-                    required(&request.reason, "reason", "skip")?,
-                    request.actor.unwrap_or_else(|| "agent".to_string()),
-                )
+                .skip(id, resolution)
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())

@@ -338,6 +338,40 @@ async fn test_mcp_obligations_detect_is_content_idempotent_after_resolution() {
     let changed = parse_json(&changed_response);
     assert_eq!(changed["written"].as_array().unwrap().len(), 1);
     assert_eq!(changed["skipped_existing"].as_array().unwrap().len(), 0);
+
+    let changed_id = changed["written"][0]["id"].as_str().unwrap().to_string();
+    let mut skip = request("skip");
+    skip.id = Some(changed_id);
+    skip.reason = Some("Report was reviewed and deferred.".to_string());
+    skip.actor = Some("agent".to_string());
+    skip.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "review:report-deferred".to_string(),
+        summary: Some("caller supplied skip evidence".to_string()),
+        excerpt: None,
+    }];
+    let skipped_response = tools::obligations_new(&state, skip)
+        .await
+        .expect("skip should work");
+    let skipped = parse_json(&skipped_response);
+    let skip_evidence = skipped["resolution"]["evidence"].as_array().unwrap();
+    assert!(skip_evidence
+        .iter()
+        .any(|evidence| evidence["summary"].as_str().unwrap() == "caller supplied skip evidence"));
+    assert!(skip_evidence.iter().any(|evidence| evidence["summary"]
+        .as_str()
+        .unwrap()
+        .contains("document_content_fingerprint=git-sha1:")));
+
+    let same_skipped_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("same skipped content detect should work");
+    let same_skipped = parse_json(&same_skipped_response);
+    assert_eq!(same_skipped["written"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        same_skipped["skipped_existing"].as_array().unwrap().len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -422,14 +456,45 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
         .to_string();
 
     let mut skip = request("skip");
-    skip.id = Some(second_id);
+    skip.id = Some(second_id.clone());
     skip.reason = Some("Failure was intentionally exercised by the test.".to_string());
+    skip.actor = Some("agent".to_string());
+    skip.evidence = vec![MemoryEvidenceRequest {
+        kind: "tool_call".to_string(),
+        target: "tool:test-failure".to_string(),
+        summary: Some("skip preserved this evidence".to_string()),
+        excerpt: Some("intentional failure path".to_string()),
+    }];
     let skip_response = tools::obligations_new(&state, skip)
         .await
         .expect("skip should work");
     let skipped = parse_json(&skip_response);
     assert_eq!(skipped["status"], "skipped");
     assert_eq!(skipped["resolution"]["kind"], "skipped_with_reason");
+    assert_eq!(skipped["resolution"]["evidence"][0]["kind"], "tool_call");
+    assert_eq!(
+        skipped["resolution"]["evidence"][0]["target"],
+        "tool:test-failure"
+    );
+    assert_eq!(
+        skipped["resolution"]["evidence"][0]["summary"],
+        "skip preserved this evidence"
+    );
+    assert_eq!(
+        skipped["resolution"]["evidence"][0]["excerpt"],
+        "intentional failure path"
+    );
+
+    let mut get = request("get");
+    get.id = Some(second_id);
+    let get_response = tools::obligations_new(&state, get)
+        .await
+        .expect("get should work");
+    let persisted = parse_json(&get_response);
+    assert_eq!(
+        persisted["obligation"]["resolution"]["evidence"][0]["summary"],
+        "skip preserved this evidence"
+    );
 }
 
 #[tokio::test]

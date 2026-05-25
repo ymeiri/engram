@@ -344,12 +344,17 @@ impl AgentObligation {
 
     /// Skip the obligation with an explicit reason.
     pub fn skip(&mut self, reason: impl Into<String>, actor: impl Into<String>) {
-        self.status = AgentObligationStatus::Skipped;
         let resolution = AgentObligationResolution::new(
             AgentObligationResolutionKind::SkippedWithReason,
             reason,
             actor,
         );
+        self.skip_with_resolution(resolution);
+    }
+
+    /// Skip the obligation with an explicit resolution.
+    pub fn skip_with_resolution(&mut self, resolution: AgentObligationResolution) {
+        self.status = AgentObligationStatus::Skipped;
         self.updated_at = resolution.resolved_at;
         self.resolution = Some(resolution);
     }
