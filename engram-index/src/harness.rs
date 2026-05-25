@@ -2212,9 +2212,15 @@ Workflow:
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
-  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
-  skip open obligations.
+- When you create or update a durable project document, call
+  `obligations(action=detect, write=true, project=..., cwd=...)` so the document disposition is
+  persisted instead of only observed. Resolve each document obligation by indexing it with
+  `docs(action=index)`, registering it with `knowledge(action=register)`, recording compact memory
+  with `memory(action=capture_current_plan)`, linking it in `handoff`, or explicitly skipping it
+  with a reason.
+- Before final response, run `obligations(action=detect, write=true, project=..., cwd=...)` and
+  `obligations(action=doctor)`; resolve or explicitly skip open obligations. If a document changes
+  again after resolution, rerun detection so a fresh content state gets its own disposition.
 - Before Codex context compaction or any expected context loss, update `handoff` and record or
   commit compact durable memory so the next Codex session can resume without the transcript.
 - For commit messages, check memory for user/project commit preferences first.
@@ -2242,8 +2248,9 @@ Steps:
   `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
-- Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
-  response.
+- Poll `obligations(action=detect, write=true, project=..., cwd=...)` before final response so
+  changed durable documents become persisted obligations, then close them by indexing,
+  registering, recording compact memory, handoff-linking, or explicitly skipping with a reason.
 - Store compact, evidenced memory if the session discovered something future agents need.
 - Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
   guidance that should surface on the next resume.
@@ -2791,6 +2798,21 @@ mod tests {
         assert!(adapters[0].contents.contains("rejected_memory_ids"));
         assert!(adapters[0].contents.contains("stale_memory_ids"));
         assert!(adapters[0].contents.contains("wrong_scope_memory_ids"));
+    }
+
+    #[test]
+    fn render_codex_adapter_spells_out_document_lifecycle_disposition() {
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
+        assert_eq!(adapters.len(), 1);
+        let contents = &adapters[0].contents;
+
+        assert!(contents.contains("obligations(action=detect, write=true"));
+        assert!(contents.contains("docs(action=index)"));
+        assert!(contents.contains("knowledge(action=register)"));
+        assert!(contents.contains("memory(action=capture_current_plan)"));
+        assert!(contents.contains("explicitly skipping it"));
+        assert!(contents.contains("fresh content state gets its own disposition"));
     }
 
     #[test]
