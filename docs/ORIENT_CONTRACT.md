@@ -35,6 +35,32 @@ the next agent decision better without forcing the agent to choose among special
 - Untracked root instruction files such as `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` are suppressed
   from the open-obligation summary.
 
+## Size Diagnostic
+
+The 2026-05-25 Claude Code source-reuse smoke showed that full `orient` can be too large for
+frictionless read-only verification tasks: Claude reported about 178,747 characters / 3,944 lines
+and had to spill the MCP result to a file. A follow-up live daemon measurement for
+`intent=verify_decision` confirmed the issue:
+
+| Shape | Bytes | Lines | Trace |
+| --- | ---: | ---: | --- |
+| Default full response | 185,087 | 4,081 | `019e5f86-9d39-7aa0-bb19-48572874dba7` |
+| `limit=6` full response | 86,919 | 1,898 | `019e5f86-9db5-75b0-87c4-b34f552afd43` |
+| `limit=6`, no recent commits | 75,890 | 1,625 | `019e5f86-9e06-7061-9c19-93f6fb3c88b4` |
+
+The largest default sections were `active_decisions` (68,219 bytes), `context_pack` (30,844
+bytes), `recent_knowledge_commits` (26,050 bytes), `memory_metadata` (24,103 bytes), `limitations`
+(11,294 bytes), and `brain_loop` (8,029 bytes). This is representation duplication, not a single
+bad memory item: the same selected memory is returned as raw buckets, Markdown context, Brain Loop
+items, and standalone trust metadata.
+
+For the next design step, keep the full response available and add an explicit lean/read-only
+shape instead of changing retrieval or ranking. Measured candidate envelopes from the same trace:
+
+- Context-pack envelope with trace/cursor/obligation metadata: about 31,742 bytes.
+- Structured response without raw memory buckets or context pack: about 39,249 bytes.
+- Brain Loop envelope without repeated trust payloads: about 3,984 bytes.
+
 ## Feedback Expectations
 
 - Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
