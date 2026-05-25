@@ -267,3 +267,31 @@ Claude Code, not only through Codex. The main follow-up finding is usability-rel
 tool-result cap, so the result had to be spilled to a file and grepped for the trace ID. That does
 not invalidate the source-reuse fix, but it is evidence that full `orient` can be too large for
 frictionless Claude Code use in verification tasks.
+
+## Skip Evidence Preservation Follow-Up
+
+Status: passed.
+
+Commit `6db64f1` (`Preserve skip obligation evidence`) fixed `obligations(action=skip)` so
+caller-provided evidence is preserved in the skip resolution, matching the earlier
+`obligations(action=resolve)` evidence contract. The live daemon was installed from that commit and
+restarted before dogfood:
+
+- installed binary hash:
+  `f5ec23fb1cc8da60518e2b7b667d17a8687c24f8437fc325ce76cc55715ed170`,
+- restarted daemon: port `8765`, PID `87119`,
+- dogfood obligation:
+  `019e5f80-a2d0-7c93-8834-558b64480cd0`.
+
+The live dogfood created a temporary project-scoped obligation, skipped it through MCP with two
+structured evidence records, read it back with `obligations(action=get)`, and verified that
+`resolution.evidence` persisted both the `tool_call` evidence and the `git_commit` evidence.
+`obligations(action=doctor)` then returned:
+
+```json
+{ "open": [], "warnings": [] }
+```
+
+This closes the trust/audit gap observed during the Claude Code smoke. The remaining follow-up is
+separate: measure why full `orient` is too large for Claude Code verification tasks before designing
+a lean `verify_decision` response.
