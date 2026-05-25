@@ -217,3 +217,28 @@ disposition is to detect this changed report, index/register it, resolve the doc
 and verify that same-content detection writes no fresh obligation. Dynamic obligation and telemetry
 IDs are recorded in Engram memory rather than embedded here, so the report content does not need a
 third edit just to cite runtime IDs.
+
+## Document Source Reuse Follow-Up
+
+Status: passed.
+
+Commit `216bfc2` (`Make document indexing reuse existing sources`) fixed explicit document indexing
+for a path that already has a stored `DocSource`. The live daemon was installed from that commit and
+restarted before dogfood:
+
+- installed binary hash:
+  `5b326a175c98cb7413ba052018f3e009e2208421d7e39d360cee244644860cec`,
+- restarted daemon: port `8765`, PID `67289`,
+- dogfood target:
+  `docs/BRAIN_HARNESS_DOCUMENT_LIFECYCLE_DOGFOOD_2026-05-16.md`.
+
+The same durable report path was indexed twice through MCP without changing content between calls.
+Both calls returned:
+
+```json
+{ "documents_indexed": 1, "chunks_created": 11, "warnings": [] }
+```
+
+This validates the important live behavior: explicit same-path indexing now reuses the existing
+source identity and replaces its chunks instead of attempting to insert a second source for the same
+path.
