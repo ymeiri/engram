@@ -242,3 +242,28 @@ Both calls returned:
 This validates the important live behavior: explicit same-path indexing now reuses the existing
 source identity and replaces its chunks instead of attempting to insert a second source for the same
 path.
+
+## Claude Code Cross-Harness Source Reuse Smoke
+
+Status: passed.
+
+After the Codex dogfood, the same source-reuse behavior was checked from a real Claude Code session
+with Engram hooks and MCP active. Startup showed SessionStart activation, the Engram MCP server, a
+UserPromptSubmit hook context, and strict-mode reminders.
+
+Claude Code called `docs(action=index)` twice against the same durable report path without modifying
+the file between calls. Both calls returned:
+
+```json
+{ "documents_indexed": 1, "chunks_created": 12, "warnings": [] }
+```
+
+No duplicate-source error occurred, and no files changed. Claude Code reported only the pre-existing
+untracked root `AGENTS.md` in `git status --short`.
+
+The smoke test verdict is pass: commit `216bfc2` is confirmed through the live Engram MCP path from
+Claude Code, not only through Codex. The main follow-up finding is usability-related: Claude Code's
+`orient` response for this task was about 178,747 characters / 3,944 lines and exceeded the inline
+tool-result cap, so the result had to be spilled to a file and grepped for the trace ID. That does
+not invalidate the source-reuse fix, but it is evidence that full `orient` can be too large for
+frictionless Claude Code use in verification tasks.
