@@ -90,6 +90,15 @@ returned trace `019e6358-44bc-7662-88f2-bc67d08101bb`, preserved the memory curs
 `used_memory_candidate_ids`, returned Brain Loop guidance without trust payloads, and reported
 `open_obligations=[]` / no warnings.
 
+Native Claude Code smoke after restart confirmed the refreshed MCP schema also exposes
+`response_shape` there. Calling `orient(response_shape="lean")` returned trace
+`019e636a-730e-77f3-86a6-96b7beb2e3fd`, preserved the memory cursor
+`019e6359-cbee-7e91-8dff-15e4a7238062`, five `used_memory_candidate_ids`, Brain Loop guidance,
+`obligation_summary`, and `open_obligations`, and omitted `context_pack`, raw memory buckets,
+`memory_metadata`, `recent_knowledge_commits`, and repeated `trust` payloads. The three open
+obligations were prompt-derived and were explicitly skipped because this was a read-only schema
+smoke with no source edits, no commit composition, and no failed tool recovery.
+
 ## Feedback Expectations
 
 - Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
