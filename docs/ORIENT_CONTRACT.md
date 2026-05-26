@@ -70,6 +70,20 @@ envelope. The lean response intentionally omits `context_pack`, raw memory bucke
 `memory_metadata`, and `recent_knowledge_commits`; it is a presentation option only and must not
 change retrieval, ranking, trace creation, memory attribution IDs, or obligation surfacing.
 
+Live daemon smoke after commit `168b06e` installed the new binary
+(`c2c8f3370f1b87a305c223646d9c4e3e54467c89f48591140768055ce53cc76d`) and restarted the daemon on
+port `8765`, PID `58736`. The same `verify_decision` request with `include_recent_commits=false`
+and `limit=6` measured:
+
+| Shape | Bytes | Lines | Trace |
+| --- | ---: | ---: | --- |
+| Full response | 78,025 | 1,676 | `019e632c-4221-7820-9932-8c39b407825e` |
+| Lean response | 4,367 | 89 | `019e632c-4272-7552-bcbf-dcf3ba5acd75` |
+
+The lean response preserved `trace_id`, `memory_cursor`, five candidate memory IDs, and the
+obligation summary. It omitted `context_pack`, all raw memory buckets, `memory_metadata`,
+`recent_knowledge_commits`, and repeated `trust` objects on Brain Loop items.
+
 ## Feedback Expectations
 
 - Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
