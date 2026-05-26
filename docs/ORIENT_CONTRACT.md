@@ -99,6 +99,18 @@ Native Claude Code smoke after restart confirmed the refreshed MCP schema also e
 obligations were prompt-derived and were explicitly skipped because this was a read-only schema
 smoke with no source edits, no commit composition, and no failed tool recovery.
 
+Real read-only verification smoke then used lean `orient` as the entrypoint for a normal status
+check instead of another schema check. Trace `019e6452-d272-75b3-bdce-52abb30018db` returned scope,
+cursor, Brain Loop guidance, candidate memory IDs, and `open_obligations=[]`. The agent could use
+that compact packet to verify with `memory(action=changes_since)`, `obligations(action=doctor)`,
+`git status --short`, and `git log -1 --oneline` that there were no newer memory writes since the
+cursor, no open obligations, the latest commit was `f88b683 Record Claude Code lean orient smoke`,
+and the only working-tree item was the user-owned untracked root `AGENTS.md`. The run also exposed
+a ranking caveat: the latest current-plan memory was not in the returned top five for this
+next-step verification prompt; older BAF target memories outranked it. That did not block this
+read-only check, but it is evidence to consider before using lean `orient` as the only planning
+input for broader product steps.
+
 ## Feedback Expectations
 
 - Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
