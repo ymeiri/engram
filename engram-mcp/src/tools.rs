@@ -23,20 +23,21 @@ use engram_core::telemetry::{
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, CurrentPlanCaptureInput, DigestExtractionOptions,
-    DigestExtractionReviewApplyOptions, DigestInventoryOptions, DigestService,
-    DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupPlan,
-    DocumentOrphanCleanupPlanOptions, DocumentOrphanQuarantineReviewApplyOptions,
-    DocumentOrphanQuarantineReviewOptions, DocumentOrphanQuarantineReviewPrioritizationOptions,
-    DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
-    DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
-    GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
-    HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
-    MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
-    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService,
-    ObservationPromotionInput, OrientInput, OrientationPacket, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
-    SessionService, TelemetryService, ToolIntelService, WorkService,
+    BrainLoop, BrainLoopItem, CoordinationService, CurrentPlanCaptureInput,
+    DigestExtractionOptions, DigestExtractionReviewApplyOptions, DigestInventoryOptions,
+    DigestService, DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions,
+    DocumentOrphanCleanupPlan, DocumentOrphanCleanupPlanOptions,
+    DocumentOrphanQuarantineReviewApplyOptions, DocumentOrphanQuarantineReviewOptions,
+    DocumentOrphanQuarantineReviewPrioritizationOptions, DocumentRecoveryOptions,
+    DocumentReindexAction, DocumentReindexExecutionOptions, DocumentReindexExecutionReport,
+    DocumentReindexPlan, DocumentService, EntityService, GraphService, HandoffService,
+    HarnessHookEvent, HarnessHookServices, HarnessInstallOptions, HarnessService,
+    HarnessSettingsTarget, KnowledgeService, LintOptions, LintService, MemoryChangesSinceOptions,
+    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, ObligationDetectOptions,
+    ObligationService, ObservationPromotionInput, OrientInput, OrientationPacket,
+    OrientationResolution, RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions,
+    RepositoryService, SearchOptions, SearchService, SessionService, TelemetryService,
+    ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7301,7 +7302,7 @@ fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, S
 // =============================================================================
 
 /// Request an orientation context packet for the current user prompt.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct OrientRequest {
     /// Current working directory, when known
     pub cwd: Option<String>,
@@ -7323,9 +7324,21 @@ pub struct OrientRequest {
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
     pub limit: Option<usize>,
+    /// Response shape: full (default) or lean for read-only/verification tasks
+    pub response_shape: Option<OrientResponseShape>,
 }
 
 const ORIENT_OPEN_OBLIGATION_LIMIT: usize = 5;
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OrientResponseShape {
+    /// Preserve the complete orientation packet.
+    #[default]
+    Full,
+    /// Return compact trace/cursor/Brain Loop guidance without duplicate raw memory payloads.
+    Lean,
+}
 
 #[derive(Debug, Clone, Serialize)]
 struct OrientResponse {
@@ -7333,6 +7346,43 @@ struct OrientResponse {
     packet: OrientationPacket,
     obligation_summary: OrientObligationSummary,
     open_obligations: Vec<OrientOpenObligation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientLeanResponse {
+    response_shape: OrientResponseShape,
+    project: Option<String>,
+    cwd: Option<String>,
+    agent: Option<String>,
+    intent: Option<BrainHarnessIntent>,
+    trace_id: Option<Id>,
+    scope: String,
+    resolution: OrientationResolution,
+    memory_cursor: MemoryCursor,
+    hot_context_ids: Vec<Id>,
+    hot_context_items: Vec<LeanBrainLoopItem>,
+    used_memory_candidate_ids: Vec<Id>,
+    brain_loop: LeanBrainLoop,
+    recommended_actions: Vec<String>,
+    ambiguities: Vec<String>,
+    obligation_summary: OrientObligationSummary,
+    open_obligations: Vec<OrientOpenObligation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LeanBrainLoop {
+    compiled_context: String,
+    top_items: Vec<LeanBrainLoopItem>,
+    degraded: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LeanBrainLoopItem {
+    id: Id,
+    kind: MemoryKind,
+    title: String,
+    summary: String,
+    why_relevant: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -7362,6 +7412,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         request.project, request.cwd
     );
 
+    let response_shape = request.response_shape.unwrap_or_default();
     let cwd = request.cwd;
     let project = request.project;
     let mut packet = {
@@ -7390,12 +7441,21 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         orient_open_obligations(state, project.as_deref(), cwd.as_deref()).await?;
     apply_obligation_summary_to_packet(&mut packet, &obligation_summary, &open_obligations);
 
-    let response = OrientResponse {
-        packet,
-        obligation_summary,
-        open_obligations,
-    };
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    match response_shape {
+        OrientResponseShape::Full => {
+            let response = OrientResponse {
+                packet,
+                obligation_summary,
+                open_obligations,
+            };
+            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+        }
+        OrientResponseShape::Lean => {
+            let response =
+                OrientLeanResponse::from_packet(packet, obligation_summary, open_obligations);
+            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+        }
+    }
 }
 
 async fn orient_open_obligations(
@@ -7465,6 +7525,64 @@ fn apply_obligation_summary_to_packet(
             "- {}: {}\n",
             obligation.title, obligation.description
         ));
+    }
+}
+
+impl OrientLeanResponse {
+    fn from_packet(
+        packet: OrientationPacket,
+        obligation_summary: OrientObligationSummary,
+        open_obligations: Vec<OrientOpenObligation>,
+    ) -> Self {
+        Self {
+            response_shape: OrientResponseShape::Lean,
+            project: packet.project,
+            cwd: packet.cwd,
+            agent: packet.agent,
+            intent: packet.intent,
+            trace_id: packet.trace_id,
+            scope: packet.scope,
+            resolution: packet.resolution,
+            memory_cursor: packet.memory_cursor,
+            hot_context_ids: packet.hot_context_ids,
+            hot_context_items: packet
+                .hot_context_items
+                .into_iter()
+                .map(LeanBrainLoopItem::from)
+                .collect(),
+            used_memory_candidate_ids: packet.used_memory_candidate_ids,
+            brain_loop: LeanBrainLoop::from(packet.brain_loop),
+            recommended_actions: packet.recommended_actions,
+            ambiguities: packet.ambiguities,
+            obligation_summary,
+            open_obligations,
+        }
+    }
+}
+
+impl From<BrainLoop> for LeanBrainLoop {
+    fn from(brain_loop: BrainLoop) -> Self {
+        Self {
+            compiled_context: brain_loop.compiled_context,
+            top_items: brain_loop
+                .top_items
+                .into_iter()
+                .map(LeanBrainLoopItem::from)
+                .collect(),
+            degraded: brain_loop.degraded,
+        }
+    }
+}
+
+impl From<BrainLoopItem> for LeanBrainLoopItem {
+    fn from(item: BrainLoopItem) -> Self {
+        Self {
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            summary: item.summary,
+            why_relevant: item.why_relevant,
+        }
     }
 }
 

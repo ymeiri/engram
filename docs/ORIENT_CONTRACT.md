@@ -25,6 +25,10 @@ the next agent decision better without forcing the agent to choose among special
 - Surface already-open, currently applicable obligations as a compact summary and bounded list.
 - Keep graph traversal, obligation detection, lint, migration, and raw entity observation lookup out
   of the normal `orient` hot path.
+- Keep the full orientation packet as the default response. Callers that only need read-only
+  verification context can request `response_shape="lean"` to receive trace/cursor/scope,
+  candidate IDs, Brain Loop guidance without repeated trust metadata, recommended actions,
+  ambiguities, and the obligation summary/list.
 
 ## Bounds
 
@@ -60,6 +64,11 @@ shape instead of changing retrieval or ranking. Measured candidate envelopes fro
 - Context-pack envelope with trace/cursor/obligation metadata: about 31,742 bytes.
 - Structured response without raw memory buckets or context pack: about 39,249 bytes.
 - Brain Loop envelope without repeated trust payloads: about 3,984 bytes.
+
+Implementation follow-up: MCP `orient` now accepts `response_shape="lean"` for the Brain Loop
+envelope. The lean response intentionally omits `context_pack`, raw memory buckets,
+`memory_metadata`, and `recent_knowledge_commits`; it is a presentation option only and must not
+change retrieval, ranking, trace creation, memory attribution IDs, or obligation surfacing.
 
 ## Feedback Expectations
 

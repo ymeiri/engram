@@ -1028,6 +1028,7 @@ async fn mcp_orient_tags_trace_with_scenario_and_arm() {
             arm: Some("memory_items".to_string()),
             include_recent_commits: Some(false),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await

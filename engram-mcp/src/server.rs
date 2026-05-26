@@ -504,7 +504,7 @@ impl EngramServer {
 
     /// Return a Memory OS orientation context packet for the current prompt.
     #[tool(
-        description = "Return an orientation context packet for the current prompt. Includes a memory cursor, relevant active decisions/rules/preferences/limitations, review-needed memory, recent knowledge commits, recommended actions, and ambiguities. Provide project when known; cwd alone is treated as partial context."
+        description = "Return an orientation context packet for the current prompt. Includes a memory cursor, relevant active decisions/rules/preferences/limitations, review-needed memory, recent knowledge commits, recommended actions, and ambiguities. Provide project when known; cwd alone is treated as partial context. Use response_shape='lean' for compact read-only/verification tasks that only need trace/cursor/scope, Brain Loop guidance, candidate memory IDs, and obligation summary/list."
     )]
     pub async fn orient(
         &self,

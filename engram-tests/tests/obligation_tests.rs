@@ -120,6 +120,7 @@ async fn orient_for_project(state: &ToolState, cwd: &str) -> Value {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -532,6 +533,7 @@ async fn test_mcp_orient_surfaces_open_obligations() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await

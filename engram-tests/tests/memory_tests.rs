@@ -3,7 +3,7 @@
 use engram_index::{EntityService, MemoryService};
 use engram_mcp::tools::{
     self, EntityObserveRequestNew, EntityRequestNew, MemoryChangeRequest, MemoryEvidenceRequest,
-    MemoryRequestNew, OrientRequest, ToolState, VaultRequest,
+    MemoryRequestNew, OrientRequest, OrientResponseShape, ToolState, VaultRequest,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
@@ -355,6 +355,7 @@ async fn test_mcp_memory_promote_observation_surfaces_in_orient() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await
@@ -591,6 +592,7 @@ async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
             arm: Some("capture_current_plan".to_string()),
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -912,6 +914,7 @@ async fn test_mcp_orient_returns_context_packet() {
             arm: None,
             include_recent_commits: Some(true),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await
@@ -961,6 +964,92 @@ async fn test_mcp_orient_returns_context_packet() {
 }
 
 #[tokio::test]
+async fn test_mcp_orient_lean_response_shape_omits_duplicate_payloads() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.kind = Some("decision".to_string());
+    add.title = Some("Lean orient preserves Brain Loop signal".to_string());
+    add.content = Some(
+        "Verification tasks should use compact Brain Loop guidance without duplicated raw memory."
+            .to_string(),
+    );
+    add.origin = Some("user_stated".to_string());
+    add.scope_type = Some("project".to_string());
+    add.project_name = Some("engram".to_string());
+    add.evidence = manual_review_evidence("Lean orient test expects reviewed guidance.");
+    tools::memory_new(&state, add)
+        .await
+        .expect("add should work");
+
+    let full_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("verify current behavior".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("verify_decision".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("full orient should work");
+    let full_json = parse_json(&full_response);
+    assert!(full_json["context_pack"].is_string());
+    assert!(full_json["active_decisions"].is_array());
+    assert!(full_json["memory_metadata"].is_array());
+    assert!(full_json["brain_loop"]["top_items"][0]["trust"].is_object());
+
+    let lean_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("verify current behavior".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("verify_decision".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: Some(OrientResponseShape::Lean),
+        },
+    )
+    .await
+    .expect("lean orient should work");
+    let lean_json = parse_json(&lean_response);
+
+    assert_eq!(lean_json["response_shape"], "lean");
+    assert_eq!(lean_json["project"], "engram");
+    assert!(lean_json["trace_id"].is_string());
+    assert!(lean_json["memory_cursor"]["timestamp"].is_string());
+    assert_eq!(
+        lean_json["brain_loop"]["top_items"][0]["title"],
+        "Lean orient preserves Brain Loop signal"
+    );
+    assert_eq!(
+        lean_json["used_memory_candidate_ids"][0],
+        lean_json["brain_loop"]["top_items"][0]["id"]
+    );
+    assert_eq!(lean_json["obligation_summary"]["available"], false);
+    assert!(lean_json.get("context_pack").is_none());
+    assert!(lean_json.get("active_decisions").is_none());
+    assert!(lean_json.get("memory_metadata").is_none());
+    assert!(lean_json.get("recent_knowledge_commits").is_none());
+    assert!(lean_json["brain_loop"]["top_items"][0]
+        .get("trust")
+        .is_none());
+    assert!(lean_response.len() < full_response.len());
+}
+
+#[tokio::test]
 async fn test_mcp_orient_routes_inferred_memory_to_review_needed() {
     let state = setup_tool_state().await;
 
@@ -989,6 +1078,7 @@ async fn test_mcp_orient_routes_inferred_memory_to_review_needed() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -1057,6 +1147,7 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -1084,6 +1175,7 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -1150,6 +1242,7 @@ async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
             arm: Some("test_hot_context".to_string()),
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
