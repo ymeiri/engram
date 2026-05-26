@@ -88,7 +88,7 @@ Native Codex Desktop smoke after restart confirmed the refreshed MCP schema expo
 `response_shape`. Calling `orient(response_shape="lean")` through the native Engram tool path
 returned trace `019e6358-44bc-7662-88f2-bc67d08101bb`, preserved the memory cursor and five
 `used_memory_candidate_ids`, returned Brain Loop guidance without trust payloads, and reported
-`obligation_summary.open=[]` / no warnings.
+`open_obligations=[]` / no warnings.
 
 ## Feedback Expectations
 
