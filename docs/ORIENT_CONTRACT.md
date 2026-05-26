@@ -84,6 +84,12 @@ The lean response preserved `trace_id`, `memory_cursor`, five candidate memory I
 obligation summary. It omitted `context_pack`, all raw memory buckets, `memory_metadata`,
 `recent_knowledge_commits`, and repeated `trust` objects on Brain Loop items.
 
+Native Codex Desktop smoke after restart confirmed the refreshed MCP schema exposes
+`response_shape`. Calling `orient(response_shape="lean")` through the native Engram tool path
+returned trace `019e6358-44bc-7662-88f2-bc67d08101bb`, preserved the memory cursor and five
+`used_memory_candidate_ids`, returned Brain Loop guidance without trust payloads, and reported
+`obligation_summary.open=[]` / no warnings.
+
 ## Feedback Expectations
 
 - Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
