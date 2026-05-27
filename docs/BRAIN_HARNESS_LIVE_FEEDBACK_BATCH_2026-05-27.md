@@ -1101,3 +1101,60 @@ Decision:
   authorize M6 inventory/export/apply/deletion, lifecycle writes, ranking changes, hook/adapter
   writes, schema/storage changes, public MCP changes, telemetry formula changes, or `orient`
   expansion.
+
+## T29 Read-Only Completion Gate Audit
+
+Status: completed as a documentation/evidence audit. No source behavior, migration flow, lifecycle
+status, hook, adapter, schema, storage, public MCP surface, telemetry formula, ranking, or `orient`
+payload changed.
+
+Research question:
+
+- After T27/T28, does the completion matrix still identify a concrete non-gated implementation
+  slice, or is the remaining Brain OS definition of done blocked by approval-gated migration and
+  harness-configuration work?
+
+Hypotheses:
+
+- Preferred: the matrix is current enough to show meaningful progress while preserving the remaining
+  approval gates.
+- Null: T27/T28 do not change any completion status.
+- Simpler alternative: rely on the prior T23/T24 matrix without another audit.
+- Failure: the audit implies approval for migration, lifecycle mutation, hook writes, or hot-path
+  changes that the user has not granted.
+
+Measurement:
+
+- T29 startup lean `orient` trace `019e6a18-38dc-7b01-9f0f-802c995e4830` returned active
+  current-plan memory `019e6a16-e428-7ee0-9959-78af745a72ae` first.
+- Direct startup searches for current plan, architecture, implementation plan, user philosophy, and
+  risks surfaced the active current plan plus relevant gate/caveat memory.
+- `git status --short` showed only the user-owned untracked root `AGENTS.md`.
+- The live daemon was running on port `8765`, PID `50257`, with installed binary hash
+  `7d9256dc2ca9fcefaaa54bf620c15989fa20926c929d9e6beca27012b6afc9cf`.
+- `real_session_eval(project=engram, limit=50)` at `2026-05-27T15:42:45Z` returned
+  `trace_count=50`, `feedback_trace_count=37`, `feedback_coverage=0.7400000095367432`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, `confidence_gate.passed=true`, and
+  `external_session_trace_count=0`.
+- `obligations(action=doctor)` returned no open obligations and no warnings.
+- `harness(action=doctor)` returned `ready=false` for `claude_code`, `codex`, `gemini_cli`, and
+  `cursor`. Claude Code still lacks required `SessionStart` and `SessionEnd` settings registrations;
+  Codex, Gemini CLI, and Cursor still have required generated adapter drift.
+
+Result:
+
+- Current-plan/next-step retrieval remains validated for the current continuation prompt class.
+- Obligation signal quality is now validated in both Codex and Claude Code for the observed request
+  shape.
+- The evidence loop remains only partially validated because the rolling feedback window is
+  sample-sensitive and the latest sampled traces have no external session labels.
+- Cross-harness behavior remains partial: shared MCP request shapes work, but harness readiness is
+  still false.
+
+Decision:
+
+- The remaining high-risk completion gate is still M6 migration. Even another read-only
+  inventory/review-export pass requires explicit user-approved scope.
+- Adapter or hook writes also remain explicitly gated.
+- The next step should be user-approved M6 scope, user-approved harness adapter/hook repair, or a
+  new evidence-backed narrow slice if the user wants to keep avoiding those gates.
