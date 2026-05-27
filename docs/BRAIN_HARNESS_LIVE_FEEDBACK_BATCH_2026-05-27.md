@@ -1158,3 +1158,65 @@ Decision:
 - Adapter or hook writes also remain explicitly gated.
 - The next step should be user-approved M6 scope, user-approved harness adapter/hook repair, or a
   new evidence-backed narrow slice if the user wants to keep avoiding those gates.
+
+## T30/T31 Documentation And Live-State Audit
+
+Status: completed as a documentation/evidence audit. No source behavior, migration flow, lifecycle
+status, hook, adapter, schema, storage, public MCP surface, telemetry formula, ranking, or `orient`
+payload changed.
+
+Research question:
+
+- After the T30 architecture/research-method doc sync commits and T31 startup retrieval, does the
+  completion matrix change, or do the same approval gates still define the next major product work?
+
+Hypotheses:
+
+- Preferred: the matrix remains stable, with better synchronized docs and fresher evidence for the
+  same gates.
+- Null: T30/T31 add no new completion evidence.
+- Simpler alternative: rely on the T29 audit only.
+- Failure: the audit implies approval for migration inventory, lifecycle mutation, hook/adapter
+  writes, ranking changes, schema/storage changes, or `orient` expansion.
+
+Measurement:
+
+- T30 committed two non-gated doc syncs: `cb39282` for
+  `docs/BRAIN_HARNESS_ARCHITECTURE.md` and `42ed92c` for
+  `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`.
+- T31 startup lean `orient` trace `019e6a25-a81f-7a00-807f-4b5c30c91432` returned current-plan
+  memory `019e6a24-99c8-7043-89a5-b363ca755460` first, while stale repository current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` still appeared as lower-ranked noise.
+- Direct T31 searches again surfaced historical no-evidence architecture/council memories and stale
+  migration-completion memory below current guidance.
+- `git status --short` showed only the user-owned untracked root `AGENTS.md`.
+- The daemon was still running on port `8765`, PID `50257`, with installed binary hash
+  `7d9256dc2ca9fcefaaa54bf620c15989fa20926c929d9e6beca27012b6afc9cf`.
+- Read-only `harness(action=doctor)` still returned `ready=false` for Claude Code, Codex, Gemini
+  CLI, and Cursor.
+- Read-only `lint(action=run, limit=80)` reported `feedback_stale_current_plan` for
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` with 79 recent stale feedback records and
+  `safe_action=none`.
+- Before scoring the new T31 traces, `real_session_eval(project=engram, limit=50)` returned
+  `trace_count=50`, `feedback_trace_count=38`, `feedback_coverage=0.7599999904632568`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, `confidence_gate.passed=true`, and
+  `external_session_trace_count=0`.
+- After scoring the T31 startup traces, the same report returned `feedback_trace_count=44`,
+  `feedback_coverage=0.8799999952316284`, `bad_memory_used_count=0`,
+  `confidence_gate.passed=true`, and `external_session_trace_count=0`.
+
+Result:
+
+- T30 improved documentation synchronization without changing product behavior.
+- T31 reconfirmed current-plan retrieval for the current continuation prompt.
+- Evidence-loop coverage remains sample-window sensitive and the latest sampled traces still have no
+  external session labels.
+- Stale historical memories remain visible as review signals, not automatic lifecycle actions.
+- Harness readiness remains false for all supported harnesses.
+
+Decision:
+
+- M6 remains approval-gated before even read-only inventory/review-export.
+- Adapter or hook writes remain separately gated.
+- The next non-gated work should be another narrow evidence-quality, validation, or documentation
+  synchronization slice unless the user explicitly approves one of the gated paths.

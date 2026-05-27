@@ -490,6 +490,41 @@ T29 read-only completion gate audit, 2026-05-27:
   another read-only inventory/review-export pass requires explicit user-approved scope. Adapter or
   hook writes also remain explicitly gated.
 
+T30/T31 documentation and live-state audit, 2026-05-27:
+
+- Research question: after the T30 architecture/research-method doc sync commits and T31 startup
+  retrieval, does the completion matrix change, or do the same approval gates still define the next
+  major product work?
+- Hypotheses: preferred: the matrix remains stable, with better synchronized docs and fresher
+  evidence for the same gates; null: T30/T31 add no new completion evidence; simpler alternative:
+  rely on the T29 audit only; failure: the audit implies approval for migration inventory, lifecycle
+  mutation, hook/adapter writes, ranking changes, schema/storage changes, or `orient` expansion.
+- Measurement: commits `cb39282` and `42ed92c` synced
+  `docs/BRAIN_HARNESS_ARCHITECTURE.md` and `docs/BRAIN_HARNESS_RESEARCH_METHOD.md` through T29
+  evidence without runtime behavior changes. T31 startup lean `orient` trace
+  `019e6a25-a81f-7a00-807f-4b5c30c91432` returned current-plan memory
+  `019e6a24-99c8-7043-89a5-b363ca755460` first, while stale repository current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` still appeared as lower-ranked noise. Direct T31
+  searches again surfaced historical no-evidence architecture/council memories and the stale
+  migration-completion memory below current guidance. `git status --short` showed only the
+  user-owned untracked root `AGENTS.md`; daemon PID `50257` was still serving installed binary hash
+  `7d9256dc2ca9fcefaaa54bf620c15989fa20926c929d9e6beca27012b6afc9cf`. Read-only
+  `harness(action=doctor)` still returned `ready=false` for Claude Code, Codex, Gemini CLI, and
+  Cursor. Read-only `lint(action=run, limit=80)` still had no safe automatic action and reported
+  `feedback_stale_current_plan` for `019e5e0a-86b4-73e3-aa9b-ca350e83e915` with 79 recent stale
+  feedback records. Before scoring the new T31 traces, `real_session_eval(project=engram, limit=50)`
+  returned `trace_count=50`, `feedback_trace_count=38`, `feedback_coverage=0.7599999904632568`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, `confidence_gate.passed=true`, and
+  `external_session_trace_count=0`. After scoring the T31 startup traces, the same report returned
+  `feedback_trace_count=44`, `feedback_coverage=0.8799999952316284`, `bad_memory_used_count=0`,
+  `confidence_gate.passed=true`, and `external_session_trace_count=0`.
+- Matrix delta: T30 improved documentation synchronization, and T31 reconfirmed current-plan
+  retrieval for the current continuation prompt. No completion status changes: evidence-loop
+  coverage remains sample-window sensitive, external-session joinability is still absent in the
+  latest sampled window, stale historical memories remain review signals with `safe_action=none`,
+  all supported harnesses remain not ready, M6 remains approval-gated before even read-only
+  inventory/review-export, and adapter/hook writes remain separately gated.
+
 Current MCP/CLI Memory OS surface:
 
 - MCP: `orient`, `memory` including `capture_current_plan`, `harness`, `obligations`, `lint`, `graph`, `handoff`, `vault`, `digest`, `repo`.
