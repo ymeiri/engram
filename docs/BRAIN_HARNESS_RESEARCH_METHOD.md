@@ -665,6 +665,21 @@ Current next application:
   fields matched Codex; the bridge path still lacks Engram MCP tools, and Claude's explanatory
   operation-filter claim was rejected after source/result review. Treat the agreement on fields as
   useful cross-harness evidence, not proof by model interpretation.
+- T23 through T25 re-audited the completion matrix and the rolling feedback window. Current-plan
+  retrieval stayed validated for the observed continuation prompts, but broad startup searches still
+  surfaced stale repository-scoped current-plan guidance and historical migration memories below
+  current evidence. Treat the confidence gate as a rolling operational signal, not durable approval.
+- T26 and T27 narrowed obligation false positives from safety-gate wording and untracked root
+  instruction files, then validated the behavior in the installed daemon. Treat this as obligation
+  signal-quality evidence only, not a reason to change ranking, lifecycle state, migration, hooks,
+  adapters, schema/storage, public MCP request shape, telemetry formulas, or `orient`.
+- T28 replicated the obligation request shape through Claude Code. The parity is useful, but the
+  smoke also showed synthetic prompts can create startup obligations, so future harness smokes must
+  run `obligations(action=doctor)` and resolve or skip synthetic artifacts.
+- T29 confirmed the remaining completion gate shape: current-plan retrieval and obligations were
+  clean for the observed surface, while cross-harness readiness remained false and the latest
+  telemetry sample had no external session labels. M6 migration and harness adapter/hook repair stay
+  explicit approval gates.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
