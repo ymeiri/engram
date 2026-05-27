@@ -696,6 +696,12 @@ Current next application:
   fails because feedback spans only two intents despite `feedback_coverage=0.9399999976158142` and
   `bad_memory_used_count=0`. This strengthens the rule that migration confidence needs explicit
   evidence and user approval, not a favorable or unfavorable single rolling sample alone.
+- T35 pre-registered fixed read-only checks before running them to avoid intent-shopping. The M6
+  `verify_decision` check passed, the `review_memory` stale-plan check was noisy but usable, and
+  the lean `prepare_handoff` `orient` check failed because explicit M6/harness-write gates were
+  absent and stale repository-scoped current-plan guidance appeared without a caveat. The rolling
+  confidence gate passed numerically afterward, but the fixed-case failure is stronger evidence
+  than the aggregate pass.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

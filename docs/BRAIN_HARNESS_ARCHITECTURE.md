@@ -238,6 +238,13 @@ Research checkpoint, current through 2026-05-27:
   `feedback_coverage=0.9399999976158142`, `bad_memory_used_count=0`,
   and `external_session_trace_count=0`, but the conservative confidence gate failed because
   feedback covered only two intents. Treat that as rolling-window evidence, not approval for M6.
+- T35 pre-registered three read-only evidence-quality checks before running them. The M6
+  `verify_decision` case passed and the `review_memory` stale-plan case weakly passed, but lean
+  `orient(intent=prepare_handoff)` failed its fixed criteria: it preserved current-plan continuity
+  while omitting explicit M6/harness-write gates and returning stale repository-scoped
+  current-plan guidance without a caveat. The rolling confidence gate then passed numerically
+  (`feedback_trace_count=42`, `distinct_intent_count=5`, `bad_memory_used_count=0`), but the
+  per-case handoff failure is stronger evidence than the aggregate gate pass.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1190,7 +1197,12 @@ Proceed in this order from the current checkpoint:
     operational signal. Feedback coverage and bad-memory containment can look healthy while the
     gate still fails on intent diversity; that failure blocks migration confidence rather than
     requiring ranking or hot-path changes.
-45. Keep non-gated work limited to targeted validation, evidence-quality fixes, cross-harness
+45. Treat the T35 evidence-quality audit as a warning against aggregate-gate overclaiming:
+    fixed-case scoring found a lean `orient(intent=prepare_handoff)` gap even though the rolling
+    confidence gate passed numerically afterward. Do not change `orient`, lifecycle state, ranking,
+    migration, hooks, adapters, public MCP shape, telemetry formulas, or schema/storage without the
+    relevant approval gate.
+46. Keep non-gated work limited to targeted validation, evidence-quality fixes, cross-harness
     replication, and documentation synchronization until the user explicitly approves either M6
     scope or harness adapter/hook writes.
 

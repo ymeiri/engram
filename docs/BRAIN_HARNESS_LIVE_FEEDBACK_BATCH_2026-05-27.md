@@ -1453,3 +1453,40 @@ Scoring rules:
   confidence-gate pass is not the success criterion.
 - Regardless of outcome, this audit does not authorize M6 read-only inventory/export, M6 write
   apply/deletion, lifecycle cleanup, hook/adapter writes, ranking changes, or `orient` expansion.
+
+Results:
+
+- T35-01 `review_memory` trace `019e6a5f-0735-7282-bc94-42d773753903` was a weak pass.
+  It surfaced stale repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915`, current-plan lifecycle predicate memory
+  `019e68e9-2842-76f2-8367-cf159246ce3c`, and report documentation that automatic cleanup is not
+  safe. It did not return the live lint finding or exact `safe_action=none` as a first-class search
+  result, so the evidence is useful but noisy. Feedback score: usefulness `3`, correctness `4`,
+  noise `4`, `bad_memory_used=false`; the stale current-plan memory was rejected.
+- T35-02 `verify_decision` trace `019e6a5f-3dd6-76a1-873d-58becefb49ec` passed. The top results
+  were migration gate memory `019dd35d-1a48-7103-b0e2-390225f8b418` and read-only M6
+  scope-approval limitation `019e6857-1059-7e41-b69f-eb9bd2d38c60`; no result implied that M6
+  inventory, review-export, write apply, deletion, or legacy simplification was already approved.
+  Feedback score: usefulness `5`, correctness `5`, noise `2`, `bad_memory_used=false`.
+- T35-03 `prepare_handoff` lean `orient` trace `019e6a5f-594d-7193-aa9b-a865523f1299`
+  failed its pre-registered criteria. The packet preserved current-plan continuity with
+  `019e6a58-9d71-7ec2-84e9-b222f57067d9`, but did not surface explicit M6 or harness-write gates,
+  and included stale repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` as a top item without a caveat. Feedback score:
+  usefulness `2`, correctness `3`, noise `4`, `task_success=false`, `bad_memory_used=false`.
+- After scoring the fixed traces, `real_session_eval(project=engram, limit=50)` at
+  `2026-05-27T16:59:05Z` returned `trace_count=50`, `feedback_trace_count=42`,
+  `feedback_coverage=0.8399999737739563`, `distinct_intent_count=5`,
+  `bad_memory_used_count=0`, `task_failure_count=1`, `external_session_trace_count=0`, and
+  `confidence_gate.passed=true`.
+
+Decision:
+
+- Treat the numerical confidence-gate pass as weaker than the T35 per-case result. The audit found
+  one real task-boundary failure, so this is not evidence of Brain Harness completion and not M6
+  approval.
+- Keep the concrete follow-up gated: fixing T35-03 would require an approved `orient`
+  handoff/ranking/payload design decision or lifecycle cleanup for stale current-plan guidance.
+- Continue to keep M6 read-only inventory/review-export, M6 write apply/deletion/legacy
+  simplification, lifecycle cleanup, and harness adapter/hook writes blocked until explicitly
+  approved by the user.

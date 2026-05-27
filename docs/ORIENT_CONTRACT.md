@@ -156,6 +156,11 @@ with that tag remain normal evidence and are not auto-superseded by
 
 - `orient` does not enforce a byte or token budget yet; tests should not pretend that it does.
 - `orient` does not promote entity observations or migrated data into active memory.
+- `orient(intent=prepare_handoff)` is not yet a complete approval-gate handoff packet. T35
+  read-only trace `019e6a5f-594d-7193-aa9b-a865523f1299` preserved current-plan continuity but
+  omitted explicit M6/harness-write gates and included stale repository-scoped current-plan
+  guidance without a caveat. Fixing this requires an approved `orient`/ranking/payload or memory
+  lifecycle slice.
 - Migration completion remains review-gated and should wait until this contract stays green.
 
 ## Contract Tests
