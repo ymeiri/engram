@@ -601,7 +601,10 @@ Current next application:
   `0d4581c1cffdd17af0d4d8f0911812a05a2c3ce3f9ff8766d455e043ed73a211` and restarting the daemon on
   port `8765`, PID `36805`, the same request returned only Engram project current-plan memory
   `019e6997-96d0-76a0-ac67-c7655df0958f`. Treat this as scoped sampling hygiene, not a ranking,
-  `orient`, migration, schema, hook, adapter, or lifecycle-cleanup change.
+  `orient`, migration, schema, hook, adapter, or lifecycle-cleanup change. Native Claude Code
+  `2.1.152` then reproduced the scoped list result through its own Engram MCP connection after the
+  T16 current-plan capture, returning only `019e69af-011f-7450-9f8c-1ff067f0f183` for
+  `project / engram`.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

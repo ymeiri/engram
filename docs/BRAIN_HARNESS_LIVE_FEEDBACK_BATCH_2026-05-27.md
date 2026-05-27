@@ -504,6 +504,10 @@ Live result:
   `019e6997-96d0-76a0-ac67-c7655df0958f`, the Engram project current plan after T15.
 - The older repository-scoped current plan and wrong-project `voice-layer` current plan were no
   longer returned for the explicit project-scope request.
+- Native Claude Code `2.1.152`, with `engram: /Users/yuval.meiri/.local/bin/engram serve`
+  connected and only `mcp__engram__memory` allowed, reproduced the same behavior after the T16
+  current-plan capture: count `1`, memory `019e69af-011f-7450-9f8c-1ff067f0f183`, title
+  `Current plan after T16 scoped memory-list filtering`, scope `project / engram`.
 - After scoring the startup traces that led to this slice,
   `real_session_eval(project=engram, limit=50)` reported `trace_count=43`,
   `feedback_trace_count=30`, `feedback_coverage=0.6976743936538696`,

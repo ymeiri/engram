@@ -165,7 +165,8 @@ Research checkpoint, current through 2026-05-27:
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
   memory-list fix only; it does not change `orient`, unified `search`, ranking, migration, schema,
-  hooks, adapters, or lifecycle status.
+  hooks, adapters, or lifecycle status. Native Claude Code `2.1.152` reproduced the same scoped
+  list behavior through its own Engram MCP connection with only `mcp__engram__memory` allowed.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1061,7 +1062,9 @@ Proceed in this order from the current checkpoint:
 31. Treat T16 scoped memory-list filtering as evidence-quality hygiene: explicit scope filters on
     `memory(action=list)` now prevent wrong-project current-plan records from contaminating scoped
     sampling. This does not change the Brain Loop hot path, unified search ranking, or memory
-    lifecycle cleanup.
+    lifecycle cleanup. Native Claude Code reproduced the scoped list result through the shared MCP
+    memory tool, which validates this specialist surface in both Codex and Claude Code for the
+    observed request shape.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
