@@ -547,6 +547,11 @@ Current next application:
   retrieves the design philosophy when it exists as an active reviewed preference `MemoryItem`.
   MemoryItem `019e6924-256b-7093-b1c5-286ec4d02461` repaired the live data state, and fixture
   coverage locks the active-preference behavior without changing ranking.
+- The T07 follow-up showed the same representation/capture pattern for telemetry feedback
+  expectations: direct search retrieves the feedback contract and weak-signal caveat when they exist
+  as an active reviewed rule `MemoryItem`. MemoryItem
+  `019e692b-635e-7d80-9f2f-8796abc95234` repaired the live data state, and fixture coverage locks
+  the active-rule behavior without changing ranking.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

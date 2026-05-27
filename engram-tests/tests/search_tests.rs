@@ -589,6 +589,92 @@ async fn test_memory_search_surfaces_active_design_philosophy_preference() {
 }
 
 #[tokio::test]
+async fn test_memory_search_surfaces_active_telemetry_feedback_rule() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+
+    let feedback_rule = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Telemetry feedback expectations",
+                "Agent telemetry feedback expectations: include used_memory_ids for returned \
+                 memory that shaped an answer, rejected_memory_ids for memory rejected as stale, \
+                 noisy, wrong_scope, or irrelevant, structured missing_context when expected \
+                 context is absent or buried, and bad_memory_used when memory caused harmful \
+                 behavior. Treat agent feedback as a weak signal until it is correlated with \
+                 transcript, tests, user review, or later memory edits.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "orient-contract-feedback-expectations",
+            ))
+            .with_tag("telemetry")
+            .with_tag("feedback")
+            .with_tag("weak-signal"),
+        )
+        .await
+        .unwrap();
+
+    let generic_telemetry_note = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::ProjectFact,
+                "Telemetry implementation note",
+                "Telemetry records traces, feedback rows, and aggregate coverage metrics for \
+                 Brain Harness reports.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_confidence(0.99)
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "generic-telemetry-note",
+            )),
+        )
+        .await
+        .unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "telemetry feedback expectations used_memory_ids rejected stale wrong_scope missing_context weak signal",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    let rule_index = results
+        .iter()
+        .position(|result| result.id == feedback_rule.id.to_string())
+        .expect("active telemetry feedback rule should be returned");
+    let generic_index = results
+        .iter()
+        .position(|result| result.id == generic_telemetry_note.id.to_string())
+        .expect("generic telemetry control should be returned");
+
+    assert!(
+        rule_index < generic_index,
+        "specific feedback rule should rank ahead of generic telemetry context"
+    );
+    assert_eq!(
+        results[rule_index]
+            .memory_metadata
+            .as_ref()
+            .map(|metadata| metadata.review_state),
+        Some(MemoryReviewState::Reviewed)
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_prioritizes_current_plan_for_next_step_query() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

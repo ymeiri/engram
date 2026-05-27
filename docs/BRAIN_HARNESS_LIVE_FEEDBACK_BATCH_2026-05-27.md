@@ -146,3 +146,28 @@ Follow-up actions:
 This repair does not imply that all legacy preferences have been promoted. Future preference misses
 should still be diagnosed as representation/capture gaps first, with broad ranking changes kept
 behind their normal evidence gates.
+
+## T07 Follow-Up Repair
+
+Status: repaired as a data/capture gap; no ranking, schema, public MCP, migration, hook, or
+`orient` payload change.
+
+The exact T07 query still surfaced telemetry-adjacent implementation memories above the actual
+feedback contract because the structured feedback expectations and weak-signal caveat lived in docs,
+not in an active project-scoped `MemoryItem`.
+
+Follow-up actions:
+
+- Added deterministic coverage in `engram-tests/tests/search_tests.rs` proving that an active,
+  reviewed project rule containing the telemetry feedback terms is returned for the T07 query and
+  ranks ahead of generic telemetry context.
+- Captured reviewed project-scoped rule MemoryItem
+  `019e692b-635e-7d80-9f2f-8796abc95234` from the user goal, `ORIENT_CONTRACT.md`,
+  `BRAIN_HARNESS_ARCHITECTURE.md`, and this T07 finding.
+- Verified live trace `019e692b-827d-7c11-93ee-94e30d6198b6`: the exact T07 query returned the new
+  rule as the top memory result. Feedback `019e692b-a9c3-7333-9f47-290609e2febd` recorded
+  `task_success=true`, `preference_adhered=true`, `bad_memory_used=false`.
+
+The pre-capture trace `019e692a-3af7-7270-b830-eba2d761f7c5` was also scored with feedback
+`019e692b-a9b7-78c0-b4fd-75ba98855fd2` as a representation miss. This repair does not make agent
+feedback ground truth; it makes the existing feedback contract easier to retrieve.
