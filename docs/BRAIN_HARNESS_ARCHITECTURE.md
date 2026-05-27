@@ -173,12 +173,14 @@ Research checkpoint, current through 2026-05-27:
   `SessionStart` and `SessionEnd` settings hook registrations are missing; Codex, Gemini CLI, and
   Cursor still have required generated adapter drift. This is configuration evidence only, not an
   adapter or hook write.
-- A post-T17 read-only evidence audit found that the current telemetry confidence gate is not
-  passing: `real_session_eval(project=engram, limit=50)` has enough traces and feedback volume but
-  only two intents with feedback. The same audit found `lint(action=apply_safe, write=false)` has no
-  safe actions, and stale repository-scoped current-plan memory
-  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active with 42 stale-feedback hits. Lifecycle
-  status changes, hot-path ranking changes, and document-index normalization remain gated.
+- A post-T17 read-only evidence audit found that the telemetry confidence gate is sample-window
+  sensitive. Before scoring T18 retrieval traces, `real_session_eval(project=engram, limit=50)` had
+  enough trace and feedback volume but feedback across only two intents, so the gate failed. After
+  scoring T18 retrieval traces, the current report passes numerically again. The same audit found
+  `lint(action=apply_safe, write=false)` has no safe actions, and stale repository-scoped
+  current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active with repeated
+  stale-feedback hits. Lifecycle status changes, hot-path ranking changes, and document-index
+  normalization remain gated.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -728,11 +730,12 @@ Implemented spike:
 - A pre-registered 2026-05-27 live feedback batch
   (`live_feedback_coverage_2026_05_27`) submitted feedback for all ten read-only retrieval traces
   and moved project-level feedback coverage to `23/44` (`0.5227272510528564`). The numerical
-  confidence gate passed at that checkpoint, but a later T18 re-audit shows the current sample no
-  longer passes because feedback spans only two intents. The batch remains weak agent-assessed
-  evidence. It exposed a design-preference retrieval failure and stale migration/current-plan
-  caveats, not authorization for M6 inventory, write apply, deletion, broad ranking changes, hook
-  changes, or `orient` payload expansion.
+  confidence gate passed at that checkpoint. A later T18 pre-feedback re-audit showed the current
+  sample could fail when feedback spans only two intents; after scoring T18 traces, the report
+  passed numerically again. The batch remains weak agent-assessed evidence. It exposed a
+  design-preference retrieval failure and stale migration/current-plan caveats, not authorization
+  for M6 inventory, write apply, deletion, broad ranking changes, hook changes, or `orient` payload
+  expansion.
 - Generated harness adapters now instruct agents to preserve `trace_id` values returned by
   `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
   with `task_success`, `preference_adhered`, `repeated_context_questions`, `bad_memory_used`, and
@@ -1083,11 +1086,12 @@ Proceed in this order from the current checkpoint:
     files are installed, but required settings registrations for `SessionStart` and `SessionEnd`
     are missing; Codex, Gemini CLI, and Cursor have required adapter drift. This corrects stale
     documentation and does not approve adapter writes, hook changes, or settings mutation.
-33. Treat T18 as a confidence-gate correction, not implementation approval: the current telemetry
-    sample no longer passes the confidence gate because feedback spans only two intents, even
-    though `bad_memory_used_count=0` and memory-judgment coverage is complete for feedback records.
-    `lint(action=apply_safe, write=false)` still has no safe actions. Do not archive stale memory,
-    change `orient` ranking, or normalize document index records without explicit approval.
+33. Treat T18 as a confidence-gate sensitivity correction, not implementation approval: before
+    scoring T18 retrieval traces, the current telemetry sample failed the confidence gate because
+    feedback spanned only two intents; after scoring those traces, it passes numerically again with
+    `bad_memory_used_count=0`. `lint(action=apply_safe, write=false)` still has no safe actions. Do
+    not archive stale memory, change `orient` ranking, or normalize document index records without
+    explicit approval.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

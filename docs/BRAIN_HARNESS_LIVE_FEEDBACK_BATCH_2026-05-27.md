@@ -110,10 +110,11 @@ approval-gated.
 
 The batch improved feedback coverage and exposed useful retrieval risks:
 
-- The project-level telemetry confidence gate passed numerically at this checkpoint, but a later
-  T18 re-audit shows the current sample no longer passes because feedback spans only two intents.
-  This remains weak agent-assessed evidence and must be correlated with transcript, tests, or user
-  review before driving product or migration decisions.
+- The project-level telemetry confidence gate passed numerically at this checkpoint. A later T18
+  pre-feedback re-audit showed the current sample could fail when feedback spans only two intents;
+  after scoring T18 traces, the current report passed numerically again. This remains weak
+  agent-assessed evidence and must be correlated with transcript, tests, or user review before
+  driving product or migration decisions.
 - The main new failure is T04: user software design philosophy is not reliably retrievable from
   the current active memory/search surface for a direct preference query.
 - The main negative-control caveat is T10: old approved migration/export records can still surface
@@ -584,10 +585,15 @@ Measurement:
 
 Result:
 
-- `real_session_eval` reported `trace_count=44`, `feedback_trace_count=30`,
+- Before scoring the T18 retrieval traces, `real_session_eval` reported `trace_count=44`,
+  `feedback_trace_count=30`,
   `feedback_coverage=0.6818181872367859`, `memory_judgment_coverage=1.0`, and
   `bad_memory_used_count=0`, but `confidence_gate.passed=false` because feedback spans only two
   intents.
+- After scoring the T18 orient/search traces, the 2026-05-27T14:01:00Z recheck returned
+  `feedback_trace_count=32`, `feedback_coverage=0.7272727489471436`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
 - `lint(action=apply_safe, write=false)` reported `applied_safe_actions=0`; all observed stale,
   wrong-scope, duplicate-entity, missing-evidence, and handoff findings still have no safe automatic
   action.
@@ -600,7 +606,9 @@ Result:
 
 Decision:
 
-- Correct the confidence-gate claim: current project telemetry does not presently pass the gate.
+- Correct the confidence-gate claim: project telemetry currently passes numerically after scoring
+  T18 traces, but this slice proves the result is sample-window sensitive and still weak
+  agent-assessed evidence.
 - Do not apply lifecycle status changes, hot-path ranking changes, document-index normalization,
   migration inventory/review-export, adapter writes, or hook/settings writes without explicit
   approval.
