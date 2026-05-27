@@ -906,6 +906,11 @@ Measurement:
   `feedback_coverage=0.7599999904632568`, `memory_judgment_coverage=1.0`,
   `bad_memory_used_count=0`, `confidence_gate.passed=true`,
   `external_session_trace_count=5`, and `unspecified_external_session_trace_count=45`.
+- After the T25 startup traces were scored, the same rolling report generated at
+  `2026-05-27T15:10:44Z` returned `trace_count=50`, `feedback_trace_count=44`,
+  `feedback_coverage=0.8799999952316284`, `memory_judgment_coverage=1.0`,
+  `bad_memory_used_count=0`, `confidence_gate.passed=true`,
+  `external_session_trace_count=5`, and `unspecified_external_session_trace_count=45`.
 - T25 startup retrieval still returned the active current-plan memory first for `orient` and the
   direct current-plan search. The stale repository-scoped current-plan memory still appeared as
   lower-ranked noise in broad startup results.
@@ -920,6 +925,9 @@ Result:
 
 - The confidence gate is useful as a rolling operational signal, not a proof of completion. Its
   numerator can move down when new unscored traces enter the latest 50-trace window.
+- Scoring the fresh T25 startup traces restored the report to the same `44/50` feedback-trace level
+  observed after T24 scoring, which supports the window-sensitivity interpretation rather than a
+  telemetry regression.
 - T24's external-session conclusion still holds: sparse joinability is a caller/harness adoption or
   host-availability gap, while the core storage/pass-through/reporting path is already covered.
 - The stale repository-scoped current-plan memory remains a visible lifecycle review issue. The

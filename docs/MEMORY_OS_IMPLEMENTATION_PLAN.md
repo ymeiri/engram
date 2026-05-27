@@ -353,11 +353,16 @@ T25 rolling evidence-window audit, 2026-05-27:
   read-only report generated at `2026-05-27T15:06:04Z` returned `trace_count=50`,
   `feedback_trace_count=38`, `feedback_coverage=0.7599999904632568`,
   `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, `confidence_gate.passed=true`,
-  `external_session_trace_count=5`, and `unspecified_external_session_trace_count=45`.
+  `external_session_trace_count=5`, and `unspecified_external_session_trace_count=45`. After those
+  T25 startup traces were scored, the report generated at `2026-05-27T15:10:44Z` returned
+  `feedback_trace_count=44`, `feedback_coverage=0.8799999952316284`,
+  `bad_memory_used_count=0`, `confidence_gate.passed=true`, and
+  `external_session_trace_count=5`.
 - Matrix delta: the confidence gate remains a useful rolling operational signal, but the latest
-  sample proves it is window-sensitive rather than a durable completion proof. Current-plan
-  retrieval still returned the active current-plan memory first for T25 startup prompts, while stale
-  repository-scoped current-plan guidance remains lower-ranked lifecycle noise. This does not
+  sample proves it is window-sensitive rather than a durable completion proof; scoring the fresh
+  T25 traces restored coverage to the same `44/50` level seen after T24 scoring. Current-plan
+  retrieval still returned the active current-plan memory first for T25 startup prompts, while
+  stale repository-scoped current-plan guidance remains lower-ranked lifecycle noise. This does not
   authorize M6 inventory/export/apply/deletion, lifecycle writes, hook/adapter writes, telemetry
   formula changes, or `orient` payload expansion.
 
