@@ -420,3 +420,36 @@ Live result:
 This is still a narrow prompt-class calibration. It does not authorize read-only M6 inventory,
 migration write apply, deletion, cleanup, legacy simplification, schema/storage/index changes, hook
 changes, public MCP surface changes, broad ranking churn, or `orient` payload expansion.
+
+## T15 Claude Code Cross-Harness Smoke
+
+Status: passed as read-only validation; no code or ranking changes.
+
+Research question: does Claude Code, using its own connected Engram MCP server, observe the same T14
+ranking boundary as Codex for explicit migration-apply prompts and the current-plan/M6 context
+regression?
+
+Measurement:
+
+- Claude Code version: `2.1.152`.
+- `claude mcp list` reported `engram: /Users/yuval.meiri/.local/bin/engram serve - Connected`.
+- Claude Code was invoked with `--permission-mode dontAsk`, `--allowedTools mcp__engram__search`,
+  and edit/shell tools disallowed.
+
+Result:
+
+- Trace `019e6993-d4da-70a1-b5eb-9185eeb23339` ranked
+  `019dd35d-1a48-7103-b0e2-390225f8b418` first for
+  `Should we proceed with migration apply?`.
+- Trace `019e6993-d891-7ff3-93ef-4bd8ad14d9c7` ranked the same paused gate memory first for
+  `next non-gated step, should we proceed with migration apply?`.
+- Trace `019e6994-8ec9-7343-9198-9298867b9ceb` ranked current-plan memory
+  `019e6992-e937-73e3-a165-a706d5f15a7d` first for the contextual
+  `current plan next step ... M6 gate` regression query.
+- After scoring these traces, `real_session_eval(project=engram, limit=50)` reported
+  `trace_count=42`, `feedback_trace_count=36`, `feedback_coverage=0.8571428656578064`,
+  `memory_judgment_coverage=0.9722222089767456`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
+
+This validates the shared MCP search behavior in Claude Code for the observed T14 prompt class. It
+does not validate hooks, adapter installation, M6 inventory/write apply, or broad ranking quality.

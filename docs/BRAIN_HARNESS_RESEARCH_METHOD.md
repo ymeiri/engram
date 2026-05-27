@@ -591,6 +591,10 @@ Current next application:
   `019e698d-b791-7d93-a0d6-542219e3eb6c` ranked the paused migration review gate first for
   explicit migration-apply prompts. Regression trace `019e698d-b7ae-7a13-b2c5-d58a9898deab`
   preserved current-plan-first behavior for the T12 current-plan/M6-gate context prompt.
+- Claude Code `2.1.152` replicated the same boundary through its own Engram MCP connection:
+  explicit migration-apply traces `019e6993-d4da-70a1-b5eb-9185eeb23339` and
+  `019e6993-d891-7ff3-93ef-4bd8ad14d9c7` returned the paused gate first, and contextual
+  current-plan/M6 trace `019e6994-8ec9-7343-9198-9298867b9ceb` returned current-plan memory first.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

@@ -156,6 +156,11 @@ Research checkpoint, current through 2026-05-27:
   the paused migration review gate first, while regression trace
   `019e698d-b7ae-7a13-b2c5-d58a9898deab` kept the current-plan/M6-gate context prompt
   current-plan-first.
+- Claude Code `2.1.152` replicated that boundary through its own Engram MCP connection: traces
+  `019e6993-d4da-70a1-b5eb-9185eeb23339` and `019e6993-d891-7ff3-93ef-4bd8ad14d9c7` returned
+  the paused gate first for explicit migration-apply prompts, and trace
+  `019e6994-8ec9-7343-9198-9298867b9ceb` returned current-plan memory first for the contextual
+  M6-gate continuation prompt.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1042,6 +1047,12 @@ Proceed in this order from the current checkpoint:
     `019e698d-b7ae-7a13-b2c5-d58a9898deab` preserves current-plan-first behavior for the T12
     context prompt. This does not authorize M6 inventory, write apply, deletion, payload expansion,
     schema changes, hooks, public MCP changes, or broad ranking weights.
+30. Treat T15 Claude Code validation as cross-harness evidence for this prompt class only: Claude
+    Code `2.1.152` with connected Engram MCP reproduced the explicit gate-first and contextual
+    current-plan-first results in traces `019e6993-d4da-70a1-b5eb-9185eeb23339`,
+    `019e6993-d891-7ff3-93ef-4bd8ad14d9c7`, and
+    `019e6994-8ec9-7343-9198-9298867b9ceb`. It does not validate hooks, adapter writes, migration
+    execution, or broad ranking quality.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
