@@ -268,3 +268,48 @@ Measurement:
 The result supports the existing direction: continue using direct feedback plus read-only lint to
 make stale active memory visible, but do not infer M6 approval, automatic archival, deletion, or broad
 ranking changes from agent feedback alone.
+
+## T12 Gate-Context Ranking Calibration
+
+Status: repaired as a narrow query-classification bug; no broad ranking weights, schema, public MCP,
+migration, lifecycle, hook, or `orient` payload change.
+
+Research question: when a continuation query asks for the current plan and mentions the M6 gate only
+as context, should direct unified `search` still promote active current-plan guidance?
+
+Before evidence:
+
+- Trace `019e6954-4bf3-7432-9122-057cb9ab5b9b` for
+  `current plan next step non-gated Brain Harness completion T11 feedback stabilization M6 gate`
+  returned the fresh current-plan MemoryItem `019e6952-49b7-7a80-b53b-7dd0790e0ce9`, but behind
+  non-gated calibration notes.
+- Source inspection showed `asks_for_decision_gate` still treated bare `gate` as a decision-gate
+  query after stripping `non-gated`, which disabled current-plan promotion.
+
+Hypotheses:
+
+- Preferred: bare `gate` in a current-plan/next-step prompt is often milestone context, not an
+  approval request; removing it as an unconditional query trigger fixes the observed miss.
+- Null: the behavior is acceptable ranking noise and should remain documented only.
+- Simpler alternative: only document a prompt-writing caveat.
+- Failure: migration apply/approval prompts lose gate-first behavior.
+
+Decision and validation:
+
+- AI Council consensus and Claude Bridge critique favored implementation within this narrow
+  classification boundary.
+- `asks_for_decision_gate` now keeps strong action or permission terms such as `should`, `proceed`,
+  `allowed`, `allow`, `apply`, `safety`, `block`, `blocked`, and `must`, but no longer treats bare
+  `gate` as sufficient.
+- `test_memory_search_treats_non_gated_next_slice_as_current_plan` now covers the observed
+  `current plan next step ... M6 gate` wording and a competing calibration fact.
+- Existing `test_memory_search_keeps_gate_guidance_above_current_plan` and the mixed
+  `should/proceed/migration apply` assertion preserve gate-first behavior for actual approval
+  prompts.
+- After scoring T12 startup/search traces, `real_session_eval(project=engram, limit=50)` reported
+  `trace_count=44`, `feedback_trace_count=27`, `feedback_coverage=0.6136363744735718`,
+  `memory_judgment_coverage=0.9629629850387573`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
+
+This result does not justify broad ranking churn. It only fixes a documented false positive in the
+query classifier for current-plan promotion.

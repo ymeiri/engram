@@ -459,10 +459,11 @@ fn current_plan_guidance_score(
 
 fn asks_for_decision_gate(query: &str) -> bool {
     // "non-gated" is continuation vocabulary; only independent gate terms trigger gate mode.
+    // Bare "gate" is often a milestone noun ("M6 gate") in continuation prompts, not an
+    // approval request. Explicit action or permission terms still keep gate guidance first.
     let query = query.replace("non-gated", "").replace("non gated", "");
     [
-        "should", "proceed", "allowed", "allow", "apply", "gate", "safety", "block", "blocked",
-        "must",
+        "should", "proceed", "allowed", "allow", "apply", "safety", "block", "blocked", "must",
     ]
     .iter()
     .any(|term| query.contains(term))

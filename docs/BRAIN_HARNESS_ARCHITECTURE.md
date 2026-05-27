@@ -1014,6 +1014,10 @@ Proceed in this order from the current checkpoint:
     `review_memory` retrieval now passes and project feedback coverage is back at the gate threshold,
     but stale migration-completion memory can still surface in implementation-plan searches and is
     only a generic `feedback_stale_active_memory` review signal with `safe_action=none`.
+27. Treat the T12 gate-context ranking calibration as a narrow false-positive fix: `current plan`
+    / `next step` prompts that mention `M6 gate` as context should retrieve current-plan guidance
+    first, while explicit `should`/`proceed`/`apply` migration prompts remain gate-first. Do not use
+    this fixture to justify broad ranking weights or migration work.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

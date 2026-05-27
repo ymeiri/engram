@@ -571,6 +571,10 @@ Current next application:
   searches can still surface stale migration-completion memory
   `019dd3fe-ec94-7122-af04-1f35b839387f`, which is visible through generic
   `feedback_stale_active_memory` lint with `safe_action=none`.
+- The T12 gate-context ranking calibration fixed a narrow query-classification false positive: bare
+  `gate` in a current-plan/next-step prompt is treated as milestone context, while
+  `should`/`proceed`/`apply` and other action or permission terms still keep gate guidance above the
+  current plan. This is deterministic fixture evidence for one prompt class, not broad ranking proof.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

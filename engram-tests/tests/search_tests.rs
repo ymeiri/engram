@@ -902,6 +902,26 @@ async fn test_memory_search_treats_non_gated_next_slice_as_current_plan() {
         .await
         .unwrap();
 
+    let mut noisy_calibration = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Non-gated continuation search calibration landed",
+        "T11 feedback stabilization confirmed the M6 gate must remain visible, but the \
+         next-step query should still retrieve the current plan before calibration notes.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "non-gated-calibration",
+    ));
+    noisy_calibration.updated_at = now;
+    memory_service
+        .capture_memory(noisy_calibration)
+        .await
+        .unwrap();
+
     let mut gate = MemoryItem::new(
         MemoryKind::Decision,
         "Migration Must Be Review-Gated",
@@ -952,6 +972,23 @@ async fn test_memory_search_treats_non_gated_next_slice_as_current_plan() {
         .expect("Failed to search");
 
     assert_eq!(continuation_results[0].id, current_plan.id.to_string());
+
+    let gate_context_results = search_service
+        .search_with_options(
+            "current plan next step non-gated Brain Harness completion T11 feedback \
+             stabilization M6 gate",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(gate_context_results[0].id, current_plan.id.to_string());
 
     let mixed_gate_results = search_service
         .search_with_options(
