@@ -996,7 +996,10 @@ Proceed in this order from the current checkpoint:
 21. Treat the T04 design-preference follow-up as a representation/capture repair, not a ranking
     repair: active reviewed preference MemoryItems are searchable for the target query, but legacy
     observations remain substrate until reviewed promotion or migration work is explicitly gated.
-22. Treat the T07 feedback-expectations follow-up the same way: active reviewed rule MemoryItems are
+22. Treat the T06 lean-`orient` follow-up the same way: active reviewed rule MemoryItems are
+    searchable for the lean response-shape and hot-path contract, but that does not expand
+    `orient` payload responsibilities or move specialist tools into the normal hot path.
+23. Treat the T07 feedback-expectations follow-up the same way: active reviewed rule MemoryItems are
     searchable for telemetry feedback contracts and weak-signal caveats, but doc-only guidance should
     be promoted deliberately when it needs to guide future agent behavior.
 

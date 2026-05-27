@@ -547,6 +547,11 @@ Current next application:
   retrieves the design philosophy when it exists as an active reviewed preference `MemoryItem`.
   MemoryItem `019e6924-256b-7093-b1c5-286ec4d02461` repaired the live data state, and fixture
   coverage locks the active-preference behavior without changing ranking.
+- The T06 follow-up showed the same representation/capture pattern for the lean-`orient` contract:
+  direct search retrieves the response-shape and hot-path rule when it exists as an active reviewed
+  `MemoryItem`. MemoryItem `019e6931-bd2d-7281-b9f6-952eaa2a20e4` repaired the live data state,
+  and fixture coverage locks the active-rule behavior without changing ranking or expanding
+  `orient`.
 - The T07 follow-up showed the same representation/capture pattern for telemetry feedback
   expectations: direct search retrieves the feedback contract and weak-signal caveat when they exist
   as an active reviewed rule `MemoryItem`. MemoryItem

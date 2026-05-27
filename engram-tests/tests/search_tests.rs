@@ -675,6 +675,96 @@ async fn test_memory_search_surfaces_active_telemetry_feedback_rule() {
 }
 
 #[tokio::test]
+async fn test_memory_search_surfaces_active_orient_contract_rule() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+
+    let orient_contract_rule = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Rule,
+                "Lean orient contract",
+                "`orient` lean response shape trace_id memory_cursor candidate ids obligation \
+                 summary contract: lean `orient` preserves trace_id, memory_cursor, candidate \
+                 IDs, Brain Loop guidance, recommended actions, ambiguities, obligation_summary, \
+                 and open_obligations while omitting context_pack, raw memory buckets, \
+                 memory_metadata, recent_knowledge_commits, and repeated trust payloads. Lean \
+                 shape is a presentation option only and must not change retrieval, ranking, \
+                 trace creation, candidate IDs, or obligation surfacing.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_confidence(0.96)
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "orient-contract-lean-shape",
+            ))
+            .with_tag("orient")
+            .with_tag("orient-contract")
+            .with_tag("lean")
+            .with_tag("hot-path"),
+        )
+        .await
+        .unwrap();
+
+    let generic_orient_note = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::ProjectFact,
+                "Orient implementation note",
+                "Orient implementation details can mention traces, cursors, candidate lists, \
+                 and obligation information without encoding the reviewed lean hot-path \
+                 contract.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_confidence(0.99)
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "generic-orient-note",
+            )),
+        )
+        .await
+        .unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "orient lean response shape trace_id memory_cursor candidate ids obligation summary",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    let rule_index = results
+        .iter()
+        .position(|result| result.id == orient_contract_rule.id.to_string())
+        .expect("active lean orient contract rule should be returned");
+    let generic_index = results
+        .iter()
+        .position(|result| result.id == generic_orient_note.id.to_string())
+        .expect("generic orient control should be returned");
+
+    assert!(
+        rule_index < generic_index,
+        "specific lean orient contract should rank ahead of generic orient context"
+    );
+    assert_eq!(
+        results[rule_index]
+            .memory_metadata
+            .as_ref()
+            .map(|metadata| metadata.review_state),
+        Some(MemoryReviewState::Reviewed)
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_prioritizes_current_plan_for_next_step_query() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

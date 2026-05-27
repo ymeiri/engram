@@ -147,6 +147,31 @@ This repair does not imply that all legacy preferences have been promoted. Futur
 should still be diagnosed as representation/capture gaps first, with broad ranking changes kept
 behind their normal evidence gates.
 
+## T06 Follow-Up Repair
+
+Status: repaired as a data/capture gap; no ranking, schema, public MCP, migration, hook, or
+`orient` payload change.
+
+The exact T06 query still surfaced an unreviewed candidate-ID implementation memory above the
+actual lean-`orient` response-shape and hot-path contract because that contract lived primarily in
+`ORIENT_CONTRACT.md`, not in an active reviewed project `MemoryItem`.
+
+Follow-up actions:
+
+- Added deterministic coverage in `engram-tests/tests/search_tests.rs` proving that an active,
+  reviewed project rule containing the lean-`orient` contract terms is returned for the T06 query
+  and ranks ahead of generic orient implementation context.
+- Captured reviewed project-scoped rule MemoryItem
+  `019e6931-bd2d-7281-b9f6-952eaa2a20e4` from `ORIENT_CONTRACT.md`,
+  `BRAIN_HARNESS_ARCHITECTURE.md`, and the T06 pre-capture trace.
+- Verified live trace `019e6931-d088-7493-a0d7-7795485ac944`: the exact T06 query returned the new
+  rule as the top memory result. Feedback `019e6931-f385-7563-a634-16db587f695e` recorded
+  `task_success=true`, `preference_adhered=true`, `bad_memory_used=false`.
+
+The pre-capture trace `019e6930-5d44-71a2-8438-e311340e7a8d` was also scored with feedback
+`019e6931-f37f-79e1-b8b8-b96927d19724` as a representation miss. This repair keeps lean
+`orient` as a presentation option and does not expand the hot path.
+
 ## T07 Follow-Up Repair
 
 Status: repaired as a data/capture gap; no ranking, schema, public MCP, migration, hook, or
