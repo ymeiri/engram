@@ -1282,3 +1282,60 @@ Decision:
 - Treat T32 as a lint usability improvement, not lifecycle cleanup authority.
 - M6 inventory/export/apply/deletion and harness adapter or hook writes remain explicit approval
   gates.
+
+## T33 Claude Code Lint-Ordering Parity Smoke
+
+Status: completed as read-only cross-harness validation. No source behavior, lifecycle status,
+migration flow, hook, adapter, schema, storage, public MCP request shape, telemetry formula,
+ranking, or `orient` payload changed.
+
+Research question:
+
+- Does Claude Code, through its own Engram MCP path, observe the same T32
+  `lint(action=run, limit=10)` priority ordering that Codex observes?
+
+Hypotheses:
+
+- Preferred: Claude Code returns `feedback_stale_current_plan` for
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` first with `safe_action=none`.
+- Null: Codex-only installed-runtime validation is sufficient for this report-ordering surface.
+- Simpler alternative: document T32 without another parity smoke.
+- Failure: Claude Bridge tool exposure or prompt-created synthetic obligations make the result
+  unusable.
+
+Measurement:
+
+- AI Council prior-decision recall found no directly matching T32 lint-ordering consultation.
+- Claude Bridge ran a read-only `harness=personal` task with `write=false`, allowing only
+  `mcp__engram__lint` and `mcp__engram__obligations`.
+- Claude Code reported `lint(action="run", limit=10)` was available and returned ten findings with
+  `applied_safe_actions=0`.
+- The first finding matched the expected T32 result exactly:
+  - rule: `feedback_stale_current_plan`
+  - id: `feedback-stale-current-plan:019e5e0a-86b4-73e3-aa9b-ca350e83e915`
+  - item id: `019e5e0a-86b4-73e3-aa9b-ca350e83e915`
+  - title: `Current-plan guidance has stale feedback`
+  - safe action: `none`
+- Claude Code's follow-up obligations doctor reported one prompt-created
+  `design_context_reading` obligation. Codex resolved it as `design_context_read` using the actual
+  T33 startup design-context reads already completed before selecting this slice. A follow-up Codex
+  `obligations(action=doctor, project=engram, cwd=/Users/yuval.meiri/projects/engram)` returned
+  `open=[]` and `warnings=[]`.
+- After scoring the T33 startup retrieval traces, `real_session_eval(project=engram, limit=50)`
+  returned `feedback_trace_count=47`, `feedback_coverage=0.9399999976158142`,
+  `bad_memory_used_count=0`, `confidence_gate.passed=true`, and
+  `external_session_trace_count=0`.
+
+Result:
+
+- The T32 lint ordering result is now validated through Claude Code's MCP path, not only Codex.
+- The validation remains narrow: it covers this read-only `lint` report shape and does not prove
+  hook readiness, adapter/settings readiness, lifecycle cleanup safety, migration authority, broad
+  ranking quality, or `orient` behavior.
+- Synthetic cross-harness prompts can still create startup obligations, so future smokes must run
+  doctor and close artifacts.
+
+Decision:
+
+- Treat T33 as cross-harness evidence for the shared MCP `lint` surface only.
+- Keep M6 and harness writes approval-gated.
