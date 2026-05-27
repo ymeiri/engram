@@ -9,7 +9,8 @@ use crate::digest::{
 };
 use crate::error::{IndexError, IndexResult};
 use crate::memory_ranker::{
-    memory_scope_matches, rank_memory_item, rank_memory_items, MemoryRankContext,
+    is_open_ended_plan_work_prompt, memory_scope_matches, rank_memory_item, rank_memory_items,
+    MemoryRankContext,
 };
 use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
@@ -1436,24 +1437,6 @@ fn should_prioritize_current_plan_for_plan_work(
 ) -> bool {
     matches!(intent, Some(BrainHarnessIntent::PlanWork))
         && query.is_some_and(is_open_ended_plan_work_prompt)
-}
-
-fn is_open_ended_plan_work_prompt(query: &str) -> bool {
-    let query = query.to_ascii_lowercase();
-    [
-        "complete",
-        "continue",
-        "current plan",
-        "end state",
-        "mission",
-        "move forward",
-        "next step",
-        "production-quality",
-        "resume",
-        "where we left off",
-    ]
-    .iter()
-    .any(|term| query.contains(term))
 }
 
 fn prioritize_latest_current_plan(items: Vec<MemoryItem>, suppress_older: bool) -> Vec<MemoryItem> {

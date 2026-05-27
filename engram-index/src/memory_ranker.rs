@@ -1,10 +1,12 @@
 //! Shared MemoryItem ranking for orientation and search.
 
 use engram_core::memory::{
-    MemoryFreshness, MemoryItem, MemoryReviewState, MemoryScope, MemoryStatus,
+    MemoryFreshness, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope, MemoryStatus,
 };
 use std::path::Path;
 use time::OffsetDateTime;
+
+const CURRENT_PLAN_TAG: &str = "current-plan";
 
 /// Scope filtering policy for memory ranking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +107,7 @@ pub(crate) struct MemoryRankComponents {
     pub review: f32,
     /// Freshness contribution, normalized 0.0-1.0.
     pub freshness: f32,
-    /// Prompt-specific decision gate or guardrail contribution, normalized 0.0-1.0.
+    /// Prompt-specific decision gate, guardrail, or current-plan contribution, normalized 0.0-1.0.
     pub guidance: f32,
 }
 
@@ -119,6 +121,7 @@ pub(crate) fn rank_memory_items(
         .filter_map(|item| rank_memory_item(item, context))
         .collect::<Vec<_>>();
     sort_ranked_memory_items(&mut ranked);
+    promote_current_plan_for_continuation_query(&mut ranked, context);
     ranked
 }
 
@@ -138,7 +141,7 @@ pub(crate) fn rank_memory_item(
 
     let text_score = text.unwrap_or(0.0);
     let guidance = if text.is_some() {
-        guidance_score(&item, context.query)
+        guidance_score(&item, context)
     } else {
         0.0
     };
@@ -214,6 +217,49 @@ fn sort_ranked_memory_items(items: &mut [RankedMemoryItem]) {
             .then_with(|| right.item.updated_at.cmp(&left.item.updated_at))
             .then_with(|| left.item.title.cmp(&right.item.title))
     });
+}
+
+fn promote_current_plan_for_continuation_query(
+    items: &mut [RankedMemoryItem],
+    context: MemoryRankContext<'_>,
+) {
+    if !should_promote_current_plan(context) {
+        return;
+    }
+
+    let Some(best_index) = items
+        .iter()
+        .enumerate()
+        .filter(|(_, ranked)| is_current_plan_guidance_item(&ranked.item))
+        .max_by(|(_, left), (_, right)| {
+            left.components
+                .scope
+                .total_cmp(&right.components.scope)
+                .then_with(|| left.item.updated_at.cmp(&right.item.updated_at))
+                .then_with(|| left.item.id.to_string().cmp(&right.item.id.to_string()))
+        })
+        .map(|(index, _)| index)
+    else {
+        return;
+    };
+
+    if best_index > 0 {
+        let top_score = items.first().map(|ranked| ranked.score).unwrap_or(0.0);
+        items[best_index].score = (top_score + 0.001).min(1.0);
+        sort_ranked_memory_items(items);
+    }
+}
+
+fn should_promote_current_plan(context: MemoryRankContext<'_>) -> bool {
+    if context.project.is_none() && context.cwd.is_none() {
+        return false;
+    }
+
+    let Some(query) = context.query.map(str::to_lowercase) else {
+        return false;
+    };
+
+    !asks_for_decision_gate(&query) && asks_for_current_plan_guidance(&query)
 }
 
 fn rank_score(components: MemoryRankComponents) -> f32 {
@@ -367,24 +413,48 @@ fn freshness_score(freshness: MemoryFreshness) -> f32 {
     }
 }
 
-fn guidance_score(item: &MemoryItem, query: Option<&str>) -> f32 {
-    let Some(query) = query.map(str::to_lowercase) else {
+fn guidance_score(item: &MemoryItem, context: MemoryRankContext<'_>) -> f32 {
+    let Some(query) = context.query.map(str::to_lowercase) else {
         return 0.0;
     };
-    if !asks_for_decision_gate(&query) {
+
+    if asks_for_decision_gate(&query) {
+        let title = item.title.to_lowercase();
+        let content = item.content.to_lowercase();
+        let reviewed = item.trust_metadata().review_state == MemoryReviewState::Reviewed;
+        if has_gate_language(&title) {
+            return if reviewed { 1.0 } else { 0.6 };
+        }
+        if has_gate_language(&content) {
+            return if reviewed { 0.8 } else { 0.4 };
+        }
         return 0.0;
     }
 
-    let title = item.title.to_lowercase();
-    let content = item.content.to_lowercase();
+    current_plan_guidance_score(item, &query, context)
+}
+
+fn current_plan_guidance_score(
+    item: &MemoryItem,
+    query: &str,
+    context: MemoryRankContext<'_>,
+) -> f32 {
+    if !asks_for_current_plan_guidance(query) {
+        return 0.0;
+    }
+    if context.project.is_none() && context.cwd.is_none() {
+        return 0.0;
+    }
+    if !is_current_plan_guidance_item(item) {
+        return 0.0;
+    }
+
     let reviewed = item.trust_metadata().review_state == MemoryReviewState::Reviewed;
-    if has_gate_language(&title) {
-        return if reviewed { 1.0 } else { 0.6 };
+    if reviewed {
+        0.7
+    } else {
+        0.6
     }
-    if has_gate_language(&content) {
-        return if reviewed { 0.8 } else { 0.4 };
-    }
-    0.0
 }
 
 fn asks_for_decision_gate(query: &str) -> bool {
@@ -394,6 +464,67 @@ fn asks_for_decision_gate(query: &str) -> bool {
     ]
     .iter()
     .any(|term| query.contains(term))
+}
+
+pub(crate) fn is_open_ended_plan_work_prompt(query: &str) -> bool {
+    let query = query.to_ascii_lowercase();
+    [
+        "complete",
+        "continue",
+        "current plan",
+        "end state",
+        "mission",
+        "move forward",
+        "next step",
+        "production-quality",
+        "resume",
+        "where we left off",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
+}
+
+fn asks_for_current_plan_guidance(query: &str) -> bool {
+    if [
+        "ignore current plan",
+        "ignore the current plan",
+        "not current plan",
+        "not the current plan",
+        "instead of current plan",
+        "instead of the current plan",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
+    {
+        return false;
+    }
+
+    [
+        "continue",
+        "current plan",
+        "current-plan",
+        "keep going",
+        "move forward",
+        "next step",
+        "next steps",
+        "pick up where",
+        "resume",
+        "what should i do next",
+        "what's left",
+        "what is left",
+        "where we left off",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
+}
+
+fn is_current_plan_guidance_item(item: &MemoryItem) -> bool {
+    item.status == MemoryStatus::Active
+        && matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
+        && item
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
 }
 
 fn has_gate_language(value: &str) -> bool {

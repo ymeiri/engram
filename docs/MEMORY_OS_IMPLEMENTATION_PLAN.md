@@ -86,6 +86,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Mission-class `plan_work` prompts promote the latest current-plan memory into active
       decisions and used memory candidates, while `resume_session` remains the only intent with the
       Brain Loop pin and older-current-plan suppression.
+- [x] Direct unified `search` continuation prompts prioritize scoped `current-plan` MemoryItems
+      through query-gated ranking calibration, with migration gate prompts still preserving gate
+      guidance above current-plan context.
 - [x] Stale Memory OS guidance cleanup after the current-plan fix: the old mission-class
       PlanWork limitation and BAF007/BAF008 sealed implementation targets are superseded by
       active resolved/accepted outcome memory.
@@ -106,7 +109,7 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 | --- | --- | --- | --- |
 | Memory OS substrate and MCP/CLI surfaces | Implemented | Checklist above; MCP/CLI surfaces listed below | None currently blocking the hot path. |
 | `orient` hot path | Implemented and validated | Lean response shape, Brain Loop projection, current-plan continuity, open-obligation summary, and prompt-specific ranking tests | No hard byte/token budget yet; keep payload expansion gated. |
-| Current-plan / next-step retrieval | Validated for continuation prompts | Commit `0b4e35b`; `orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking`; active current-plan memory is intentionally looked up from Engram at task start because each slice supersedes the previous plan | Generic `review_memory` prompts can still surface unrelated memory before current plan/M6 gate. Treat as future eval/ranking work, not proof of broad ranking quality. |
+| Current-plan / next-step retrieval | Validated for continuation prompts | Commit `0b4e35b`; `orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking`; direct `search` fixtures `test_memory_search_prioritizes_current_plan_for_next_step_query`, `test_memory_search_prefers_project_current_plan_over_repository_plan`, and `test_memory_search_keeps_gate_guidance_above_current_plan`; active current-plan memory is intentionally looked up from Engram at task start because each slice supersedes the previous plan | Generic `review_memory` prompts can still surface unrelated memory before current plan/M6 gate. Treat as future eval/ranking work, not proof of broad ranking quality. |
 | Cross-harness behavior | Partially validated | Codex and Claude Code lean-orient smokes; BAF008 real Claude Code treatment with clean controls; 2026-05-27 read-only `harness doctor` shows Claude Code ready, while Codex, Gemini CLI, and Cursor are not fully ready because required generated adapters have drifted from current policy | Broad harness reliability still depends on hook/config status and future real sessions. Adapter or hook writes remain gated. |
 | Evidence and feedback loop | Partially validated | Trace IDs, scenario/arm telemetry, feedback attribution warnings, real-session eval report, BAF007/BAF008 accepted outcome memory | Agent feedback remains weak evidence unless checked against transcript, tests, or user review. |
 | Memory quality / lifecycle | Partially validated | Review-gated promotion, archive-aware retrieval, stale-target cleanup, document lifecycle dogfood, Codex adapter follow-through, bounded/actionable lint reports | Duplicate entity, handoff, and missing-evidence lint findings still require human/agent review; no safe automatic action exists for those warning classes. |

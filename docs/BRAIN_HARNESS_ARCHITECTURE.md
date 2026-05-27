@@ -122,6 +122,9 @@ Research checkpoint, current through 2026-05-27:
 - The latest narrow implementation checkpoint fixed mission-class `plan_work` current-plan ranking
   without expanding `orient`, changing migration, adding graph/lint/raw-observation hot-path
   behavior, or deleting legacy layers.
+- A follow-up narrow checkpoint extends that same current-plan continuity claim to direct unified
+  `search` continuation prompts through deterministic MemoryItem fixtures, while keeping migration
+  approval prompts gate-first and leaving the `orient` payload unchanged.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -938,7 +941,9 @@ Proceed in this order from the current checkpoint:
     adapter after the 2026-05-16 dogfood, content-idempotence check, and adapter contract update.
 15. Treat the mission-class `plan_work` current-plan ranking fix as a narrow calibration only:
     it supports continuation prompts, not broad ranking quality or `review_memory` behavior.
-16. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
+16. Treat direct unified `search` current-plan ranking as the same narrow continuation-prompt
+    calibration, not a broad search-quality claim or migration signal.
+17. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
     replication. Read-only M6 inventory/review-export requires explicit user-approved scope, and
     M6 write apply/deletion requires a separate approval gate.
 

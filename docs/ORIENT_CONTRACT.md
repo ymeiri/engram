@@ -117,6 +117,8 @@ Mission-class `plan_work` prompts now promote the latest current plan within act
 include it in used memory candidates, but they do not use the `resume_session` Brain Loop pin.
 The stale BAF sealed-target memories that previously outranked current-plan context have also been
 superseded by accepted outcome memories, so they should not appear as active implementation targets.
+Direct unified `search` now has separate continuation-prompt fixtures for scoped current-plan
+ranking; that calibration does not expand or change this `orient` contract.
 
 ## Feedback Expectations
 

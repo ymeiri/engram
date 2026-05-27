@@ -15,6 +15,7 @@ use engram_index::{
     EntityService, MemoryService, SearchOptions, SearchService, SessionService, ToolIntelService,
 };
 use engram_store::{connect_and_init, StoreConfig};
+use time::OffsetDateTime;
 
 // =============================================================================
 // Test Fixtures
@@ -501,6 +502,179 @@ async fn test_memory_search_respects_project_scope_when_provided() {
 
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "Engram telemetry policy");
+}
+
+#[tokio::test]
+async fn test_memory_search_prioritizes_current_plan_for_next_step_query() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut older_decision = MemoryItem::new(
+        MemoryKind::Decision,
+        "Resume continuity probe uses active MemoryItems before ranking changes",
+        "For the current Brain Harness resume-continuity issue, the next action is to test \
+         active MemoryItem capture before changing ranking.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "older-probe"));
+    older_decision.updated_at = now - time::Duration::days(20);
+    memory_service.capture_memory(older_decision).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after adapter refresh dry-run",
+        "Pending explicit approval, refresh only generated harness adapters. Continue from this \
+         current plan; the next step is not migration or hook work.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "latest-current-plan",
+    ))
+    .with_tag("current-plan");
+    current_plan.updated_at = now;
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "What is the current plan / next step? Continue from where we left off.",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, current_plan.id.to_string());
+}
+
+#[tokio::test]
+async fn test_memory_search_prefers_project_current_plan_over_repository_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut repository_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after Codex document lifecycle follow-through",
+        "The next product-facing Brain Harness slice completed document lifecycle follow-through. \
+         Continue with this current plan.",
+        MemoryScope::Repository {
+            repository_id: None,
+            remote_url: None,
+            local_path: Some("/Users/yuval.meiri/projects/engram".to_string()),
+        },
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "old-plan"))
+    .with_tag("current-plan");
+    repository_plan.updated_at = now - time::Duration::days(2);
+    memory_service
+        .capture_memory(repository_plan)
+        .await
+        .unwrap();
+
+    let mut project_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after adapter refresh dry-run",
+        "Pending explicit approval, refresh only generated harness adapters. Continue from this \
+         current plan.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "latest-current-plan",
+    ))
+    .with_tag("current-plan");
+    project_plan.updated_at = now;
+    let project_plan = memory_service.capture_memory(project_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "current plan next step continue",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, project_plan.id.to_string());
+}
+
+#[tokio::test]
+async fn test_memory_search_keeps_gate_guidance_above_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut gate = MemoryItem::new(
+        MemoryKind::Decision,
+        "Migration Must Be Review-Gated",
+        "Memory OS migration must not proceed without reviewed candidates, a dry-run report, \
+         rollback planning, and explicit approval.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.95)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "migration-gate",
+    ));
+    gate.updated_at = now - time::Duration::days(30);
+    let gate = memory_service.capture_memory(gate).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after adapter refresh dry-run",
+        "Continue by refreshing generated adapters after approval. This current plan does not \
+         approve migration.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "latest-current-plan",
+    ))
+    .with_tag("current-plan");
+    current_plan.updated_at = now;
+    memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "Should we proceed with migration apply?",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, gate.id.to_string());
 }
 
 // =============================================================================
