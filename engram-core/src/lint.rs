@@ -28,6 +28,8 @@ pub enum LintRule {
     UnresolvedAgentObligation,
     /// Active memory was reported stale by agent feedback.
     FeedbackStaleActiveMemory,
+    /// Active current-plan guidance was reported stale by agent feedback.
+    FeedbackStaleCurrentPlan,
     /// Active memory was reported wrong-scope by agent feedback.
     FeedbackWrongScopeActiveMemory,
 }
@@ -47,6 +49,7 @@ impl std::fmt::Display for LintRule {
             Self::HandoffMissingNextActions => write!(f, "handoff_missing_next_actions"),
             Self::UnresolvedAgentObligation => write!(f, "unresolved_agent_obligation"),
             Self::FeedbackStaleActiveMemory => write!(f, "feedback_stale_active_memory"),
+            Self::FeedbackStaleCurrentPlan => write!(f, "feedback_stale_current_plan"),
             Self::FeedbackWrongScopeActiveMemory => {
                 write!(f, "feedback_wrong_scope_active_memory")
             }

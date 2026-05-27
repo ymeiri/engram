@@ -557,6 +557,10 @@ Current next application:
   as an active reviewed rule `MemoryItem`. MemoryItem
   `019e692b-635e-7d80-9f2f-8796abc95234` repaired the live data state, and fixture coverage locks
   the active-rule behavior without changing ranking.
+- The T09 follow-up turns repeated stale-current-plan feedback into a more specific read-only lint
+  signal: `feedback_stale_current_plan` names active `current-plan` guidance that recent feedback
+  marked stale, but keeps `safe_action=none` because feedback is not proof and must not authorize
+  automatic archival, deletion, or migration.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

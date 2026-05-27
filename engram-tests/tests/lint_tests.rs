@@ -200,3 +200,56 @@ async fn test_mcp_lint_reports_feedback_flagged_active_memory() {
     assert_eq!(stale_finding["item_id"], item_id.to_string());
     assert_eq!(wrong_scope_finding["item_id"], item_id.to_string());
 }
+
+#[tokio::test]
+async fn test_mcp_lint_reports_stale_current_plan_feedback() {
+    let (state, memory_service, telemetry_repo) = setup_tool_state().await;
+
+    let item = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after older slice",
+        "Old current-plan guidance that feedback says is stale.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"))
+    .with_tag("current-plan");
+    let item_id = item.id;
+    memory_service
+        .capture_memory(item)
+        .await
+        .expect("memory item should be captured");
+
+    let mut feedback = AgentFeedback::new(Id::new());
+    feedback.stale_memory_ids = vec![item_id];
+    telemetry_repo
+        .save_feedback(&feedback)
+        .await
+        .expect("feedback should be saved");
+
+    let response = tools::lint_new(&state, lint_request("run"))
+        .await
+        .expect("lint should run");
+    let json = parse_json(&response);
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be an array");
+
+    let finding = findings
+        .iter()
+        .find(|finding| finding["rule"] == "feedback_stale_current_plan")
+        .expect("stale current-plan feedback finding should be present");
+
+    assert_eq!(finding["severity"], "info");
+    assert_eq!(finding["safe_action"], "none");
+    assert_eq!(finding["item_id"], item_id.to_string());
+    assert!(finding["message"]
+        .as_str()
+        .expect("finding should include a message")
+        .contains("Current plan after older slice"));
+    assert!(!findings.iter().any(|finding| {
+        finding["rule"] == "feedback_stale_active_memory"
+            && finding["item_id"] == item_id.to_string()
+    }));
+}

@@ -196,3 +196,24 @@ Follow-up actions:
 The pre-capture trace `019e692a-3af7-7270-b830-eba2d761f7c5` was also scored with feedback
 `019e692b-a9b7-78c0-b4fd-75ba98855fd2` as a representation miss. This repair does not make agent
 feedback ground truth; it makes the existing feedback contract easier to retrieve.
+
+## T09 Follow-Up Repair
+
+Status: improved as read-only lint visibility; no automatic cleanup, ranking, schema, migration,
+hook, or `orient` payload change.
+
+The original T09 caveat was that stale old current-plan guidance can still appear below fresher
+guidance and must be explicitly rejected. The post-2d1fdcd startup reproduced that caveat:
+repository-scoped memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` still appeared in lean `orient`
+even though newer project current-plan memory supersedes the actual work state. Existing
+telemetry-backed lint already reported it as stale active memory with many feedback hits, but the
+finding was generic.
+
+Follow-up actions:
+
+- Added a read-only lint rule `feedback_stale_current_plan` for active `decision`/`rule`
+  MemoryItems tagged `current-plan` when recent feedback marks them stale.
+- Kept `safe_action=none`; stale feedback is a review signal, not proof or permission to archive,
+  rewrite, or delete memory.
+- Added focused service and MCP tests proving current-plan stale feedback uses the specific rule
+  and no duplicate generic stale-active-memory finding is emitted for the same item.

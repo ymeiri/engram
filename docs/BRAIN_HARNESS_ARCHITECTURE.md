@@ -1002,6 +1002,10 @@ Proceed in this order from the current checkpoint:
 23. Treat the T07 feedback-expectations follow-up the same way: active reviewed rule MemoryItems are
     searchable for telemetry feedback contracts and weak-signal caveats, but doc-only guidance should
     be promoted deliberately when it needs to guide future agent behavior.
+24. Treat the T09 stale-current-plan follow-up as lint visibility, not cleanup authority:
+    telemetry-backed stale feedback can identify active current-plan guidance that needs review,
+    but the rule intentionally has no safe automatic action and does not authorize archival,
+    deletion, migration, ranking changes, or hot-path expansion.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

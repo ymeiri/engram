@@ -14,6 +14,7 @@ use std::path::Path;
 use time::{Duration, OffsetDateTime};
 
 const VAULT_MARKER: &str = "<!-- engram:generated:file memory-vault-v1 -->";
+const CURRENT_PLAN_TAG: &str = "current-plan";
 const GENERATED_VAULT_PREFIXES: &[&str] = &[
     "99_System",
     "memory",
@@ -365,6 +366,25 @@ fn lint_feedback_stale_active_memory(
         let Some(item) = active_items.get(&item_id) else {
             continue;
         };
+        if is_current_plan_guidance(item) {
+            findings.push(
+                LintFinding::new(
+                    format!("feedback-stale-current-plan:{item_id}"),
+                    LintRule::FeedbackStaleCurrentPlan,
+                    LintSeverity::Info,
+                    "Current-plan guidance has stale feedback",
+                    format!(
+                        "Active current-plan memory item '{}' ({}) was marked stale by {count} \
+                         recent feedback record(s). Treat this as a review signal for \
+                         supersession, archival, or scope correction; no automatic lifecycle \
+                         action is safe.",
+                        item.title, item.kind
+                    ),
+                )
+                .with_item(item_id),
+            );
+            continue;
+        }
         findings.push(
             LintFinding::new(
                 format!("feedback-stale-active-memory:{item_id}"),
@@ -381,6 +401,14 @@ fn lint_feedback_stale_active_memory(
             .with_item(item_id),
         );
     }
+}
+
+fn is_current_plan_guidance(item: &MemoryItem) -> bool {
+    matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
+        && item
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
 }
 
 fn lint_feedback_wrong_scope_active_memory(
@@ -686,6 +714,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lint_reports_stale_current_plan_feedback_with_specific_rule() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after older slice",
+            "Old current-plan guidance that feedback later marked stale.",
+            MemoryScope::repository(None, Some("/Users/yuval.meiri/projects/engram".to_string())),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_tag("current-plan");
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![item.id, item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let current_plan_finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::FeedbackStaleCurrentPlan)
+            .expect("stale current-plan finding should be present");
+
+        assert_eq!(
+            current_plan_finding.id,
+            format!("feedback-stale-current-plan:{}", item.id)
+        );
+        assert_eq!(current_plan_finding.item_id, Some(item.id));
+        assert_eq!(current_plan_finding.severity, LintSeverity::Info);
+        assert_eq!(current_plan_finding.safe_action, LintSafeAction::None);
+        assert!(current_plan_finding
+            .message
+            .contains("Current plan after older slice"));
+        assert!(current_plan_finding
+            .message
+            .contains("marked stale by 1 recent feedback record(s)"));
+        assert!(!report.findings.iter().any(|finding| {
+            finding.rule == LintRule::FeedbackStaleActiveMemory && finding.item_id == Some(item.id)
+        }));
+    }
+
+    #[tokio::test]
     async fn lint_ignores_feedback_for_non_active_or_missing_memory() {
         let service = service().await;
         let item = MemoryItem::new(
@@ -714,7 +791,9 @@ mod tests {
         assert!(!report.findings.iter().any(|finding| {
             matches!(
                 finding.rule,
-                LintRule::FeedbackStaleActiveMemory | LintRule::FeedbackWrongScopeActiveMemory
+                LintRule::FeedbackStaleActiveMemory
+                    | LintRule::FeedbackStaleCurrentPlan
+                    | LintRule::FeedbackWrongScopeActiveMemory
             )
         }));
     }
