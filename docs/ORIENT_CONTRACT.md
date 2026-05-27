@@ -108,13 +108,15 @@ cursor, no open obligations, the latest commit was `f88b683 Record Claude Code l
 and the only working-tree item was the user-owned untracked root `AGENTS.md`. The run also exposed
 a ranking caveat: the latest current-plan memory was not in the returned top five for this
 next-step verification prompt; older BAF target memories outranked it. That did not block this
-read-only check, but it is evidence to consider before using lean `orient` as the only planning
-input for broader product steps.
+read-only check, but it showed that lean `orient` still needed current-plan calibration before it
+could be the only planning input for broader product steps.
 The diagnostic fixture
 `orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking` now preserves this distinction:
 explicit current-plan prompts and `resume_session` intent return the latest current plan first.
 Mission-class `plan_work` prompts now promote the latest current plan within active decisions and
 include it in used memory candidates, but they do not use the `resume_session` Brain Loop pin.
+The stale BAF sealed-target memories that previously outranked current-plan context have also been
+superseded by accepted outcome memories, so they should not appear as active implementation targets.
 
 ## Feedback Expectations
 

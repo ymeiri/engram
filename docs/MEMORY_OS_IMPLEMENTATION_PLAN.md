@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-05-10
+Last Updated: 2026-05-27
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -80,8 +80,31 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Rolling handoff: MCP/CLI `handoff get|update|compile`.
 - [x] Session-following event vocabulary: prompts, plans, tool results, tests, preferences, rules, limitations, and handoff updates.
 - [x] Session distillation dry-run candidate generation through `memory(action=distill_session)` and `engram memory distill-session`.
+- [x] Lean `orient(response_shape="lean")` envelope validated in Codex and Claude Code smokes:
+      trace/cursor/scope, Brain Loop top items, used memory candidate IDs, and obligation summary
+      are available without the full raw packet payload.
+- [x] Mission-class `plan_work` prompts promote the latest current-plan memory into active
+      decisions and used memory candidates, while `resume_session` remains the only intent with the
+      Brain Loop pin and older-current-plan suppression.
+- [x] Stale Memory OS guidance cleanup after the current-plan fix: the old mission-class
+      PlanWork limitation and BAF007/BAF008 sealed implementation targets are superseded by
+      active resolved/accepted outcome memory.
 - [x] Full validation and live daemon smoke from installed binary.
-- [ ] Migration completion run: inventory, review export, prioritize/dedupe, human review, dry-run apply, approved write apply, knowledge commit, vault compile, lint run.
+- [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
+      review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
+      knowledge commit, vault compile, lint run.
+
+## Current Completion Matrix
+
+| Area | Status | Current evidence | Remaining risk or gate |
+| --- | --- | --- | --- |
+| Memory OS substrate and MCP/CLI surfaces | Implemented | Checklist above; MCP/CLI surfaces listed below | None currently blocking the hot path. |
+| `orient` hot path | Implemented and validated | Lean response shape, Brain Loop projection, current-plan continuity, open-obligation summary, and prompt-specific ranking tests | No hard byte/token budget yet; keep payload expansion gated. |
+| Current-plan / next-step retrieval | Validated for continuation prompts | Commit `0b4e35b`; `orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking`; current-plan memory `019e685b-345a-7f72-b502-d9befd5720f3` | Generic `review_memory` prompts can still surface unrelated memory before current plan/M6 gate. Treat as future eval/ranking work, not proof of broad ranking quality. |
+| Cross-harness behavior | Partially validated | Codex and Claude Code lean-orient smokes; BAF008 real Claude Code treatment with clean controls | Broad harness reliability still depends on hook/config status and future real sessions. |
+| Evidence and feedback loop | Partially validated | Trace IDs, scenario/arm telemetry, feedback attribution warnings, real-session eval report, BAF007/BAF008 accepted outcome memory | Agent feedback remains weak evidence unless checked against transcript, tests, or user review. |
+| Memory quality / lifecycle | Partially validated | Review-gated promotion, archive-aware retrieval, stale-target cleanup, lint reports | Existing lint still reports duplicate entity candidates and old handoff/missing-evidence warnings with no safe automatic action. |
+| Migration from legacy layers | Blocked by approval gate | Review-gated migration/digest flows exist; one accidental broad read-only inventory returned `3934` sources and `3641` candidates with no writes | Do not run further read-only inventory/review-export without explicit user-approved scope. Do not write-apply/delete/simplify without reviewed candidates, dry-run report, rollback plan, and explicit approval. |
 
 Current MCP/CLI Memory OS surface:
 
@@ -90,7 +113,9 @@ Current MCP/CLI Memory OS surface:
 
 Migration safety rule:
 
-No orphan, digest, or legacy Engram data is automatically promoted to active memory. Promotion requires review decisions, dry-run apply, approved write apply, and a knowledge commit.
+No orphan, digest, or legacy Engram data is automatically promoted to active memory. Even read-only
+M6 inventory/review-export requires an explicit user-approved scope. Promotion requires review
+decisions, dry-run apply, explicit approved write apply, and a knowledge commit.
 
 ---
 
