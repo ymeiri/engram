@@ -131,6 +131,18 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       semantics were not changed. Validation passed with the focused regression test, full
       telemetry tests, Brain Harness eval tests, `cargo fmt --all --check`,
       `cargo check -p engram-cli`, and `git diff --check`.
+- [x] T21 installed-runtime validation for T19/T20: after installing binary hash
+      `0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab`
+      and restarting the daemon on port `8765`, PID `11922`, a controlled live MCP telemetry smoke
+      validated both fixes together. Scoped report
+      `real_session_eval(project=engram,
+      scenario_id=t21_installed_runtime_eval_20260527_0192d24d,
+      arm=memoryitem_orient, limit=2)` returned `trace_count=2`, `feedback_count=1`,
+      `feedback_trace_count=1`, `feedback_coverage=0.5`, `task_success_count=1`, and
+      `task_failure_count=0`, while newer out-of-scope traces and newer feedback on older in-scope
+      traces were excluded. This is installed-runtime evidence only; it does not change ranking,
+      `orient`, migration, lifecycle state, hooks, adapters, public MCP parameters, output fields,
+      schema/storage, or `list_feedback_scoped`.
 - [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
       feedback records task success, preference adherence, repeated context questions, and bad
       memory use, and the confidence gate requires behavioral outcome evidence.

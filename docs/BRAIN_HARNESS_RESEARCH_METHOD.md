@@ -383,6 +383,18 @@ one design-preference retrieval failure, two partial feedback/context gaps, stal
 surfacing, and old migration/export approval records that must not be treated as current M6
 authorization.
 
+2026-05-27 installed-runtime telemetry update: T21 installed binary
+`0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab`, restarted the daemon on
+port `8765` with PID `11922`, and ran a controlled live MCP smoke for scenario
+`t21_installed_runtime_eval_20260527_0192d24d`. The smoke made the newest global traces
+out-of-scope and submitted newer feedback to older in-scope traces. The scoped
+`real_session_eval(..., limit=2)` report returned `trace_count=2`, `feedback_count=1`,
+`feedback_trace_count=1`, `feedback_coverage=0.5`, `task_success_count=1`, and
+`task_failure_count=0`, with project/scenario/arm filters applied. This validates the installed
+T19/T20 measurement behavior for one controlled live case; it is not product-quality proof, M6
+authorization, or evidence for ranking, hot-path, lifecycle, hook, adapter, schema, or migration
+changes.
+
 ---
 
 ## 9. Decision Gates
@@ -632,6 +644,12 @@ Current next application:
   out-of-scope traces from starving scoped confidence reports. It did not change public request
   parameters, output fields, confidence formulas, ranking, `orient`, M6 migration, lifecycle state,
   document-index behavior, hooks, adapters, schema/storage, or `list_feedback_scoped` behavior.
+- T21 validated T19/T20 in the installed daemon: binary
+  `0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab` on daemon PID `11922`
+  returned the expected controlled scoped report for
+  `t21_installed_runtime_eval_20260527_0192d24d`. Treat this as installed-runtime measurement
+  evidence only, not authorization for M6, lifecycle cleanup, ranking changes, hooks, adapters,
+  schema/storage changes, public MCP changes, or `orient` payload expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

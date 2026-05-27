@@ -707,3 +707,61 @@ Decision:
   transcript evidence, tests, or user review.
 - `list_feedback_scoped` still has its older scoped-window semantics and should be handled only as a
   separately approved/narrow follow-up if evidence shows operators need drill-down parity.
+
+## T21 Installed-Runtime Validation For T19/T20
+
+Status: passed as a live daemon validation; no source behavior, ranking, public MCP surface,
+migration, lifecycle, hook, adapter, schema, storage, or `orient` change.
+
+Research question: after installing the T19/T20 code, does the live daemon apply scope filters
+before the trace limit and fetch feedback only for the sampled trace IDs?
+
+Hypotheses:
+
+- Preferred: installing the current binary and restarting the daemon makes the live MCP report match
+  the T19/T20 regression tests.
+- Null: the daemon was already current or the smoke cannot distinguish old behavior from new
+  behavior.
+- Simpler alternative: rely on local tests and skip live runtime validation.
+- Failure: install/restart fails, the MCP daemon is unreachable, or the scoped report counts newer
+  out-of-scope traces or newer feedback attached to older in-scope traces.
+
+Measurement:
+
+- Installed `/Users/yuval.meiri/.local/bin/engram` from the current repo with
+  `cargo install --path engram-cli --force --root /Users/yuval.meiri/.local`.
+- Restarted the global daemon. New status: port `8765`, PID `11922`.
+- Installed binary hash:
+  `0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab`.
+- Scenario: `t21_installed_runtime_eval_20260527_0192d24d`; arm: `memoryitem_orient`.
+- Created four in-scope `project=engram` traces, then two newer out-of-scope
+  `project=engram-other` traces. Only one of the latest two in-scope traces had feedback. Newer
+  feedback was submitted to the older in-scope traces to catch feedback-window drift.
+
+Result:
+
+- `telemetry(action=list_traces, project=engram, scenario_id=..., arm=..., limit=6)` returned the
+  four in-scope traces newest-first. The latest two were:
+  `019e69e4-6244-7123-a34e-d19e8c44341a` and
+  `019e69e4-5582-79a1-8dc4-09411d58aca5`.
+- `telemetry(action=real_session_eval, project=engram, scenario_id=..., arm=..., limit=2)` returned
+  `trace_count=2`, `feedback_count=1`, `feedback_trace_count=1`, `feedback_coverage=0.5`,
+  `feedback_records_per_trace=0.5`, `memory_judgment_trace_coverage=0.5`,
+  `task_success_count=1`, `task_failure_count=0`, and applied filters for project, scenario, and
+  arm.
+- The newer out-of-scope traces
+  `019e69e4-9e3e-75f3-96b4-6cf82dce695a` and
+  `019e69e4-b6f0-7872-ad41-f7432683e19f` did not starve the scoped sample.
+- Newer feedback on older in-scope traces
+  `019e69e4-3411-7783-b3a3-f00e0dae3e21` and
+  `019e69e4-4640-78c3-a805-6f44283da31b` did not inflate the scoped report.
+
+Decision:
+
+- Treat T19/T20 as installed-runtime validated for this controlled live case.
+- Keep the confidence gate caveat: this is evidence-quality plumbing validation, not human-judged
+  Brain Harness product proof or migration approval.
+- The next non-gated work should stay in targeted validation, evidence quality, or a concrete
+  capture/lifecycle gap surfaced by evidence. M6 inventory/export/apply/deletion, lifecycle writes,
+  hook/adapter writes, public MCP changes, schema/storage changes, broad ranking changes, and
+  `orient` payload expansion remain approval-gated.

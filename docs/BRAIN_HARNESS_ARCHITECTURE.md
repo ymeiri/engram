@@ -191,6 +191,12 @@ Research checkpoint, current through 2026-05-27:
   in-scope confidence sample. This keeps public request parameters, output fields, formulas,
   ranking, `orient`, migration, lifecycle state, document-index behavior, hooks, adapters,
   schema/storage, and `list_feedback_scoped` behavior unchanged.
+- T21 installed-runtime validation confirmed the T19/T20 behavior in the live daemon after
+  installing binary hash `0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab`.
+  The controlled scoped report
+  `t21_installed_runtime_eval_20260527_0192d24d / memoryitem_orient / limit=2` returned exactly the
+  latest two in-scope traces and only the feedback attached to those sampled traces, excluding newer
+  out-of-scope traces and newer feedback on older in-scope traces.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
