@@ -131,6 +131,13 @@ Research checkpoint, current through 2026-05-27:
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
+- A 2026-05-27 native Claude Code CLI follow-up after installed binary
+  `4f3bda71eb441d492ece4b1bb5983993be9cf47802fd10cdb3484f31f7e23f9c`
+  confirmed the current continuation surface still works: lean `orient` trace
+  `019e68fe-6150-7ab3-9df7-8339e3766c76` kept the packet compact inline and included current-plan
+  memory `019e68f9-31b1-7270-9095-4f0be5ffa94b` at position 2; direct `search` trace
+  `019e68fe-6417-7590-8331-85ddf3dd4a86` returned that memory first. Claude Bridge could not run
+  the same smoke because its project harness exposed only file-read tools, not Engram MCP tools.
 - A follow-up direct `search` calibration fixed a lexical false positive where `non-gated`
   continuation wording was classified as a gate query by substring. Live installed trace
   `019e68d4-05b7-79d3-8077-df6e2999482d` returns the active current plan first for the

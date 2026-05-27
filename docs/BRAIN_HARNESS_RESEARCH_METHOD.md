@@ -501,6 +501,13 @@ Current next application:
   `019e68ac-678e-7683-a241-08119fc6b03c` returned current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` first. Treat this as cross-harness parity for this
   prompt class only, not proof of broad ranking quality.
+- A 2026-05-27 follow-up repeated the native Claude Code CLI smoke after installing binary hash
+  `4f3bda71eb441d492ece4b1bb5983993be9cf47802fd10cdb3484f31f7e23f9c`.
+  Lean `orient` trace `019e68fe-6150-7ab3-9df7-8339e3766c76` was compact enough to inspect inline
+  and surfaced current-plan memory `019e68f9-31b1-7270-9095-4f0be5ffa94b` second, while direct
+  `search` trace `019e68fe-6417-7590-8331-85ddf3dd4a86` returned that memory first. Claude Bridge
+  still did not validate the smoke because the bridged project harness exposed only file-read tools,
+  not Engram MCP tools; do not conflate that bridge limitation with native Claude Code MCP parity.
 - A targeted follow-up fixed direct unified `search` query classification for `non-gated`
   continuation wording. Trace `019e68d4-05b7-79d3-8077-df6e2999482d` returned the active
   current-plan memory first for the non-gated next-slice prompt after installing binary hash

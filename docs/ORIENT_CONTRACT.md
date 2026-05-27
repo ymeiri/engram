@@ -99,6 +99,16 @@ Native Claude Code smoke after restart confirmed the refreshed MCP schema also e
 obligations were prompt-derived and were explicitly skipped because this was a read-only schema
 smoke with no source edits, no commit composition, and no failed tool recovery.
 
+A later native Claude Code CLI smoke after installing binary hash
+`4f3bda71eb441d492ece4b1bb5983993be9cf47802fd10cdb3484f31f7e23f9c`
+confirmed the same lean shape remained usable for the current continuation prompt. Trace
+`019e68fe-6150-7ab3-9df7-8339e3766c76` returned a compact inline packet whose top five Brain Loop
+items included the latest current-plan memory `019e68f9-31b1-7270-9095-4f0be5ffa94b` at position
+2, behind the non-gated calibration limitation. The paired direct search trace
+`019e68fe-6417-7590-8331-85ddf3dd4a86` returned that current-plan memory first. Claude Bridge did
+not reproduce this smoke because its project harness exposed only file-read tools, not the Engram
+MCP tools; treat that as a bridge tool-exposure limitation, not as a native Claude Code MCP failure.
+
 Real read-only verification smoke then used lean `orient` as the entrypoint for a normal status
 check instead of another schema check. Trace `019e6452-d272-75b3-bdce-52abb30018db` returned scope,
 cursor, Brain Loop guidance, candidate memory IDs, and `open_obligations=[]`. The agent could use
