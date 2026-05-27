@@ -202,6 +202,23 @@ Research checkpoint, current through 2026-05-27:
   file-read tools for the same request, so treat the bridge miss as a tool-exposure limitation.
   The Claude Code result validates the shared MCP telemetry surface for this report shape, not
   hooks, adapters, ranking, migration, or broad Brain Harness product behavior.
+- T23 through T25 re-audited the completion matrix and rolling feedback window. Current-plan
+  retrieval stayed current-plan-first for the startup prompt class, while broad architecture and
+  implementation-plan searches could still surface stale repository-scoped or historical migration
+  memories below current guidance. The telemetry confidence gate stayed useful as an operational
+  signal but remained sample-window sensitive.
+- T26 and T27 narrowed obligation noise from safety-gate wording and untracked root instruction
+  files, then validated the fix in the installed daemon. The slice changed only obligation signal
+  quality; it did not change ranking, migration, lifecycle state, hooks, adapters, schema/storage,
+  public MCP request shape, telemetry formulas, or the `orient` payload.
+- T28 replicated that obligation behavior through Claude Code for the same MCP request shape, with
+  a harness caveat: synthetic prompts containing obligation trigger phrases can create startup
+  obligations even when the requested validation calls are dry-run. Future smokes should run
+  obligation doctor and close synthetic artifacts.
+- T29 audited the completion gate after T27/T28. Current-plan retrieval and obligations were clean
+  for the observed continuation surface, `real_session_eval(project=engram, limit=50)` passed
+  numerically with `bad_memory_used_count=0`, but `external_session_trace_count=0` in the latest
+  sampled window and all supported harnesses still reported `ready=false`.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1122,6 +1139,27 @@ Proceed in this order from the current checkpoint:
     inside the requested project/scenario/arm scope before fetching feedback. This does not change
     public request parameters, formulas, ranking, `orient`, M6 migration, lifecycle state,
     document-index behavior, hooks, adapters, schema/storage, or `list_feedback_scoped` behavior.
+36. Treat T21/T22 installed-runtime and native Claude Code telemetry parity as validation of one
+    read-only telemetry report surface. It does not validate hooks, adapters, ranking, migration, or
+    broad Brain Harness behavior.
+37. Treat T23/T24/T25 matrix and rolling-window audits as status calibration: current-plan retrieval
+    stayed validated for the observed continuation class, stale historical guidance remained
+    lower-ranked lifecycle noise, and the confidence gate remained sample-window sensitive.
+38. Treat T26/T27 obligation-noise suppression as obligation signal-quality work only. The installed
+    daemon now suppresses the observed false positives while preserving explicit failed-tool
+    recovery, but the slice does not authorize lifecycle writes, hook/adapter writes, M6 work,
+    ranking changes, public MCP changes, telemetry formula changes, schema/storage changes, or
+    `orient` expansion.
+39. Treat T28 as Claude Code parity for one shared `obligations` request shape, not broad harness
+    readiness. Synthetic validation prompts can themselves create startup obligations, so follow-up
+    smokes should run `obligations(action=doctor)` and resolve or skip synthetic artifacts.
+40. Treat T29 as a completion-gate audit, not product completion. Current-plan retrieval and the
+    obligation surface are clean for the observed shape, while evidence-loop joinability remains
+    partial because the latest sampled traces had no external session labels.
+41. Keep the next major product gates explicit: M6 read-only inventory/review-export needs approved
+    scope, M6 write apply/deletion/legacy simplification needs reviewed candidates plus explicit
+    approval, and harness adapter or hook repair needs separate approval before writing settings or
+    generated adapters.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
