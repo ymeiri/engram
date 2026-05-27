@@ -458,6 +458,8 @@ fn current_plan_guidance_score(
 }
 
 fn asks_for_decision_gate(query: &str) -> bool {
+    // "non-gated" is continuation vocabulary; only independent gate terms trigger gate mode.
+    let query = query.replace("non-gated", "").replace("non gated", "");
     [
         "should", "proceed", "allowed", "allow", "apply", "gate", "safety", "block", "blocked",
         "must",

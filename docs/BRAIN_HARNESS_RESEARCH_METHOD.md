@@ -501,6 +501,12 @@ Current next application:
   `019e68ac-678e-7683-a241-08119fc6b03c` returned current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` first. Treat this as cross-harness parity for this
   prompt class only, not proof of broad ranking quality.
+- A targeted follow-up fixed direct unified `search` query classification for `non-gated`
+  continuation wording. Trace `019e68d4-05b7-79d3-8077-df6e2999482d` returned the active
+  current-plan memory first for the non-gated next-slice prompt after installing binary hash
+  `8859cacc921a243d5cd8dd3351f5f196c46d8074ecdc9933fa66e0ec490b1c7b`; migration-apply gate
+  trace `019e68d4-27b7-70e2-bdfe-5c879a97f0c8` still kept migration/gate context above
+  current-plan context. Treat this as narrow continuation-prompt calibration only.
 - The next non-gated work should improve targeted validation, evidence quality, or cross-harness
   replication. Read-only M6 inventory/review-export requires explicit user-approved scope; M6 write
   apply, deletion, and broad legacy simplification remain separately gated.

@@ -131,6 +131,12 @@ Research checkpoint, current through 2026-05-27:
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
+- A follow-up direct `search` calibration fixed a lexical false positive where `non-gated`
+  continuation wording was classified as a gate query by substring. Live installed trace
+  `019e68d4-05b7-79d3-8077-df6e2999482d` returns the active current plan first for the
+  non-gated next-slice prompt, while migration-apply gate trace
+  `019e68d4-27b7-70e2-bdfe-5c879a97f0c8` still keeps migration/gate context above current-plan
+  context.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -949,7 +955,10 @@ Proceed in this order from the current checkpoint:
     it supports continuation prompts, not broad ranking quality or `review_memory` behavior.
 16. Treat direct unified `search` current-plan ranking as the same narrow continuation-prompt
     calibration, not a broad search-quality claim or migration signal.
-17. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
+17. Treat the `non-gated` continuation wording fix as part of that same narrow prompt-class
+    calibration: it fixes a false gate-positive in continuation vocabulary, not broad natural
+    language intent understanding.
+18. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
     replication. Read-only M6 inventory/review-export requires explicit user-approved scope, and
     M6 write apply/deletion requires a separate approval gate.
 

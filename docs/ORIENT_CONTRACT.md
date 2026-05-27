@@ -118,7 +118,8 @@ include it in used memory candidates, but they do not use the `resume_session` B
 The stale BAF sealed-target memories that previously outranked current-plan context have also been
 superseded by accepted outcome memories, so they should not appear as active implementation targets.
 Direct unified `search` now has separate continuation-prompt fixtures for scoped current-plan
-ranking; that calibration does not expand or change this `orient` contract.
+ranking, including a `non-gated` continuation wording fixture that preserves migration-gate
+queries; that calibration does not expand or change this `orient` contract.
 
 ## Feedback Expectations
 

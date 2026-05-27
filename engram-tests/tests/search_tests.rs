@@ -621,6 +621,96 @@ async fn test_memory_search_prefers_project_current_plan_over_repository_plan() 
 }
 
 #[tokio::test]
+async fn test_memory_search_treats_non_gated_next_slice_as_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut noisy_limitation = MemoryItem::new(
+        MemoryKind::Limitation,
+        "Broad Brain OS next-step search still has non-current-plan top hit",
+        "A move forward next non-gated Brain Harness implementation slice query can surface \
+         limitation context before current-plan guidance.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "non-gated-gap"));
+    noisy_limitation.updated_at = now;
+    memory_service
+        .capture_memory(noisy_limitation)
+        .await
+        .unwrap();
+
+    let mut gate = MemoryItem::new(
+        MemoryKind::Decision,
+        "Migration Must Be Review-Gated",
+        "Memory OS migration apply must not proceed without reviewed candidates, a dry-run \
+         report, rollback planning, and explicit approval.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.95)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "migration-gate",
+    ));
+    gate.updated_at = now - time::Duration::days(30);
+    let gate = memory_service.capture_memory(gate).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after telemetry-backed lint slice",
+        "Continue working toward the active thread goal by choosing the next non-gated Brain \
+         Harness implementation slice from this current plan.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "latest-current-plan",
+    ))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(1);
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let continuation_results = search_service
+        .search_with_options(
+            "move forward next non-gated Brain Harness implementation slice current plan",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(continuation_results[0].id, current_plan.id.to_string());
+
+    let mixed_gate_results = search_service
+        .search_with_options(
+            "next non-gated step, should we proceed with migration apply?",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(mixed_gate_results[0].id, gate.id.to_string());
+}
+
+#[tokio::test]
 async fn test_memory_search_keeps_gate_guidance_above_current_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();
