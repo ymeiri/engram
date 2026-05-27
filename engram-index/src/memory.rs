@@ -3782,6 +3782,191 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking() {
+        let service = setup_service().await;
+        let current_plan = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Current plan after lean orient real verification smoke",
+                    "Lean orient passed a real read-only verification smoke. Next step: add a \
+                     deterministic diagnostic fixture before changing ranking, migration, hooks, \
+                     or the orient payload.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_status(MemoryStatus::Active)
+                .with_confidence(0.95)
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::ToolCall,
+                    "latest-current-plan",
+                ))
+                .with_tag(CURRENT_PLAN_TAG),
+            )
+            .await
+            .unwrap();
+
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Brain Harness work follows research method",
+                    "Engram Brain Harness work toward a production-quality Brain OS must use \
+                     explicit research questions, competing hypotheses, evidence gates, and \
+                     claim-ledger updates.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Preference,
+                    "Commit every meaningful Engram step",
+                    "When developing Engram, commit each meaningful validated step and keep \
+                     unrelated user-owned files out of the commit.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "Mission-class Brain OS prompt can miss latest current-plan memory",
+                    "A broad prompt to complete Engram into a production-quality Brain OS can \
+                     surface older Brain Harness guidance before the latest current-plan item.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "mission-gap")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Current plan after Codex document lifecycle follow-through",
+                    "The next product-facing Brain Harness slice completed document lifecycle \
+                     follow-through for Codex while working toward Engram as a Brain OS.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::GitCommit,
+                    "document-lifecycle-follow-through",
+                )),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Review mission prompt policy before changing ranking",
+                    "Inferred mission-class Brain OS planning policy should stay review-needed \
+                     until a diagnostic fixture distinguishes caller intent from ranker behavior.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::AgentInferred,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "mission-gap")),
+            )
+            .await
+            .unwrap();
+
+        let explicit_next_step = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "What is the current plan / next step for Engram? Continue from where we \
+                     left off."
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::PlanWork),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            explicit_next_step
+                .active_decisions
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id)
+        );
+        assert_eq!(
+            explicit_next_step
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id)
+        );
+
+        let mission_prompt =
+            "Complete Engram into a production-quality Brain OS / brain harness for AI agents.";
+        let plan_work_mission = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(mission_prompt.to_string()),
+                intent: Some(BrainHarnessIntent::PlanWork),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(plan_work_mission.intent, Some(BrainHarnessIntent::PlanWork));
+        assert_ne!(
+            plan_work_mission.active_decisions.first().map(|item| item.id),
+            Some(current_plan.id),
+            "diagnostic fixture should preserve the current mission-prompt gap until a policy is chosen"
+        );
+        assert!(
+            !plan_work_mission
+                .used_memory_candidate_ids
+                .contains(&current_plan.id),
+            "mission-class PlanWork prompt currently omits the latest current-plan candidate"
+        );
+
+        let resume_mission = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(mission_prompt.to_string()),
+                intent: Some(BrainHarnessIntent::ResumeSession),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            resume_mission.active_decisions.first().map(|item| item.id),
+            Some(current_plan.id)
+        );
+        assert_eq!(
+            resume_mission
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id)
+        );
+    }
+
+    #[tokio::test]
     async fn orient_recent_knowledge_commits_respect_explicit_project_scope() {
         let service = setup_service().await;
 

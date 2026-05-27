@@ -110,6 +110,11 @@ a ranking caveat: the latest current-plan memory was not in the returned top fiv
 next-step verification prompt; older BAF target memories outranked it. That did not block this
 read-only check, but it is evidence to consider before using lean `orient` as the only planning
 input for broader product steps.
+The diagnostic fixture
+`orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking` now preserves this distinction:
+explicit current-plan prompts and `resume_session` intent return the latest current plan first,
+while a mission-class `plan_work` prompt can still omit it from used memory candidates until a
+policy is chosen.
 
 ## Feedback Expectations
 
