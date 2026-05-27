@@ -496,8 +496,11 @@ Current next application:
   `019e68a5-ef05-7db0-8249-3722fcf78aea` returned the active current-plan memory first. This is
   validation for the prompt class only, not evidence for broad ranking churn or migration.
 - Claude Bridge could not validate the same direct-search smoke: the first attempt hit Claude API
-  overload, and the retry had no Engram MCP search tool available. Treat direct-search
-  cross-harness parity as still requiring a real Claude Code native MCP smoke.
+  overload, and the retry had no Engram MCP search tool available. Native Claude Code CLI later
+  completed the direct-search smoke through the live MCP server; trace
+  `019e68ac-678e-7683-a241-08119fc6b03c` returned current-plan memory
+  `019e689c-b188-70e2-acfc-2d00f956bd24` first. Treat this as cross-harness parity for this
+  prompt class only, not proof of broad ranking quality.
 - The next non-gated work should improve targeted validation, evidence quality, or cross-harness
   replication. Read-only M6 inventory/review-export requires explicit user-approved scope; M6 write
   apply, deletion, and broad legacy simplification remain separately gated.

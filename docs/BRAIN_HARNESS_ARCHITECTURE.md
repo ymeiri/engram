@@ -128,6 +128,9 @@ Research checkpoint, current through 2026-05-27:
 - Native MCP smoke after installing binary hash
   `f5cb5816927b4e4a5b9cb92df560de47e201c2bccdcbfa05eeb25c9d35bcfb35` confirmed the direct
   `search` continuation query returns the active current-plan memory first.
+- A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
+  `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
+  `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
