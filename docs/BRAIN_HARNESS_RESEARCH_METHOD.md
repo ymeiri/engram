@@ -491,8 +491,10 @@ Current next application:
 - Document lifecycle follow-through has passed for Codex and the generated Codex adapter; do not
   keep selecting that as the next product step unless a new harness or failure mode is being tested.
 - Direct unified `search` continuation prompts now have a narrow current-plan fixture after the
-  live daemon reproduced the old noisy ranking; this is validation for the prompt class only, not
-  evidence for broad ranking churn or migration.
+  live daemon reproduced the old noisy ranking; after installing binary hash
+  `f5cb5816927b4e4a5b9cb92df560de47e201c2bccdcbfa05eeb25c9d35bcfb35`, native MCP trace
+  `019e68a5-ef05-7db0-8249-3722fcf78aea` returned the active current-plan memory first. This is
+  validation for the prompt class only, not evidence for broad ranking churn or migration.
 - The next non-gated work should improve targeted validation, evidence quality, or cross-harness
   replication. Read-only M6 inventory/review-export requires explicit user-approved scope; M6 write
   apply, deletion, and broad legacy simplification remain separately gated.
