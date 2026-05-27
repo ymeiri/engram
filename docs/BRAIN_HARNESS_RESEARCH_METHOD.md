@@ -605,6 +605,12 @@ Current next application:
   `2.1.152` then reproduced the scoped list result through its own Engram MCP connection after the
   T16 current-plan capture, returning only `019e69af-011f-7450-9f8c-1ff067f0f183` for
   `project / engram`.
+- A read-only harness readiness re-audit corrected stale cross-harness status documentation:
+  explicit `harness(action=doctor)` calls for `claude_code`, `codex`, `gemini_cli`, and `cursor`
+  all returned `ready=false`. Claude Code has required generated adapter files installed, but
+  required `SessionStart` and `SessionEnd` settings registrations are missing; Codex, Gemini CLI,
+  and Cursor still have required generated adapter drift. Treat this as configuration drift
+  evidence, not approval to write adapters or hooks.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

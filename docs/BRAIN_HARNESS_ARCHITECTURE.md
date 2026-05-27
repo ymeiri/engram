@@ -167,6 +167,12 @@ Research checkpoint, current through 2026-05-27:
   memory-list fix only; it does not change `orient`, unified `search`, ranking, migration, schema,
   hooks, adapters, or lifecycle status. Native Claude Code `2.1.152` reproduced the same scoped
   list behavior through its own Engram MCP connection with only `mcp__engram__memory` allowed.
+- A follow-up read-only harness readiness audit corrected stale documentation: explicit
+  `harness(action=doctor)` calls for `claude_code`, `codex`, `gemini_cli`, and `cursor` all
+  returned `ready=false`. Claude Code has required generated adapter files installed, but required
+  `SessionStart` and `SessionEnd` settings hook registrations are missing; Codex, Gemini CLI, and
+  Cursor still have required generated adapter drift. This is configuration evidence only, not an
+  adapter or hook write.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1065,6 +1071,11 @@ Proceed in this order from the current checkpoint:
     lifecycle cleanup. Native Claude Code reproduced the scoped list result through the shared MCP
     memory tool, which validates this specialist surface in both Codex and Claude Code for the
     observed request shape.
+32. Treat T17 harness readiness as a read-only drift audit: current explicit `harness doctor`
+    output shows no supported harness is fully ready. Claude Code's required generated adapter
+    files are installed, but required settings registrations for `SessionStart` and `SessionEnd`
+    are missing; Codex, Gemini CLI, and Cursor have required adapter drift. This corrects stale
+    documentation and does not approve adapter writes, hook changes, or settings mutation.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

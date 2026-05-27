@@ -518,3 +518,45 @@ This closes a concrete evidence-sampling gap. It does not archive stale current-
 ranking, or authorize M6 inventory/write apply, deletion, cleanup, legacy simplification,
 schema/storage/index changes, hook changes, public request-parameter changes, or `orient` payload
 expansion.
+
+## T17 Harness Readiness Drift Audit
+
+Research question: does current read-only `harness(action=doctor)` still support the completion
+matrix claim that Claude Code is fully ready while the other harnesses have adapter drift?
+
+Hypotheses:
+
+- Preferred: the readiness implementation is working and the docs were stale; only docs and memory
+  need correction.
+- Null: Claude Code remains fully ready.
+- Simpler alternative: record the raw doctor output without changing status claims.
+- Failure: the doctor readiness logic is misleading and needs a code/test fix.
+
+Measurement:
+
+- Run explicit read-only doctor checks for `claude_code`, `codex`, `gemini_cli`, and `cursor` with
+  root `/Users/yuval.meiri`, project `engram`, cwd `/Users/yuval.meiri/projects/engram`, and no
+  `write` flag.
+- Inspect `engram-index/src/harness.rs` readiness logic before interpreting results.
+
+Result:
+
+- All four explicit doctor checks returned `ready=false`.
+- Claude Code: required generated adapter files were installed, but required `SessionStart` and
+  `SessionEnd` hook registrations were missing from Claude settings; the optional settings snippet
+  was user-owned. Extra Engram permission entries were present but are warnings, not the primary
+  readiness blocker.
+- Codex: required generated `codex-memory-session-skill` and `codex-resume-session-skill` drifted
+  from current policy.
+- Gemini CLI: required generated memory-session and resume-session commands plus global context
+  drifted from current policy.
+- Cursor: required generated memory-session and resume-session skills drifted from current policy.
+- Source inspection confirmed `ready` requires all required adapters to be installed and, for
+  Claude Code, required settings checks to pass; `doctor` then adds the soft lifecycle warning.
+
+Decision:
+
+- Correct the docs claim. Treat current cross-harness readiness as partially validated but not
+  fully installed for any supported harness.
+- No adapter, hook, settings, schema, ranking, `orient`, migration, or lifecycle-status writes were
+  made. Adapter and hook writes remain approval-gated.
