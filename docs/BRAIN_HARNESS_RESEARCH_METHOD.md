@@ -700,8 +700,10 @@ Current next application:
   `verify_decision` check passed, the `review_memory` stale-plan check was noisy but usable, and
   the lean `prepare_handoff` `orient` check failed because explicit M6/harness-write gates were
   absent and stale repository-scoped current-plan guidance appeared without a caveat. The rolling
-  confidence gate passed numerically afterward, but the fixed-case failure is stronger evidence
-  than the aggregate pass.
+  confidence gate passed numerically afterward (`feedback_trace_count=48`,
+  `feedback_coverage=0.9599999785423279`, `bad_memory_used_count=0`, `task_failure_count=1`
+  after startup feedback scoring), but the fixed-case failure is stronger evidence than the
+  aggregate pass.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

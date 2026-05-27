@@ -1479,6 +1479,11 @@ Results:
   `feedback_coverage=0.8399999737739563`, `distinct_intent_count=5`,
   `bad_memory_used_count=0`, `task_failure_count=1`, `external_session_trace_count=0`, and
   `confidence_gate.passed=true`.
+- After scoring the T35 startup retrieval traces as well, a follow-up report at
+  `2026-05-27T17:05:44Z` returned `feedback_trace_count=48`,
+  `feedback_coverage=0.9599999785423279`, `distinct_intent_count=5`,
+  `bad_memory_used_count=0`, `task_failure_count=1`, `external_session_trace_count=0`, and
+  `confidence_gate.passed=true`.
 
 Decision:
 

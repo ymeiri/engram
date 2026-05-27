@@ -243,8 +243,10 @@ Research checkpoint, current through 2026-05-27:
   `orient(intent=prepare_handoff)` failed its fixed criteria: it preserved current-plan continuity
   while omitting explicit M6/harness-write gates and returning stale repository-scoped
   current-plan guidance without a caveat. The rolling confidence gate then passed numerically
-  (`feedback_trace_count=42`, `distinct_intent_count=5`, `bad_memory_used_count=0`), but the
-  per-case handoff failure is stronger evidence than the aggregate gate pass.
+  (`feedback_trace_count=48`, `feedback_coverage=0.9599999785423279`,
+  `distinct_intent_count=5`, `bad_memory_used_count=0`, `task_failure_count=1` after scoring the
+  T35 startup traces), but the per-case handoff failure is stronger evidence than the aggregate
+  gate pass.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
