@@ -1339,3 +1339,61 @@ Decision:
 
 - Treat T33 as cross-harness evidence for the shared MCP `lint` surface only.
 - Keep M6 and harness writes approval-gated.
+
+## T34 Governing-Doc Sync And Rolling Eval Audit
+
+Status: completed as documentation/evidence synchronization. No source behavior, lifecycle status,
+migration flow, hook, adapter, schema, storage, public MCP request shape, telemetry formula,
+ranking, or `orient` payload changed.
+
+Research question:
+
+- After T33, do the governing architecture/research-method docs and central completion matrix still
+  reflect the latest evidence without implying gated M6 or harness writes?
+
+Hypotheses:
+
+- Preferred: synchronize docs through T33/T34 evidence and preserve the same approval gates.
+- Null: T33 adds no doc synchronization need.
+- Simpler alternative: rely on the T33 report only.
+- Failure: the update implies migration, lifecycle, hook/adapter, ranking, schema/storage, public
+  MCP, telemetry formula, or `orient` payload authority that the user has not granted.
+
+Measurement:
+
+- T34 startup lean `orient` trace `019e6a51-23a7-72b1-b9b8-2e37fbcbc812` returned current-plan
+  memory `019e6a50-1cb8-7623-97f6-9a7446fd7abc` first.
+- Direct current-plan search trace `019e6a51-3881-7002-b359-7ce125029735` returned the same
+  current-plan memory first, while stale repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remained lower-ranked review noise.
+- Live `lint(action=run, limit=10)` returned `feedback_stale_current_plan` for
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` first with 87 recent stale-feedback records and
+  `safe_action=none`.
+- `obligations(action=doctor, project=engram, cwd=/Users/yuval.meiri/projects/engram)` returned
+  `open=[]` and `warnings=[]`.
+- Explicit harness doctor calls still returned `ready=false` for Claude Code, Codex, Gemini CLI,
+  and Cursor. Claude Code still lacks required `SessionStart` and `SessionEnd` hook registrations;
+  Codex, Gemini CLI, and Cursor still have generated adapter drift.
+- The installed daemon was running on port `8765`, PID `85531`, binary hash
+  `62db1e301ef7913ad685caa39d96ce0c479fc160fff3e8002df66401f619fce9`.
+- After scoring the T34 startup traces, `real_session_eval(project=engram, limit=50)` at
+  `2026-05-27T16:49:00Z` returned `trace_count=50`, `feedback_trace_count=47`,
+  `feedback_coverage=0.9399999976158142`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`,
+  `external_session_trace_count=0`, and `confidence_gate.passed=false` because feedback covered
+  only two intents.
+- `docs/BRAIN_HARNESS_ARCHITECTURE.md`, `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`,
+  `docs/MEMORY_OS_IMPLEMENTATION_PLAN.md`, and this report were updated and indexed.
+
+Result:
+
+- Current-plan retrieval and lint visibility remain usable for the observed startup surfaces.
+- The evidence loop is still partial: a rolling sample can have healthy feedback coverage and no
+  bad-memory use while failing the confidence gate on intent diversity.
+- Harness readiness remains false for every supported harness in the read-only doctor checks.
+
+Decision:
+
+- Treat T34 as documentation and evidence synchronization only.
+- Keep M6 read-only inventory/review-export gated on explicit user-approved scope, and keep M6
+  write apply/deletion/legacy simplification plus harness adapter/hook writes separately gated.

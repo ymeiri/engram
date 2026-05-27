@@ -680,6 +680,22 @@ Current next application:
   clean for the observed surface, while cross-harness readiness remained false and the latest
   telemetry sample had no external session labels. M6 migration and harness adapter/hook repair stay
   explicit approval gates.
+- T30/T31 synchronized the architecture and research-method docs with the T29 gate evidence, then
+  reconfirmed the same live-state shape. This was documentation and status calibration only: stale
+  historical guidance stayed review noise, the rolling feedback window stayed sample-sensitive, all
+  supported harnesses remained not ready, and no M6 or harness-write gate changed.
+- T32 changed only lint report ordering before truncation so stale current-plan and wrong-scope
+  feedback signals are visible under small limits. The evidence level is a deterministic fixture
+  plus installed-runtime smoke; it improves review visibility but has `safe_action=none` and does
+  not authorize lifecycle cleanup.
+- T33 replicated the T32 lint ordering through Claude Code's Engram MCP path. Treat it as
+  cross-harness evidence for one read-only `lint` report shape, with the caveat that synthetic
+  validation prompts can create obligations that must be closed.
+- T34 startup evidence keeps the current-plan continuation surface usable, but after scoring the
+  T34 startup traces the live `real_session_eval(project=engram, limit=50)` confidence gate still
+  fails because feedback spans only two intents despite `feedback_coverage=0.9399999976158142` and
+  `bad_memory_used_count=0`. This strengthens the rule that migration confidence needs explicit
+  evidence and user approval, not a favorable or unfavorable single rolling sample alone.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

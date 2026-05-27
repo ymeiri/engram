@@ -219,6 +219,25 @@ Research checkpoint, current through 2026-05-27:
   for the observed continuation surface, `real_session_eval(project=engram, limit=50)` passed
   numerically with `bad_memory_used_count=0`, but `external_session_trace_count=0` in the latest
   sampled window and all supported harnesses still reported `ready=false`.
+- T30/T31 synchronized the architecture and research-method docs through T29 evidence, then
+  reconfirmed the same live-state shape: current-plan retrieval stayed current for the observed
+  continuation prompt, stale historical guidance remained lower-ranked review noise, the evidence
+  loop stayed sample-window sensitive, and all supported harnesses still reported `ready=false`.
+- T32 changed only private lint finding priority before truncation so feedback-stale current-plan
+  and wrong-scope feedback findings are visible under normal limits. The installed daemon returned
+  `feedback_stale_current_plan` first for stale repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915`, with `safe_action=none`.
+- T33 replicated that T32 lint-ordering result through Claude Code's Engram MCP path via Claude
+  Bridge. The smoke created one synthetic design-context obligation, which was resolved after the
+  already-required startup docs were read; this is a harness-smoke caveat, not broad readiness.
+- T34 startup live-state sampling kept current-plan retrieval usable, with the active current plan
+  first for both lean `orient` and direct current-plan search. The live lint report still surfaced
+  the same stale current-plan finding first, now with 87 recent stale-feedback records, and
+  `obligations(action=doctor)` remained clean. After scoring the T34 startup traces,
+  `real_session_eval(project=engram, limit=50)` had `feedback_trace_count=47`,
+  `feedback_coverage=0.9399999976158142`, `bad_memory_used_count=0`,
+  and `external_session_trace_count=0`, but the conservative confidence gate failed because
+  feedback covered only two intents. Treat that as rolling-window evidence, not approval for M6.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1160,6 +1179,20 @@ Proceed in this order from the current checkpoint:
     scope, M6 write apply/deletion/legacy simplification needs reviewed candidates plus explicit
     approval, and harness adapter or hook repair needs separate approval before writing settings or
     generated adapters.
+42. Treat T30/T31 as documentation and live-state synchronization only. They keep the governing
+    docs aligned with T29 evidence and reconfirm the same gates, but they do not add implementation
+    evidence or authorize migration, lifecycle, ranking, hook, adapter, schema/storage, public MCP,
+    telemetry formula, or `orient` payload changes.
+43. Treat T32/T33 as lint evidence-visibility and cross-harness parity for one shared MCP lint
+    report shape. They make stale-current-plan review signals easier to see in Codex and Claude
+    Code, but `safe_action=none` remains intentional and no lifecycle cleanup is implied.
+44. Treat the T34 live telemetry result as a reminder that the confidence gate is a rolling
+    operational signal. Feedback coverage and bad-memory containment can look healthy while the
+    gate still fails on intent diversity; that failure blocks migration confidence rather than
+    requiring ranking or hot-path changes.
+45. Keep non-gated work limited to targeted validation, evidence-quality fixes, cross-harness
+    replication, and documentation synchronization until the user explicitly approves either M6
+    scope or harness adapter/hook writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -321,6 +321,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `019e5e0a-86b4-73e3-aa9b-ca350e83e915` first with `safe_action=none`; the synthetic
       design-context obligation created by the validation prompt was resolved from the already-read
       startup docs.
+- [x] T34 governing-doc sync and rolling eval audit: `docs/BRAIN_HARNESS_ARCHITECTURE.md` and
+      `docs/BRAIN_HARNESS_RESEARCH_METHOD.md` now record the T30/T31 documentation audit, T32/T33
+      lint-ordering evidence, and the T34 live-state sample. The T34 sample keeps current-plan
+      retrieval usable and obligations clean, but after scoring the T34 startup traces
+      `real_session_eval(project=engram, limit=50)` still fails the conservative confidence gate
+      because feedback spans only two intents. This is documentation/evidence alignment only; no
+      source behavior, ranking, lifecycle, migration, hook, adapter, schema/storage, public MCP,
+      telemetry formula, or `orient` payload change was introduced.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -593,6 +601,35 @@ T33 Claude Code lint-ordering parity smoke, 2026-05-27:
   hooks/settings/adapters, lifecycle cleanup, migration authority, ranking, telemetry formulas,
   schema/storage, public MCP request shape, or `orient`. Synthetic validation prompts can still
   create startup obligations, so future cross-harness smokes must run doctor and close artifacts.
+
+T34 governing-doc sync and rolling eval audit, 2026-05-27:
+
+- Research question: after T33, do the governing architecture/research-method docs and the central
+  completion matrix still reflect the latest evidence without implying gated M6 or harness writes?
+- Hypotheses: preferred: synchronize docs through T33/T34 evidence and preserve the same approval
+  gates; null: T33 adds no doc synchronization need; simpler alternative: rely on the T33 report
+  only; failure: the update implies migration, lifecycle, hook/adapter, ranking, schema/storage,
+  public MCP, telemetry formula, or `orient` payload authority that the user has not granted.
+- Measurement: T34 startup lean `orient` trace `019e6a51-23a7-72b1-b9b8-2e37fbcbc812`
+  returned the current plan `019e6a50-1cb8-7623-97f6-9a7446fd7abc` first; direct current-plan
+  search trace `019e6a51-3881-7002-b359-7ce125029735` also returned it first, with stale
+  repository-scoped current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` still lower as
+  review noise. Live `lint(action=run, limit=10)` returned `feedback_stale_current_plan` for that
+  stale current-plan item first with 87 recent stale-feedback records and `safe_action=none`.
+  `obligations(action=doctor)` returned `open=[]` and `warnings=[]`. Explicit harness doctor calls
+  still returned `ready=false` for Claude Code, Codex, Gemini CLI, and Cursor. The installed daemon
+  was running on port `8765`, PID `85531`, binary hash
+  `62db1e301ef7913ad685caa39d96ce0c479fc160fff3e8002df66401f619fce9`.
+  After scoring the T34 startup traces, `real_session_eval(project=engram, limit=50)` at
+  `2026-05-27T16:49:00Z` returned `trace_count=50`, `feedback_trace_count=47`,
+  `feedback_coverage=0.9399999976158142`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, `external_session_trace_count=0`,
+  and `confidence_gate.passed=false` because feedback covered only two intents.
+- Matrix delta: current-plan retrieval and lint visibility remain usable for the observed surfaces,
+  but the evidence loop is again explicitly partial because the rolling confidence gate currently
+  fails on intent diversity. This does not call for ranking or hot-path changes; it reinforces that
+  M6 remains blocked without explicit user-approved scope and stronger evidence. The non-gated T34
+  implementation was documentation synchronization plus document indexing and obligation cleanup.
 
 Current MCP/CLI Memory OS surface:
 
