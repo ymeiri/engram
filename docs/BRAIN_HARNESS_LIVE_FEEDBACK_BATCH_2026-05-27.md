@@ -1044,3 +1044,60 @@ Decision:
   M6 inventory/export/apply/deletion, lifecycle writes, ranking changes, hook/adapter writes,
   schema/storage changes, public MCP surface changes, telemetry formula changes, or `orient`
   expansion.
+
+## T28 Claude Code Cross-Harness Obligation Smoke
+
+Status: passed with a harness-write caveat through Claude Bridge. No source behavior, ranking,
+`orient` payload, migration flow, lifecycle status, hook, adapter, schema, storage, public MCP
+surface, or telemetry formula changed.
+
+Research question:
+
+- Does native Claude Code, through its own Engram MCP connection exposed by Claude Bridge, observe the
+  same T27 installed-runtime obligation behavior as Codex?
+
+Hypotheses:
+
+- Preferred: Claude Code receives the same dry-run obligation results as Codex: the bare `schema` /
+  `failure hypothesis` prompt does not produce `tool_failure_recovery` or an `AGENTS.md`
+  document-disposition candidate, while explicit failed-tool wording still produces
+  `tool_failure_recovery`.
+- Null: Codex MCP sees the fixed daemon but Claude Code's MCP path is stale or unavailable.
+- Simpler alternative: rely on Codex installed-runtime validation only.
+- Failure: Claude Bridge cannot expose the Engram MCP obligations tool, or Claude Code receives a
+  divergent result that needs a separate harness investigation.
+
+Measurement:
+
+- AI Council recall found no directly relevant prior decision for this exact obligation parity smoke.
+- Claude Bridge foreground read-only task used `harness=personal`, `write=false`, and allowed only
+  `mcp__engram__obligations`.
+- Claude Code dry-run for prompt `Failure hypothesis: avoid schema changes unless evidence justifies
+  them.` returned only `source_reading` with id `019e6a13-8410-7be3-8c5a-38614d40e9d1`. It did not
+  return `tool_failure_recovery` and did not return any `AGENTS.md` document-disposition candidate.
+- Claude Code dry-run for prompt `A tool call failed because of wrong parameters.` returned
+  `tool_failure_recovery` with id `019e6a13-890d-7781-9e1e-cc50c5793c75`.
+- Both requested Claude Code validation calls reported dry-run results: `written=[]`,
+  `skipped_existing=[]`, and `warnings=[]`.
+- Follow-up Codex `obligations(action=doctor)` found that the Claude Code harness itself had opened
+  two prompt-derived obligations from the synthetic smoke prompt: `tool_failure_recovery`
+  `019e6a13-6a3f-7d12-92b6-a89cc7d91b37` and `source_reading`
+  `019e6a13-6a3f-7d12-92b6-a884a00d46c9`. Codex skipped both with explicit synthetic-smoke
+  evidence because there was no real failed tool recovery or Claude source-reading task to complete.
+
+Result:
+
+- The T26/T27 obligation-noise behavior is now replicated through Claude Code for this exact MCP
+  request shape.
+- This is cross-harness evidence for the shared `obligations` surface only. It does not validate
+  hooks, generated adapter settings, broad Claude Code readiness, ranking, migration, or `orient`.
+- The caveat is material for future smokes: prompts that intentionally contain obligation trigger
+  phrases can cause harness-start obligation writes even when the requested validation calls are
+  dry-run. Always run `obligations(action=doctor)` afterward and resolve or skip synthetic artifacts.
+
+Decision:
+
+- Treat this as narrow Claude Code parity evidence for obligation signal quality. It does not
+  authorize M6 inventory/export/apply/deletion, lifecycle writes, ranking changes, hook/adapter
+  writes, schema/storage changes, public MCP changes, telemetry formula changes, or `orient`
+  expansion.

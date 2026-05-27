@@ -170,6 +170,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       wording still returns `tool_failure_recovery`. This is installed-runtime evidence only; it
       does not change `orient`, ranking, migration, lifecycle status, hooks, adapters, public MCP
       parameters, telemetry formulas, schema, or storage.
+- [x] T28 Claude Code cross-harness obligation smoke: Claude Bridge with `harness=personal`,
+      `write=false`, and only `mcp__engram__obligations` allowed reproduced the T27 behavior.
+      Claude Code returned only `source_reading` for the bare `schema` / `failure hypothesis` prompt,
+      no `AGENTS.md` document-disposition candidate, and `tool_failure_recovery` for explicit
+      failed-tool wording. Caveat: the requested validation calls were dry-run, but the Claude Code
+      harness itself opened two prompt-derived obligations from the synthetic smoke prompt; Codex
+      skipped them with explicit synthetic-smoke evidence. This validates the shared MCP obligations
+      request shape only; it does not validate hooks, adapter/settings writes, ranking, migration,
+      lifecycle status, public MCP changes, telemetry formulas, schema, storage, or `orient`.
 - [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
       feedback records task success, preference adherence, repeated context questions, and bad
       memory use, and the confidence gate requires behavioral outcome evidence.
@@ -414,6 +423,31 @@ T27 installed-runtime validation for T26, 2026-05-27:
   closing the immediate binary-drift caveat for this slice. This does not authorize M6
   inventory/export/apply/deletion, lifecycle writes, ranking changes, hook/adapter writes, public MCP
   changes, telemetry formula changes, schema/storage changes, or `orient` payload expansion.
+
+T28 Claude Code cross-harness obligation smoke, 2026-05-27:
+
+- Research question: does native Claude Code, through the Claude Bridge personal harness and Engram
+  MCP obligations tool, observe the same T27 installed-runtime obligation behavior as Codex?
+- Measurement: AI Council recall found no directly relevant prior decision. Claude Bridge ran a
+  foreground task with `harness=personal`, `write=false`, and only `mcp__engram__obligations`
+  allowed for the requested calls. For prompt
+  `Failure hypothesis: avoid schema changes unless evidence justifies them.`, Claude Code returned
+  only `source_reading` id `019e6a13-8410-7be3-8c5a-38614d40e9d1`, with no
+  `tool_failure_recovery` and no `AGENTS.md` document-disposition candidate. For prompt
+  `A tool call failed because of wrong parameters.`, Claude Code returned `tool_failure_recovery`
+  id `019e6a13-890d-7781-9e1e-cc50c5793c75`. Both requested calls reported dry-run results with no
+  writes, no skipped existing obligations, and no warnings. Follow-up Codex
+  `obligations(action=doctor)` found two prompt-derived open obligations written by the Claude Code
+  harness itself, `019e6a13-6a3f-7d12-92b6-a89cc7d91b37` and
+  `019e6a13-6a3f-7d12-92b6-a884a00d46c9`; Codex skipped both as synthetic-smoke artifacts with
+  explicit evidence.
+- Matrix delta: cross-harness behavior is slightly stronger for the shared MCP obligations surface.
+  This does not change the T17 harness-readiness finding: hooks/settings/adapters are still not
+  broadly ready, and adapter or hook writes remain gated. The smoke also exposes a harness caveat:
+  prompts containing obligation trigger phrases can create startup obligations even when the requested
+  validation calls are dry-run, so future smokes should run doctor and close synthetic artifacts. It
+  does not authorize M6 work, lifecycle writes, ranking changes, public MCP changes, telemetry
+  formula changes, schema/storage changes, or `orient` payload expansion.
 
 Current MCP/CLI Memory OS surface:
 
