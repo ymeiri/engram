@@ -395,6 +395,17 @@ T19/T20 measurement behavior for one controlled live case; it is not product-qua
 authorization, or evidence for ranking, hot-path, lifecycle, hook, adapter, schema, or migration
 changes.
 
+2026-05-27 cross-harness telemetry update: Claude Bridge still could not expose Engram MCP tools in
+the project harness, so that path remains a bridge tool-exposure limitation. Native Claude Code
+`2.1.152` with `mcp__engram__telemetry` allowed reproduced the T21 report through its own MCP
+connection: `trace_count=2`, `feedback_count=1`, `feedback_trace_count=1`,
+`feedback_coverage=0.5`, `task_success_count=1`, and `task_failure_count=0`, with newest in-scope
+trace IDs `019e69e4-6244-7123-a34e-d19e8c44341a` and
+`019e69e4-5582-79a1-8dc4-09411d58aca5`. Claude's final explanation incorrectly inferred an
+operation-level filter; the source and controlled trace ordering show the report is simply the
+newest two scoped traces under `limit=2`. Treat this as cross-harness report-surface validation plus
+a model-interpretation caveat, not model proof or authorization for broader changes.
+
 ---
 
 ## 9. Decision Gates
@@ -650,6 +661,10 @@ Current next application:
   `t21_installed_runtime_eval_20260527_0192d24d`. Treat this as installed-runtime measurement
   evidence only, not authorization for M6, lifecycle cleanup, ranking changes, hooks, adapters,
   schema/storage changes, public MCP changes, or `orient` payload expansion.
+- T22 adds native Claude Code replication for the same read-only telemetry surface. The report
+  fields matched Codex; the bridge path still lacks Engram MCP tools, and Claude's explanatory
+  operation-filter claim was rejected after source/result review. Treat the agreement on fields as
+  useful cross-harness evidence, not proof by model interpretation.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

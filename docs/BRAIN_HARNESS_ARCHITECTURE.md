@@ -197,6 +197,11 @@ Research checkpoint, current through 2026-05-27:
   `t21_installed_runtime_eval_20260527_0192d24d / memoryitem_orient / limit=2` returned exactly the
   latest two in-scope traces and only the feedback attached to those sampled traces, excluding newer
   out-of-scope traces and newer feedback on older in-scope traces.
+- Native Claude Code `2.1.152` reproduced the same T21 read-only telemetry report through its own
+  Engram MCP connection with `mcp__engram__telemetry` allowed. Claude Bridge still exposed only
+  file-read tools for the same request, so treat the bridge miss as a tool-exposure limitation.
+  The Claude Code result validates the shared MCP telemetry surface for this report shape, not
+  hooks, adapters, ranking, migration, or broad Brain Harness product behavior.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.

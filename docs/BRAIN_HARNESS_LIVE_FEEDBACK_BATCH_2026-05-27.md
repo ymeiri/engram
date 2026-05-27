@@ -765,3 +765,45 @@ Decision:
   capture/lifecycle gap surfaced by evidence. M6 inventory/export/apply/deletion, lifecycle writes,
   hook/adapter writes, public MCP changes, schema/storage changes, broad ranking changes, and
   `orient` payload expansion remain approval-gated.
+
+## T22 Claude Code Cross-Harness Read-Only Smoke
+
+Status: native Claude Code reproduced the T21 report; Claude Bridge remains tool-limited for this
+request.
+
+Research question: can a separate Claude Code harness read the same installed T21 telemetry report
+through its own Engram MCP connection?
+
+Measurement:
+
+- AI Council recall before consultation found no directly relevant prior decision for T19/T20
+  cross-harness validation.
+- Claude Bridge was asked to run the read-only report with `mcp__engram__telemetry` allowed, but
+  the bridge project harness exposed only file-read tools. This is a bridge tool-exposure
+  limitation, not an Engram runtime failure.
+- Native Claude Code `2.1.152` was run from `/Users/yuval.meiri/projects/engram` with
+  `--allowedTools mcp__engram__telemetry` and no write permission.
+
+Result:
+
+- Native Claude Code reported `tool_available=true`.
+- `real_session_eval(project=engram,
+  scenario_id=t21_installed_runtime_eval_20260527_0192d24d, arm=memoryitem_orient, limit=2)`
+  returned `trace_count=2`, `feedback_count=1`, `feedback_trace_count=1`,
+  `feedback_coverage=0.5`, `task_success_count=1`, and `task_failure_count=0`, with the expected
+  project/scenario/arm filters.
+- `list_traces` returned the same newest two in-scope trace IDs:
+  `019e69e4-6244-7123-a34e-d19e8c44341a` and
+  `019e69e4-5582-79a1-8dc4-09411d58aca5`.
+- Claude's final explanation incorrectly inferred that the report was scoped to orient-operation
+  traces. That interpretation is rejected: the current source applies project/scenario/arm filters
+  before `limit=2`, and the two newest in-scope traces happen to be orient traces.
+
+Decision:
+
+- Treat this as cross-harness validation for the read-only MCP telemetry report shape used in T21.
+- Do not treat Claude's model explanation as proof; the evidence is the matching tool result plus
+  source inspection.
+- This does not validate hooks, adapter installs, bridge tool parity, broad report quality, M6
+  migration, ranking, lifecycle writes, schema/storage changes, public MCP changes, or `orient`
+  payload changes.

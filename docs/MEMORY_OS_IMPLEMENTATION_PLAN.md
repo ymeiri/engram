@@ -143,6 +143,18 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       traces were excluded. This is installed-runtime evidence only; it does not change ranking,
       `orient`, migration, lifecycle state, hooks, adapters, public MCP parameters, output fields,
       schema/storage, or `list_feedback_scoped`.
+- [x] T22 Claude Code cross-harness smoke for T21: Claude Bridge still could not expose Engram MCP
+      tools in the project harness and is treated as a bridge tool-exposure limitation. Native
+      Claude Code `2.1.152` with `mcp__engram__telemetry` allowed reproduced the same read-only T21
+      report through its own MCP connection: `trace_count=2`, `feedback_count=1`,
+      `feedback_trace_count=1`, `feedback_coverage=0.5`, `task_success_count=1`, and
+      `task_failure_count=0`, with newest in-scope trace IDs
+      `019e69e4-6244-7123-a34e-d19e8c44341a` and
+      `019e69e4-5582-79a1-8dc4-09411d58aca5`. Claude's explanation incorrectly inferred
+      operation-level filtering; source inspection and the controlled fixture show the result is
+      the newest two scoped traces under `limit=2`. This validates shared MCP report behavior for
+      this read-only surface only, not hooks, adapters, ranking, migration, or broad product
+      quality.
 - [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
       feedback records task success, preference adherence, repeated context questions, and bad
       memory use, and the confidence gate requires behavioral outcome evidence.
