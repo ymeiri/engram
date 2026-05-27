@@ -98,6 +98,92 @@ async fn test_mcp_lint_bounds_duplicate_entity_candidate_messages() {
 }
 
 #[tokio::test]
+async fn test_mcp_lint_prioritizes_feedback_signal_under_limit() {
+    let (state, memory_service, telemetry_repo) = setup_tool_state().await;
+
+    let current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after older slice",
+        "Old current-plan guidance that feedback says is stale.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"))
+    .with_tag("current-plan");
+    let current_plan_id = current_plan.id;
+    memory_service
+        .capture_memory(current_plan)
+        .await
+        .expect("current-plan memory should be captured");
+
+    let mut feedback = AgentFeedback::new(Id::new());
+    feedback.stale_memory_ids = vec![current_plan_id];
+    telemetry_repo
+        .save_feedback(&feedback)
+        .await
+        .expect("feedback should be saved");
+
+    let old = MemoryItem::new(
+        MemoryKind::Decision,
+        "Superseded older decision",
+        "Old content.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+    let replacement = MemoryItem::new(
+        MemoryKind::Decision,
+        "Replacement decision",
+        "New content.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"))
+    .with_superseded_item(old.id);
+    memory_service
+        .capture_memory(old)
+        .await
+        .expect("old memory should be captured");
+    memory_service
+        .capture_memory(replacement)
+        .await
+        .expect("replacement memory should be captured");
+
+    for index in 0..3 {
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            format!("Duplicate entity fact {index}"),
+            "Duplicate entity-scoped content.",
+            MemoryScope::entity("ide-mcp-eval"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+        memory_service
+            .capture_memory(item)
+            .await
+            .expect("duplicate entity item should be captured");
+    }
+
+    let mut request = lint_request("run");
+    request.limit = Some(1);
+    let response = tools::lint_new(&state, request)
+        .await
+        .expect("lint should run");
+    let json = parse_json(&response);
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be an array");
+
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0]["rule"], "feedback_stale_current_plan");
+    assert_eq!(findings[0]["item_id"], current_plan_id.to_string());
+}
+
+#[tokio::test]
 async fn test_mcp_lint_includes_item_titles_for_actionable_warnings() {
     let (state, memory_service, _) = setup_tool_state().await;
 

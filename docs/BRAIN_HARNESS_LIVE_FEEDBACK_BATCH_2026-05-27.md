@@ -1220,3 +1220,65 @@ Decision:
 - Adapter or hook writes remain separately gated.
 - The next non-gated work should be another narrow evidence-quality, validation, or documentation
   synchronization slice unless the user explicitly approves one of the gated paths.
+
+## T32 Lint Evidence-Prioritization Slice
+
+Status: completed as a narrow lint report-ordering change. No source data, lifecycle status,
+migration flow, hook, adapter, schema, storage, public MCP request shape, telemetry formula,
+ranking, or `orient` payload changed.
+
+Research question:
+
+- Can lint report ordering make review-critical feedback signals visible under normal limits
+  without changing any memory lifecycle authority?
+
+Hypotheses:
+
+- Preferred: a deterministic private priority sort can surface stale current-plan and wrong-scope
+  feedback before duplicate-entity, unresolved-obligation, and archive-safe lifecycle noise.
+- Null: agents already scan enough findings, so order has little practical value.
+- Simpler alternative: document the lint-noise caveat only.
+- Failure: the ordering implies cleanup authority or changes which findings are generated.
+
+Measurement:
+
+- T32 startup lean `orient` trace `019e6a2b-cfd9-7ca2-8c6c-a19adced80e1` returned current-plan
+  memory `019e6a2a-45db-7110-8000-a86cc4970a76` first. Direct T32 current-plan search trace
+  `019e6a2b-f4a1-7b10-ab0c-d2c6491b021e` also returned it first, with stale repository-scoped
+  current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` still second.
+- Live pre-change `lint(action=run, limit=80)` showed `duplicate_entity_candidate` findings at the
+  top while the stale current-plan finding appeared lower in the report.
+- Source inspection found `LintService::run` sorted findings lexicographically by ID before
+  applying `limit`.
+- The patch changes only private finding priority before truncation. The generated finding IDs,
+  rule names, messages, safe actions, and MCP schema stay unchanged.
+- Focused validation passed:
+  - `cargo test -p engram-index lint`
+  - `cargo test -p engram-tests --test lint_tests`
+  - `cargo fmt --all --check`
+  - `cargo check -p engram-cli`
+  - `git diff --check`
+- A direct read-only CLI smoke against the live DB failed because the running daemon held the
+  RocksDB lock, so installed-runtime validation used MCP after install/restart.
+- After installing binary `62db1e301ef7913ad685caa39d96ce0c479fc160fff3e8002df66401f619fce9`
+  and restarting the daemon on port `8765`, PID `85531`, live
+  `lint(action=run, limit=10)` returned `feedback_stale_current_plan` for
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` first, followed by wrong-scope feedback findings. The
+  finding still has `safe_action=none`.
+- After scoring the T32 startup retrieval traces, `real_session_eval(project=engram, limit=50)`
+  returned `feedback_trace_count=49`, `feedback_coverage=0.9800000190734863`,
+  `bad_memory_used_count=0`, `confidence_gate.passed=true`, and
+  `external_session_trace_count=0`.
+
+Result:
+
+- The stale current-plan review signal is no longer buried behind duplicate-entity,
+  unresolved-obligation, or archive-safe lifecycle noise under small lint limits.
+- This is evidence-quality work only. It does not archive, supersede, scope-correct, delete,
+  migrate, or authorize any lifecycle write.
+
+Decision:
+
+- Treat T32 as a lint usability improvement, not lifecycle cleanup authority.
+- M6 inventory/export/apply/deletion and harness adapter or hook writes remain explicit approval
+  gates.

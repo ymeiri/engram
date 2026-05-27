@@ -83,7 +83,30 @@ impl LintService {
             lint_vault_pages(Path::new(&vault_path), &mut findings)?;
         }
 
-        findings.sort_by(|left, right| left.id.cmp(&right.id));
+        findings.sort_by(|left, right| {
+            let priority = |finding: &LintFinding| match finding.rule {
+                LintRule::FeedbackStaleCurrentPlan => 10,
+                LintRule::FeedbackWrongScopeActiveMemory => 20,
+                LintRule::FeedbackStaleActiveMemory => 30,
+                LintRule::UnresolvedAgentObligation => 40,
+                LintRule::SupersededItemStillActive
+                    if finding.safe_action != LintSafeAction::None =>
+                {
+                    45
+                }
+                LintRule::MissingEvidence
+                | LintRule::HandoffMissingNextActions
+                | LintRule::OrphanProjectSubproject
+                | LintRule::StaleActiveSession
+                | LintRule::VaultPageMissingMarkerFrontmatter => 50,
+                LintRule::StalePreference => 60,
+                LintRule::DuplicateEntityCandidate => 90,
+                LintRule::SupersededItemStillActive => 50,
+            };
+            priority(left)
+                .cmp(&priority(right))
+                .then_with(|| left.id.cmp(&right.id))
+        });
         if let Some(limit) = options.limit {
             findings.truncate(limit);
         }
@@ -625,6 +648,98 @@ mod tests {
         assert!(finding.message.contains("10 active items"));
         assert!(finding.message.contains("... (2 more)"));
         assert_eq!(displayed_id_count, MAX_DUPLICATE_ENTITY_IDS_IN_FINDING);
+    }
+
+    #[tokio::test]
+    async fn lint_prioritizes_feedback_signals_before_duplicate_entity_noise() {
+        let service = service().await;
+        let current_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after older slice",
+            "Old current-plan guidance that feedback later marked stale.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_tag(CURRENT_PLAN_TAG);
+        service
+            .memory_repo
+            .save_memory_item(&current_plan)
+            .await
+            .unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![current_plan.id];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let obligation = AgentObligation::new(
+            AgentObligationKind::DocumentDisposition,
+            "Resolve historical document status",
+            "An older document obligation should not hide feedback-stale plan signals.",
+            MemoryScope::project("other-project"),
+            AgentObligationTrigger::new("test", "historical document obligation"),
+            writer(),
+        );
+        service
+            .obligation_repo
+            .save_obligation(&obligation)
+            .await
+            .unwrap();
+
+        let old = MemoryItem::new(
+            MemoryKind::Decision,
+            "Superseded older decision",
+            "Old content.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        let replacement = MemoryItem::new(
+            MemoryKind::Decision,
+            "Replacement decision",
+            "New content.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_superseded_item(old.id);
+        service.memory_repo.save_memory_item(&old).await.unwrap();
+        service
+            .memory_repo
+            .save_memory_item(&replacement)
+            .await
+            .unwrap();
+
+        for index in 0..3 {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Duplicate {index}"),
+                "Duplicate entity-scoped content.",
+                MemoryScope::entity("ide-mcp-eval"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+            service.memory_repo.save_memory_item(&item).await.unwrap();
+        }
+
+        let report = service
+            .run(LintOptions {
+                vault_path: None,
+                limit: Some(1),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].rule, LintRule::FeedbackStaleCurrentPlan);
     }
 
     #[tokio::test]
