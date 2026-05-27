@@ -92,6 +92,10 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 - [x] Full validation and live daemon smoke from installed binary.
 - [x] Lint actionability follow-up: duplicate entity findings are bounded at the service and MCP
       boundary, and item-scoped missing-evidence/handoff warnings name the affected item.
+      Live daemon smoke after installing commit `7d56006` with binary hash
+      `cc8e30db22be3f106454c21c334441c113f168ca6290c4554168e708ebfecb49`
+      confirmed MCP `lint(action=run, limit=80)` returns handoff warnings naming handoff titles
+      and missing-evidence warnings naming item title/kind.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
