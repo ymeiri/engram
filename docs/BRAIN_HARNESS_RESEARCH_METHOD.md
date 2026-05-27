@@ -507,6 +507,12 @@ Current next application:
   `8859cacc921a243d5cd8dd3351f5f196c46d8074ecdc9933fa66e0ec490b1c7b`; migration-apply gate
   trace `019e68d4-27b7-70e2-bdfe-5c879a97f0c8` still kept migration/gate context above
   current-plan context. Treat this as narrow continuation-prompt calibration only.
+- A follow-up evidence-quality slice aligned current-plan lifecycle semantics with the already
+  stricter direct-search guidance predicate: `capture_current_plan` and `orient` current-plan
+  post-prioritization now treat only active `decision` or `rule` MemoryItems with the
+  `current-plan` tag as managed current-plan guidance. The slice fixes accidental supersession of
+  non-guidance facts or limitations, but does not add lint, migration, cleanup, or ranking-weight
+  changes.
 - The next non-gated work should improve targeted validation, evidence quality, or cross-harness
   replication. Read-only M6 inventory/review-export requires explicit user-approved scope; M6 write
   apply, deletion, and broad legacy simplification remain separately gated.

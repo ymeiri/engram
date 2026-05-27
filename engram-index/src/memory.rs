@@ -1486,9 +1486,12 @@ fn prioritize_latest_current_plan(items: Vec<MemoryItem>, suppress_older: bool) 
 }
 
 fn is_current_plan_item(item: &MemoryItem) -> bool {
-    item.tags
-        .iter()
-        .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
+    item.status == MemoryStatus::Active
+        && matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
+        && item
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
 }
 
 fn current_plan_scope_key(scope: &MemoryScope) -> String {
@@ -2941,6 +2944,72 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(active_engram_current_plans.len(), 1);
         assert_eq!(active_engram_current_plans[0].id, new.id);
+    }
+
+    #[tokio::test]
+    async fn capture_current_plan_does_not_supersede_non_guidance_current_plan_tags() {
+        let service = setup_service().await;
+
+        let old = service
+            .capture_current_plan(current_plan_input(
+                "engram",
+                "Old current plan",
+                "Resume from the old current plan.",
+            ))
+            .await
+            .unwrap()
+            .item;
+        let tagged_fact = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::ProjectFact,
+                    "Non-guidance fact with current-plan tag",
+                    "This fact records validation evidence and should not be replaced by \
+                     current-plan capture lifecycle.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_status(MemoryStatus::Active)
+                .with_tag(CURRENT_PLAN_TAG),
+            )
+            .await
+            .unwrap();
+
+        let mut input = current_plan_input(
+            "engram",
+            "New current plan",
+            "Resume from the new current plan.",
+        );
+        input.create_commit = true;
+        let capture = service.capture_current_plan(input).await.unwrap();
+        let new = capture.item;
+
+        assert!(new.supersedes.contains(&old.id));
+        assert!(!new.supersedes.contains(&tagged_fact.id));
+        let commit = capture
+            .commit
+            .expect("superseding current-plan capture should create a commit");
+        assert!(commit.changes.iter().any(|change| {
+            change.change_type == MemoryChangeType::Superseded && change.item_id == Some(old.id)
+        }));
+        assert!(!commit
+            .changes
+            .iter()
+            .any(|change| change.item_id == Some(tagged_fact.id)));
+        assert_eq!(
+            service.get_memory(&old.id).await.unwrap().unwrap().status,
+            MemoryStatus::Superseded
+        );
+        assert_eq!(
+            service
+                .get_memory(&tagged_fact.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active
+        );
     }
 
     #[tokio::test]

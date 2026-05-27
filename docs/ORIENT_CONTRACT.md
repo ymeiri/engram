@@ -120,6 +120,11 @@ superseded by accepted outcome memories, so they should not appear as active imp
 Direct unified `search` now has separate continuation-prompt fixtures for scoped current-plan
 ranking, including a `non-gated` continuation wording fixture that preserves migration-gate
 queries; that calibration does not expand or change this `orient` contract.
+Current-plan lifecycle management now uses the same operational meaning as search ranking: only
+active `decision` or `rule` MemoryItems with the `current-plan` tag are treated as current-plan
+guidance for capture supersession and orientation post-prioritization. Other active memory kinds
+with that tag remain normal evidence and are not auto-superseded by
+`memory(action=capture_current_plan)`.
 
 ## Feedback Expectations
 

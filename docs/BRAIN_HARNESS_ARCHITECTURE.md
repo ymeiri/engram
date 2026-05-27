@@ -137,6 +137,11 @@ Research checkpoint, current through 2026-05-27:
   non-gated next-slice prompt, while migration-apply gate trace
   `019e68d4-27b7-70e2-bdfe-5c879a97f0c8` still keeps migration/gate context above current-plan
   context.
+- Current-plan lifecycle semantics are now aligned across capture, `orient` post-prioritization,
+  and direct `search` ranking: only active `decision` and `rule` MemoryItems with the
+  `current-plan` tag are managed as current-plan guidance. Non-guidance facts or limitations with
+  the tag remain active evidence and are not automatically superseded by
+  `memory(action=capture_current_plan)`.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -958,7 +963,10 @@ Proceed in this order from the current checkpoint:
 17. Treat the `non-gated` continuation wording fix as part of that same narrow prompt-class
     calibration: it fixes a false gate-positive in continuation vocabulary, not broad natural
     language intent understanding.
-18. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
+18. Treat current-plan lifecycle predicate parity as evidence-quality work: it prevents accidental
+    supersession of non-guidance facts or limitations, but it does not auto-clean historical
+    non-guidance `current-plan` tags or prove broad ranking quality.
+19. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
     replication. Read-only M6 inventory/review-export requires explicit user-approved scope, and
     M6 write apply/deletion requires a separate approval gate.
 
