@@ -450,6 +450,9 @@ fn detect_document_obligations(
     let mut obligations = Vec::new();
     for line in stdout.lines() {
         if let Some(path) = parse_git_status_path(line) {
+            if is_untracked_root_instruction_file(line, &path) {
+                continue;
+            }
             if is_durable_doc_path(&path) {
                 obligations.push(document_obligation(
                     cwd,
@@ -669,17 +672,7 @@ fn detect_prompt_obligations(
         );
     }
 
-    if contains_any(
-        &lower,
-        &[
-            "failed tool",
-            "tool call failed",
-            "wrong parameter",
-            "wrong parameters",
-            "invalid parameter",
-            "schema",
-        ],
-    ) {
+    if has_tool_failure_cue(&lower) {
         obligations.push(
             AgentObligation::new(
                 AgentObligationKind::ToolFailureRecovery,
@@ -727,6 +720,23 @@ fn detect_prompt_obligations(
     }
 
     obligations
+}
+
+fn has_tool_failure_cue(prompt: &str) -> bool {
+    contains_any(
+        prompt,
+        &[
+            "failed tool",
+            "tool failed",
+            "tool call failed",
+            "wrong parameter",
+            "wrong parameters",
+            "invalid parameter",
+            "tool schema",
+            "schema error",
+            "schema/help",
+        ],
+    )
 }
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
@@ -823,6 +833,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prompt_detection_ignores_bare_schema_as_tool_failure() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let service = ObligationService::new(db);
+        service.init_schema().await.unwrap();
+
+        let result = service
+            .detect(ObligationDetectOptions {
+                cwd: None,
+                prompt: Some(
+                    "Failure hypothesis: avoid schema changes unless evidence justifies them."
+                        .to_string(),
+                ),
+                project: Some("engram".to_string()),
+                writer: writer(),
+                write: false,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(!result
+            .candidates
+            .iter()
+            .any(|obligation| obligation.kind == AgentObligationKind::ToolFailureRecovery));
+    }
+
+    #[tokio::test]
     async fn git_status_detects_document_obligation() {
         let dir = tempfile::tempdir().unwrap();
         Command::new("git")
@@ -855,6 +893,36 @@ mod tests {
             result.candidates[0].kind,
             AgentObligationKind::DocumentDisposition
         );
+    }
+
+    #[tokio::test]
+    async fn git_status_ignores_untracked_root_instruction_file() {
+        let dir = tempfile::tempdir().unwrap();
+        Command::new("git")
+            .arg("init")
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "# Local instructions\n").unwrap();
+
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let service = ObligationService::new(db);
+        service.init_schema().await.unwrap();
+
+        let result = service
+            .detect(ObligationDetectOptions {
+                cwd: Some(dir.path().display().to_string()),
+                prompt: None,
+                project: Some("engram".to_string()),
+                writer: writer(),
+                write: false,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(result.candidates.is_empty());
     }
 
     #[tokio::test]

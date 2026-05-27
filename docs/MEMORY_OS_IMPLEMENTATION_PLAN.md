@@ -155,6 +155,13 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       the newest two scoped traces under `limit=2`. This validates shared MCP report behavior for
       this read-only surface only, not hooks, adapters, ranking, migration, or broad product
       quality.
+- [x] T26 obligation-noise suppression: agent-native obligation detection no longer treats a bare
+      `schema` mention as a failed-tool recovery cue, and untracked root instruction files such as
+      `AGENTS.md` are skipped before document-disposition candidates are created. Explicit
+      failed-tool wording and ordinary durable document changes remain covered. Validation passed
+      with `cargo test -p engram-index obligation::tests`,
+      `cargo test -p engram-tests --test obligation_tests`, `cargo fmt --all --check`,
+      `cargo check -p engram-cli`, and `git diff --check`.
 - [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
       feedback records task success, preference adherence, repeated context questions, and bad
       memory use, and the confidence gate requires behavioral outcome evidence.
@@ -365,6 +372,23 @@ T25 rolling evidence-window audit, 2026-05-27:
   stale repository-scoped current-plan guidance remains lower-ranked lifecycle noise. This does not
   authorize M6 inventory/export/apply/deletion, lifecycle writes, hook/adapter writes, telemetry
   formula changes, or `orient` payload expansion.
+
+T26 obligation-noise suppression, 2026-05-27:
+
+- Research question: can obligation detection reduce false follow-through pressure from safety-gate
+  wording and local instruction files without weakening explicit failed-tool or document-disposition
+  detection?
+- Measurement: source inspection found bare `schema` in `detect_prompt_obligations` triggered
+  `tool_failure_recovery`, and `detect_document_obligations` created candidates for untracked root
+  instruction files before later filtering/skipping. The patch routes tool-failure matching through
+  a narrower helper and skips untracked root instruction files before document candidates are built.
+  Validation passed with `cargo test -p engram-index obligation::tests` (`6` passed),
+  `cargo test -p engram-tests --test obligation_tests` (`10` passed),
+  `cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`.
+- Matrix delta: memory quality/follow-through is slightly stronger because false obligation pressure
+  is lower while explicit failed-tool and document-disposition coverage remains tested. This does
+  not change `orient`, ranking, migration, lifecycle status, hook/adapter behavior, telemetry
+  semantics, schema, or storage.
 
 Current MCP/CLI Memory OS surface:
 

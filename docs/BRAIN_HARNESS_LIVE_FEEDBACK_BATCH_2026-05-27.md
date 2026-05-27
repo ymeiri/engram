@@ -941,3 +941,56 @@ Decision:
   write apply, deletion, or legacy simplification.
 - Score new startup traces when assessable, but do not change telemetry semantics or hook/adapter
   behavior without a separate approved slice.
+
+## T26 Obligation Noise Suppression
+
+Status: implemented as a narrow obligation-detection fix. No `orient` payload, ranking formula,
+telemetry formula, migration flow, lifecycle status, hook, adapter, schema, or storage behavior
+changed.
+
+Research question:
+
+- Can agent-native obligation detection reduce false follow-through pressure from safety-gate
+  wording and local instruction files without weakening explicit failed-tool or document-disposition
+  detection?
+
+Hypotheses:
+
+- Preferred: bare `schema` mentions in research/safety text should not create failed-tool recovery
+  obligations, and untracked root instruction files such as `AGENTS.md` should not create document
+  disposition candidates. Explicit failed-tool wording and ordinary durable document edits should
+  still be detected.
+- Null: the existing detector is noisy but acceptable because agents can manually skip the false
+  positives.
+- Simpler alternative: keep code unchanged and document the skip pattern.
+- Failure: suppressing too broadly would hide real failed tool calls or real durable documents that
+  need indexing, memory capture, or explicit skip evidence.
+
+Measurement:
+
+- Source inspection found `detect_prompt_obligations` treated bare `schema` as a tool-failure cue,
+  which matched T25/T26 research text even when no tool call failed.
+- Source inspection also found `detect_document_obligations` created document candidates for
+  untracked root instruction files before later context filtering or same-content skip logic.
+- The code now routes tool-failure detection through a narrower `has_tool_failure_cue` helper and
+  skips untracked root instruction files before creating document-disposition candidates.
+- Focused unit validation passed:
+  `cargo test -p engram-index obligation::tests` (`6` passed), covering both new regression cases
+  plus existing prompt/document/idempotency behavior.
+- MCP boundary validation passed:
+  `cargo test -p engram-tests --test obligation_tests` (`10` passed).
+- Additional checks passed: `cargo fmt --all --check`, `cargo check -p engram-cli`, and
+  `git diff --check`.
+
+Result:
+
+- Obligation detection is quieter for ordinary Brain Harness research prompts that mention schema or
+  failure hypotheses without an actual tool failure.
+- The persistent user-owned root `AGENTS.md` no longer becomes a document-disposition candidate just
+  because it is untracked in the checkout.
+- Existing explicit failed-tool and ordinary durable-document coverage remains tested.
+
+Decision:
+
+- Treat this as an obligation signal-quality fix only. It does not authorize M6 work, lifecycle
+  archive/scope writes, hook/adapter writes, ranking changes, or `orient` expansion.
