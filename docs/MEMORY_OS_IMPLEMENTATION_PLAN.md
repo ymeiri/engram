@@ -298,6 +298,34 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 | Memory quality / lifecycle | Partially validated | Review-gated promotion, archive-aware retrieval, stale-target cleanup, document lifecycle dogfood, Codex adapter follow-through, bounded/actionable lint reports, telemetry-backed stale/wrong-scope active-memory lint, specialized `feedback_stale_current_plan` lint for stale current-plan guidance, generic `feedback_stale_active_memory` coverage for stale old migration/export approval-shaped records, current-plan lifecycle predicate parity for active `decision`/`rule` guidance, and MCP tag/scope-filtered memory listing for evidence-quality sampling; T11 `lint(action=run, limit=80)` reported stale migration-completion memory `019dd3fe-ec94-7122-af04-1f35b839387f` as `feedback_stale_active_memory` after four stale-feedback records; T16 live smoke showed explicit `memory(action=list, scope_type=project, project_name=engram, tags=[current-plan])` returns only the Engram project current-plan item after binary `0d4581c1cffdd17af0d4d8f0911812a05a2c3ce3f9ff8766d455e043ed73a211` | Duplicate entity, handoff, missing-evidence, and feedback-flagged active-memory lint findings still require human/agent review; no safe automatic action exists for those warning classes. Stale current-plan guidance is now visible as a specific review signal, but it is not auto-archived or auto-superseded. Old migration/export approval-shaped records and old migration-completion records are not automatically classified or invalidated; feedback only marks them for review unless a current user-approved M6 scope exists. |
 | Migration from legacy layers | Blocked by approval gate | Review-gated migration/digest flows exist; one accidental broad read-only inventory returned `3934` sources and `3641` candidates with no writes; the live feedback batch found no current M6 authorization and rejected older migration/export approvals as stale for this gate; T14 explicit migration-apply prompts now retrieve the paused migration review gate first | Do not run further read-only inventory/review-export without explicit user-approved scope. Do not write-apply/delete/simplify without reviewed candidates, dry-run report, rollback plan, and explicit approval. |
 
+T23 matrix audit, 2026-05-27:
+
+- Research question: after T21/T22, does the completion matrix still identify the next real Brain OS
+  blocker and the latest evidence without overstating completion?
+- Hypotheses: preferred: the matrix remains directionally right but needs a current audit delta;
+  null: T21/T22 change no matrix conclusions; simpler alternative: rely on the checklist only;
+  failure: the audit implies M6 or lifecycle approval that the user has not granted.
+- Measurement: `orient(response_shape=lean, intent=plan_work)` trace
+  `019e69ec-679d-7df0-985a-6f159a3165fc` returned current-plan memory
+  `019e69eb-4f19-7c90-b930-96036b4e23cb` first and stale repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` fifth. Direct search trace
+  `019e69ec-f013-7370-8757-af7091bd65e2` returned the same current plan first and the stale
+  repository-scoped plan second. `memory(action=list, scope_type=project, project_name=engram,
+  tags=[current-plan])` returned only the current project-scoped plan, so scoped memory-list
+  sampling is clean even though broader orientation/search can still surface stale repository
+  guidance as noisy context. `real_session_eval(project=engram, limit=50)` returned
+  `trace_count=50`, `feedback_trace_count=40`, `feedback_coverage=0.800000011920929`,
+  `distinct_intent_count=4`, `bad_memory_used_count=0`, and `confidence_gate.passed=true`.
+- Matrix delta: current-plan retrieval is validated for the latest startup prompt, but stale
+  repository-scoped plan guidance still appears as lower-ranked noise and remains a lifecycle
+  review issue, not an approved archival/scope-correction action. Cross-harness behavior now also
+  includes T22 native Claude Code telemetry-report parity for the T21 scenario; Claude Bridge tool
+  exposure is still limited. Evidence-loop plumbing is stronger after T19/T20/T21/T22 and the
+  current project-level gate is numerically passing, but the report still requires user approval for
+  migration decisions and remains weak agent-assessed evidence unless corroborated. M6 remains the
+  only known high-risk completion blocker in this matrix and is approval-gated before even another
+  read-only inventory/review-export pass.
+
 Current MCP/CLI Memory OS surface:
 
 - MCP: `orient`, `memory` including `capture_current_plan`, `harness`, `obligations`, `lint`, `graph`, `handoff`, `vault`, `digest`, `repo`.
