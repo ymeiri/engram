@@ -627,6 +627,11 @@ Current next application:
   sampled trace IDs, so newer feedback on older traces cannot inflate coverage for a smaller recent
   trace sample. This did not change confidence formulas, public request parameters, ranking,
   `orient`, M6 migration, lifecycle state, hooks, adapters, or schema/storage/index behavior.
+- T20 corrected scoped real-session eval sampling: project, scenario, and arm filters are applied
+  before the trace limit, then feedback is fetched for that scoped trace sample. This prevents newer
+  out-of-scope traces from starving scoped confidence reports. It did not change public request
+  parameters, output fields, confidence formulas, ranking, `orient`, M6 migration, lifecycle state,
+  document-index behavior, hooks, adapters, schema/storage, or `list_feedback_scoped` behavior.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

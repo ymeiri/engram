@@ -13,6 +13,7 @@ use engram_index::{
 use engram_mcp::tools::{self, OrientRequest, SearchRequest, TelemetryRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
+use time::OffsetDateTime;
 
 async fn setup_services() -> (TelemetryService, MemoryService) {
     let config = StoreConfig::memory();
@@ -395,6 +396,87 @@ async fn real_session_eval_report_separates_trace_coverage_from_feedback_density
         .recommendations
         .iter()
         .any(|recommendation| recommendation.contains("feedback_records_per_trace")));
+}
+
+#[tokio::test]
+async fn scoped_real_session_eval_applies_limit_after_scope_filters() {
+    let (telemetry, _) = setup_services().await;
+
+    let scenario_id = "scoped_eval_sampling_001";
+    let arm = "memoryitem_orient";
+    let mut in_scope_ids = Vec::new();
+
+    for offset in 1..=3 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_intent(Some(BrainHarnessIntent::ImplementChange))
+            .with_project(Some("engram".to_string()))
+            .with_scenario_id(Some(scenario_id.to_string()))
+            .with_arm(Some(arm.to_string()))
+            .with_query(Some(format!("older in-scope trace {offset}")));
+        trace.created_at = OffsetDateTime::from_unix_timestamp(1_700_000_000 + offset)
+            .expect("fixed test timestamp should be valid");
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("in-scope trace should be recorded");
+        in_scope_ids.push(trace.id);
+
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.task_success = Some(true);
+        telemetry
+            .submit_feedback(feedback)
+            .await
+            .expect("in-scope feedback should be accepted");
+    }
+
+    for offset in 10..=12 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_intent(Some(BrainHarnessIntent::ImplementChange))
+            .with_project(Some("other-project".to_string()))
+            .with_scenario_id(Some(scenario_id.to_string()))
+            .with_arm(Some(arm.to_string()))
+            .with_query(Some(format!("newer out-of-scope trace {offset}")));
+        trace.created_at = OffsetDateTime::from_unix_timestamp(1_700_000_000 + offset)
+            .expect("fixed test timestamp should be valid");
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("out-of-scope trace should be recorded");
+
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.task_success = Some(false);
+        telemetry
+            .submit_feedback(feedback)
+            .await
+            .expect("out-of-scope feedback should be accepted");
+    }
+
+    let scoped_traces = telemetry
+        .list_traces_scoped(Some(2), Some("engram"), Some(scenario_id), Some(arm))
+        .await
+        .expect("scoped traces should be listed");
+    assert_eq!(scoped_traces.len(), 2);
+    assert_eq!(scoped_traces[0].id, in_scope_ids[2]);
+    assert_eq!(scoped_traces[1].id, in_scope_ids[1]);
+
+    let report = telemetry
+        .real_session_eval_report_scoped(Some(2), Some("engram"), Some(scenario_id), Some(arm))
+        .await
+        .expect("scoped report should build");
+
+    assert_eq!(report.sample_limit, 2);
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 2);
+    assert_eq!(report.feedback_trace_count, 2);
+    assert_eq!(report.feedback_coverage, 1.0);
+    assert_eq!(report.task_success_count, 2);
+    assert_eq!(report.task_failure_count, 0);
+    assert_eq!(report.applied_filters.project.as_deref(), Some("engram"));
+    assert_eq!(
+        report.applied_filters.scenario_id.as_deref(),
+        Some(scenario_id)
+    );
+    assert_eq!(report.applied_filters.arm.as_deref(), Some(arm));
 }
 
 #[tokio::test]

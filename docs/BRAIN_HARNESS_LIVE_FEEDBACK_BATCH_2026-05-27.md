@@ -661,3 +661,49 @@ Decision:
 - This does not authorize M6 inventory, M6 write apply, deletion, lifecycle status writes, broad
   ranking changes, document-index normalization, hook/settings writes, adapter writes, schema
   changes, or `orient` payload expansion.
+
+## T20 Scoped Real-Session Eval Sampling
+
+Research question: when `real_session_eval` is filtered by project, scenario, or arm, should
+`limit=N` mean the newest N traces in that scope, or the scoped subset of the newest N global
+traces?
+
+Hypotheses:
+
+- Preferred: scoped eval should apply filters before the limit, then anchor feedback to that scoped
+  trace sample. This keeps scoped confidence reports from being starved by newer out-of-scope
+  traffic.
+- Null: the current newest-global-window semantics are intentional and should stay.
+- Simpler alternative: only add a test documenting the current behavior.
+- Failure: the slice expands into public parameters, output fields, ranking, `orient`, migration,
+  lifecycle writes, document-index normalization, hooks, adapters, or schema changes.
+
+Measurement:
+
+- AI Council recall found the T19 feedback-window consultation; AI Council broadcast and Claude
+  Bridge critique agreed this is an eval-starvation bug.
+- Focused regression:
+  `cargo test -p engram-tests --test telemetry_tests scoped_real_session_eval_applies_limit_after_scope_filters -- --exact`.
+- Broader validation:
+  `cargo test -p engram-tests --test telemetry_tests`,
+  `cargo test -p engram-tests --test brain_harness_eval_tests`,
+  `cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`.
+
+Result:
+
+- Added `TelemetryRepo::list_traces_scoped`, applying project, scenario, and arm predicates before
+  the trace limit while preserving newest-first order.
+- `TelemetryService::list_traces_scoped` and scoped real-session eval now use that repository query.
+- Scoped real-session eval still fetches feedback by the sampled scoped trace IDs, preserving the
+  T19 feedback-anchoring behavior.
+- Public request parameters, output fields, formulas, confidence-gate constants, ranking, `orient`,
+  migration, lifecycle status, document-index behavior, hooks, adapters, schema/storage, and
+  `list_feedback_scoped` semantics were not changed.
+
+Decision:
+
+- Treat this as a scoped eval-sampling correctness fix. It improves evidence quality for controlled
+  project/scenario/arm reports but remains weak agent-assessed evidence unless checked against
+  transcript evidence, tests, or user review.
+- `list_feedback_scoped` still has its older scoped-window semantics and should be handled only as a
+  separately approved/narrow follow-up if evidence shows operators need drill-down parity.

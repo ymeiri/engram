@@ -158,6 +158,57 @@ impl TelemetryRepo {
         records.into_iter().map(TraceRecord::into_trace).collect()
     }
 
+    /// List scoped traces, newest first, applying the limit after scope filters.
+    pub async fn list_traces_scoped(
+        &self,
+        limit: Option<usize>,
+        project: Option<&str>,
+        scenario_id: Option<&str>,
+        arm: Option<&str>,
+    ) -> StoreResult<Vec<BrainHarnessTrace>> {
+        debug!("Listing scoped brain harness traces");
+
+        let mut conditions = Vec::new();
+        if project.is_some() {
+            conditions.push("project = $project");
+        }
+        if scenario_id.is_some() {
+            conditions.push("trace.scenario_id = $scenario_id");
+        }
+        if arm.is_some() {
+            conditions.push("trace.arm = $arm");
+        }
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let mut query = self.db.query(format!(
+            r#"
+            SELECT meta::id(id) AS record_id, trace, created_at
+            FROM {TABLE_TRACE}
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT {}
+            "#,
+            limit.unwrap_or(100)
+        ));
+        if let Some(project) = project {
+            query = query.bind(("project", project.to_string()));
+        }
+        if let Some(scenario_id) = scenario_id {
+            query = query.bind(("scenario_id", scenario_id.to_string()));
+        }
+        if let Some(arm) = arm {
+            query = query.bind(("arm", arm.to_string()));
+        }
+
+        let mut result = query.await?;
+        let records: Vec<TraceRecord> = result.take(0)?;
+        records.into_iter().map(TraceRecord::into_trace).collect()
+    }
+
     /// Save agent feedback.
     pub async fn save_feedback(&self, feedback: &AgentFeedback) -> StoreResult<()> {
         debug!("Saving agent feedback: {}", feedback.id);

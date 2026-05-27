@@ -63,12 +63,20 @@ impl TelemetryService {
         scenario_id: Option<&str>,
         arm: Option<&str>,
     ) -> IndexResult<Vec<BrainHarnessTrace>> {
-        let traces = self.repo.list_traces(limit).await?;
-        if !has_scope_filter(project, scenario_id, arm) {
-            return Ok(traces);
+        let applied_filters = applied_filters(project, scenario_id, arm);
+        if !has_any_filter(&applied_filters) {
+            return self.list_traces(limit).await;
         }
 
-        Ok(filter_traces_by_scope(traces, project, scenario_id, arm))
+        Ok(self
+            .repo
+            .list_traces_scoped(
+                limit,
+                applied_filters.project.as_deref(),
+                applied_filters.scenario_id.as_deref(),
+                applied_filters.arm.as_deref(),
+            )
+            .await?)
     }
 
     /// Submit agent feedback for a trace.
@@ -257,13 +265,15 @@ impl TelemetryService {
         }
 
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
-        let traces = self.repo.list_traces(Some(sample_limit)).await?;
-        let traces = filter_traces_by_scope(
-            traces,
-            applied_filters.project.as_deref(),
-            applied_filters.scenario_id.as_deref(),
-            applied_filters.arm.as_deref(),
-        );
+        let traces = self
+            .repo
+            .list_traces_scoped(
+                Some(sample_limit),
+                applied_filters.project.as_deref(),
+                applied_filters.scenario_id.as_deref(),
+                applied_filters.arm.as_deref(),
+            )
+            .await?;
         let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
         let feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
 

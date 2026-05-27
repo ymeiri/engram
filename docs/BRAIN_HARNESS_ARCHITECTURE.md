@@ -186,6 +186,11 @@ Research checkpoint, current through 2026-05-27:
   fields, formulas, confidence-gate constants, ranking, `orient`, migration, hooks, adapters, and
   schema/storage/index behavior unchanged, while preventing older traces with newer feedback from
   inflating coverage for a smaller recent trace sample.
+- T20 corrected scoped real-session eval sampling: project, scenario, and arm filters are now
+  applied before the trace limit for scoped reports, so newer out-of-scope traffic cannot starve an
+  in-scope confidence sample. This keeps public request parameters, output fields, formulas,
+  ranking, `orient`, migration, lifecycle state, document-index behavior, hooks, adapters,
+  schema/storage, and `list_feedback_scoped` behavior unchanged.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1102,6 +1107,10 @@ Proceed in this order from the current checkpoint:
     trace set so coverage and confidence cannot be inflated by newer feedback on older traces.
     This does not change public request parameters, confidence formulas, ranking, `orient`, M6
     migration, lifecycle state, hooks, adapters, or schema/storage/index behavior.
+35. Treat T20 as scoped eval-sampling hygiene: scoped real-session reports sample the newest traces
+    inside the requested project/scenario/arm scope before fetching feedback. This does not change
+    public request parameters, formulas, ranking, `orient`, M6 migration, lifecycle state,
+    document-index behavior, hooks, adapters, schema/storage, or `list_feedback_scoped` behavior.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
