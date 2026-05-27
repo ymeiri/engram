@@ -807,3 +807,68 @@ Decision:
 - This does not validate hooks, adapter installs, bridge tool parity, broad report quality, M6
   migration, ranking, lifecycle writes, schema/storage changes, public MCP changes, or `orient`
   payload changes.
+
+## T24 External-Session Telemetry Coverage Audit
+
+Status: read-only evidence audit; no source behavior, ranking, public MCP surface, migration,
+lifecycle, hook, adapter, schema, storage, or `orient` change.
+
+Research question: is sparse `external_session_id` coverage in the live feedback loop a core
+telemetry implementation gap, a harness-guidance/adoption gap, or a host-session availability limit?
+
+Hypotheses:
+
+- Preferred: the core telemetry path already supports caller-supplied host labels, but current Codex
+  startup calls do not have a stable host-thread label to pass, so the gap is joinability/adoption
+  rather than missing storage or eval plumbing.
+- Null: existing docs and tests fully cover the issue, so no new recorded evidence is useful.
+- Simpler alternative: record only the current completion-matrix caveat and defer all action.
+- Failure: attempting to auto-fill a label would require hook, adapter, host integration, or public
+  behavior changes and would hit an approval gate.
+
+Measurement:
+
+- `telemetry(action=real_session_eval, project=engram, limit=50)` generated at
+  `2026-05-27T14:58:28Z` returned `trace_count=50`, `feedback_count=38`,
+  `feedback_trace_count=38`, `feedback_coverage=0.7599999904632568`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
+- The same report returned `external_session_trace_count=5`,
+  `distinct_external_session_count=1`, `unspecified_external_session_trace_count=45`,
+  `external_session_feedback_count=5`, and `unspecified_external_session_feedback_count=33`, with
+  the recommendation to set `external_session_id` when a host thread/session ID is known.
+- `telemetry(action=list_traces, project=engram, limit=12)` showed the latest startup/audit traces
+  all had `external_session_id=null`, including T24 startup searches
+  `019e69f1-81a4-7b00-b93d-4af8bf9da741`,
+  `019e69f1-824f-7f31-b5a6-4e85a62e851e`,
+  `019e69f1-82f9-7e71-8412-3f080b1862ca`,
+  `019e69f1-83a9-7272-900c-55c7d61106ad`, and
+  `019e69f1-8456-7c30-a4ab-1ca07abc29fa`.
+- Source inspection found the storage/model fields in `BrainHarnessTrace` and `AgentFeedback`, MCP
+  request fields on `orient`, `search`, `memory(action=changes_since)`, and `telemetry`, service-side
+  feedback inheritance from the trace label, eval aggregation of external-session counts, and
+  validation that non-empty labels are at most 256 characters.
+- Focused tests already cover service-level `orient` and `changes_since` pass-through, MCP
+  `orient` and `search` pass-through, `telemetry(action=record_trace)` plus
+  `submit_feedback` inheritance, and real-session eval external-session count reporting.
+
+Result:
+
+- Treat this as a host/harness attribution gap, not a core telemetry implementation gap. The core
+  path stores, preserves, validates, reports, and tests caller-supplied labels.
+- Current Codex Desktop/native MCP calls in this thread did not expose a stable host-thread label to
+  the agent. Supplying a synthetic label would make trace-to-transcript joins look stronger than the
+  evidence supports.
+- Generated harness guidance currently emphasizes keeping `trace_id` values and submitting
+  feedback; it does not force an `external_session_id` because the host label may be unavailable.
+  Updating hooks, adapters, or host integration to provide one is a separate approved slice.
+
+Decision:
+
+- Keep the feedback loop marked partially validated: the current confidence gate passes numerically,
+  but most live traces still cannot be joined back to host transcripts through
+  `external_session_id`.
+- Do not infer or auto-fill `external_session_id` from unrelated transport/session metadata without
+  an explicit host-session contract.
+- This does not authorize M6 inventory/export/apply/deletion, lifecycle writes, hook/adapter writes,
+  public MCP changes, schema/storage changes, broad ranking changes, or `orient` payload expansion.
