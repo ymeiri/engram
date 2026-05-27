@@ -1177,8 +1177,11 @@ impl MemoryService {
             input.cwd.as_deref(),
             input.prompt.as_deref(),
         );
-        let relevant_active =
-            prioritize_current_plan_for_resume(relevant_active, input.intent.as_ref());
+        let relevant_active = prioritize_current_plan_for_orientation(
+            relevant_active,
+            input.intent.as_ref(),
+            input.prompt.as_deref(),
+        );
         let mut relevant_review = filter_relevant(
             review,
             effective_project,
@@ -1412,14 +1415,48 @@ fn filter_relevant(
         .collect()
 }
 
-fn prioritize_current_plan_for_resume(
+fn prioritize_current_plan_for_orientation(
     items: Vec<MemoryItem>,
     intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
 ) -> Vec<MemoryItem> {
-    if !matches!(intent, Some(BrainHarnessIntent::ResumeSession)) {
+    let suppress_older = matches!(intent, Some(BrainHarnessIntent::ResumeSession));
+    let promote_latest =
+        suppress_older || should_prioritize_current_plan_for_plan_work(intent, query);
+    if !promote_latest {
         return items;
     }
 
+    prioritize_latest_current_plan(items, suppress_older)
+}
+
+fn should_prioritize_current_plan_for_plan_work(
+    intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
+) -> bool {
+    matches!(intent, Some(BrainHarnessIntent::PlanWork))
+        && query.is_some_and(is_open_ended_plan_work_prompt)
+}
+
+fn is_open_ended_plan_work_prompt(query: &str) -> bool {
+    let query = query.to_ascii_lowercase();
+    [
+        "complete",
+        "continue",
+        "current plan",
+        "end state",
+        "mission",
+        "move forward",
+        "next step",
+        "production-quality",
+        "resume",
+        "where we left off",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
+}
+
+fn prioritize_latest_current_plan(items: Vec<MemoryItem>, suppress_older: bool) -> Vec<MemoryItem> {
     let mut latest_by_scope: HashMap<String, MemoryItem> = HashMap::new();
     for item in items.iter().filter(|item| is_current_plan_item(item)) {
         let scope_key = current_plan_scope_key(&item.scope);
@@ -1449,7 +1486,19 @@ fn prioritize_current_plan_for_resume(
     });
 
     let mut prioritized = latest_current_plans;
-    prioritized.extend(items.into_iter().filter(|item| !is_current_plan_item(item)));
+    if suppress_older {
+        prioritized.extend(items.into_iter().filter(|item| !is_current_plan_item(item)));
+    } else {
+        let latest_ids = prioritized
+            .iter()
+            .map(|item| item.id)
+            .collect::<HashSet<_>>();
+        prioritized.extend(
+            items
+                .into_iter()
+                .filter(|item| !latest_ids.contains(&item.id)),
+        );
+    }
     prioritized
 }
 
@@ -3930,16 +3979,28 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(plan_work_mission.intent, Some(BrainHarnessIntent::PlanWork));
-        assert_ne!(
-            plan_work_mission.active_decisions.first().map(|item| item.id),
+        assert_eq!(
+            plan_work_mission
+                .active_decisions
+                .first()
+                .map(|item| item.id),
             Some(current_plan.id),
-            "diagnostic fixture should preserve the current mission-prompt gap until a policy is chosen"
+            "mission-class PlanWork should promote the latest current plan within decisions"
         );
         assert!(
-            !plan_work_mission
+            plan_work_mission
                 .used_memory_candidate_ids
                 .contains(&current_plan.id),
-            "mission-class PlanWork prompt currently omits the latest current-plan candidate"
+            "mission-class PlanWork should include the latest current plan in used candidates"
+        );
+        assert_ne!(
+            plan_work_mission
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id),
+            "PlanWork should not use the ResumeSession brain-loop pin"
         );
 
         let resume_mission = service
@@ -3964,6 +4025,20 @@ mod tests {
                 .map(|item| item.id),
             Some(current_plan.id)
         );
+    }
+
+    #[test]
+    fn open_ended_plan_work_prompt_detection_stays_narrow() {
+        assert!(is_open_ended_plan_work_prompt(
+            "Complete Engram into a production-quality Brain OS / brain harness for AI agents."
+        ));
+        assert!(is_open_ended_plan_work_prompt(
+            "Continue from where we left off and move forward."
+        ));
+        assert!(!is_open_ended_plan_work_prompt("plan schema migration"));
+        assert!(!is_open_ended_plan_work_prompt(
+            "implement request throttling"
+        ));
     }
 
     #[tokio::test]

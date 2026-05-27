@@ -112,9 +112,9 @@ read-only check, but it is evidence to consider before using lean `orient` as th
 input for broader product steps.
 The diagnostic fixture
 `orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking` now preserves this distinction:
-explicit current-plan prompts and `resume_session` intent return the latest current plan first,
-while a mission-class `plan_work` prompt can still omit it from used memory candidates until a
-policy is chosen.
+explicit current-plan prompts and `resume_session` intent return the latest current plan first.
+Mission-class `plan_work` prompts now promote the latest current plan within active decisions and
+include it in used memory candidates, but they do not use the `resume_session` Brain Loop pin.
 
 ## Feedback Expectations
 
