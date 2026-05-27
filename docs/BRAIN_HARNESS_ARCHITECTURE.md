@@ -993,6 +993,9 @@ Proceed in this order from the current checkpoint:
     the numerical project gate, not as evidence of product completeness. Its actionable findings
     are narrow: investigate design-preference retrieval, keep rejecting stale current-plan records,
     and reject old migration/export approvals unless they match the current user-approved M6 scope.
+21. Treat the T04 design-preference follow-up as a representation/capture repair, not a ranking
+    repair: active reviewed preference MemoryItems are searchable for the target query, but legacy
+    observations remain substrate until reviewed promotion or migration work is explicitly gated.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

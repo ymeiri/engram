@@ -543,7 +543,11 @@ Current next application:
   project-feedback coverage gate and recorded one failure: user design philosophy was not reliably
   surfaced for a direct Ousterhout/no-unrequested-features query. Treat this as a focused
   retrieval/promotion coverage gap to investigate later, not as evidence for broad ranking churn.
+- The T04 follow-up showed that gap was a representation/capture issue: direct search already
+  retrieves the design philosophy when it exists as an active reviewed preference `MemoryItem`.
+  MemoryItem `019e6924-256b-7093-b1c5-286ec4d02461` repaired the live data state, and fixture
+  coverage locks the active-preference behavior without changing ranking.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
-  replication, or the specific design-preference retrieval gap. Read-only M6
+  replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
   broad legacy simplification remain separately gated.

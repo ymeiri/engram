@@ -505,6 +505,90 @@ async fn test_memory_search_respects_project_scope_when_provided() {
 }
 
 #[tokio::test]
+async fn test_memory_search_surfaces_active_design_philosophy_preference() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+
+    let preference = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Preference,
+                "Software design philosophy preference",
+                "User prefers software design in the spirit of John Ousterhout's A Philosophy \
+                 of Software Design: deep modules with simple interfaces, low cognitive load, \
+                 no unrequested features, small end-to-end slices, and evidence over confidence \
+                 when making design claims.",
+                MemoryScope::User,
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "user-stated-design-philosophy",
+            ))
+            .with_tag("preference")
+            .with_tag("software-design")
+            .with_tag("ousterhout"),
+        )
+        .await
+        .unwrap();
+
+    let generic_design_note = memory_service
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::ProjectFact,
+                "Generic software design note",
+                "Architecture notes can discuss modules, interfaces, and implementation slices \
+                 without encoding the user's durable design preference.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_confidence(0.99)
+            .with_evidence(EvidenceRef::new(
+                EvidenceKind::ManualReview,
+                "generic-design-note",
+            )),
+        )
+        .await
+        .unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "Ousterhout deep modules no unrequested features small end-to-end slices evidence over confidence",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    let preference_index = results
+        .iter()
+        .position(|result| result.id == preference.id.to_string())
+        .expect("active design philosophy preference should be returned");
+    let generic_index = results
+        .iter()
+        .position(|result| result.id == generic_design_note.id.to_string())
+        .expect("generic design control should be returned");
+
+    assert!(
+        preference_index < generic_index,
+        "specific user preference should rank ahead of generic design context"
+    );
+    assert_eq!(
+        results[preference_index]
+            .memory_metadata
+            .as_ref()
+            .map(|metadata| metadata.review_state),
+        Some(MemoryReviewState::Reviewed)
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_prioritizes_current_plan_for_next_step_query() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

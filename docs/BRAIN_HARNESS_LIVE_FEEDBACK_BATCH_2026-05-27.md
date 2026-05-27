@@ -120,3 +120,29 @@ The batch improved feedback coverage and exposed useful retrieval risks:
 - Stale old current-plan memory can still appear below fresher guidance and should be explicitly
   rejected when it conflicts with newer current-plan memory.
 - No bad memory was used.
+
+## T04 Follow-Up Repair
+
+Status: repaired as a data/capture gap; no ranking, schema, public MCP, migration, hook, or
+`orient` payload change.
+
+Source inspection showed direct unified `search` ranks only active `MemoryItem` records in the
+memory layer. The software-design/Ousterhout preference existed in legacy observations and docs,
+but not as an active preference `MemoryItem`, so the T04 memory-layer miss was expected from the
+current retrieval contract.
+
+Follow-up actions:
+
+- Added deterministic coverage in `engram-tests/tests/search_tests.rs` proving that an active,
+  reviewed user preference containing the design-philosophy terms is returned for the T04 query and
+  ranks ahead of generic software-design context.
+- Captured reviewed user-scoped preference MemoryItem
+  `019e6924-256b-7093-b1c5-286ec4d02461` from the user-stated goal/design evidence and existing
+  legacy observation IDs, without auto-promoting legacy observations.
+- Verified live trace `019e6924-3c0b-7031-a54a-3cdee7bf2647`: the exact T04 query returned the new
+  preference as the top memory result. Feedback `019e6924-5878-7961-a4cb-c64c3643340e` recorded
+  `task_success=true`, `preference_adhered=true`, `bad_memory_used=false`.
+
+This repair does not imply that all legacy preferences have been promoted. Future preference misses
+should still be diagnosed as representation/capture gaps first, with broad ranking changes kept
+behind their normal evidence gates.
