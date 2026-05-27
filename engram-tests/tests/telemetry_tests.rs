@@ -504,6 +504,65 @@ async fn real_session_eval_report_tracks_memory_judgment_attribution_gaps() {
 }
 
 #[tokio::test]
+async fn memory_judgment_trace_coverage_uses_distinct_eligible_traces() {
+    let (telemetry, _) = setup_services().await;
+    let surfaced_memory_id = engram_core::Id::new();
+    let first_search_memory_id = engram_core::Id::new();
+    let second_search_memory_id = engram_core::Id::new();
+
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_returned_memory_ids(vec![surfaced_memory_id]),
+        )
+        .await
+        .expect("memory-bearing trace should be recorded");
+    let first_search_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_returned_result_ids(vec![first_search_memory_id.to_string()]),
+        )
+        .await
+        .expect("legacy search trace should be recorded");
+    let second_search_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_returned_result_ids(vec![second_search_memory_id.to_string()]),
+        )
+        .await
+        .expect("second legacy search trace should be recorded");
+
+    let mut first_feedback = AgentFeedback::new(first_search_trace.id);
+    first_feedback.used_memory_ids = vec![first_search_memory_id];
+    telemetry
+        .submit_feedback(first_feedback)
+        .await
+        .expect("first feedback should be accepted");
+
+    let mut second_feedback = AgentFeedback::new(second_search_trace.id);
+    second_feedback.rejected_memory_ids = vec![second_search_memory_id];
+    telemetry
+        .submit_feedback(second_feedback)
+        .await
+        .expect("second feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(100))
+        .await
+        .expect("real-session report should build");
+    assert_eq!(report.trace_count, 3);
+    assert_eq!(report.memory_judgment_trace_count, 2);
+    assert!((report.memory_judgment_trace_coverage - (2.0_f32 / 3.0)).abs() < f32::EPSILON);
+    assert!(report.memory_judgment_trace_coverage <= 1.0);
+}
+
+#[tokio::test]
 async fn outcome_only_feedback_is_a_concrete_signal() {
     let (telemetry, _) = setup_services().await;
     let trace = telemetry
@@ -1149,6 +1208,10 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     assert_eq!(trace.arm.as_deref(), Some("memory_items"));
     assert_eq!(trace.query.as_deref(), Some("intent aware telemetry"));
     assert_eq!(trace.project.as_deref(), Some("engram"));
+    assert_eq!(trace.returned_memory_ids, vec![memory_item.id]);
+    assert!(trace
+        .returned_result_ids
+        .contains(&memory_item.id.to_string()));
 }
 
 #[tokio::test]

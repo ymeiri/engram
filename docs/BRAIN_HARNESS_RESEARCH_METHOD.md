@@ -360,6 +360,16 @@ Current gate: move to the next product-facing Brain Harness slice while keeping 
 as measurement backlog. Do not make ranking, hot-path, migration, deletion, or legacy-simplification
 claims from one sealed live run.
 
+2026-05-27 telemetry update: attribution repair closed a narrow metric-validity bug. A live
+`real_session_eval(project=engram, limit=50)` report returned impossible
+`memory_judgment_trace_coverage=1.78` because memory judgments on search traces were counted while
+search memory results were only recorded as generic result IDs. The fix keeps old data valid by
+using a distinct eligible-trace denominator and records memory-layer search results in
+`returned_memory_ids` going forward. Installed binary
+`5b989d898ff033505c584c27d483ea9b3b433e679cc5bbf16befb59c48d1325c` returned
+`memory_judgment_trace_coverage=0.94`, and fresh search trace
+`019e6911-2f5b-7e02-a6d4-1c8b3b24b17e` recorded memory IDs in both returned ID fields.
+
 ---
 
 ## 9. Decision Gates

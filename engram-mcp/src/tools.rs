@@ -15,7 +15,7 @@ use engram_core::obligation::{
     AgentObligationStatus, AgentObligationTrigger,
 };
 use engram_core::repository::ProjectRepositoryRole;
-use engram_core::search::SearchLayer;
+use engram_core::search::{SearchLayer, SearchResultSource};
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
@@ -3291,6 +3291,11 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
         .map_err(|e| e.to_string())?;
 
     let returned_result_ids = results.iter().map(|result| result.id.clone()).collect();
+    let returned_memory_ids = results
+        .iter()
+        .filter(|result| result.source == SearchResultSource::Memory)
+        .filter_map(|result| Id::parse(&result.id).ok())
+        .collect();
     let trace_id = record_optional_trace(
         state,
         BrainHarnessTrace::new(BrainHarnessOperation::Search)
@@ -3308,6 +3313,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
             .with_arm(request.arm.clone())
             .with_query(Some(request.query.clone()))
             .with_project(request.project.clone())
+            .with_returned_memory_ids(returned_memory_ids)
             .with_returned_result_ids(returned_result_ids)
             .with_latency_ms(started.elapsed().as_millis() as u64),
     )

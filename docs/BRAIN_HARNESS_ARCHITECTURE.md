@@ -689,6 +689,12 @@ Implemented spike:
   feedback density when multiple feedback records attach to one trace. Outcome feedback and memory
   attribution also expose trace-level counts so scope correctness, task outcome, and feedback
   presence are not conflated.
+- Memory-attribution trace coverage is bounded to distinct eligible traces. A 2026-05-27 live
+  report exposed the old denominator mismatch: memory judgments on search traces could be counted
+  while search memory results were only stored as generic result IDs, producing an impossible
+  `memory_judgment_trace_coverage=1.78`. Search traces now also populate `returned_memory_ids` for
+  memory-layer results, and the report denominator includes older traces with explicit memory
+  judgments so historical coverage cannot exceed 1.0 without rewriting data.
 - Generated harness adapters now instruct agents to preserve `trace_id` values returned by
   `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
   with `task_success`, `preference_adhered`, `repeated_context_questions`, `bad_memory_used`, and

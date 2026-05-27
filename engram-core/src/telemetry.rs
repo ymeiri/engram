@@ -414,7 +414,10 @@ pub struct RealSessionEvalReport {
     pub memory_judgment_coverage: f32,
     /// Number of traces with at least one explicit memory attribution judgment.
     pub memory_judgment_trace_count: usize,
-    /// Traces with memory attribution judgments divided by memory-bearing traces.
+    /// Traces with memory attribution judgments divided by traces that either returned memory IDs
+    /// or have memory-judgment feedback. The feedback side keeps older search traces from making
+    /// this trace-coverage ratio exceed 1.0 when they judged memory before search telemetry also
+    /// populated returned_memory_ids.
     pub memory_judgment_trace_coverage: f32,
     /// Feedback records for memory-bearing traces that omitted memory attribution judgments.
     pub unjudged_memory_feedback_count: usize,

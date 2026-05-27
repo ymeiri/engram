@@ -492,7 +492,7 @@ struct ReportTotals {
     feedback_trace_count: usize,
     memory_judgment_feedback_count: usize,
     memory_judgment_trace_count: usize,
-    memory_bearing_trace_count: usize,
+    memory_judgment_eligible_trace_count: usize,
     unjudged_memory_feedback_count: usize,
     external_session_feedback: ExternalSessionFeedbackAggregation,
     outcome_trace_count: usize,
@@ -556,7 +556,9 @@ fn build_real_session_eval_report(
         feedback_trace_count: count_feedback_traces(traces, feedback),
         memory_judgment_feedback_count: count_memory_judgment_feedback(feedback),
         memory_judgment_trace_count: count_memory_judgment_traces(traces, feedback),
-        memory_bearing_trace_count: count_memory_bearing_traces(traces),
+        memory_judgment_eligible_trace_count: count_memory_judgment_eligible_traces(
+            traces, feedback,
+        ),
         unjudged_memory_feedback_count: count_unjudged_memory_feedback(traces, feedback),
         external_session_feedback: aggregate_feedback_external_sessions(feedback),
         outcome_trace_count: count_outcome_traces(traces, feedback),
@@ -682,7 +684,7 @@ fn report_from_rows(
         memory_judgment_trace_count: totals.memory_judgment_trace_count,
         memory_judgment_trace_coverage: coverage(
             totals.memory_judgment_trace_count,
-            totals.memory_bearing_trace_count,
+            totals.memory_judgment_eligible_trace_count,
         ),
         unjudged_memory_feedback_count: totals.unjudged_memory_feedback_count,
         distinct_intent_count: rows.intents.len(),
@@ -928,11 +930,11 @@ fn count_memory_judgment_traces(traces: &[BrainHarnessTrace], feedback: &[AgentF
         .len()
 }
 
-fn count_memory_bearing_traces(traces: &[BrainHarnessTrace]) -> usize {
-    traces
-        .iter()
-        .filter(|trace| !trace.returned_memory_ids.is_empty())
-        .count()
+fn count_memory_judgment_eligible_traces(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> usize {
+    memory_judgment_eligible_trace_ids(traces, feedback).len()
 }
 
 fn count_outcome_traces(traces: &[BrainHarnessTrace], feedback: &[AgentFeedback]) -> usize {
@@ -986,11 +988,7 @@ fn count_unjudged_memory_feedback(
     traces: &[BrainHarnessTrace],
     feedback: &[AgentFeedback],
 ) -> usize {
-    let memory_bearing_trace_ids = traces
-        .iter()
-        .filter(|trace| !trace.returned_memory_ids.is_empty())
-        .map(|trace| trace.id)
-        .collect::<HashSet<_>>();
+    let memory_bearing_trace_ids = memory_judgment_eligible_trace_ids(traces, feedback);
 
     feedback
         .iter()
@@ -998,6 +996,27 @@ fn count_unjudged_memory_feedback(
             memory_bearing_trace_ids.contains(&item.trace_id) && !has_memory_judgment(item)
         })
         .count()
+}
+
+fn memory_judgment_eligible_trace_ids(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> HashSet<Id> {
+    let trace_ids = trace_id_set(traces);
+    let mut eligible_ids = traces
+        .iter()
+        .filter(|trace| !trace.returned_memory_ids.is_empty())
+        .map(|trace| trace.id)
+        .collect::<HashSet<_>>();
+
+    for item in feedback
+        .iter()
+        .filter(|item| trace_ids.contains(&item.trace_id) && has_memory_judgment(item))
+    {
+        eligible_ids.insert(item.trace_id);
+    }
+
+    eligible_ids
 }
 
 fn has_memory_judgment(feedback: &AgentFeedback) -> bool {
