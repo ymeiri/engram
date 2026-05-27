@@ -8925,10 +8925,21 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .as_deref()
                 .map(parse_memory_status)
                 .transpose()?;
-            let items = service
-                .list_memory(status, request.limit)
+            let tags = request.tags;
+            let fetch_limit = if tags.is_empty() { request.limit } else { None };
+            let mut items = service
+                .list_memory(status, fetch_limit)
                 .await
                 .map_err(|e| e.to_string())?;
+            if !tags.is_empty() {
+                items.retain(|item| {
+                    tags.iter()
+                        .all(|tag| item.tags.iter().any(|item_tag| item_tag == tag))
+                });
+                if let Some(limit) = request.limit {
+                    items.truncate(limit);
+                }
+            }
 
             serde_json::to_string_pretty(&serde_json::json!({
                 "count": items.len(),

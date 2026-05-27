@@ -170,6 +170,50 @@ async fn test_mcp_memory_add_get_list() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_list_filters_by_tags_before_limit() {
+    let state = setup_tool_state().await;
+
+    let mut matching = with_writer(request("add"));
+    matching.kind = Some("decision".to_string());
+    matching.title = Some("Tagged current plan".to_string());
+    matching.content =
+        Some("This tagged item should be returned by tag-filtered list.".to_string());
+    matching.origin = Some("user_stated".to_string());
+    matching.scope_type = Some("project".to_string());
+    matching.project_name = Some("engram".to_string());
+    matching.tags = vec!["current-plan".to_string(), "brain-harness".to_string()];
+    matching.evidence = manual_review_evidence("Reviewed tagged list fixture.");
+    tools::memory_new(&state, matching)
+        .await
+        .expect("matching add should work");
+
+    let mut non_matching = with_writer(request("add"));
+    non_matching.kind = Some("project_fact".to_string());
+    non_matching.title = Some("Newer untagged fact".to_string());
+    non_matching.content = Some("This newer item should not satisfy the tag filter.".to_string());
+    non_matching.origin = Some("tool_result".to_string());
+    non_matching.scope_type = Some("project".to_string());
+    non_matching.project_name = Some("engram".to_string());
+    non_matching.tags = vec!["current-plan".to_string()];
+    non_matching.evidence = manual_review_evidence("Reviewed nonmatching tagged list fixture.");
+    tools::memory_new(&state, non_matching)
+        .await
+        .expect("non-matching add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.tags = vec!["current-plan".to_string(), "brain-harness".to_string()];
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["title"], "Tagged current plan");
+}
+
+#[tokio::test]
 async fn test_mcp_memory_add_requires_writer_provenance() {
     let state = setup_tool_state().await;
 
