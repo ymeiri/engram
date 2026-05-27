@@ -373,11 +373,12 @@ using a distinct eligible-trace denominator and records memory-layer search resu
 2026-05-27 live feedback update: the pre-registered
 `live_feedback_coverage_2026_05_27` batch submitted feedback for all ten read-only `orient` and
 `search` traces. The project-level report moved from `17/44` feedback-bearing traces
-(`0.3863636255264282`) to `23/44` (`0.5227272510528564`), so the numerical confidence gate now
-passes. This is evidence-quality work only: it is agent-assessed feedback, not a human-judged
-product-quality result or M6 approval. The batch found one design-preference retrieval failure,
-two partial feedback/context gaps, stale old current-plan surfacing, and old migration/export
-approval records that must not be treated as current M6 authorization.
+(`0.3863636255264282`) to `23/44` (`0.5227272510528564`), so the numerical confidence gate passed
+at that checkpoint. A later T18 re-audit showed the current 50-trace sample no longer passes because
+feedback spans only two intents. This is evidence-quality work only: it is agent-assessed feedback,
+not a human-judged product-quality result or M6 approval. The batch found one design-preference
+retrieval failure, two partial feedback/context gaps, stale old current-plan surfacing, and old
+migration/export approval records that must not be treated as current M6 authorization.
 
 ---
 
@@ -611,6 +612,12 @@ Current next application:
   required `SessionStart` and `SessionEnd` settings registrations are missing; Codex, Gemini CLI,
   and Cursor still have required generated adapter drift. Treat this as configuration drift
   evidence, not approval to write adapters or hooks.
+- A post-T17 read-only evidence audit corrected the current telemetry confidence claim:
+  `real_session_eval(project=engram, limit=50)` reported `confidence_gate.passed=false` because the
+  current sample has feedback across only two intents. `lint(action=apply_safe, write=false)` found
+  no safe actions. The stale repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` has 42 stale-feedback hits, but archival or scope
+  correction remains a lifecycle write that requires explicit approval.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

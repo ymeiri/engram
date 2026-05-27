@@ -110,9 +110,10 @@ approval-gated.
 
 The batch improved feedback coverage and exposed useful retrieval risks:
 
-- The project-level telemetry confidence gate now passes numerically, but this is weak
-  agent-assessed evidence and must be correlated with transcript, tests, or user review before
-  driving product or migration decisions.
+- The project-level telemetry confidence gate passed numerically at this checkpoint, but a later
+  T18 re-audit shows the current sample no longer passes because feedback spans only two intents.
+  This remains weak agent-assessed evidence and must be correlated with transcript, tests, or user
+  review before driving product or migration decisions.
 - The main new failure is T04: user software design philosophy is not reliably retrievable from
   the current active memory/search surface for a direct preference query.
 - The main negative-control caveat is T10: old approved migration/export records can still surface
@@ -560,3 +561,46 @@ Decision:
   fully installed for any supported harness.
 - No adapter, hook, settings, schema, ranking, `orient`, migration, or lifecycle-status writes were
   made. Adapter and hook writes remain approval-gated.
+
+## T18 Post-T17 Evidence Gate Audit
+
+Research question: after T17, which remaining Brain Harness quality gaps can be advanced without
+crossing an approval gate?
+
+Hypotheses:
+
+- Preferred: read-only evidence will show the next meaningful fixes are lifecycle, hot-path, or
+  index-behavior changes that require approval before implementation.
+- Null: an existing safe action can be applied without approval.
+- Simpler alternative: continue collecting telemetry feedback only.
+- Failure: current docs overstate confidence or completion and must be corrected before any fix.
+
+Measurement:
+
+- `real_session_eval(project=engram, limit=50)`.
+- `lint(action=apply_safe, write=false, limit=80)`.
+- Direct review-memory search for stale current-plan behavior.
+- Document search for the newly indexed T17 evidence.
+
+Result:
+
+- `real_session_eval` reported `trace_count=44`, `feedback_trace_count=30`,
+  `feedback_coverage=0.6818181872367859`, `memory_judgment_coverage=1.0`, and
+  `bad_memory_used_count=0`, but `confidence_gate.passed=false` because feedback spans only two
+  intents.
+- `lint(action=apply_safe, write=false)` reported `applied_safe_actions=0`; all observed stale,
+  wrong-scope, duplicate-entity, missing-evidence, and handoff findings still have no safe automatic
+  action.
+- The stale repository-scoped current-plan item
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` now has 42 stale-feedback hits and still appears near the
+  latest project current plan in review-memory search. It is visible as a review signal, not an
+  automatically safe archival target.
+- Document search finds the T17 evidence, but also shows duplicated relative/absolute path chunks
+  for some Brain Harness docs. A normalization/idempotency fix would change document-index behavior.
+
+Decision:
+
+- Correct the confidence-gate claim: current project telemetry does not presently pass the gate.
+- Do not apply lifecycle status changes, hot-path ranking changes, document-index normalization,
+  migration inventory/review-export, adapter writes, or hook/settings writes without explicit
+  approval.
