@@ -4,12 +4,14 @@ use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
     ModelIdentity, WriterProvenance,
 };
+use engram_core::telemetry::AgentFeedback;
+use engram_core::Id;
 use engram_index::{LintService, MemoryService};
 use engram_mcp::tools::{self, LintRequest, ToolState};
-use engram_store::{connect_and_init, StoreConfig};
+use engram_store::{connect_and_init, StoreConfig, TelemetryRepo};
 use serde_json::Value;
 
-async fn setup_tool_state() -> (ToolState, MemoryService) {
+async fn setup_tool_state() -> (ToolState, MemoryService, TelemetryRepo) {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config).await.expect("Failed to connect");
 
@@ -19,15 +21,16 @@ async fn setup_tool_state() -> (ToolState, MemoryService) {
         .await
         .expect("Failed to initialize memory schema");
 
-    let lint_service = LintService::new(db);
+    let lint_service = LintService::new(db.clone());
     lint_service
         .init_schema()
         .await
         .expect("Failed to initialize lint schema");
+    let telemetry_repo = TelemetryRepo::new(db);
 
     let state = ToolState::new();
     state.init_lint(lint_service).await;
-    (state, memory_service)
+    (state, memory_service, telemetry_repo)
 }
 
 fn lint_request(action: &str) -> LintRequest {
@@ -50,7 +53,7 @@ fn parse_json(response: &str) -> Value {
 
 #[tokio::test]
 async fn test_mcp_lint_bounds_duplicate_entity_candidate_messages() {
-    let (state, memory_service) = setup_tool_state().await;
+    let (state, memory_service, _) = setup_tool_state().await;
     let mut item_ids = Vec::new();
 
     for index in 0..10 {
@@ -96,7 +99,7 @@ async fn test_mcp_lint_bounds_duplicate_entity_candidate_messages() {
 
 #[tokio::test]
 async fn test_mcp_lint_includes_item_titles_for_actionable_warnings() {
-    let (state, memory_service) = setup_tool_state().await;
+    let (state, memory_service, _) = setup_tool_state().await;
 
     let missing = MemoryItem::new(
         MemoryKind::Decision,
@@ -146,4 +149,54 @@ async fn test_mcp_lint_includes_item_titles_for_actionable_warnings() {
     assert!(missing_message.contains("Missing source citation"));
     assert!(missing_message.contains("decision"));
     assert!(handoff_message.contains("Incomplete handoff"));
+}
+
+#[tokio::test]
+async fn test_mcp_lint_reports_feedback_flagged_active_memory() {
+    let (state, memory_service, telemetry_repo) = setup_tool_state().await;
+
+    let item = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Telemetry-questioned fact",
+        "Content that feedback says may be stale.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+    let item_id = item.id;
+    memory_service
+        .capture_memory(item)
+        .await
+        .expect("memory item should be captured");
+
+    let mut feedback = AgentFeedback::new(Id::new());
+    feedback.stale_memory_ids = vec![item_id];
+    feedback.wrong_scope_memory_ids = vec![item_id];
+    telemetry_repo
+        .save_feedback(&feedback)
+        .await
+        .expect("feedback should be saved");
+
+    let response = tools::lint_new(&state, lint_request("run"))
+        .await
+        .expect("lint should run");
+    let json = parse_json(&response);
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be an array");
+
+    let stale_finding = findings
+        .iter()
+        .find(|finding| finding["rule"] == "feedback_stale_active_memory")
+        .expect("stale feedback finding should be present");
+    let wrong_scope_finding = findings
+        .iter()
+        .find(|finding| finding["rule"] == "feedback_wrong_scope_active_memory")
+        .expect("wrong-scope feedback finding should be present");
+
+    assert_eq!(stale_finding["severity"], "info");
+    assert_eq!(stale_finding["safe_action"], "none");
+    assert_eq!(stale_finding["item_id"], item_id.to_string());
+    assert_eq!(wrong_scope_finding["item_id"], item_id.to_string());
 }

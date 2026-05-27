@@ -103,6 +103,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `cc8e30db22be3f106454c21c334441c113f168ca6290c4554168e708ebfecb49`
       confirmed MCP `lint(action=run, limit=80)` returns handoff warnings naming handoff titles
       and missing-evidence warnings naming item title/kind.
+- [x] Telemetry-backed memory quality lint: read-only `lint` now reports active MemoryItems that
+      recent agent feedback flagged as stale or wrong-scope. Findings are informational,
+      deduplicated per active memory item, ignore non-active or dangling IDs, and intentionally
+      have no safe automatic action. Live daemon smoke after installing binary hash
+      `1d4d5134cc9d89e977e635d439b2008ddfaf459e91b4d00df0997fb39ab78934` and restarting the
+      daemon on port `8765`, PID `54666`, confirmed `lint(action=run, limit=80)` includes
+      `feedback_stale_active_memory` and `feedback_wrong_scope_active_memory` findings with
+      `safe_action=none`.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -116,7 +124,7 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 | Current-plan / next-step retrieval | Validated for continuation prompts | Commit `0b4e35b`; commit `94930ad`; `orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking`; direct `search` fixtures `test_memory_search_prioritizes_current_plan_for_next_step_query`, `test_memory_search_prefers_project_current_plan_over_repository_plan`, and `test_memory_search_keeps_gate_guidance_above_current_plan`; native Codex MCP trace `019e68a5-ef05-7db0-8249-3722fcf78aea` and native Claude Code CLI trace `019e68ac-678e-7683-a241-08119fc6b03c` both returned active current-plan memory first after installed binary `f5cb5816927b4e4a5b9cb92df560de47e201c2bccdcbfa05eeb25c9d35bcfb35`; active current-plan memory is intentionally looked up from Engram at task start because each slice supersedes the previous plan | Generic `review_memory` prompts can still surface unrelated memory before current plan/M6 gate. Treat as future eval/ranking work, not proof of broad ranking quality. |
 | Cross-harness behavior | Partially validated | Codex and Claude Code lean-orient smokes; BAF008 real Claude Code treatment with clean controls; 2026-05-27 read-only `harness doctor` shows Claude Code ready, while Codex, Gemini CLI, and Cursor are not fully ready because required generated adapters have drifted from current policy; native Claude Code CLI direct-search smoke trace `019e68ac-678e-7683-a241-08119fc6b03c` returned current-plan memory `019e689c-b188-70e2-acfc-2d00f956bd24` first | Broad harness reliability still depends on hook/config status and future real sessions. Adapter or hook writes remain gated. |
 | Evidence and feedback loop | Partially validated | Trace IDs, scenario/arm telemetry, feedback attribution warnings, real-session eval report, BAF007/BAF008 accepted outcome memory | Agent feedback remains weak evidence unless checked against transcript, tests, or user review. |
-| Memory quality / lifecycle | Partially validated | Review-gated promotion, archive-aware retrieval, stale-target cleanup, document lifecycle dogfood, Codex adapter follow-through, bounded/actionable lint reports | Duplicate entity, handoff, and missing-evidence lint findings still require human/agent review; no safe automatic action exists for those warning classes. |
+| Memory quality / lifecycle | Partially validated | Review-gated promotion, archive-aware retrieval, stale-target cleanup, document lifecycle dogfood, Codex adapter follow-through, bounded/actionable lint reports, telemetry-backed stale/wrong-scope active-memory lint | Duplicate entity, handoff, missing-evidence, and feedback-flagged active-memory lint findings still require human/agent review; no safe automatic action exists for those warning classes. |
 | Migration from legacy layers | Blocked by approval gate | Review-gated migration/digest flows exist; one accidental broad read-only inventory returned `3934` sources and `3641` candidates with no writes | Do not run further read-only inventory/review-export without explicit user-approved scope. Do not write-apply/delete/simplify without reviewed candidates, dry-run report, rollback plan, and explicit approval. |
 
 Current MCP/CLI Memory OS surface:

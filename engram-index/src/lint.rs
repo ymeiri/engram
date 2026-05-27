@@ -5,7 +5,9 @@ use engram_core::lint::{LintFinding, LintReport, LintRule, LintSafeAction, LintS
 use engram_core::memory::{MemoryItem, MemoryKind, MemoryScope, MemoryStatus};
 use engram_core::obligation::AgentObligationStatus;
 use engram_core::session::SessionStatus;
-use engram_store::{Db, MemoryRepo, ObligationRepo, SessionRepo};
+use engram_core::telemetry::AgentFeedback;
+use engram_core::Id;
+use engram_store::{Db, MemoryRepo, ObligationRepo, SessionRepo, TelemetryRepo};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -20,6 +22,7 @@ const GENERATED_VAULT_PREFIXES: &[&str] = &[
     "repositories",
 ];
 const MAX_DUPLICATE_ENTITY_IDS_IN_FINDING: usize = 8;
+const MAX_FEEDBACK_ROWS_FOR_LINT: usize = 500;
 
 /// Options for lint execution.
 #[derive(Debug, Clone, Default)]
@@ -36,6 +39,7 @@ pub struct LintService {
     memory_repo: MemoryRepo,
     session_repo: SessionRepo,
     obligation_repo: ObligationRepo,
+    telemetry_repo: TelemetryRepo,
 }
 
 impl LintService {
@@ -44,7 +48,8 @@ impl LintService {
         Self {
             memory_repo: MemoryRepo::new(db.clone()),
             session_repo: SessionRepo::new(db.clone()),
-            obligation_repo: ObligationRepo::new(db),
+            obligation_repo: ObligationRepo::new(db.clone()),
+            telemetry_repo: TelemetryRepo::new(db),
         }
     }
 
@@ -53,6 +58,7 @@ impl LintService {
         self.memory_repo.init_schema().await?;
         self.session_repo.init_schema().await?;
         self.obligation_repo.init_schema().await?;
+        self.telemetry_repo.init_schema().await?;
         Ok(())
     }
 
@@ -69,6 +75,8 @@ impl LintService {
         lint_handoffs_missing_next_actions(&items, &mut findings);
         self.lint_stale_active_sessions(&mut findings).await?;
         self.lint_open_obligations(&mut findings).await?;
+        self.lint_feedback_flagged_active_memory(&items, &mut findings)
+            .await?;
 
         if let Some(vault_path) = options.vault_path {
             lint_vault_pages(Path::new(&vault_path), &mut findings)?;
@@ -155,6 +163,20 @@ impl LintService {
                 .with_obligation(obligation.id),
             );
         }
+        Ok(())
+    }
+
+    async fn lint_feedback_flagged_active_memory(
+        &self,
+        items: &[MemoryItem],
+        findings: &mut Vec<LintFinding>,
+    ) -> IndexResult<()> {
+        let feedback = self
+            .telemetry_repo
+            .list_feedback(Some(MAX_FEEDBACK_ROWS_FOR_LINT))
+            .await?;
+        lint_feedback_stale_active_memory(items, &feedback, findings);
+        lint_feedback_wrong_scope_active_memory(items, &feedback, findings);
         Ok(())
     }
 }
@@ -331,6 +353,89 @@ fn lint_handoffs_missing_next_actions(items: &[MemoryItem], findings: &mut Vec<L
     }
 }
 
+fn lint_feedback_stale_active_memory(
+    items: &[MemoryItem],
+    feedback: &[AgentFeedback],
+    findings: &mut Vec<LintFinding>,
+) {
+    let active_items = active_memory_items_by_id(items);
+    let stale_counts = feedback_signal_counts(feedback, |feedback| &feedback.stale_memory_ids);
+
+    for (item_id, count) in stale_counts {
+        let Some(item) = active_items.get(&item_id) else {
+            continue;
+        };
+        findings.push(
+            LintFinding::new(
+                format!("feedback-stale-active-memory:{item_id}"),
+                LintRule::FeedbackStaleActiveMemory,
+                LintSeverity::Info,
+                "Active memory has stale feedback",
+                format!(
+                    "Active memory item '{}' ({}) was marked stale by {count} recent \
+                     feedback record(s). Treat this as a review signal, not proof; no \
+                     automatic lifecycle action is safe.",
+                    item.title, item.kind
+                ),
+            )
+            .with_item(item_id),
+        );
+    }
+}
+
+fn lint_feedback_wrong_scope_active_memory(
+    items: &[MemoryItem],
+    feedback: &[AgentFeedback],
+    findings: &mut Vec<LintFinding>,
+) {
+    let active_items = active_memory_items_by_id(items);
+    let wrong_scope_counts =
+        feedback_signal_counts(feedback, |feedback| &feedback.wrong_scope_memory_ids);
+
+    for (item_id, count) in wrong_scope_counts {
+        let Some(item) = active_items.get(&item_id) else {
+            continue;
+        };
+        findings.push(
+            LintFinding::new(
+                format!("feedback-wrong-scope-active-memory:{item_id}"),
+                LintRule::FeedbackWrongScopeActiveMemory,
+                LintSeverity::Info,
+                "Active memory has wrong-scope feedback",
+                format!(
+                    "Active memory item '{}' ({}) was marked wrong-scope by {count} recent \
+                     feedback record(s). Review its scope or retrieval behavior before changing \
+                     lifecycle status.",
+                    item.title, item.kind
+                ),
+            )
+            .with_item(item_id),
+        );
+    }
+}
+
+fn active_memory_items_by_id(items: &[MemoryItem]) -> HashMap<Id, &MemoryItem> {
+    items
+        .iter()
+        .filter(|item| item.status == MemoryStatus::Active)
+        .map(|item| (item.id, item))
+        .collect()
+}
+
+fn feedback_signal_counts(
+    feedback: &[AgentFeedback],
+    ids: impl Fn(&AgentFeedback) -> &[Id],
+) -> HashMap<Id, usize> {
+    let mut counts = HashMap::new();
+    for feedback in feedback {
+        let unique_ids: HashSet<_> = ids(feedback).iter().copied().collect();
+        for item_id in unique_ids {
+            *counts.entry(item_id).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
 fn has_next_actions(content: &str) -> bool {
     let lower = content.to_lowercase();
     lower.contains("next action")
@@ -398,6 +503,7 @@ mod tests {
         WriterProvenance,
     };
     use engram_core::obligation::{AgentObligation, AgentObligationKind, AgentObligationTrigger};
+    use engram_core::telemetry::AgentFeedback;
     use engram_store::{connect_and_init, StoreConfig};
 
     async fn service() -> LintService {
@@ -515,6 +621,101 @@ mod tests {
         assert!(report.findings.iter().any(|finding| {
             finding.rule == LintRule::UnresolvedAgentObligation
                 && finding.obligation_id == Some(obligation.id)
+        }));
+    }
+
+    #[tokio::test]
+    async fn lint_reports_feedback_flagged_active_memory_once_per_item() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Possibly stale fact",
+            "Content that feedback later questioned.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut first_feedback = AgentFeedback::new(Id::new());
+        first_feedback.stale_memory_ids = vec![item.id, item.id];
+        first_feedback.wrong_scope_memory_ids = vec![item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&first_feedback)
+            .await
+            .unwrap();
+
+        let mut second_feedback = AgentFeedback::new(Id::new());
+        second_feedback.stale_memory_ids = vec![item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&second_feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let stale_findings = report
+            .findings
+            .iter()
+            .filter(|finding| finding.rule == LintRule::FeedbackStaleActiveMemory)
+            .collect::<Vec<_>>();
+        let wrong_scope_findings = report
+            .findings
+            .iter()
+            .filter(|finding| finding.rule == LintRule::FeedbackWrongScopeActiveMemory)
+            .collect::<Vec<_>>();
+
+        assert_eq!(stale_findings.len(), 1);
+        assert_eq!(wrong_scope_findings.len(), 1);
+        assert_eq!(
+            stale_findings[0].id,
+            format!("feedback-stale-active-memory:{}", item.id)
+        );
+        assert_eq!(stale_findings[0].item_id, Some(item.id));
+        assert_eq!(stale_findings[0].severity, LintSeverity::Info);
+        assert_eq!(stale_findings[0].safe_action, LintSafeAction::None);
+        assert!(stale_findings[0]
+            .message
+            .contains("marked stale by 2 recent feedback record(s)"));
+        assert!(wrong_scope_findings[0]
+            .message
+            .contains("marked wrong-scope by 1 recent feedback record(s)"));
+    }
+
+    #[tokio::test]
+    async fn lint_ignores_feedback_for_non_active_or_missing_memory() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Archived fact",
+            "Content that is no longer active.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_archive("test archive", Some("test".to_string()));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![item.id, Id::new()];
+        feedback.wrong_scope_memory_ids = vec![item.id, Id::new()];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        assert!(!report.findings.iter().any(|finding| {
+            matches!(
+                finding.rule,
+                LintRule::FeedbackStaleActiveMemory | LintRule::FeedbackWrongScopeActiveMemory
+            )
         }));
     }
 
