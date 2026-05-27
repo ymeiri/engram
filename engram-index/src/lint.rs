@@ -19,6 +19,7 @@ const GENERATED_VAULT_PREFIXES: &[&str] = &[
     "projects",
     "repositories",
 ];
+const MAX_DUPLICATE_ENTITY_IDS_IN_FINDING: usize = 8;
 
 /// Options for lint execution.
 #[derive(Debug, Clone, Default)]
@@ -217,19 +218,27 @@ fn lint_duplicate_entities(items: &[MemoryItem], findings: &mut Vec<LintFinding>
     }
 
     for (entity_name, group) in groups.into_iter().filter(|(_, group)| group.len() > 1) {
-        let item_ids = group
+        let total = group.len();
+        let displayed_ids = group
             .iter()
+            .take(MAX_DUPLICATE_ENTITY_IDS_IN_FINDING)
             .map(|item| item.id.to_string())
             .collect::<Vec<_>>()
             .join(", ");
+        let omitted = total.saturating_sub(MAX_DUPLICATE_ENTITY_IDS_IN_FINDING);
+        let item_ids = if omitted == 0 {
+            displayed_ids
+        } else {
+            format!("{displayed_ids}, ... ({omitted} more)")
+        };
         findings.push(LintFinding::new(
             format!("duplicate-entity-candidate:{entity_name}"),
             LintRule::DuplicateEntityCandidate,
             LintSeverity::Info,
             "Duplicate entity memory candidate",
             format!(
-                "Multiple active memory items target entity '{}': {}.",
-                entity_name, item_ids
+                "Multiple active memory items target entity '{}': {} active items: {}.",
+                entity_name, total, item_ids
             ),
         ));
     }
@@ -413,6 +422,40 @@ mod tests {
             .findings
             .iter()
             .any(|finding| finding.rule == LintRule::MissingEvidence));
+    }
+
+    #[tokio::test]
+    async fn lint_bounds_duplicate_entity_candidate_messages() {
+        let service = service().await;
+        let mut item_ids = Vec::new();
+        for index in 0..10 {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Duplicate {index}"),
+                "Duplicate entity-scoped content.",
+                MemoryScope::entity("ide-mcp-eval"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+            item_ids.push(item.id);
+            service.memory_repo.save_memory_item(&item).await.unwrap();
+        }
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::DuplicateEntityCandidate)
+            .unwrap();
+        let displayed_id_count = item_ids
+            .iter()
+            .filter(|item_id| finding.message.contains(&item_id.to_string()))
+            .count();
+        assert!(finding.message.contains("10 active items"));
+        assert!(finding.message.contains("... (2 more)"));
+        assert_eq!(displayed_id_count, MAX_DUPLICATE_ENTITY_IDS_IN_FINDING);
     }
 
     #[tokio::test]
