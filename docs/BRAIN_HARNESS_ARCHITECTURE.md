@@ -91,7 +91,7 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
-Research checkpoint, current through 2026-05-12:
+Research checkpoint, current through 2026-05-27:
 
 - The first matched same-harness dogfood batch is recorded in
   `docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md`.
@@ -111,11 +111,20 @@ Research checkpoint, current through 2026-05-12:
 - `bounded_autonomous_followthrough_005` was confounded by current-plan supersession: both arms
   completed useful narrow work, but the treatment did not receive the intended target-bearing
   current-plan memory.
-- The Claude Code Hot Context ID rerun closed one narrow preference-attribution gap, but it does
-  not prove broad cross-harness benefit.
-- The next discriminating evidence step remains a harder code-bearing follow-through slice before
-  changing `orient`, migration, graph/lint/raw-observation exposure, obligation detection, or
-  legacy deletion.
+- `bounded_autonomous_followthrough_006` was scoreable and added stronger scoped regression
+  coverage, but the no-memory arm also passed, so it did not support ranking, hot-path, migration,
+  deletion, or broad legacy-simplification changes.
+- `bounded_autonomous_followthrough_007` and `bounded_autonomous_followthrough_008` provide narrow
+  positive sealed MemoryItem recovery evidence, including one real Claude Code code-bearing task
+  whose sanitized controls failed cleanly. They do not prove broad cross-harness benefit.
+- Document lifecycle follow-through passed for Codex and the generated Codex adapter, including
+  obligation detection, document disposition, same-content suppression, and final doctor cleanup.
+- The latest narrow implementation checkpoint fixed mission-class `plan_work` current-plan ranking
+  without expanding `orient`, changing migration, adding graph/lint/raw-observation hot-path
+  behavior, or deleting legacy layers.
+- M6 migration remains the high-risk gate: even read-only inventory requires explicit
+  user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
+  rollback planning, and explicit approval.
 
 ---
 
@@ -546,6 +555,13 @@ because it has stronger scoped regression coverage. The result improves measurem
 memory-attribution gaps, but it does not justify ranking, hot-path, migration, deletion, or broad
 legacy-simplification changes.
 
+`bounded_autonomous_followthrough_007` and `bounded_autonomous_followthrough_008` then exercised
+sealed MemoryItem recovery. BAF007 produced a narrow accepted Codex outcome; BAF008 produced a
+real Claude Code treatment pass with sanitized no-memory and static-instruction controls that
+failed cleanly. These runs strengthen the sealed-recovery claim, including one real cross-harness
+code-bearing task, but they do not justify broad cross-harness claims, hook expansion, M6
+write-apply, deletion, ranking changes, or hot-path expansion.
+
 ---
 
 ## 13. Eval Trace Schema
@@ -918,10 +934,13 @@ Proceed in this order from the current checkpoint:
     Engram.
 13. Treat the `live_blind_continuity_002` current-plan attribution gap as instrumentation backlog,
     not a blocker for product work. Manual transcript inspection closed the behavioral checkpoint.
-14. Move next to a product-facing Brain Harness capability. The highest-confidence gap is lifecycle
-    follow-through for newly created or updated project documents: agents should ingest, register,
-    record, or explicitly skip those documents before final response.
-15. Only after explicit approval, apply accepted migration candidates through KnowledgeCommits.
+14. Treat document lifecycle follow-through as implemented for Codex and the generated Codex
+    adapter after the 2026-05-16 dogfood, content-idempotence check, and adapter contract update.
+15. Treat the mission-class `plan_work` current-plan ranking fix as a narrow calibration only:
+    it supports continuation prompts, not broad ranking quality or `review_memory` behavior.
+16. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
+    replication. Read-only M6 inventory/review-export requires explicit user-approved scope, and
+    M6 write apply/deletion requires a separate approval gate.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

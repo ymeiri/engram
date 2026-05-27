@@ -484,3 +484,12 @@ Current next application:
   the no-memory arm also completed the work. The result should be used to improve measurement
   quality, not to justify ranking, hot-path, migration, deletion, or broad legacy-simplification
   changes.
+- `bounded_autonomous_followthrough_007` and `bounded_autonomous_followthrough_008` provide narrow
+  sealed MemoryItem recovery evidence. BAF008 is the strongest cross-harness point so far because
+  the real Claude Code treatment passed and sanitized no-memory/static controls failed cleanly, but
+  the result is still one code-bearing task, not broad cross-harness proof.
+- Document lifecycle follow-through has passed for Codex and the generated Codex adapter; do not
+  keep selecting that as the next product step unless a new harness or failure mode is being tested.
+- The next non-gated work should improve targeted validation, evidence quality, or cross-harness
+  replication. Read-only M6 inventory/review-export requires explicit user-approved scope; M6 write
+  apply, deletion, and broad legacy simplification remain separately gated.
