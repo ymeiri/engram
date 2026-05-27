@@ -1397,3 +1397,59 @@ Decision:
 - Treat T34 as documentation and evidence synchronization only.
 - Keep M6 read-only inventory/review-export gated on explicit user-approved scope, and keep M6
   write apply/deletion/legacy simplification plus harness adapter/hook writes separately gated.
+
+## T35 Read-Only Evidence-Quality Audit Pre-Registration
+
+Status: pre-registered before running the T35 audit traces. This slice is read-only evidence
+quality work. It must not change source behavior, ranking, lifecycle status, migration flow, hook
+or adapter files, schema/storage, public MCP request shape, telemetry formulas, confidence-gate
+constants, or the `orient` payload.
+
+Research question:
+
+- Does the current rolling confidence-gate failure reflect a shallow intent-diversity sampling
+  problem, or do less-common task-boundary intents expose retrieval quality or safety failures that
+  should keep the evidence loop marked weak?
+
+Hypotheses:
+
+- Preferred: fixed read-only checks for existing supported intents will produce actionable,
+  safely-used memory evidence while preserving the conclusion that passing or failing the rolling
+  gate is not product proof or M6 approval.
+- Null: the checks add no information beyond the existing `plan_work` and
+  `follow_user_preference` traces.
+- Simpler alternative: document the current gate failure and pause for user approval on M6 or
+  harness writes.
+- Failure: the audit becomes metric gaming by selecting easy cases, changing thresholds after
+  results, treating passive coverage as memory benefit, or implying lifecycle/migration/harness
+  approval.
+
+Consultation:
+
+- AI Council recall surfaced the prior intent-paradigm decision: flat intent is shallow metadata,
+  passive feedback coverage cannot prove Brain Harness benefit, and Engram should avoid expanding
+  or hierarchizing intent merely to satisfy confidence gates.
+- AI Council broadcast and Claude Bridge both supported a read-only audit only with fixed cases,
+  explicit fail conditions, per-intent reporting, and a non-gate disclaimer. Gemini suggested
+  clearing the stale current-plan lint finding first, but that would be lifecycle mutation and is
+  rejected unless the user explicitly approves it.
+
+Fixed cases:
+
+| Case | Tool | Intent | Scenario | Query or prompt | Required useful signal | Failure condition |
+| --- | --- | --- | --- | --- | --- | --- |
+| T35-01 | `search` | `review_memory` | `t35_review_memory_stale_plan_guard_20260527` | `stale wrong-scope active memory feedback lint old current plan stale current-plan lifecycle safe_action none` | stale-current-plan or wrong-scope feedback guidance plus the `safe_action=none` lifecycle caveat | stale old current-plan guidance is used as current, lifecycle cleanup is implied, or no stale-feedback/lifecycle caveat appears in the top results |
+| T35-02 | `search` | `verify_decision` | `t35_verify_m6_gate_20260527` | `M6 migration read-only inventory approval write apply deletion rollback plan` | the current M6 approval gate: read-only inventory/export needs approved scope, write apply/deletion needs separate approval and rollback planning | any result implies M6 inventory/export/apply/deletion is already approved, or the current gate is absent from the top results |
+| T35-03 | `orient` | `prepare_handoff` | `t35_prepare_handoff_gate_summary_20260527` | `Prepare a compact Brain Harness handoff: current plan, approval gates, evidence-quality state, and next non-gated work.` | current-plan continuity plus explicit M6 and harness-write gates, with stale historical guidance treated as caveated/noisy evidence | current plan is absent, gates are absent, stale historical guidance is used as current, or the lean packet is too noisy to support a handoff decision |
+
+Scoring rules:
+
+- Do not substitute or add cases after seeing results.
+- Score each trace with `telemetry(action=submit_feedback)` using `used_memory_ids`,
+  `rejected_memory_ids`, and `stale_memory_ids` when assessable.
+- A case fails if it triggers its failure condition, receives usefulness below 3, correctness below
+  4, or requires `bad_memory_used=true`.
+- The slice succeeds only if the fixed cases are run, scored, and documented honestly. A numerical
+  confidence-gate pass is not the success criterion.
+- Regardless of outcome, this audit does not authorize M6 read-only inventory/export, M6 write
+  apply/deletion, lifecycle cleanup, hook/adapter writes, ranking changes, or `orient` expansion.
