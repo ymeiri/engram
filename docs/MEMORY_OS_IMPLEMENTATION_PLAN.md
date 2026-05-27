@@ -162,6 +162,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       with `cargo test -p engram-index obligation::tests`,
       `cargo test -p engram-tests --test obligation_tests`, `cargo fmt --all --check`,
       `cargo check -p engram-cli`, and `git diff --check`.
+- [x] T27 installed-runtime validation for T26: after installing binary hash
+      `7d9256dc2ca9fcefaaa54bf620c15989fa20926c929d9e6beca27012b6afc9cf`
+      and restarting the daemon on port `8765`, PID `50257`, live MCP obligation detection no
+      longer returns `tool_failure_recovery` or `AGENTS.md` document-disposition candidates for the
+      bare `schema` / `failure hypothesis` prompt that failed before install. Explicit failed-tool
+      wording still returns `tool_failure_recovery`. This is installed-runtime evidence only; it
+      does not change `orient`, ranking, migration, lifecycle status, hooks, adapters, public MCP
+      parameters, telemetry formulas, schema, or storage.
 - [x] Brain Harness telemetry outcome dimensions: traces support free-form `scenario_id`/`arm`,
       feedback records task success, preference adherence, repeated context questions, and bad
       memory use, and the confidence gate requires behavioral outcome evidence.
@@ -389,6 +397,23 @@ T26 obligation-noise suppression, 2026-05-27:
   is lower while explicit failed-tool and document-disposition coverage remains tested. This does
   not change `orient`, ranking, migration, lifecycle status, hook/adapter behavior, telemetry
   semantics, schema, or storage.
+
+T27 installed-runtime validation for T26, 2026-05-27:
+
+- Research question: after installing the T26 code and restarting the daemon, does live MCP
+  obligation detection apply the same noise suppression that passed source and MCP-boundary tests?
+- Measurement: before install, daemon PID `11922` with binary hash
+  `0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab` returned
+  `document_disposition` for `AGENTS.md`, `source_reading`, and `tool_failure_recovery` for prompt
+  `Failure hypothesis: avoid schema changes unless evidence justifies them.` After
+  `cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` and daemon restart,
+  binary hash `7d9256dc2ca9fcefaaa54bf620c15989fa20926c929d9e6beca27012b6afc9cf` on port `8765`,
+  PID `50257`, returned only `source_reading` for the same prompt. A separate live MCP dry-run for
+  `A tool call failed because of wrong parameters.` still returned `tool_failure_recovery`.
+- Matrix delta: the T26 obligation signal-quality fix is now validated in the installed live runtime,
+  closing the immediate binary-drift caveat for this slice. This does not authorize M6
+  inventory/export/apply/deletion, lifecycle writes, ranking changes, hook/adapter writes, public MCP
+  changes, telemetry formula changes, schema/storage changes, or `orient` payload expansion.
 
 Current MCP/CLI Memory OS surface:
 

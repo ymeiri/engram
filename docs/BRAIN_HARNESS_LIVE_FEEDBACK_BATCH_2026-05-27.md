@@ -994,3 +994,53 @@ Decision:
 
 - Treat this as an obligation signal-quality fix only. It does not authorize M6 work, lifecycle
   archive/scope writes, hook/adapter writes, ranking changes, or `orient` expansion.
+
+## T27 Installed-Runtime Validation For T26
+
+Status: passed as a live daemon validation. No source behavior, `orient` payload, ranking formula,
+telemetry formula, migration flow, lifecycle status, hook, adapter, schema, or storage behavior
+changed in this slice.
+
+Research question:
+
+- After installing the T26 code and restarting the daemon, does live MCP obligation detection apply
+  the same noise suppression that passed source and MCP-boundary tests?
+
+Hypotheses:
+
+- Preferred: the refreshed installed binary removes the two observed false positives in live MCP:
+  bare `schema` / `failure hypothesis` wording does not create `tool_failure_recovery`, and the
+  untracked user-owned root `AGENTS.md` file does not create a document-disposition candidate.
+  Explicit failed-tool wording still creates `tool_failure_recovery`.
+- Null: source tests pass, but the installed daemon remains stale or live MCP behavior differs.
+- Simpler alternative: rely on source tests only and leave the installed daemon unchanged.
+- Failure: install/restart breaks MCP access or suppresses explicit failed-tool recovery too broadly.
+
+Measurement:
+
+- Pre-install live MCP dry-run against daemon PID `11922`, installed binary hash
+  `0192d24d945b7acb8bdfabe129c56d61a5abf0f7ce8223c854139677a93738ab`, reproduced the stale
+  behavior: prompt `Failure hypothesis: avoid schema changes unless evidence justifies them.`
+  produced `document_disposition` for `AGENTS.md`, `source_reading`, and
+  `tool_failure_recovery`.
+- Refreshed `/Users/yuval.meiri/.local/bin/engram` with
+  `cargo install --path engram-cli --force --root /Users/yuval.meiri/.local`, installed binary hash
+  `7d9256dc2ca9fcefaaa54bf620c15989fa20926c929d9e6beca27012b6afc9cf`, and restarted the daemon on
+  port `8765`, PID `50257`.
+- Post-install live MCP dry-run for the same prompt returned only `source_reading`; it did not return
+  `tool_failure_recovery`, `document_disposition`, or any `AGENTS.md` candidate.
+- Post-install live MCP dry-run for `A tool call failed because of wrong parameters.` still returned
+  `tool_failure_recovery`.
+
+Result:
+
+- The T26 obligation-noise fix is now validated in the installed live runtime used by Codex MCP.
+- The known installed-binary drift caveat was addressed for this slice by installing the current
+  source and restarting the global daemon.
+
+Decision:
+
+- Treat this as installed-runtime evidence for obligation signal quality only. It does not authorize
+  M6 inventory/export/apply/deletion, lifecycle writes, ranking changes, hook/adapter writes,
+  schema/storage changes, public MCP surface changes, telemetry formula changes, or `orient`
+  expansion.
