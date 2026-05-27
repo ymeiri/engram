@@ -872,3 +872,64 @@ Decision:
   an explicit host-session contract.
 - This does not authorize M6 inventory/export/apply/deletion, lifecycle writes, hook/adapter writes,
   public MCP changes, schema/storage changes, broad ranking changes, or `orient` payload expansion.
+
+## T25 Rolling Evidence Window Re-Audit
+
+Status: read-only evidence audit only. No source behavior, ranking formula, migration flow, harness
+adapter, hook, schema, or `orient` payload changed.
+
+Research question:
+
+- After T24 feedback scoring and the next T25 startup traces, does the rolling
+  `real_session_eval(project=engram, limit=50)` report still support the completion-matrix evidence
+  claims without overstating confidence?
+
+Hypotheses:
+
+- Preferred: the report remains useful operational evidence, but it is sample-window-sensitive; new
+  unscored startup traces can lower feedback coverage even when the underlying feedback loop is
+  working and `bad_memory_used_count` remains zero.
+- Null: the existing T24 audit is enough and the latest report adds no meaningful completion-matrix
+  information.
+- Simpler alternative: submit feedback for new traces only, without recording the rolling-window
+  interpretation.
+- Failure: treating the rolling report as migration approval, changing confidence formulas, or
+  expanding hot-path behavior without a user-approved slice.
+
+Measurement:
+
+- After T24 trace feedback was submitted, the project report reached
+  `feedback_trace_count=44/50`, `feedback_coverage=0.88`, `external_session_trace_count=5/50`,
+  and `bad_memory_used_count=0`.
+- The T25 startup added fresh orient/search traces. A read-only report generated at
+  `2026-05-27T15:06:04Z` returned `trace_count=50`, `feedback_trace_count=38`,
+  `feedback_coverage=0.7599999904632568`, `memory_judgment_coverage=1.0`,
+  `bad_memory_used_count=0`, `confidence_gate.passed=true`,
+  `external_session_trace_count=5`, and `unspecified_external_session_trace_count=45`.
+- T25 startup retrieval still returned the active current-plan memory first for `orient` and the
+  direct current-plan search. The stale repository-scoped current-plan memory still appeared as
+  lower-ranked noise in broad startup results.
+- Read-only lint reported specialized stale-current-plan feedback for
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` with 61 recent stale feedback records and
+  `applied_safe_actions=0`.
+- Read-only harness doctor still reported all four supported harnesses as `ready=false`: Claude
+  Code is missing settings hook registrations, while Codex, Gemini CLI, and Cursor have generated
+  adapter or context drift. No harness files were written.
+
+Result:
+
+- The confidence gate is useful as a rolling operational signal, not a proof of completion. Its
+  numerator can move down when new unscored traces enter the latest 50-trace window.
+- T24's external-session conclusion still holds: sparse joinability is a caller/harness adoption or
+  host-availability gap, while the core storage/pass-through/reporting path is already covered.
+- The stale repository-scoped current-plan memory remains a visible lifecycle review issue. The
+  latest evidence does not justify automatic archive/scope writes.
+
+Decision:
+
+- Keep evidence and feedback loop status at "partially validated" until live traces are routinely
+  scored and corroborated against transcripts, tests, or user review.
+- Do not use the rolling confidence gate as approval for M6 migration inventory, review export,
+  write apply, deletion, or legacy simplification.
+- Score new startup traces when assessable, but do not change telemetry semantics or hook/adapter
+  behavior without a separate approved slice.

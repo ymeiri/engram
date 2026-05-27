@@ -342,6 +342,25 @@ T24 external-session audit, 2026-05-27:
   or eval plumbing is missing. Future hook/adapter/host integration work to provide stable labels
   remains separately approval-gated.
 
+T25 rolling evidence-window audit, 2026-05-27:
+
+- Research question: after T24 feedback scoring and the next T25 startup traces, does the rolling
+  `real_session_eval(project=engram, limit=50)` report still support the completion-matrix evidence
+  claims without overstating confidence?
+- Measurement: after T24 trace feedback, the project report reached `feedback_trace_count=44/50`,
+  `feedback_coverage=0.88`, `external_session_trace_count=5/50`, and
+  `bad_memory_used_count=0`. After the T25 startup added fresh unscored orient/search traces, the
+  read-only report generated at `2026-05-27T15:06:04Z` returned `trace_count=50`,
+  `feedback_trace_count=38`, `feedback_coverage=0.7599999904632568`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, `confidence_gate.passed=true`,
+  `external_session_trace_count=5`, and `unspecified_external_session_trace_count=45`.
+- Matrix delta: the confidence gate remains a useful rolling operational signal, but the latest
+  sample proves it is window-sensitive rather than a durable completion proof. Current-plan
+  retrieval still returned the active current-plan memory first for T25 startup prompts, while stale
+  repository-scoped current-plan guidance remains lower-ranked lifecycle noise. This does not
+  authorize M6 inventory/export/apply/deletion, lifecycle writes, hook/adapter writes, telemetry
+  formula changes, or `orient` payload expansion.
+
 Current MCP/CLI Memory OS surface:
 
 - MCP: `orient`, `memory` including `capture_current_plan`, `harness`, `obligations`, `lint`, `graph`, `handoff`, `vault`, `digest`, `repo`.
