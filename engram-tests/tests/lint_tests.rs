@@ -93,3 +93,57 @@ async fn test_mcp_lint_bounds_duplicate_entity_candidate_messages() {
     assert!(message.contains("... (2 more)"));
     assert_eq!(displayed_id_count, 8);
 }
+
+#[tokio::test]
+async fn test_mcp_lint_includes_item_titles_for_actionable_warnings() {
+    let (state, memory_service) = setup_tool_state().await;
+
+    let missing = MemoryItem::new(
+        MemoryKind::Decision,
+        "Missing source citation",
+        "A durable decision without evidence.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    );
+    memory_service
+        .capture_memory(missing)
+        .await
+        .expect("missing-evidence item should be captured");
+
+    let handoff = MemoryItem::new(
+        MemoryKind::Handoff,
+        "Incomplete handoff",
+        "Useful context without an explicit action list.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+    memory_service
+        .capture_memory(handoff)
+        .await
+        .expect("handoff item should be captured");
+
+    let response = tools::lint_new(&state, lint_request("run"))
+        .await
+        .expect("lint should run");
+    let json = parse_json(&response);
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be an array");
+    let missing_message = findings
+        .iter()
+        .find(|finding| finding["rule"] == "missing_evidence")
+        .and_then(|finding| finding["message"].as_str())
+        .expect("missing evidence finding should include a message");
+    let handoff_message = findings
+        .iter()
+        .find(|finding| finding["rule"] == "handoff_missing_next_actions")
+        .and_then(|finding| finding["message"].as_str())
+        .expect("handoff finding should include a message");
+
+    assert!(missing_message.contains("Missing source citation"));
+    assert!(missing_message.contains("decision"));
+    assert!(handoff_message.contains("Incomplete handoff"));
+}

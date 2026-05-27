@@ -172,7 +172,11 @@ fn lint_missing_evidence(items: &[MemoryItem], findings: &mut Vec<LintFinding>) 
                 LintRule::MissingEvidence,
                 LintSeverity::Warning,
                 "Memory item has no evidence",
-                "Durable memory should point to source evidence, review, or observed context.",
+                format!(
+                    "Memory item '{}' ({}) has no evidence; durable memory should point to \
+                     source evidence, review, or observed context.",
+                    item.title, item.kind
+                ),
             )
             .with_item(item.id),
         );
@@ -316,7 +320,11 @@ fn lint_handoffs_missing_next_actions(items: &[MemoryItem], findings: &mut Vec<L
                 LintRule::HandoffMissingNextActions,
                 LintSeverity::Warning,
                 "Handoff is missing next actions",
-                "Rolling handoffs should include concrete next actions for future agents.",
+                format!(
+                    "Handoff '{}' is missing next actions; rolling handoffs should include \
+                     concrete next actions for future agents.",
+                    item.title
+                ),
             )
             .with_item(item.id),
         );
@@ -418,10 +426,37 @@ mod tests {
 
         let report = service.run(LintOptions::default()).await.unwrap();
 
-        assert!(report
+        let finding = report
             .findings
             .iter()
-            .any(|finding| finding.rule == LintRule::MissingEvidence));
+            .find(|finding| finding.rule == LintRule::MissingEvidence)
+            .unwrap();
+        assert!(finding.message.contains("No evidence"));
+        assert!(finding.message.contains("decision"));
+    }
+
+    #[tokio::test]
+    async fn lint_reports_handoff_titles_when_next_actions_are_missing() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Incomplete handoff",
+            "Useful context without an explicit action list.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::HandoffMissingNextActions)
+            .unwrap();
+        assert!(finding.message.contains("Incomplete handoff"));
     }
 
     #[tokio::test]
