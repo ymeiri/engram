@@ -1010,6 +1010,10 @@ Proceed in this order from the current checkpoint:
     stale feedback on approval-shaped records is visible through `feedback_stale_active_memory`,
     but Engram does not infer a migration-authorization classifier, invalidate old approvals,
     authorize current M6 work, mutate lifecycle state, or alter retrieval behavior.
+26. Treat the T11 startup feedback stabilization as evidence-loop maintenance: exact T07
+    `review_memory` retrieval now passes and project feedback coverage is back at the gate threshold,
+    but stale migration-completion memory can still surface in implementation-plan searches and is
+    only a generic `feedback_stale_active_memory` review signal with `safe_action=none`.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

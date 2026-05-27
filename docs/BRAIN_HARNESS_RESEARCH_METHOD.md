@@ -565,6 +565,12 @@ Current next application:
   migration/export approval-shaped records that recent feedback marks stale stay on the generic
   `feedback_stale_active_memory` lint path with `safe_action=none`; this is a review signal, not
   M6 authorization, invalidation, archival, deletion, or ranking behavior.
+- The T11 startup feedback stabilization confirms the feedback loop is sample-window sensitive:
+  scoring startup/search traces restored the current project gate to exactly `0.5` feedback coverage
+  with no bad memory used. Exact T07 `review_memory` retrieval now passes, but implementation-plan
+  searches can still surface stale migration-completion memory
+  `019dd3fe-ec94-7122-af04-1f35b839387f`, which is visible through generic
+  `feedback_stale_active_memory` lint with `safe_action=none`.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

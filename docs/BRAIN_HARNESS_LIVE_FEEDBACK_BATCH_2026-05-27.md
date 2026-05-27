@@ -239,3 +239,32 @@ Follow-up actions:
   `feedback_stale_current_plan`.
 - Documented that this generic finding is a review signal only: it does not invalidate historical
   approvals, authorize current M6 work, archive/delete memory, or change retrieval behavior.
+
+## T11 Startup Feedback Stabilization
+
+Status: evidence update only; no ranking, schema, migration, hook, lifecycle, or `orient` payload
+change.
+
+Research question: after the T10 clarification, does the normal startup sequence preserve the current
+plan, feedback contract, and M6 gates while keeping stale historical memory as rejected evidence?
+
+Measurement:
+
+- Startup `orient` trace `019e694a-1369-7a62-b414-afd428f96a8b` returned current-plan memory
+  `019e6948-d9b1-7d52-8f62-539a6db583a7`, the non-gated limitation
+  `019e68d8-50b3-7212-8499-0f4361aae70c`, and the M6 read-only approval gate
+  `019e6857-1059-7e41-b69f-eb26ef78bcb5`.
+- Exact T07 recheck trace `019e694c-57fd-7702-9824-ccb7932a92f6` returned telemetry-feedback rule
+  `019e692b-635e-7d80-9f2f-8796abc95234` first for the target `review_memory` query.
+- Implementation-plan and risk searches still surfaced stale migration-completion memory
+  `019dd3fe-ec94-7122-af04-1f35b839387f`; feedback marked it stale rather than using it.
+- `lint(action=run, limit=80)` reported that same memory as
+  `feedback_stale_active_memory` after four recent stale-feedback records, with `safe_action=none`.
+- After scoring the T11 startup/search traces, `real_session_eval(project=engram, limit=50)` reported
+  `trace_count=44`, `feedback_trace_count=22`, `feedback_coverage=0.5`,
+  `memory_judgment_coverage=0.9545`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
+
+The result supports the existing direction: continue using direct feedback plus read-only lint to
+make stale active memory visible, but do not infer M6 approval, automatic archival, deletion, or broad
+ranking changes from agent feedback alone.
