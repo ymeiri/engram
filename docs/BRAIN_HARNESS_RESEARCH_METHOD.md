@@ -561,6 +561,10 @@ Current next application:
   signal: `feedback_stale_current_plan` names active `current-plan` guidance that recent feedback
   marked stale, but keeps `safe_action=none` because feedback is not proof and must not authorize
   automatic archival, deletion, or migration.
+- The T10 follow-up deliberately does not add a migration-authorization classifier. Old
+  migration/export approval-shaped records that recent feedback marks stale stay on the generic
+  `feedback_stale_active_memory` lint path with `safe_action=none`; this is a review signal, not
+  M6 authorization, invalidation, archival, deletion, or ranking behavior.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

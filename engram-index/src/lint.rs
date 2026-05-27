@@ -763,6 +763,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lint_keeps_stale_migration_authorization_on_generic_feedback_rule() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Approved repo topology migration write applied first batch",
+            "Old migration approval record from an earlier scoped repository topology write. \
+             It is not current M6 authorization.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let stale_finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::FeedbackStaleActiveMemory)
+            .expect("stale migration authorization should use generic stale feedback lint");
+
+        assert_eq!(
+            stale_finding.id,
+            format!("feedback-stale-active-memory:{}", item.id)
+        );
+        assert_eq!(stale_finding.item_id, Some(item.id));
+        assert_eq!(stale_finding.severity, LintSeverity::Info);
+        assert_eq!(stale_finding.safe_action, LintSafeAction::None);
+        assert!(stale_finding
+            .message
+            .contains("Approved repo topology migration write applied first batch"));
+        assert!(stale_finding
+            .message
+            .contains("no automatic lifecycle action is safe"));
+        assert!(!report.findings.iter().any(|finding| {
+            finding.rule == LintRule::FeedbackStaleCurrentPlan && finding.item_id == Some(item.id)
+        }));
+    }
+
+    #[tokio::test]
     async fn lint_ignores_feedback_for_non_active_or_missing_memory() {
         let service = service().await;
         let item = MemoryItem::new(

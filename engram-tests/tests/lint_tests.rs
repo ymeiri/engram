@@ -253,3 +253,58 @@ async fn test_mcp_lint_reports_stale_current_plan_feedback() {
             && finding["item_id"] == item_id.to_string()
     }));
 }
+
+#[tokio::test]
+async fn test_mcp_lint_keeps_stale_migration_authorization_generic() {
+    let (state, memory_service, telemetry_repo) = setup_tool_state().await;
+
+    let item = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Approved repo topology migration write applied first batch",
+        "Old migration approval record from an earlier scoped repository topology write. \
+         It is not current M6 authorization.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+    let item_id = item.id;
+    memory_service
+        .capture_memory(item)
+        .await
+        .expect("memory item should be captured");
+
+    let mut feedback = AgentFeedback::new(Id::new());
+    feedback.stale_memory_ids = vec![item_id];
+    telemetry_repo
+        .save_feedback(&feedback)
+        .await
+        .expect("feedback should be saved");
+
+    let response = tools::lint_new(&state, lint_request("run"))
+        .await
+        .expect("lint should run");
+    let json = parse_json(&response);
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be an array");
+
+    let finding = findings
+        .iter()
+        .find(|finding| {
+            finding["rule"] == "feedback_stale_active_memory"
+                && finding["item_id"] == item_id.to_string()
+        })
+        .expect("stale migration authorization should use generic stale feedback lint");
+
+    assert_eq!(finding["severity"], "info");
+    assert_eq!(finding["safe_action"], "none");
+    assert!(finding["message"]
+        .as_str()
+        .expect("finding should include a message")
+        .contains("Approved repo topology migration write applied first batch"));
+    assert!(!findings.iter().any(|finding| {
+        finding["rule"] == "feedback_stale_current_plan"
+            && finding["item_id"] == item_id.to_string()
+    }));
+}

@@ -217,3 +217,25 @@ Follow-up actions:
   rewrite, or delete memory.
 - Added focused service and MCP tests proving current-plan stale feedback uses the specific rule
   and no duplicate generic stale-active-memory finding is emitted for the same item.
+
+## T10 Follow-Up Clarification
+
+Status: covered by existing read-only lint visibility; no new classifier, automatic cleanup,
+ranking, schema, migration, hook, or `orient` payload change.
+
+The original T10 caveat was that older migration/export approval records can still surface for
+authorization-shaped queries and must be rejected unless they match a current user-approved M6
+scope. AI Council feedback supported a specialized lint possibility, but Claude Bridge identified a
+material design risk: unlike `current-plan`, Engram has no explicit migration-authorization tag or
+lifecycle predicate. Adding a new classifier would rely on brittle title/content heuristics or
+invent M6-shaped classification work outside the approval gate.
+
+Follow-up actions:
+
+- Kept old migration/export approval-shaped records on the existing generic
+  `feedback_stale_active_memory` lint path when telemetry marks them stale.
+- Added focused service and MCP tests proving an old repo-topology migration approval memory marked
+  stale emits `feedback_stale_active_memory` with `safe_action=none`, and does not get classified as
+  `feedback_stale_current_plan`.
+- Documented that this generic finding is a review signal only: it does not invalidate historical
+  approvals, authorize current M6 work, archive/delete memory, or change retrieval behavior.

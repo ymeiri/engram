@@ -1006,6 +1006,10 @@ Proceed in this order from the current checkpoint:
     telemetry-backed stale feedback can identify active current-plan guidance that needs review,
     but the rule intentionally has no safe automatic action and does not authorize archival,
     deletion, migration, ranking changes, or hot-path expansion.
+25. Treat the T10 old migration/export approval follow-up as generic stale-feedback coverage:
+    stale feedback on approval-shaped records is visible through `feedback_stale_active_memory`,
+    but Engram does not infer a migration-authorization classifier, invalidate old approvals,
+    authorize current M6 work, mutate lifecycle state, or alter retrieval behavior.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
