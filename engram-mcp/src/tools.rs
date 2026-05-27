@@ -8569,35 +8569,35 @@ pub struct MemoryRequestNew {
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// Scope type (for add): global, user, project, task, entity, repository, session, custom
-    #[schemars(description = "Scope type (required for add)")]
+    /// Scope type (for add or explicit list filtering): global, user, project, task, entity, repository, session, custom
+    #[schemars(description = "Scope type (required for add; optional filter for list)")]
     pub scope_type: Option<String>,
 
-    /// Project ID for project/task scope
+    /// Project ID for project/task scope or list filter
     pub project_id: Option<String>,
-    /// Project name for project/task scope
+    /// Project name for project/task scope or list filter
     pub project_name: Option<String>,
-    /// Task ID for task scope
+    /// Task ID for task scope or list filter
     pub task_id: Option<String>,
-    /// Task name for task scope
+    /// Task name for task scope or list filter
     pub task_name: Option<String>,
-    /// Entity ID for entity scope
+    /// Entity ID for entity scope or list filter
     pub entity_id: Option<String>,
-    /// Entity name for entity scope
+    /// Entity name for entity scope or list filter
     pub entity_name: Option<String>,
     /// Source entity name for promote_observation
     pub source_entity_name: Option<String>,
     /// Source observation key for promote_observation
     pub observation_key: Option<String>,
-    /// Repository ID for repository scope
+    /// Repository ID for repository scope or list filter
     pub repository_id: Option<String>,
-    /// Repository remote URL for repository scope
+    /// Repository remote URL for repository scope or list filter
     pub remote_url: Option<String>,
-    /// Local checkout path for repository scope
+    /// Local checkout path for repository scope or list filter
     pub local_path: Option<String>,
-    /// Session ID for session scope
+    /// Session ID for session scope or list filter
     pub scope_session_id: Option<String>,
-    /// Custom scope name
+    /// Custom scope name or list filter
     pub scope_name: Option<String>,
 
     /// Writer harness/interface: claude_code, codex, gemini_cli, chatgpt, cursor, or custom
@@ -8931,12 +8931,118 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .as_deref()
                 .map(parse_memory_status)
                 .transpose()?;
+            let scope_filter = if request.scope_type.is_some() {
+                Some(parse_memory_scope(&request)?)
+            } else {
+                None
+            };
             let tags = request.tags;
-            let fetch_limit = if tags.is_empty() { request.limit } else { None };
+            let fetch_limit = if tags.is_empty() && scope_filter.is_none() {
+                request.limit
+            } else {
+                None
+            };
             let mut items = service
                 .list_memory(status, fetch_limit)
                 .await
                 .map_err(|e| e.to_string())?;
+            if let Some(scope_filter) = &scope_filter {
+                items.retain(|item| match (scope_filter, &item.scope) {
+                    (MemoryScope::Global, MemoryScope::Global)
+                    | (MemoryScope::User, MemoryScope::User) => true,
+                    (
+                        MemoryScope::Project {
+                            project_id,
+                            project_name,
+                        },
+                        MemoryScope::Project {
+                            project_id: item_project_id,
+                            project_name: item_project_name,
+                        },
+                    ) => {
+                        project_id
+                            .as_ref()
+                            .map_or(true, |id| item_project_id.as_ref() == Some(id))
+                            && item_project_name.eq_ignore_ascii_case(project_name)
+                    }
+                    (
+                        MemoryScope::Task {
+                            project_id,
+                            project_name,
+                            task_id,
+                            task_name,
+                        },
+                        MemoryScope::Task {
+                            project_id: item_project_id,
+                            project_name: item_project_name,
+                            task_id: item_task_id,
+                            task_name: item_task_name,
+                        },
+                    ) => {
+                        project_id
+                            .as_ref()
+                            .map_or(true, |id| item_project_id.as_ref() == Some(id))
+                            && project_name.as_ref().map_or(true, |name| {
+                                item_project_name.as_ref().is_some_and(|item_name| {
+                                    item_name.eq_ignore_ascii_case(name)
+                                })
+                            })
+                            && task_id
+                                .as_ref()
+                                .map_or(true, |id| item_task_id.as_ref() == Some(id))
+                            && item_task_name.eq_ignore_ascii_case(task_name)
+                    }
+                    (
+                        MemoryScope::Entity {
+                            entity_id,
+                            entity_name,
+                        },
+                        MemoryScope::Entity {
+                            entity_id: item_entity_id,
+                            entity_name: item_entity_name,
+                        },
+                    ) => {
+                        entity_id
+                            .as_ref()
+                            .map_or(true, |id| item_entity_id.as_ref() == Some(id))
+                            && item_entity_name.eq_ignore_ascii_case(entity_name)
+                    }
+                    (
+                        MemoryScope::Repository {
+                            repository_id,
+                            remote_url,
+                            local_path,
+                        },
+                        MemoryScope::Repository {
+                            repository_id: item_repository_id,
+                            remote_url: item_remote_url,
+                            local_path: item_local_path,
+                        },
+                    ) => {
+                        repository_id
+                            .as_ref()
+                            .map_or(true, |id| item_repository_id.as_ref() == Some(id))
+                            && remote_url.as_ref().map_or(true, |url| {
+                                item_remote_url
+                                    .as_ref()
+                                    .is_some_and(|item_url| item_url.eq_ignore_ascii_case(url))
+                            })
+                            && local_path.as_ref().map_or(true, |path| {
+                                item_local_path.as_ref() == Some(path)
+                            })
+                    }
+                    (
+                        MemoryScope::Session { session_id },
+                        MemoryScope::Session {
+                            session_id: item_session_id,
+                        },
+                    ) => item_session_id == session_id,
+                    (MemoryScope::Custom { name }, MemoryScope::Custom { name: item_name }) => {
+                        item_name.eq_ignore_ascii_case(name)
+                    }
+                    _ => false,
+                });
+            }
             if !tags.is_empty() {
                 items.retain(|item| {
                     tags.iter()

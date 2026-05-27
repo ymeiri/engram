@@ -161,6 +161,11 @@ Research checkpoint, current through 2026-05-27:
   the paused gate first for explicit migration-apply prompts, and trace
   `019e6994-8ec9-7343-9198-9298867b9ceb` returned current-plan memory first for the contextual
   M6-gate continuation prompt.
+- MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
+  evidence-sampling gap where a project-scoped current-plan list for Engram could return older
+  repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
+  memory-list fix only; it does not change `orient`, unified `search`, ranking, migration, schema,
+  hooks, adapters, or lifecycle status.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1053,6 +1058,10 @@ Proceed in this order from the current checkpoint:
     `019e6993-d891-7ff3-93ef-4bd8ad14d9c7`, and
     `019e6994-8ec9-7343-9198-9298867b9ceb`. It does not validate hooks, adapter writes, migration
     execution, or broad ranking quality.
+31. Treat T16 scoped memory-list filtering as evidence-quality hygiene: explicit scope filters on
+    `memory(action=list)` now prevent wrong-project current-plan records from contaminating scoped
+    sampling. This does not change the Brain Loop hot path, unified search ranking, or memory
+    lifecycle cleanup.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

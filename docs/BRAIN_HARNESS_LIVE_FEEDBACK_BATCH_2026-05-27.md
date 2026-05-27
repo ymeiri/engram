@@ -453,3 +453,64 @@ Result:
 
 This validates the shared MCP search behavior in Claude Code for the observed T14 prompt class. It
 does not validate hooks, adapter installation, M6 inventory/write apply, or broad ranking quality.
+
+## T16 Scoped Memory List Filtering
+
+Status: fixed and live verified; evidence-quality surface only.
+
+Research question: when agents ask `memory(action=list)` for active current-plan records in an
+explicit project scope, can Engram exclude wrong-project guidance before applying `limit`?
+
+Hypotheses:
+
+- Preferred: explicit `scope_type` fields on `memory(action=list)` should filter matching
+  `MemoryItem` scopes before `limit`, just like tag filtering already does.
+- Null: scope fields are add-only on this MCP action and callers should not expect list filtering.
+- Simpler alternative: document the limitation and require callers to filter client-side.
+- Failure: scope filtering hides useful cross-scope records or changes `orient`/ranking behavior.
+
+Observed failure:
+
+- Before the fix, live MCP
+  `memory(action=list, scope_type=project, project_name=engram, tags=[current-plan], status_filter=active)`
+  returned three items: the current Engram project plan, an older repository-scoped Engram plan, and
+  a `voice-layer` project current-plan item. That made evidence sampling noisy and wrong-project.
+
+Implementation:
+
+- `memory(action=list)` now parses an explicit `scope_type` as a scope filter, fetches before
+  limiting when a scope or tag filter is present, retains matching scopes, then applies `limit`.
+- The change is limited to the MCP memory-list surface. It does not change storage queries,
+  unified `search`, `orient`, ranking, migration, schema, hooks, adapters, or lifecycle status.
+- Added focused MCP regression `test_mcp_memory_list_filters_by_scope_before_limit`, where a newer
+  `voice-layer` current-plan item must not outrank an older requested Engram current-plan when
+  `scope_type=project`, `project_name=engram`, and `limit=1`.
+
+Validation:
+
+- `cargo test -p engram-tests --test memory_tests test_mcp_memory_list_filters_by_scope_before_limit -- --exact`
+- `cargo test -p engram-tests --test memory_tests`
+- `cargo fmt --all --check`
+- `cargo check -p engram-cli`
+- `cargo clippy -p engram-mcp --all-targets -- -D warnings`
+- `git diff --check`
+- Installed binary hash
+  `0d4581c1cffdd17af0d4d8f0911812a05a2c3ce3f9ff8766d455e043ed73a211` and restarted the daemon on
+  port `8765`, PID `36805`.
+
+Live result:
+
+- The same scoped current-plan list call returned exactly one item:
+  `019e6997-96d0-76a0-ac67-c7655df0958f`, the Engram project current plan after T15.
+- The older repository-scoped current plan and wrong-project `voice-layer` current plan were no
+  longer returned for the explicit project-scope request.
+- After scoring the startup traces that led to this slice,
+  `real_session_eval(project=engram, limit=50)` reported `trace_count=43`,
+  `feedback_trace_count=30`, `feedback_coverage=0.6976743936538696`,
+  `memory_judgment_coverage=1.0`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
+
+This closes a concrete evidence-sampling gap. It does not archive stale current-plan memory, change
+ranking, or authorize M6 inventory/write apply, deletion, cleanup, legacy simplification,
+schema/storage/index changes, hook changes, public request-parameter changes, or `orient` payload
+expansion.

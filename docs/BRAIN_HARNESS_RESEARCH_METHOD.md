@@ -595,6 +595,13 @@ Current next application:
   explicit migration-apply traces `019e6993-d4da-70a1-b5eb-9185eeb23339` and
   `019e6993-d891-7ff3-93ef-4bd8ad14d9c7` returned the paused gate first, and contextual
   current-plan/M6 trace `019e6994-8ec9-7343-9198-9298867b9ceb` returned current-plan memory first.
+- A follow-up evidence-quality slice fixed explicit scope filtering for `memory(action=list)`.
+  Before the fix, a project-scoped current-plan list for Engram returned older repository-scoped
+  Engram guidance and a wrong-project `voice-layer` current plan. After installing binary
+  `0d4581c1cffdd17af0d4d8f0911812a05a2c3ce3f9ff8766d455e043ed73a211` and restarting the daemon on
+  port `8765`, PID `36805`, the same request returned only Engram project current-plan memory
+  `019e6997-96d0-76a0-ac67-c7655df0958f`. Treat this as scoped sampling hygiene, not a ranking,
+  `orient`, migration, schema, hook, adapter, or lifecycle-cleanup change.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
