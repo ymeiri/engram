@@ -370,6 +370,15 @@ using a distinct eligible-trace denominator and records memory-layer search resu
 `memory_judgment_trace_coverage=0.94`, and fresh search trace
 `019e6911-2f5b-7e02-a6d4-1c8b3b24b17e` recorded memory IDs in both returned ID fields.
 
+2026-05-27 live feedback update: the pre-registered
+`live_feedback_coverage_2026_05_27` batch submitted feedback for all ten read-only `orient` and
+`search` traces. The project-level report moved from `17/44` feedback-bearing traces
+(`0.3863636255264282`) to `23/44` (`0.5227272510528564`), so the numerical confidence gate now
+passes. This is evidence-quality work only: it is agent-assessed feedback, not a human-judged
+product-quality result or M6 approval. The batch found one design-preference retrieval failure,
+two partial feedback/context gaps, stale old current-plan surfacing, and old migration/export
+approval records that must not be treated as current M6 authorization.
+
 ---
 
 ## 9. Decision Gates
@@ -530,6 +539,11 @@ Current next application:
   `current-plan` tag as managed current-plan guidance. The slice fixes accidental supersession of
   non-guidance facts or limitations, but does not add lint, migration, cleanup, or ranking-weight
   changes.
-- The next non-gated work should improve targeted validation, evidence quality, or cross-harness
-  replication. Read-only M6 inventory/review-export requires explicit user-approved scope; M6 write
-  apply, deletion, and broad legacy simplification remain separately gated.
+- The pre-registered `live_feedback_coverage_2026_05_27` batch closed the numerical
+  project-feedback coverage gate and recorded one failure: user design philosophy was not reliably
+  surfaced for a direct Ousterhout/no-unrequested-features query. Treat this as a focused
+  retrieval/promotion coverage gap to investigate later, not as evidence for broad ranking churn.
+- The next non-gated work should improve targeted validation, evidence quality, cross-harness
+  replication, or the specific design-preference retrieval gap. Read-only M6
+  inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
+  broad legacy simplification remain separately gated.

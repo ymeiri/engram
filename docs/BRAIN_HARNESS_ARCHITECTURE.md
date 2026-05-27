@@ -695,6 +695,13 @@ Implemented spike:
   `memory_judgment_trace_coverage=1.78`. Search traces now also populate `returned_memory_ids` for
   memory-layer results, and the report denominator includes older traces with explicit memory
   judgments so historical coverage cannot exceed 1.0 without rewriting data.
+- A pre-registered 2026-05-27 live feedback batch
+  (`live_feedback_coverage_2026_05_27`) submitted feedback for all ten read-only retrieval traces
+  and moved project-level feedback coverage to `23/44` (`0.5227272510528564`). The numerical
+  confidence gate now passes, but the batch remains weak agent-assessed evidence. It exposed a
+  design-preference retrieval failure and stale migration/current-plan caveats, not authorization
+  for M6 inventory, write apply, deletion, broad ranking changes, hook changes, or `orient` payload
+  expansion.
 - Generated harness adapters now instruct agents to preserve `trace_id` values returned by
   `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
   with `task_success`, `preference_adhered`, `repeated_context_questions`, `bad_memory_used`, and
@@ -982,6 +989,10 @@ Proceed in this order from the current checkpoint:
 19. Keep the next non-gated work to targeted validation, evidence quality, and cross-harness
     replication. Read-only M6 inventory/review-export requires explicit user-approved scope, and
     M6 write apply/deletion requires a separate approval gate.
+20. Treat the `live_feedback_coverage_2026_05_27` batch as evidence that feedback capture can pass
+    the numerical project gate, not as evidence of product completeness. Its actionable findings
+    are narrow: investigate design-preference retrieval, keep rejecting stale current-plan records,
+    and reject old migration/export approvals unless they match the current user-approved M6 scope.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
