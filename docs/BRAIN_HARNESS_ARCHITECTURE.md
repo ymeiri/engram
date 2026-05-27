@@ -1018,6 +1018,14 @@ Proceed in this order from the current checkpoint:
     / `next step` prompts that mention `M6 gate` as context should retrieve current-plan guidance
     first, while explicit `should`/`proceed`/`apply` migration prompts remain gate-first. Do not use
     this fixture to justify broad ranking weights or migration work.
+28. Treat the T13 installed-runtime smoke as a split result: after installing binary
+    `62272400960eaaeb2fd7aa44aa13bf6f93abdbc81b5d11bc9106b0bcc82df29b` and restarting the daemon,
+    native MCP trace `019e6969-a674-7631-8ffa-b532b8638262` confirmed the exact T12
+    current-plan/M6-gate context query. The paired migration-apply traces
+    `019e696a-0698-7e20-940a-b0ad23a29994` and
+    `019e696a-2540-7172-a473-33f13538d54d` showed that real memory can still rank calibration or
+    current-plan records above M6 gate context for explicit apply/proceed prompts. Treat that as a
+    separate narrow ranking or capture gap, not as M6 authorization.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

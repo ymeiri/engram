@@ -575,6 +575,15 @@ Current next application:
   `gate` in a current-plan/next-step prompt is treated as milestone context, while
   `should`/`proceed`/`apply` and other action or permission terms still keep gate guidance above the
   current plan. This is deterministic fixture evidence for one prompt class, not broad ranking proof.
+- The T13 installed-runtime smoke refreshed the user-level Engram binary to
+  `62272400960eaaeb2fd7aa44aa13bf6f93abdbc81b5d11bc9106b0bcc82df29b` and restarted the daemon on
+  port `8765`, PID `79904`. Native MCP trace `019e6969-a674-7631-8ffa-b532b8638262` confirmed the
+  exact T12 current-plan/M6-gate context query now returns current-plan memory first in live data.
+  The same smoke exposed a separate live gap: explicit migration-apply prompts in traces
+  `019e696a-0698-7e20-940a-b0ad23a29994` and
+  `019e696a-2540-7172-a473-33f13538d54d` still ranked calibration or current-plan memory above M6
+  gate context. Do not treat that as authorization to run M6; treat it as a narrow ranking/capture
+  follow-up.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

@@ -313,3 +313,42 @@ Decision and validation:
 
 This result does not justify broad ranking churn. It only fixes a documented false positive in the
 query classifier for current-plan promotion.
+
+## T13 Installed-Runtime Validation
+
+Status: T12 live runtime verified; a separate explicit gate-query live gap remains.
+
+Research question: after installing the T12 code and restarting the daemon, does native MCP `search`
+return the fresh current-plan memory first for the exact `current plan next step ... M6 gate`
+continuation query, while preserving useful gate context for explicit migration-apply prompts?
+
+Measurement:
+
+- Before install, `/Users/yuval.meiri/.local/bin/engram` was hash
+  `5b989d898ff033505c584c27d483ea9b3b433e679cc5bbf16befb59c48d1325c`, daemon PID `10065`.
+- Pre-install exact T12 trace `019e6964-34ea-7222-b01d-b5414b161d2c` returned the fresh current-plan
+  memory second, behind older non-gated calibration memory.
+- Installed binary hash
+  `62272400960eaaeb2fd7aa44aa13bf6f93abdbc81b5d11bc9106b0bcc82df29b`, restarted daemon on port
+  `8765`, PID `79904`.
+- Post-install exact T12 trace `019e6969-a674-7631-8ffa-b532b8638262` returned current-plan memory
+  `019e6960-7ead-7001-9a4f-d8adce7c8264` first.
+- After scoring the T13 traces, `real_session_eval(project=engram, limit=50)` reported
+  `trace_count=46`, `feedback_trace_count=34`, `feedback_coverage=0.739130437374115`,
+  `memory_judgment_coverage=0.970588207244873`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`. The `postinstall_live_mcp` arm recorded one pass and three
+  failures, matching the split result below.
+- Focused repository validation before install passed:
+  `cargo test -p engram-tests --test search_tests test_memory_search_treats_non_gated_next_slice_as_current_plan -- --exact`,
+  `cargo test -p engram-tests --test search_tests test_memory_search_keeps_gate_guidance_above_current_plan -- --exact`,
+  and `cargo check -p engram-cli`.
+
+Result:
+
+T12 is now verified in the installed live runtime for the exact gate-context current-plan prompt.
+However, post-install gate-control traces `019e696a-0698-7e20-940a-b0ad23a29994` and
+`019e696a-2540-7172-a473-33f13538d54d` still ranked calibration or current-plan memory above M6 gate
+context for explicit migration-apply prompts. That is a separate narrow live-data/ranking gap. It
+does not authorize read-only M6 inventory, migration write apply, deletion, cleanup, legacy
+simplification, schema changes, hook changes, public MCP surface changes, broad ranking churn, or
+`orient` payload expansion.
