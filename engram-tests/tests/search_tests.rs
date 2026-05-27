@@ -1064,6 +1064,161 @@ async fn test_memory_search_keeps_gate_guidance_above_current_plan() {
     assert_eq!(results[0].id, gate.id.to_string());
 }
 
+#[tokio::test]
+async fn test_memory_search_promotes_live_like_migration_gate_over_calibration_noise() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut calibration = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Non-gated continuation search calibration landed",
+        "T11 feedback stabilization confirmed the M6 gate must remain visible, but the \
+         next-step query should still retrieve the current plan before calibration notes.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "non-gated-calibration",
+    ));
+    calibration.updated_at = now;
+    memory_service.capture_memory(calibration).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after T13 installed-runtime validation",
+        "The next non-gated Brain Harness slice should investigate explicit \
+         migration-apply gate queries; do not run M6 inventory or write apply.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "latest-current-plan",
+    ))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(1);
+    memory_service.capture_memory(current_plan).await.unwrap();
+
+    let mut broad_contract = MemoryItem::new(
+        MemoryKind::Rule,
+        "Lean orient contract is a presentation option",
+        "`orient` should keep migration, graph, and lint outside the hot path; do not \
+         expand the payload from a gate query.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.96)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "orient-contract",
+    ));
+    broad_contract.updated_at = now;
+    memory_service.capture_memory(broad_contract).await.unwrap();
+
+    let mut broad_implementation_history = MemoryItem::new(
+        MemoryKind::Decision,
+        "Memory OS harness completion implementation landed",
+        "Implemented Memory OS harness completion slice with dry-run session distillation \
+         candidates and implementation-plan checklist updates. Migration remains \
+         review-gated with no automatic promotion from orphan/digest/legacy data.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "implementation-history",
+    ));
+    broad_implementation_history.updated_at = now;
+    memory_service
+        .capture_memory(broad_implementation_history)
+        .await
+        .unwrap();
+
+    let mut reviewed_batch_status = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "First Memory OS migration review batch has conservative decisions and dry-run validation",
+        "The first migration review batch was marked with conservative decisions and \
+         validated without migration writes. Next step requires explicit user approval \
+         immediately before any migration --write apply.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "reviewed-batch-status",
+    ));
+    reviewed_batch_status.updated_at = now;
+    memory_service
+        .capture_memory(reviewed_batch_status)
+        .await
+        .unwrap();
+
+    let mut migration_gate = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Memory OS completion is paused at migration review gate",
+        "M6 migration apply must not proceed without reviewed candidates, a dry-run \
+         report, rollback planning, and explicit approval.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.95)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "migration-gate",
+    ));
+    migration_gate.updated_at = now - time::Duration::days(30);
+    let migration_gate = memory_service.capture_memory(migration_gate).await.unwrap();
+
+    let mut old_approval = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Approved repo topology migration write applied first batch",
+        "After explicit user approval, the first repository topology migration write was \
+         applied for an older reviewed batch.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "old-migration-approval",
+    ));
+    old_approval.updated_at = now;
+    memory_service.capture_memory(old_approval).await.unwrap();
+
+    for query in [
+        "Should we proceed with migration apply?",
+        "next non-gated step, should we proceed with migration apply?",
+    ] {
+        let results = search_service
+            .search_with_options(
+                query,
+                10,
+                Some(0.0),
+                Some(&[SearchLayer::Memory]),
+                SearchOptions {
+                    project: Some("engram".to_string()),
+                    cwd: None,
+                },
+            )
+            .await
+            .expect("Failed to search");
+
+        assert_eq!(results[0].id, migration_gate.id.to_string());
+    }
+}
+
 // =============================================================================
 // Cross-Layer Search Tests
 // =============================================================================

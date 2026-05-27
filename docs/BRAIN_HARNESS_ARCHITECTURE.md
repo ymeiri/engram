@@ -149,6 +149,13 @@ Research checkpoint, current through 2026-05-27:
   `current-plan` tag are managed as current-plan guidance. Non-guidance facts or limitations with
   the tag remain active evidence and are not automatically superseded by
   `memory(action=capture_current_plan)`.
+- A 2026-05-27 narrow gate follow-up calibrated explicit migration-apply direct `search` prompts
+  against live-shaped distractors. After installing binary
+  `fea91cc46549c138a425389394af9c4cdd9d8727eb39137f8afc179a976968eb`, native MCP traces
+  `019e698d-b766-7e71-a4da-a8c593f1b191` and `019e698d-b791-7d93-a0d6-542219e3eb6c` returned
+  the paused migration review gate first, while regression trace
+  `019e698d-b7ae-7a13-b2c5-d58a9898deab` kept the current-plan/M6-gate context prompt
+  current-plan-first.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1026,6 +1033,15 @@ Proceed in this order from the current checkpoint:
     `019e696a-2540-7172-a473-33f13538d54d` showed that real memory can still rank calibration or
     current-plan records above M6 gate context for explicit apply/proceed prompts. Treat that as a
     separate narrow ranking or capture gap, not as M6 authorization.
+29. Treat the T14 explicit migration-apply calibration as a narrow prompt-class fix: actionable
+    migration gate evidence now outranks calibration notes, current-plan guidance, broad
+    implementation history, reviewed dry-run batch summaries, and old approval history for
+    explicit apply/proceed prompts. The installed native MCP traces
+    `019e698d-b766-7e71-a4da-a8c593f1b191` and
+    `019e698d-b791-7d93-a0d6-542219e3eb6c` prove the observed prompt class, while regression trace
+    `019e698d-b7ae-7a13-b2c5-d58a9898deab` preserves current-plan-first behavior for the T12
+    context prompt. This does not authorize M6 inventory, write apply, deletion, payload expansion,
+    schema changes, hooks, public MCP changes, or broad ranking weights.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

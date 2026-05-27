@@ -352,3 +352,71 @@ context for explicit migration-apply prompts. That is a separate narrow live-dat
 does not authorize read-only M6 inventory, migration write apply, deletion, cleanup, legacy
 simplification, schema changes, hook changes, public MCP surface changes, broad ranking churn, or
 `orient` payload expansion.
+
+## T14 Explicit Migration-Apply Gate Calibration
+
+Status: fixed and live verified; M6 remains approval-gated.
+
+Research question: when a direct unified `search` query explicitly asks whether to proceed with
+migration apply, should Engram rank the current migration review stop condition above current-plan,
+calibration, and broad implementation-history records?
+
+Consultation and hypotheses:
+
+- AI Council and Claude Bridge both rejected docs-only repair and broad ranking churn. They
+  recommended a prompt-class-specific fix with a live-shaped fixture.
+- Preferred: explicit migration/M6 apply-permission prompts should promote actionable migration gate
+  evidence first.
+- Null: existing lexical ranking is sufficient once data is scored.
+- Simpler alternative: capture a new gate MemoryItem only; this would not protect the current live
+  distractors.
+- Failure: old migration approvals or historical dry-run summaries outrank the unresolved gate, or
+  the fix disturbs current-plan continuation prompts.
+
+Implementation:
+
+- Added `promote_migration_gate_for_explicit_apply_query` in the shared memory ranker. It only runs
+  when the query mentions migration/M6, asks for apply/proceed/approval/write-style permission, and
+  passes the decision-gate classifier.
+- Candidate items must be active, not current-plan guidance, not calibration noise, and must contain
+  migration/apply detail plus actionable blocking language. The final tie-breaker favors stronger
+  stop signals such as `must not proceed`, `do not mark`, `pending/undecided`, and explicit write
+  approval over merely reviewed historical batch status.
+- Added deterministic coverage in
+  `test_memory_search_promotes_live_like_migration_gate_over_calibration_noise`, including
+  live-shaped distractors for non-gated calibration, current-plan guidance, broad implementation
+  history, a reviewed dry-run batch, and old approval history.
+
+Validation:
+
+- `cargo test -p engram-tests --test search_tests test_memory_search_promotes_live_like_migration_gate_over_calibration_noise -- --exact`
+- `cargo test -p engram-tests --test search_tests`
+- `cargo fmt --all --check`
+- `cargo check -p engram-cli`
+- `git diff --check`
+- Installed binary hash
+  `fea91cc46549c138a425389394af9c4cdd9d8727eb39137f8afc179a976968eb` and restarted the daemon on
+  port `8765`, PID `9969`.
+
+Live result:
+
+- Final trace `019e698d-b766-7e71-a4da-a8c593f1b191` for
+  `Should we proceed with migration apply?` ranked
+  `019dd35d-1a48-7103-b0e2-390225f8b418` (`Memory OS completion is paused at migration review
+  gate`) first.
+- Final trace `019e698d-b791-7d93-a0d6-542219e3eb6c` for
+  `next non-gated step, should we proceed with migration apply?` ranked the same gate memory first.
+- Regression trace `019e698d-b7ae-7a13-b2c5-d58a9898deab` kept the T13 current-plan memory
+  `019e696e-83ce-73c2-9650-8591575d5bb7` first for the exact current-plan/M6-gate context query.
+- Intermediate traces recorded the live misses that shaped the fixture: broad implementation
+  history `019dd0ae-e56a-75a2-9181-a172c22460e4` and reviewed batch status
+  `019dd368-5484-7d80-9de5-a6245b7e4a05` each outranked the unresolved gate before the final
+  signal ordering.
+- After scoring T14 traces, `real_session_eval(project=engram, limit=50)` reported
+  `trace_count=44`, `feedback_trace_count=35`, `feedback_coverage=0.7954545617103577`,
+  `memory_judgment_coverage=0.9714285731315613`, `bad_memory_used_count=0`, and
+  `confidence_gate.passed=true`.
+
+This is still a narrow prompt-class calibration. It does not authorize read-only M6 inventory,
+migration write apply, deletion, cleanup, legacy simplification, schema/storage/index changes, hook
+changes, public MCP surface changes, broad ranking churn, or `orient` payload expansion.

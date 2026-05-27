@@ -584,6 +584,13 @@ Current next application:
   `019e696a-2540-7172-a473-33f13538d54d` still ranked calibration or current-plan memory above M6
   gate context. Do not treat that as authorization to run M6; treat it as a narrow ranking/capture
   follow-up.
+- The T14 explicit migration-apply calibration fixed that narrow follow-up without broad ranking
+  churn: after installing binary
+  `fea91cc46549c138a425389394af9c4cdd9d8727eb39137f8afc179a976968eb` and restarting the daemon on
+  port `8765`, PID `9969`, native MCP traces `019e698d-b766-7e71-a4da-a8c593f1b191` and
+  `019e698d-b791-7d93-a0d6-542219e3eb6c` ranked the paused migration review gate first for
+  explicit migration-apply prompts. Regression trace `019e698d-b7ae-7a13-b2c5-d58a9898deab`
+  preserved current-plan-first behavior for the T12 current-plan/M6-gate context prompt.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

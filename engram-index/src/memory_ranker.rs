@@ -122,6 +122,7 @@ pub(crate) fn rank_memory_items(
         .collect::<Vec<_>>();
     sort_ranked_memory_items(&mut ranked);
     promote_current_plan_for_continuation_query(&mut ranked, context);
+    promote_migration_gate_for_explicit_apply_query(&mut ranked, context);
     ranked
 }
 
@@ -235,6 +236,46 @@ fn promote_current_plan_for_continuation_query(
             left.components
                 .scope
                 .total_cmp(&right.components.scope)
+                .then_with(|| left.item.updated_at.cmp(&right.item.updated_at))
+                .then_with(|| left.item.id.to_string().cmp(&right.item.id.to_string()))
+        })
+        .map(|(index, _)| index)
+    else {
+        return;
+    };
+
+    if best_index > 0 {
+        let top_score = items.first().map(|ranked| ranked.score).unwrap_or(0.0);
+        items[best_index].score = (top_score + 0.001).min(1.0);
+        sort_ranked_memory_items(items);
+    }
+}
+
+fn promote_migration_gate_for_explicit_apply_query(
+    items: &mut [RankedMemoryItem],
+    context: MemoryRankContext<'_>,
+) {
+    if !asks_for_explicit_migration_apply_gate(context.query) {
+        return;
+    }
+
+    let Some(best_index) = items
+        .iter()
+        .enumerate()
+        .filter(|(_, ranked)| is_actionable_migration_gate_item(&ranked.item))
+        .max_by(|(_, left), (_, right)| {
+            migration_apply_gate_signal_score(&left.item)
+                .cmp(&migration_apply_gate_signal_score(&right.item))
+                .then_with(|| {
+                    migration_gate_kind_score(&left.item.kind)
+                        .cmp(&migration_gate_kind_score(&right.item.kind))
+                })
+                .then_with(|| {
+                    memory_review_rank(left.item.trust_metadata().review_state).cmp(
+                        &memory_review_rank(right.item.trust_metadata().review_state),
+                    )
+                })
+                .then_with(|| left.components.scope.total_cmp(&right.components.scope))
                 .then_with(|| left.item.updated_at.cmp(&right.item.updated_at))
                 .then_with(|| left.item.id.to_string().cmp(&right.item.id.to_string()))
         })
@@ -521,6 +562,22 @@ fn asks_for_current_plan_guidance(query: &str) -> bool {
     .any(|term| query.contains(term))
 }
 
+fn asks_for_explicit_migration_apply_gate(query: Option<&str>) -> bool {
+    let Some(query) = query.map(str::to_lowercase) else {
+        return false;
+    };
+    let query = query.replace("non-gated", "").replace("non gated", "");
+    let mentions_migration = ["migration", "m6"].iter().any(|term| query.contains(term));
+    let asks_apply_or_permission = [
+        "apply", "proceed", "approve", "approval", "approved", "allowed", "allow", "run",
+        "execute", "write",
+    ]
+    .iter()
+    .any(|term| query.contains(term));
+
+    mentions_migration && asks_apply_or_permission && asks_for_decision_gate(&query)
+}
+
 fn is_current_plan_guidance_item(item: &MemoryItem) -> bool {
     item.status == MemoryStatus::Active
         && matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
@@ -530,7 +587,110 @@ fn is_current_plan_guidance_item(item: &MemoryItem) -> bool {
             .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
 }
 
+fn is_actionable_migration_gate_item(item: &MemoryItem) -> bool {
+    if item.status != MemoryStatus::Active {
+        return false;
+    }
+    if is_current_plan_guidance_item(item) || is_gate_query_noise_item(item) {
+        return false;
+    }
+
+    let value = format!(
+        "{} {}",
+        item.title.to_lowercase(),
+        item.content.to_lowercase()
+    );
+    has_migration_gate_domain(&value)
+        && has_migration_apply_gate_detail(&value)
+        && migration_apply_gate_signal_score(item) > 0
+}
+
+fn is_gate_query_noise_item(item: &MemoryItem) -> bool {
+    let value = format!(
+        "{} {}",
+        item.title.to_lowercase(),
+        item.content.to_lowercase()
+    );
+    [
+        "non-gated continuation",
+        "non gated continuation",
+        "search calibration",
+        "ranking calibration",
+        "calibration landed",
+    ]
+    .iter()
+    .any(|term| value.contains(term))
+}
+
+fn has_migration_gate_domain(value: &str) -> bool {
+    ["migration", "m6"].iter().any(|term| value.contains(term))
+}
+
+fn has_migration_apply_gate_detail(value: &str) -> bool {
+    [
+        "migration apply",
+        "write apply",
+        "write-apply",
+        "write approval",
+        "reviewed candidates",
+        "rollback",
+    ]
+    .iter()
+    .any(|term| value.contains(term))
+}
+
+fn migration_apply_gate_signal_score(item: &MemoryItem) -> u16 {
+    let title = item.title.to_lowercase();
+    let value = format!("{title} {}", item.content.to_lowercase());
+    let mut score = [
+        ("must not proceed", 10),
+        ("cannot proceed", 10),
+        ("do not mark", 9),
+        ("do not run", 9),
+        ("without reviewed candidates", 8),
+        ("without human review", 8),
+        ("review statuses remain pending", 7),
+        ("pending/undecided", 7),
+        ("explicit write approval", 6),
+        ("requires explicit user approval", 5),
+        ("explicit user approval", 4),
+        ("explicit approval", 4),
+        ("requires approval", 4),
+    ]
+    .iter()
+    .filter_map(|(term, weight)| value.contains(term).then_some(*weight))
+    .sum();
+
+    if title.contains("paused") && title.contains("migration review gate") {
+        score += 4;
+    }
+
+    score
+}
+
+fn migration_gate_kind_score(kind: &MemoryKind) -> u8 {
+    match kind {
+        MemoryKind::Rule => 5,
+        MemoryKind::Decision => 4,
+        MemoryKind::Limitation => 3,
+        MemoryKind::ProjectFact | MemoryKind::Handoff => 2,
+        _ => 1,
+    }
+}
+
+fn memory_review_rank(review_state: MemoryReviewState) -> u8 {
+    match review_state {
+        MemoryReviewState::Reviewed => 4,
+        MemoryReviewState::ActiveUnreviewed => 3,
+        MemoryReviewState::NeedsReview => 2,
+        MemoryReviewState::Superseded
+        | MemoryReviewState::Archived
+        | MemoryReviewState::Rejected => 1,
+    }
+}
+
 fn has_gate_language(value: &str) -> bool {
+    let value = value.replace("non-gated", "").replace("non gated", "");
     [
         "review-gated",
         "gate",
