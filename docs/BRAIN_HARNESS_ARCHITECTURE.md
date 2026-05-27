@@ -181,6 +181,11 @@ Research checkpoint, current through 2026-05-27:
   current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active with repeated
   stale-feedback hits. Lifecycle status changes, hot-path ranking changes, and document-index
   normalization remain gated.
+- T19 corrected a real-session eval measurement flaw: feedback is now selected by sampled trace IDs
+  instead of by an independent newest-feedback window. This keeps public request parameters, output
+  fields, formulas, confidence-gate constants, ranking, `orient`, migration, hooks, adapters, and
+  schema/storage/index behavior unchanged, while preventing older traces with newer feedback from
+  inflating coverage for a smaller recent trace sample.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -732,10 +737,11 @@ Implemented spike:
   and moved project-level feedback coverage to `23/44` (`0.5227272510528564`). The numerical
   confidence gate passed at that checkpoint. A later T18 pre-feedback re-audit showed the current
   sample could fail when feedback spans only two intents; after scoring T18 traces, the report
-  passed numerically again. The batch remains weak agent-assessed evidence. It exposed a
-  design-preference retrieval failure and stale migration/current-plan caveats, not authorization
-  for M6 inventory, write apply, deletion, broad ranking changes, hook changes, or `orient` payload
-  expansion.
+  passed numerically again. T19 then corrected the report builder to select feedback from the
+  sampled trace IDs rather than an independent feedback window. The batch remains weak
+  agent-assessed evidence. It exposed a design-preference retrieval failure and stale
+  migration/current-plan caveats, not authorization for M6 inventory, write apply, deletion, broad
+  ranking changes, hook changes, or `orient` payload expansion.
 - Generated harness adapters now instruct agents to preserve `trace_id` values returned by
   `orient` and `search`, then submit `telemetry(action=submit_feedback)` before final response
   with `task_success`, `preference_adhered`, `repeated_context_questions`, `bad_memory_used`, and
@@ -1092,6 +1098,10 @@ Proceed in this order from the current checkpoint:
     `bad_memory_used_count=0`. `lint(action=apply_safe, write=false)` still has no safe actions. Do
     not archive stale memory, change `orient` ranking, or normalize document index records without
     explicit approval.
+34. Treat T19 as a real-session eval measurement correction: feedback is anchored to the sampled
+    trace set so coverage and confidence cannot be inflated by newer feedback on older traces.
+    This does not change public request parameters, confidence formulas, ranking, `orient`, M6
+    migration, lifecycle state, hooks, adapters, or schema/storage/index behavior.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

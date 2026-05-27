@@ -232,7 +232,8 @@ impl TelemetryService {
     ) -> IndexResult<RealSessionEvalReport> {
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
         let traces = self.repo.list_traces(Some(sample_limit)).await?;
-        let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
 
         Ok(build_real_session_eval_report(
             sample_limit,
@@ -263,12 +264,8 @@ impl TelemetryService {
             applied_filters.scenario_id.as_deref(),
             applied_filters.arm.as_deref(),
         );
-        let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
-        let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
-        let feedback = feedback
-            .into_iter()
-            .filter(|item| trace_ids.contains(&item.trace_id))
-            .collect::<Vec<_>>();
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
 
         Ok(build_real_session_eval_report(
             sample_limit,

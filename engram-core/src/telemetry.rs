@@ -393,13 +393,13 @@ pub struct RealSessionEvalReport {
     /// Report creation timestamp.
     #[serde(with = "time::serde::rfc3339")]
     pub generated_at: OffsetDateTime,
-    /// Maximum recent traces and feedback rows considered.
+    /// Maximum recent traces considered. Feedback is selected from the sampled trace set.
     pub sample_limit: usize,
     /// Effective project, scenario_id, and arm filters used for the report.
     pub applied_filters: RealSessionEvalAppliedFilters,
     /// Number of traces in the sample.
     pub trace_count: usize,
-    /// Number of feedback records in the sample.
+    /// Number of feedback records linked to traces in the sample.
     pub feedback_count: usize,
     /// Number of traces in the sample that have at least one linked feedback record.
     pub feedback_trace_count: usize,

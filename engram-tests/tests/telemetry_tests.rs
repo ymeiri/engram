@@ -398,6 +398,84 @@ async fn real_session_eval_report_separates_trace_coverage_from_feedback_density
 }
 
 #[tokio::test]
+async fn real_session_eval_report_anchors_feedback_to_sampled_traces() {
+    let (telemetry, _) = setup_services().await;
+
+    let old_trace_with_new_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("old trace with newer feedback".to_string())),
+        )
+        .await
+        .expect("old trace should be recorded");
+    let another_old_trace_with_new_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("another old trace with newer feedback".to_string())),
+        )
+        .await
+        .expect("another old trace should be recorded");
+    let sampled_trace_with_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("sampled trace with older feedback".to_string())),
+        )
+        .await
+        .expect("sampled trace should be recorded");
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("sampled trace without feedback".to_string())),
+        )
+        .await
+        .expect("second sampled trace should be recorded");
+
+    let mut sampled_feedback = AgentFeedback::new(sampled_trace_with_feedback.id);
+    sampled_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(sampled_feedback)
+        .await
+        .expect("sampled trace feedback should be accepted");
+
+    let mut old_feedback = AgentFeedback::new(old_trace_with_new_feedback.id);
+    old_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(old_feedback)
+        .await
+        .expect("old trace feedback should be accepted");
+
+    let mut another_old_feedback = AgentFeedback::new(another_old_trace_with_new_feedback.id);
+    another_old_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(another_old_feedback)
+        .await
+        .expect("another old trace feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(2))
+        .await
+        .expect("real-session report should build");
+
+    assert_eq!(report.sample_limit, 2);
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 1);
+    assert_eq!(report.feedback_trace_count, 1);
+    assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.feedback_records_per_trace, 0.5);
+    assert_eq!(report.outcome_feedback_count, 1);
+    assert_eq!(report.outcome_trace_count, 1);
+    assert_eq!(report.outcome_coverage, 0.5);
+}
+
+#[tokio::test]
 async fn real_session_eval_report_tracks_memory_judgment_attribution_gaps() {
     let (telemetry, _) = setup_services().await;
     let scenario_id = "bounded_autonomous_followthrough_006";

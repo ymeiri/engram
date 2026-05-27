@@ -231,6 +231,41 @@ impl TelemetryRepo {
             .collect()
     }
 
+    /// List feedback for a set of traces, newest first.
+    pub async fn list_feedback_for_traces(
+        &self,
+        trace_ids: &[Id],
+    ) -> StoreResult<Vec<AgentFeedback>> {
+        debug!("Listing feedback for {} traces", trace_ids.len());
+
+        if trace_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let trace_ids = trace_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        let mut result = self
+            .db
+            .query(
+                r#"
+                SELECT meta::id(id) AS record_id, feedback, created_at
+                FROM agent_feedback
+                WHERE trace_id IN $trace_ids
+                ORDER BY created_at DESC
+                "#,
+            )
+            .bind(("trace_ids", trace_ids))
+            .await?;
+
+        let records: Vec<FeedbackRecord> = result.take(0)?;
+        records
+            .into_iter()
+            .map(FeedbackRecord::into_feedback)
+            .collect()
+    }
+
     /// List feedback, newest first.
     pub async fn list_feedback(&self, limit: Option<usize>) -> StoreResult<Vec<AgentFeedback>> {
         debug!("Listing agent feedback");

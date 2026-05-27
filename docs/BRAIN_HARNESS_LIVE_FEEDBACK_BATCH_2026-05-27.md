@@ -612,3 +612,52 @@ Decision:
 - Do not apply lifecycle status changes, hot-path ranking changes, document-index normalization,
   migration inventory/review-export, adapter writes, or hook/settings writes without explicit
   approval.
+
+## T19 Trace-Anchored Real-Session Eval
+
+Research question: does `real_session_eval(limit=N)` measure feedback for the sampled trace set, or
+can independent trace and feedback windows distort coverage and confidence?
+
+Hypotheses:
+
+- Preferred: anchor feedback to sampled trace IDs, keeping formulas, output fields, request
+  parameters, and confidence-gate constants stable.
+- Null: the independent newest-feedback window is intentional enough to keep.
+- Simpler alternative: document the window sensitivity without changing code.
+- Failure: the slice unbounds feedback, changes public API, or spills into ranking, migration,
+  harness adapters, hooks, or `orient`.
+
+Measurement:
+
+- AI Council prior-decision recall, AI Council broadcast, and Claude Bridge critique for eval-design
+  blind spots.
+- Focused regression test:
+  `cargo test -p engram-tests --test telemetry_tests real_session_eval_report_anchors_feedback_to_sampled_traces -- --exact`.
+- Broader validation:
+  `cargo test -p engram-tests --test telemetry_tests`,
+  `cargo test -p engram-tests --test brain_harness_eval_tests`,
+  `cargo fmt --all --check`, and `cargo check -p engram-cli`.
+
+Result:
+
+- Added `TelemetryRepo::list_feedback_for_traces`.
+- `real_session_eval_report` and scoped real-session eval now fetch feedback linked to the sampled
+  trace IDs.
+- Output fields, request parameters, formulas, confidence-gate constants, `stats_by_intent`,
+  `list_feedback_scoped`, ranking, `orient`, migration, hooks, adapters, and schema/storage/index
+  behavior were not changed.
+- The focused regression test proves that newer feedback on older traces no longer inflates
+  coverage for a smaller recent trace sample.
+- Validation passed:
+  `cargo test -p engram-tests --test telemetry_tests real_session_eval_report_anchors_feedback_to_sampled_traces -- --exact`,
+  `cargo test -p engram-tests --test telemetry_tests`,
+  `cargo test -p engram-tests --test brain_harness_eval_tests`,
+  `cargo fmt --all --check`, and `cargo check -p engram-cli`.
+
+Decision:
+
+- Treat this as an evidence-quality correctness fix. The confidence gate still relies on weak
+  agent-assessed feedback unless checked against transcript evidence, tests, or user review.
+- This does not authorize M6 inventory, M6 write apply, deletion, lifecycle status writes, broad
+  ranking changes, document-index normalization, hook/settings writes, adapter writes, schema
+  changes, or `orient` payload expansion.

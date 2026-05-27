@@ -376,10 +376,12 @@ using a distinct eligible-trace denominator and records memory-layer search resu
 (`0.3863636255264282`) to `23/44` (`0.5227272510528564`), so the numerical confidence gate passed
 at that checkpoint. A later T18 pre-feedback re-audit showed the current 50-trace sample could fail
 when feedback spanned only two intents; after scoring T18 retrieval traces, the report passed
-numerically again. This is evidence-quality work only: it is agent-assessed feedback, not a
-human-judged product-quality result or M6 approval. The batch found one design-preference retrieval
-failure, two partial feedback/context gaps, stale old current-plan surfacing, and old
-migration/export approval records that must not be treated as current M6 authorization.
+numerically again. T19 corrected the report builder so feedback is selected from sampled trace IDs
+instead of an independent newest-feedback window. This is evidence-quality work only: it is
+agent-assessed feedback, not a human-judged product-quality result or M6 approval. The batch found
+one design-preference retrieval failure, two partial feedback/context gaps, stale old current-plan
+surfacing, and old migration/export approval records that must not be treated as current M6
+authorization.
 
 ---
 
@@ -621,6 +623,10 @@ Current next application:
   `lint(action=apply_safe, write=false)` found no safe actions. The stale repository-scoped
   current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` has repeated stale-feedback hits, but
   archival or scope correction remains a lifecycle write that requires explicit approval.
+- T19 corrected one concrete source of that sensitivity: real-session eval now anchors feedback to
+  sampled trace IDs, so newer feedback on older traces cannot inflate coverage for a smaller recent
+  trace sample. This did not change confidence formulas, public request parameters, ranking,
+  `orient`, M6 migration, lifecycle state, hooks, adapters, or schema/storage/index behavior.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
