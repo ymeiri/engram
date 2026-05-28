@@ -247,6 +247,11 @@ Research checkpoint, current through 2026-05-27:
   `distinct_intent_count=5`, `bad_memory_used_count=0`, `task_failure_count=1` after scoring the
   T35 startup traces), but the per-case handoff failure is stronger evidence than the aggregate
   gate pass.
+- T38 repaired that fixed `prepare_handoff` orientation gap narrowly: handoff orientation now
+  presents one latest applicable current-plan item across matching project/repository scopes, pins
+  it in Brain Loop, and leaves explicit M6/harness-write gate items to normal scoped selection. It
+  does not expand the payload, synthesize approval gates, mutate lifecycle state, or authorize M6 or
+  harness writes.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.

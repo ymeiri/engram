@@ -1421,14 +1421,21 @@ fn prioritize_current_plan_for_orientation(
     intent: Option<&BrainHarnessIntent>,
     query: Option<&str>,
 ) -> Vec<MemoryItem> {
-    let suppress_older = matches!(intent, Some(BrainHarnessIntent::ResumeSession));
+    let suppress_older = matches!(
+        intent,
+        Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
+    );
     let promote_latest =
         suppress_older || should_prioritize_current_plan_for_plan_work(intent, query);
     if !promote_latest {
         return items;
     }
 
-    prioritize_latest_current_plan(items, suppress_older)
+    prioritize_latest_current_plan(
+        items,
+        suppress_older,
+        matches!(intent, Some(BrainHarnessIntent::PrepareHandoff)),
+    )
 }
 
 fn should_prioritize_current_plan_for_plan_work(
@@ -1439,10 +1446,18 @@ fn should_prioritize_current_plan_for_plan_work(
         && query.is_some_and(is_open_ended_plan_work_prompt)
 }
 
-fn prioritize_latest_current_plan(items: Vec<MemoryItem>, suppress_older: bool) -> Vec<MemoryItem> {
+fn prioritize_latest_current_plan(
+    items: Vec<MemoryItem>,
+    suppress_older: bool,
+    collapse_scopes: bool,
+) -> Vec<MemoryItem> {
     let mut latest_by_scope: HashMap<String, MemoryItem> = HashMap::new();
     for item in items.iter().filter(|item| is_current_plan_item(item)) {
-        let scope_key = current_plan_scope_key(&item.scope);
+        let scope_key = if collapse_scopes {
+            "handoff".to_string()
+        } else {
+            current_plan_scope_key(&item.scope)
+        };
         let should_replace = latest_by_scope
             .get(&scope_key)
             .map(|existing| {
@@ -1932,8 +1947,10 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
             score: 0.0,
         },
     ];
-    let resume_current_plan = matches!(parts.intent, Some(BrainHarnessIntent::ResumeSession))
-        && parts.decisions.first().is_some_and(is_current_plan_item);
+    let continuity_current_plan = matches!(
+        parts.intent,
+        Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
+    ) && parts.decisions.first().is_some_and(is_current_plan_item);
     let follow_user_preference =
         matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference))
             && !parts.preferences.is_empty();
@@ -1949,14 +1966,14 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
                 .unwrap_or(0.0);
         }
     }
-    if resume_current_plan {
+    if continuity_current_plan {
         groups[3].score = f32::INFINITY;
     }
     if follow_user_preference {
         groups[1].score = f32::INFINITY;
     }
     if parts.query.is_some_and(|query| !query.trim().is_empty())
-        || resume_current_plan
+        || continuity_current_plan
         || follow_user_preference
     {
         groups.sort_by(|left, right| {
@@ -3879,6 +3896,132 @@ mod tests {
             service.get_memory(&old.id).await.unwrap().unwrap().status,
             MemoryStatus::Active,
             "resume guard should not mutate existing records"
+        );
+    }
+
+    #[tokio::test]
+    async fn orient_prepare_handoff_prioritizes_latest_current_plan_and_keeps_gates() {
+        let service = setup_service().await;
+        let mut stale_repository_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after Codex document lifecycle follow-through",
+            "Older repository-scoped current-plan guidance that should not lead a compact \
+             Brain Harness handoff.",
+            MemoryScope::repository(None, Some("/Users/yuval.meiri/projects/engram".to_string())),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            "stale-repository-current-plan",
+        ))
+        .with_tag(CURRENT_PLAN_TAG);
+        stale_repository_plan.updated_at = OffsetDateTime::now_utc() - time::Duration::days(2);
+        let stale_repository_plan = service.capture_memory(stale_repository_plan).await.unwrap();
+
+        let mut latest_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan: fix prepare_handoff orientation",
+            "Latest current plan: add a narrow prepare_handoff orientation fixture before any \
+             migration, lifecycle, hook, schema, public MCP, broad ranking, or payload change.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            "latest-current-plan",
+        ))
+        .with_tag(CURRENT_PLAN_TAG);
+        latest_plan.updated_at = OffsetDateTime::now_utc();
+        let latest_plan = service.capture_memory(latest_plan).await.unwrap();
+
+        let m6_gate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "M6 migration approval gate remains explicit",
+                    "Brain Harness handoff approval gates must say that M6 migration read-only \
+                     inventory or review export needs explicit user-approved scope, and write \
+                     apply, deletion, cleanup, or legacy simplification need reviewed candidates, \
+                     dry-run evidence, rollback planning, and explicit approval.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        let harness_gate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Harness adapter and hook writes require approval",
+                    "Brain Harness handoffs must preserve the harness-write gate: do not install \
+                     or modify Claude Code, Codex, Gemini CLI, or Cursor adapters, settings, or \
+                     hooks without explicit user approval.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+                prompt: Some(
+                    "Prepare a compact Brain Harness handoff: current plan, approval gates, \
+                     evidence-quality state, and next non-gated work."
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::PrepareHandoff),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet.active_decisions.first().map(|item| item.id),
+            Some(latest_plan.id)
+        );
+        assert!(
+            !packet
+                .active_decisions
+                .iter()
+                .any(|item| item.id == stale_repository_plan.id),
+            "handoff should not present stale repository-scoped current-plan guidance as current"
+        );
+        assert_eq!(
+            packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(latest_plan.id)
+        );
+        assert!(packet
+            .brain_loop
+            .top_items
+            .iter()
+            .any(|item| item.id == m6_gate.id));
+        assert!(packet
+            .brain_loop
+            .top_items
+            .iter()
+            .any(|item| item.id == harness_gate.id));
+        assert_eq!(
+            service
+                .get_memory(&stale_repository_plan.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active,
+            "handoff orientation should not mutate stale memory lifecycle"
         );
     }
 

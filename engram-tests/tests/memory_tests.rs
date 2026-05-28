@@ -1143,6 +1143,141 @@ async fn test_mcp_orient_lean_response_shape_omits_duplicate_payloads() {
 }
 
 #[tokio::test]
+async fn test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates() {
+    let state = setup_tool_state().await;
+
+    let mut stale = with_writer(request("add"));
+    stale.kind = Some("decision".to_string());
+    stale.title = Some("Current plan after Codex document lifecycle follow-through".to_string());
+    stale.content = Some(
+        "Older repository-scoped current-plan guidance that should not lead a compact handoff."
+            .to_string(),
+    );
+    stale.origin = Some("tool_result".to_string());
+    stale.scope_type = Some("repository".to_string());
+    stale.local_path = Some("/Users/yuval.meiri/projects/engram".to_string());
+    stale.tags = vec!["current-plan".to_string()];
+    stale.evidence = manual_review_evidence("Stale repository current-plan fixture.");
+    let stale_response = tools::memory_new(&state, stale)
+        .await
+        .expect("stale current-plan add should work");
+    let stale_id = parse_json(&stale_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut latest = with_writer(request("add"));
+    latest.kind = Some("decision".to_string());
+    latest.title = Some("Current plan: fix prepare_handoff orientation".to_string());
+    latest.content = Some(
+        "Latest current plan: validate compact prepare_handoff orientation before any migration, \
+         lifecycle, hook, schema, public MCP, broad ranking, or payload change."
+            .to_string(),
+    );
+    latest.origin = Some("tool_result".to_string());
+    latest.scope_type = Some("project".to_string());
+    latest.project_name = Some("engram".to_string());
+    latest.tags = vec!["current-plan".to_string()];
+    latest.evidence = manual_review_evidence("Latest current-plan fixture.");
+    let latest_response = tools::memory_new(&state, latest)
+        .await
+        .expect("latest current-plan add should work");
+    let latest_id = parse_json(&latest_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut m6_gate = with_writer(request("add"));
+    m6_gate.kind = Some("limitation".to_string());
+    m6_gate.title = Some("M6 migration approval gate remains explicit".to_string());
+    m6_gate.content = Some(
+        "Brain Harness handoff approval gates must say that M6 migration read-only inventory or \
+         review export needs explicit user-approved scope, and write apply, deletion, cleanup, or \
+         legacy simplification need reviewed candidates, dry-run evidence, rollback planning, and \
+         explicit approval."
+            .to_string(),
+    );
+    m6_gate.origin = Some("user_stated".to_string());
+    m6_gate.scope_type = Some("project".to_string());
+    m6_gate.project_name = Some("engram".to_string());
+    m6_gate.evidence = manual_review_evidence("M6 handoff gate fixture.");
+    let m6_response = tools::memory_new(&state, m6_gate)
+        .await
+        .expect("M6 gate add should work");
+    let m6_id = parse_json(&m6_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut harness_gate = with_writer(request("add"));
+    harness_gate.kind = Some("rule".to_string());
+    harness_gate.title = Some("Harness adapter and hook writes require approval".to_string());
+    harness_gate.content = Some(
+        "Brain Harness handoffs must preserve the harness-write gate: do not install or modify \
+         Claude Code, Codex, Gemini CLI, or Cursor adapters, settings, or hooks without explicit \
+         user approval."
+            .to_string(),
+    );
+    harness_gate.origin = Some("user_stated".to_string());
+    harness_gate.scope_type = Some("project".to_string());
+    harness_gate.project_name = Some("engram".to_string());
+    harness_gate.evidence = manual_review_evidence("Harness-write handoff gate fixture.");
+    let harness_response = tools::memory_new(&state, harness_gate)
+        .await
+        .expect("harness gate add should work");
+    let harness_id = parse_json(&harness_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(
+                "Prepare a compact Brain Harness handoff: current plan, approval gates, \
+                 evidence-quality state, and next non-gated work."
+                    .to_string(),
+            ),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("prepare_handoff".to_string()),
+            scenario_id: Some("t35_prepare_handoff_gate_summary_20260527".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(10),
+            response_shape: Some(OrientResponseShape::Lean),
+        },
+    )
+    .await
+    .expect("prepare_handoff orient should work");
+    let json = parse_json(&response);
+    let top_ids = json["brain_loop"]["top_items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(json["response_shape"], "lean");
+    assert_eq!(top_ids.first(), Some(&latest_id));
+    assert!(top_ids.contains(&m6_id));
+    assert!(top_ids.contains(&harness_id));
+    assert!(!top_ids.contains(&stale_id));
+    assert!(json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|id| id.as_str() != Some(stale_id.as_str())));
+    assert!(json.get("context_pack").is_none());
+    assert!(json.get("active_decisions").is_none());
+    assert!(json["brain_loop"]["top_items"][0].get("trust").is_none());
+}
+
+#[tokio::test]
 async fn test_mcp_orient_routes_inferred_memory_to_review_needed() {
     let state = setup_tool_state().await;
 

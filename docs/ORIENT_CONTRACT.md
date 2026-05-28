@@ -23,6 +23,9 @@ the next agent decision better without forcing the agent to choose among special
   top-level `hot_context_ids` / `hot_context_items` before the larger `context_pack` so agents can
   reliably populate `used_memory_ids`.
 - Surface already-open, currently applicable obligations as a compact summary and bounded list.
+- For `intent=prepare_handoff`, present one latest applicable current-plan item across matching
+  scopes, pin that current plan in Brain Loop, and keep stale current-plan guidance out of the
+  lean handoff candidate IDs without mutating lifecycle state.
 - Keep graph traversal, obligation detection, lint, migration, and raw entity observation lookup out
   of the normal `orient` hot path.
 - Keep the full orientation packet as the default response. Callers that only need read-only
@@ -156,11 +159,9 @@ with that tag remain normal evidence and are not auto-superseded by
 
 - `orient` does not enforce a byte or token budget yet; tests should not pretend that it does.
 - `orient` does not promote entity observations or migrated data into active memory.
-- `orient(intent=prepare_handoff)` is not yet a complete approval-gate handoff packet. T35
-  read-only trace `019e6a5f-594d-7193-aa9b-a865523f1299` preserved current-plan continuity but
-  omitted explicit M6/harness-write gates and included stale repository-scoped current-plan
-  guidance without a caveat. Fixing this requires an approved `orient`/ranking/payload or memory
-  lifecycle slice.
+- `orient(intent=prepare_handoff)` is a compact orientation packet, not a generated handoff or
+  approval audit. It does not run lint, migration, harness doctor, graph traversal, obligation
+  detection, or gate synthesis; explicit gates must already exist as active MemoryItems to appear.
 - Migration completion remains review-gated and should wait until this contract stays green.
 
 ## Contract Tests

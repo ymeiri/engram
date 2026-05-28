@@ -704,6 +704,10 @@ Current next application:
   `feedback_coverage=0.9599999785423279`, `bad_memory_used_count=0`, `task_failure_count=1`
   after startup feedback scoring), but the fixed-case failure is stronger evidence than the
   aggregate pass.
+- T38 repaired the `prepare_handoff` failure as a narrow hot-path slice after explicit approval:
+  strict handoff current-plan presentation keeps one latest applicable current plan across matching
+  scopes and pins it in Brain Loop while preserving existing gate selection, lean shape, and
+  lifecycle state.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

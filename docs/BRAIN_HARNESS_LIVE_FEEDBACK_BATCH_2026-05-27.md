@@ -1495,3 +1495,59 @@ Decision:
 - Continue to keep M6 read-only inventory/review-export, M6 write apply/deletion/legacy
   simplification, lifecycle cleanup, and harness adapter/hook writes blocked until explicitly
   approved by the user.
+
+## T38 Prepare-Handoff Orient Repair
+
+Status: fixed as an approved narrow `orient` behavior slice. No migration inventory/export,
+write-apply, deletion, lifecycle cleanup, schema/storage/index change, public MCP parameter change,
+hook/adapter write, broad ranking change, or `orient` payload expansion was introduced.
+
+Research question: can `orient(intent=prepare_handoff)` repair the T35 fixed-case failure by
+presenting one latest applicable current plan and existing explicit gates, without turning `orient`
+into a handoff generator or approval-audit tool?
+
+Hypotheses:
+
+- Preferred: `PrepareHandoff` needs strict current-plan continuity like resume, but only for
+  presentation: keep one latest applicable current-plan item across matching project/repository
+  scopes, pin it in Brain Loop, and leave existing gate MemoryItems to normal scoped ranking.
+- Null: the T35 result is acceptable handoff noise and should remain documented only.
+- Simpler alternative: update docs to tell agents to call `search` for gates after `orient`.
+- Failure: current-plan repair still omits M6/harness-write gates, mutates stale memory lifecycle,
+  or disturbs existing `PlanWork` and `ResumeSession` behavior.
+
+Consultation: AI Council recall found prior ranking/gate decisions that kept fixes prompt-class
+specific and rejected payload expansion or lifecycle mutation. A new AI Council broadcast and
+Claude Bridge critique both supported the strict `PrepareHandoff` current-plan repair as on-slice,
+but warned not to add gate-specific ranking unless a fixture proved it necessary. The fixture passed
+without adding a gate boost.
+
+Implementation:
+
+- `prepare_handoff` now shares strict current-plan suppression with `resume_session`, but collapses
+  applicable current-plan scopes to one latest item for handoff presentation. This keeps stale
+  repository-scoped current-plan guidance out of handoff candidate IDs while leaving the underlying
+  MemoryItem active for review/lint.
+- Brain Loop pins the handoff current-plan decision the same way it pins resume current-plan
+  guidance.
+- No new public request parameter, response field, ranking weight, migration classifier, lifecycle
+  write, or gate synthesizer was added.
+
+Validation so far:
+
+- `cargo test -p engram-index orient_prepare_handoff_prioritizes_latest_current_plan_and_keeps_gates`
+- `cargo test -p engram-tests --test memory_tests test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates`
+- `cargo test -p engram-index orient_`
+- `cargo test -p engram-tests --test memory_tests test_mcp_orient_`
+- `cargo test -p engram-tests --test memory_tests`
+- `cargo fmt --all --check`
+- `cargo check -p engram-cli`
+- `git diff --check`
+- Native Claude Code CLI `2.1.153` ran the new MCP lean fixture through `claude -p` with only
+  that `cargo test` command allowed and reported `1 passed; 0 failed`.
+
+The new service fixture reproduces the T35 shape with a latest project current plan, stale
+repository-scoped current plan, M6 gate, and harness-write gate. The new MCP lean fixture verifies
+that the compact packet includes the latest plan and both existing gates, omits the stale
+current-plan item from top candidates, preserves lean shape, and does not rely on lifecycle
+mutation.
