@@ -370,6 +370,12 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       M6 write/apply/deletion gate-first behavior. No production ranking code, lifecycle state,
       public MCP surface, `orient` payload, migration flow, schema/storage/index behavior, or
       harness adapter/hook behavior changed.
+- [ ] T42 Claude Code parity for T41 mixed-query behavior: pre-registered in
+      `docs/BRAIN_HARNESS_T42_CLAUDE_T41_PARITY_2026-05-31.md`. This is read-only validation of
+      two exact `search` queries through Claude Code's Engram MCP path, with pinned current-plan,
+      M6-gate, and stale-plan IDs plus pre/post cursor checks. It does not authorize ranking,
+      lifecycle, migration, `orient`, schema/storage/index, public MCP, or harness adapter/hook
+      changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
