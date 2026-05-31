@@ -1,7 +1,7 @@
 # Brain Harness T40 Partial Completion Audit
 
 Date: 2026-05-31
-Status: Pre-registered before scoreable audit execution
+Status: Completed partial audit; one mixed-query check remains partial
 Scope: Approved/read-only Brain Harness surfaces only
 
 ## Boundary
@@ -68,3 +68,35 @@ Results must use one of: `pass`, `fail`, `partial`, `blocked-by-approval`, or `n
 
 Passing this audit can only support this claim: approved/read-only surfaces remain coherent enough
 to continue toward the Brain Harness goal. It cannot support the claim that Engram is complete.
+
+## Scoreable Results
+
+The scoreable audit ran after commit `0322566` pre-registered the fixed checks.
+
+| ID | Result | Evidence |
+| --- | --- | --- |
+| T40-01 | pass | Codex `prepare_handoff` lean orient trace `019e7cf5-3636-7f33-88f8-86f2f130d539` returned latest T39 current-plan memory `019e7ced-4de2-7860-be61-e5bc6dc1be78`, harness-write gate `019e7cde-b517-77d0-aaac-c8638811d4e8`, M6 gate `019e7ce5-155d-7a10-85f5-00b9dcc69cd0`, and no open obligations. |
+| T40-02 | pass | Native Claude Code `prepare_handoff` trace `019e7cf6-0970-7ef0-b9a9-8efc1d448f48` returned the same current-plan and gate IDs as Codex. The synthetic prompt opened three startup obligations, which Codex resolved or skipped with explicit evidence before finalization. |
+| T40-03 | pass | Codex `plan_work` lean orient trace `019e7cf5-4787-7202-8acd-ec27d5ed1238` returned the latest current plan first, kept M6/harness constraints visible, and left stale current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` lower as review noise. |
+| T40-04 | partial | Direct search trace `019e7cf5-5a61-7943-be95-ecf16c0356de` returned the latest current plan first and stale current-plan memory lower, but the active M6 approval gate did not appear in the top memory results for the mixed non-gated query. This is a retrieval caveat, not authorization. |
+| T40-05 | pass | Direct M6 negative-control search trace `019e7cf5-78f0-77a2-bb94-8e248a1a6f92` returned blocked/gate context ahead of old approval-shaped records; no result was treated as current approval. |
+| T40-06 | pass | `harness(action=doctor)` returned `ready=false` for Claude Code, Codex, Gemini CLI, and Cursor, with no writes. Claude Code still lacks required session hooks; the other harnesses still have generated adapter drift. |
+| T40-07 | pass | `lint(action=run, limit=10)` kept `feedback_stale_current_plan` for `019e5e0a-86b4-73e3-aa9b-ca350e83e915` first, with `safe_action=none` and no safe actions applied. |
+| T40-08 | pass with caveat | Project rolling eval after T40 feedback returned `trace_count=50`, `feedback_trace_count=35`, `feedback_coverage=0.70`, `memory_judgment_coverage=1.0`, `external_session_trace_count=22`, `task_success_count=30`, `task_failure_count=5`, `bad_memory_used_count=0`, and `confidence_gate.passed=true`. This remains weak rolling evidence and does not approve M6. |
+| T40-09 | pass | After cleanup, `obligations(action=doctor)` returned no open obligations or warnings. |
+
+Scenario-scoped eval for `t40_partial_completion_audit_20260531` returned five scored traces, four
+task successes, one task failure for T40-04, and `bad_memory_used_count=0`. Its confidence gate
+failed only because the scenario is below the minimum trace/feedback thresholds, which is expected
+for this fixed audit batch.
+
+## Outcome
+
+The approved/read-only surfaces remain coherent enough to continue, but the overall Brain Harness
+goal is still not complete. T40 strengthened Codex/Claude Code handoff parity and preserved the
+explicit M6/harness gates, while exposing a narrow mixed-query retrieval caveat: non-gated current
+plan searches can still omit active M6 gate memory from the top memory results.
+
+This audit did not run M6 inventory or review export, write migration data, change lifecycle state,
+change schema/storage/index behavior, change public MCP request parameters, expand `orient`, adjust
+broad ranking, or install/modify harness adapters or hooks.

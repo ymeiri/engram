@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-05-27
+Last Updated: 2026-05-31
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -351,6 +351,16 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       traces now surface the latest current plan plus M6 and harness-write approval gates. This did
       not expand the payload, synthesize gates, mutate lifecycle state, authorize M6 work, or write
       harness adapters/hooks.
+- [x] T40 partial completion audit: fixed checks were pre-registered in commit `0322566`, then
+      run only against approved/read-only surfaces. Codex and native Claude Code
+      `prepare_handoff` traces returned the same latest current-plan and M6/harness gate IDs;
+      `plan_work` returned the latest current plan first with stale current-plan memory lower;
+      the explicit M6 negative-control search returned gate/blocked context ahead of old
+      approval-shaped records; all four harnesses still reported `ready=false`; lint kept stale
+      current-plan feedback visible with `safe_action=none`; obligations were clean after audit
+      cleanup. The mixed non-gated search `current plan next non-gated Brain Harness feedback
+      confidence M6 gate` returned latest current-plan first but did not surface the active M6 gate
+      in top memory results, so this is partial evidence, not completion or M6 authorization.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -382,6 +392,19 @@ suppression but live data/ranking still omitted gate context. The repair was phr
 `019e7ceb-fda5-79b1-a997-725a9914840e` returned new current-plan memory
 `019e7ceb-d8bb-73f0-960c-85b667b872de` first with both gates still present. This is
 validation/capture work, not M6 or harness-write approval.
+
+T40 matrix note: the partial completion audit in
+`docs/BRAIN_HARNESS_T40_PARTIAL_COMPLETION_AUDIT_2026-05-31.md` produced four successful
+scoreable retrieval/safety checks and one partial mixed-query check. Scenario eval for
+`t40_partial_completion_audit_20260531` recorded five scored traces, four task successes, one task
+failure for T40-04, and `bad_memory_used_count=0`; the scenario confidence gate failed only because
+the fixed batch is below minimum trace/feedback thresholds. Project rolling eval after T40 feedback
+still passed numerically with `feedback_coverage=0.70`, `memory_judgment_coverage=1.0`, and
+`bad_memory_used_count=0`, but this remains weak evidence. The matrix delta is: current-plan and
+handoff continuity are stronger across Codex and native Claude Code; stale current-plan lint
+visibility remains healthy; M6 and harness readiness remain explicit approval gates; the mixed
+non-gated search caveat is a retrieval-quality issue, not approval for migration, lifecycle,
+ranking, hook/adapter, schema/storage, public MCP, or `orient` payload work.
 
 T23 matrix audit, 2026-05-27:
 
