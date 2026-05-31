@@ -715,6 +715,20 @@ Current next application:
   native Claude Code trace `019e7ce5-b4e4-7830-94a4-48f87ebf56b2` now agree on the handoff IDs.
   This remains prompt-class validation and capture repair, not approval for migration, lifecycle
   cleanup, payload expansion, or harness writes.
+- T43 repaired the live mixed current-plan/M6 direct-search prompt class after a failed baseline:
+  installed Codex trace `019e7d1c-b20a-7c52-b8af-e6d82439988c` returned current-plan memory first
+  and active M6 gate memory second for the exact mixed query, while explicit M6 and pure
+  continuation controls preserved their boundaries. Treat this as search-only prompt-class
+  evidence, not broad ranking proof or `orient` expansion.
+- T44 replicated the T43 direct-search prompt class in Claude Code. Trace
+  `019e7d21-cec2-7c60-b570-40bb6b79574e` matched the Codex mixed-query order, trace
+  `019e7d21-d4c6-7eb0-80a7-244042f513b0` kept explicit M6 gate context above current-plan
+  guidance, and trace `019e7d21-da4e-7e72-9e40-35153ba73628` kept the active M6 gate out of the
+  pure continuation top eight. Treat this as cross-harness evidence for the exact prompt class only.
+- T45 prepared a pending approval packet for one bounded inventory-only M6 scoping run. It did not
+  run inventory, review export, apply, deletion, lifecycle mutation, schema/storage/index changes,
+  public MCP changes, ranking or `orient` changes, or harness/hook changes. Missing, conditional,
+  or ambiguous user approval remains default-deny.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

@@ -161,6 +161,15 @@ Research checkpoint, current through 2026-05-27:
   the paused gate first for explicit migration-apply prompts, and trace
   `019e6994-8ec9-7343-9198-9298867b9ceb` returned current-plan memory first for the contextual
   M6-gate continuation prompt.
+- A later installed-runtime repair closed the live mixed current-plan/M6 direct-search gap for the
+  exact `current plan next non-gated Brain Harness feedback confidence M6 gate` prompt class. T43
+  Codex trace `019e7d1c-b20a-7c52-b8af-e6d82439988c` returned the current plan first and the
+  active M6 gate second; pure continuation trace `019e7d1e-29ad-7540-bcfc-d28131851091` did not
+  promote the M6 gate. T44 Claude Code trace `019e7d21-cec2-7c60-b570-40bb6b79574e` reproduced
+  that mixed-query order, while explicit M6 and pure continuation controls also passed. T45 then
+  prepared a pending approval packet for exactly one inventory-only M6 scoping run. No M6
+  inventory, review export, apply, deletion, lifecycle mutation, schema/storage/index change,
+  public MCP change, ranking or `orient` change, or harness/hook change was authorized or run.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1221,6 +1230,18 @@ Proceed in this order from the current checkpoint:
     wording now retrieves active M6 and harness-write gate MemoryItems in Codex and Claude Code,
     but this does not make `orient` a generated handoff, approval-audit tool, lifecycle-cleanup
     mechanism, or migration/harness-write authorization path.
+48. Treat T43 as a direct-search prompt-class repair only: for the exact mixed
+    current-plan/M6-gate prompt class, direct unified `search` now keeps current-plan guidance first
+    while surfacing already-ranked active M6 gate context in usable top-k. This was implemented as a
+    search-only ranker repair, not an `orient` payload expansion or broad ranking change.
+49. Treat T44 as Claude Code parity for the T43 repaired prompt class only: Claude Code reproduced
+    the mixed query, explicit M6 negative control, and pure continuation control through Engram MCP.
+    This does not prove broad ranking quality, harness readiness, or M6 approval.
+50. Treat T45 as an approval-packet step, not an M6 step. It prepares a pending user decision for
+    one bounded inventory-only `memory(action="migration_inventory", ...)` call and a Markdown
+    report. Review export, apply, deletion, lifecycle mutation, schema/storage/index changes,
+    public MCP changes, ranking or `orient` changes, and harness adapter/hook writes remain
+    unapproved.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
