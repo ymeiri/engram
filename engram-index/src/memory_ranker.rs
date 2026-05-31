@@ -594,21 +594,107 @@ fn asks_for_decision_gate(query: &str) -> bool {
     // Bare "gate" is often a milestone noun ("M6 gate") in continuation prompts, not an
     // approval request. Explicit action or permission terms still keep gate guidance first.
     // The phrase "approval gate" is itself an explicit gate request; bare "approval" is not.
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = query
+        .to_ascii_lowercase()
+        .replace("non-gated", "")
+        .replace("non gated", "");
+    has_modal_gate_action(&query)
+        || [
+            "proceed",
+            "allowed",
+            "allow",
+            "apply",
+            "safety",
+            "block",
+            "blocked",
+            "must",
+            "approval gate",
+        ]
+        .iter()
+        .any(|term| query.contains(term))
+}
+
+fn has_modal_gate_action(query: &str) -> bool {
+    let query = collapse_ascii_whitespace(query);
     [
-        "should",
-        "proceed",
-        "allowed",
-        "allow",
-        "apply",
-        "safety",
-        "block",
-        "blocked",
-        "must",
-        "approval gate",
+        "should we proceed",
+        "should i proceed",
+        "should we apply",
+        "should i apply",
+        "should we run",
+        "should i run",
+        "should we execute",
+        "should i execute",
+        "should we export",
+        "should i export",
+        "should we migrate",
+        "should i migrate",
+        "should we approve",
+        "should i approve",
+        "should we do",
+        "should i do",
+        "can we proceed",
+        "can i proceed",
+        "can we apply",
+        "can i apply",
+        "can we run",
+        "can i run",
+        "can we execute",
+        "can i execute",
+        "can we export",
+        "can i export",
+        "can we migrate",
+        "can i migrate",
+        "could we proceed",
+        "could i proceed",
+        "could we apply",
+        "could i apply",
+        "could we run",
+        "could i run",
+        "could we execute",
+        "could i execute",
+        "whether we should proceed",
+        "whether i should proceed",
+        "whether we should apply",
+        "whether i should apply",
+        "whether we should run",
+        "whether i should run",
+        "whether we should execute",
+        "whether i should execute",
+        "whether we should export",
+        "whether i should export",
+        "whether we should migrate",
+        "whether i should migrate",
+        "if we should proceed",
+        "if i should proceed",
+        "if we should apply",
+        "if i should apply",
+        "if we should run",
+        "if i should run",
+        "if we should execute",
+        "if i should execute",
+        "if we should export",
+        "if i should export",
+        "if we should migrate",
+        "if i should migrate",
+        "do we have approval",
+        "do i have approval",
     ]
     .iter()
-    .any(|term| query.contains(term))
+    .any(|phrase| starts_at_gate_boundary(&query, phrase))
+}
+
+fn starts_at_gate_boundary(query: &str, phrase: &str) -> bool {
+    phrase.starts_with("whether ") && query.contains(phrase)
+        || phrase.starts_with("if ") && query.contains(phrase)
+        || query.starts_with(phrase)
+        || [". ", "? ", "! ", "; ", ": ", ", ", " and ", ", and "]
+            .iter()
+            .any(|prefix| query.contains(&format!("{prefix}{phrase}")))
+}
+
+fn collapse_ascii_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 pub(crate) fn is_open_ended_plan_work_prompt(query: &str) -> bool {
@@ -897,6 +983,29 @@ mod tests {
             "Prepare a compact Brain Harness handoff: current plan, approval gates, \
              evidence-quality state, and next non-gated work."
         ));
+    }
+
+    #[test]
+    fn what_should_happen_next_is_continuation_not_gate_mode() {
+        for query in [
+            "Continue the Engram Brain Harness work. What is the current plan and what \
+             should happen next?",
+            "What should we do next for Engram?",
+        ] {
+            assert!(!asks_for_decision_gate(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn modal_action_prompts_still_trigger_gate_mode() {
+        for query in [
+            "Should we proceed with the migration?",
+            "Should we run migration_review_export?",
+            "What is the current plan, and should we proceed with the migration?",
+            "Continue from the plan and tell me whether we should run migration_review_export.",
+        ] {
+            assert!(asks_for_decision_gate(query), "{query}");
+        }
     }
 
     #[test]

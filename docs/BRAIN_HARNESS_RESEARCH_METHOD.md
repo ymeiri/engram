@@ -815,6 +815,11 @@ Current next application:
   no-write condition failed because Claude Bridge `write=false` still triggered existing Claude
   Code session-end rolling handoff MemoryItem writes. Treat future Claude Bridge no-write claims as
   unproven unless handoff behavior is controlled or explicitly accepted.
+- T61 repaired the observed continuation false-positive without broad ranking churn: `what should
+  happen next` no longer triggers approval-gate mode, while explicit modal action prompts such as
+  `should we run migration_review_export` still preserve gate-first behavior. Treat this as one
+  prompt-class direct-search repair, not migration approval or broad ranking evidence. The Claude
+  Bridge critique retry repeated the T60 handoff-write caveat, so no-write parity remains unproven.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.

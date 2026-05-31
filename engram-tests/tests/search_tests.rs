@@ -819,6 +819,132 @@ async fn test_memory_search_prioritizes_current_plan_for_next_step_query() {
 }
 
 #[tokio::test]
+async fn test_memory_search_t60_what_should_happen_next_promotes_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut research_method = MemoryItem::new(
+        MemoryKind::Rule,
+        "Brain Harness work follows research method",
+        "Continue the Engram Brain Harness work by stating the research question, \
+         hypotheses, measurement, and what should happen next before implementation.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "research-method-rule",
+    ));
+    research_method.updated_at = now;
+    memory_service
+        .capture_memory(research_method)
+        .await
+        .unwrap();
+
+    let mut historical_calibration = MemoryItem::new(
+        MemoryKind::ProjectFact,
+        "Non-gated continuation search calibration landed",
+        "Historical calibration notes mention continuing the Brain Harness work and choosing \
+         what should happen next, but they are not the active current plan.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "historical-calibration",
+    ));
+    historical_calibration.updated_at = now;
+    memory_service
+        .capture_memory(historical_calibration)
+        .await
+        .unwrap();
+
+    let mut m6_gate = MemoryItem::new(
+        MemoryKind::Limitation,
+        "M6 migration approval gate remains explicit",
+        "Brain Harness work must not run M6 migration read-only inventory or review export \
+         without explicit user-approved scope. M6 write apply requires reviewed candidates, \
+         dry-run evidence, rollback planning, and explicit approval.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "m6-approval-gate",
+    ));
+    m6_gate.updated_at = now - time::Duration::hours(2);
+    let m6_gate = memory_service.capture_memory(m6_gate).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "T59 M6 review export approval packet prepared",
+        "The current plan is to keep M6 review export blocked until the user explicitly \
+         approves the T59 scope. Continue the Brain Harness work with non-gated validation.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.8)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "t59-packet"))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(1);
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "Continue the Engram Brain Harness work. What is the current plan and what \
+             should happen next?",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, current_plan.id.to_string());
+    assert!(
+        results
+            .iter()
+            .any(|result| result.id == m6_gate.id.to_string()),
+        "continuation query should still keep M6 gate evidence retrievable"
+    );
+
+    let explicit_gate_results = search_service
+        .search_with_options(
+            "What is the current plan, and should we run migration_review_export?",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_ne!(explicit_gate_results[0].id, current_plan.id.to_string());
+    assert!(
+        explicit_gate_results
+            .iter()
+            .take(2)
+            .any(|result| result.id == m6_gate.id.to_string()),
+        "explicit review-export prompt should keep active M6 gate in top gate context"
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_prefers_project_current_plan_over_repository_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

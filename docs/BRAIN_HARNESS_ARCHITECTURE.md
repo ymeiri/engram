@@ -1353,6 +1353,12 @@ Proceed in this order from the current checkpoint:
     Claude Bridge runs as no-write proof unless handoff behavior is controlled or explicitly
     accepted. This does not authorize handoff cleanup, hook changes, ranking changes, `orient`
     expansion, or M6 review export/apply.
+61. Treat T61 as a narrow direct-search false-positive repair: `what should happen next` is
+    continuation/current-plan wording, not approval-gate intent. Explicit modal action prompts such
+    as `should we run migration_review_export` still preserve gate-first behavior. This does not
+    authorize broad ranking changes, `orient` expansion, M6 review export/apply, lifecycle writes,
+    schema/storage/index changes, public MCP changes, or harness adapter/hook changes. The Claude
+    Bridge critique retry also repeated the no-write handoff confound.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
