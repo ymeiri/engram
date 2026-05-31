@@ -708,6 +708,13 @@ Current next application:
   strict handoff current-plan presentation keeps one latest applicable current plan across matching
   scopes and pins it in Brain Loop while preserving existing gate selection, lean shape, and
   lifecycle state.
+- T39 installed-runtime validation showed that source fixtures were not enough: the installed T38
+  binary removed stale current-plan guidance, but live handoff prompts still omitted gate context
+  until `approval gate` was treated as exact gate vocabulary and the M6/harness-write gate rules
+  were captured as active MemoryItems. Codex trace `019e7ce5-4d19-7060-aa12-ab0f6d9b5695` and
+  native Claude Code trace `019e7ce5-b4e4-7830-94a4-48f87ebf56b2` now agree on the handoff IDs.
+  This remains prompt-class validation and capture repair, not approval for migration, lifecycle
+  cleanup, payload expansion, or harness writes.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

@@ -1189,6 +1189,72 @@ async fn test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates() 
         .unwrap()
         .to_string();
 
+    let mut secondary = with_writer(request("add"));
+    secondary.kind = Some("decision".to_string());
+    secondary.title = Some("Mission-class PlanWork current-plan gap resolved narrowly".to_string());
+    secondary.content = Some(
+        "Earlier mission-class plan_work prompts now preserve current-plan continuity, but this \
+         implementation-history item is not the current handoff plan."
+            .to_string(),
+    );
+    secondary.origin = Some("tool_result".to_string());
+    secondary.scope_type = Some("project".to_string());
+    secondary.project_name = Some("engram".to_string());
+    secondary.evidence = manual_review_evidence("Secondary decision fixture.");
+    tools::memory_new(&state, secondary)
+        .await
+        .expect("secondary decision add should work");
+
+    let mut research_rule = with_writer(request("add"));
+    research_rule.kind = Some("rule".to_string());
+    research_rule.title = Some("Brain Harness work follows research method".to_string());
+    research_rule.content = Some(
+        "Brain Harness work uses explicit research questions, competing hypotheses, evidence \
+         levels, falsifiers, decision gates, and claim-ledger updates."
+            .to_string(),
+    );
+    research_rule.origin = Some("user_stated".to_string());
+    research_rule.scope_type = Some("project".to_string());
+    research_rule.project_name = Some("engram".to_string());
+    research_rule.evidence = manual_review_evidence("Research method rule fixture.");
+    tools::memory_new(&state, research_rule)
+        .await
+        .expect("research rule add should work");
+
+    let mut preference = with_writer(request("add"));
+    preference.kind = Some("preference".to_string());
+    preference.title =
+        Some("Software design philosophy: deep modules and evidence over confidence".to_string());
+    preference.content = Some(
+        "Prefer Ousterhout-style deep modules, low cognitive load, no unrequested features, and \
+         evidence over confidence."
+            .to_string(),
+    );
+    preference.origin = Some("user_stated".to_string());
+    preference.scope_type = Some("project".to_string());
+    preference.project_name = Some("engram".to_string());
+    preference.evidence = manual_review_evidence("Software design preference fixture.");
+    tools::memory_new(&state, preference)
+        .await
+        .expect("preference add should work");
+
+    let mut non_gate_noise = with_writer(request("add"));
+    non_gate_noise.kind = Some("limitation".to_string());
+    non_gate_noise.title =
+        Some("Non-gated calibration does not prove broad ranking quality".to_string());
+    non_gate_noise.content = Some(
+        "The non-gated continuation calibration fixes one prompt class but should not be treated \
+         as broad ranking proof."
+            .to_string(),
+    );
+    non_gate_noise.origin = Some("tool_result".to_string());
+    non_gate_noise.scope_type = Some("project".to_string());
+    non_gate_noise.project_name = Some("engram".to_string());
+    non_gate_noise.evidence = manual_review_evidence("Non-gated calibration noise fixture.");
+    tools::memory_new(&state, non_gate_noise)
+        .await
+        .expect("non-gated calibration noise add should work");
+
     let mut m6_gate = with_writer(request("add"));
     m6_gate.kind = Some("limitation".to_string());
     m6_gate.title = Some("M6 migration approval gate remains explicit".to_string());
@@ -1213,7 +1279,7 @@ async fn test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates() 
 
     let mut harness_gate = with_writer(request("add"));
     harness_gate.kind = Some("rule".to_string());
-    harness_gate.title = Some("Harness adapter and hook writes require approval".to_string());
+    harness_gate.title = Some("Harness adapter and hook write approval gate".to_string());
     harness_gate.content = Some(
         "Brain Harness handoffs must preserve the harness-write gate: do not install or modify \
          Claude Code, Codex, Gemini CLI, or Cursor adapters, settings, or hooks without explicit \

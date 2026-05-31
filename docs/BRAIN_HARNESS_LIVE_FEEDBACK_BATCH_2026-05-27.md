@@ -1551,3 +1551,83 @@ repository-scoped current plan, M6 gate, and harness-write gate. The new MCP lea
 that the compact packet includes the latest plan and both existing gates, omits the stale
 current-plan item from top candidates, preserves lean shape, and does not rely on lifecycle
 mutation.
+
+## T39 Installed Prepare-Handoff Gate Validation
+
+Status: fixed and live validated in Codex and native Claude Code. The slice stayed within the
+approved `prepare_handoff` prompt class: no migration inventory/export, write-apply, deletion,
+lifecycle cleanup, schema/storage/index change, public MCP parameter change, hook/adapter write,
+payload expansion, or broad ranking-weight change was introduced.
+
+Research question: after installing the T38 source fix, does live
+`orient(intent=prepare_handoff, response_shape="lean")` surface the latest current plan plus
+explicit M6 and harness-write approval gates, while keeping stale current-plan guidance out of lean
+candidate IDs?
+
+Hypotheses:
+
+- Preferred: the installed daemon needs only a phrase-local approval-gate ranking repair plus
+  deliberate capture of clean M6 and harness-write gate MemoryItems from existing user/doc rules.
+- Null: T38 source fixtures are enough and live installed validation can remain documented only.
+- Simpler alternative: tell agents to call direct `search` for gates after `orient`.
+- Failure: live handoff still omits M6 or harness-write gates, surfaces stale current-plan guidance,
+  or makes contextual `M6 gate` continuation prompts gate-first again.
+
+Evidence before repair:
+
+- Pre-install binary hash `62db1e301ef7913ad685caa39d96ce0c479fc160fff3e8002df66401f619fce9`
+  reproduced the old failure in Codex trace `019e7ccf-5494-7750-aa1c-0f3b3f955aeb`: latest plan
+  appeared, but stale repository current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` was
+  still a lean candidate and explicit gates were absent.
+- Installing the T38 binary hash `f7bffa20215c4bdcc0e33a81c849bd7bd8018e0ae80d96b9bc0be83be2324945`
+  fixed stale current-plan suppression in trace `019e7cd4-a224-79d2-a2c4-4f9d779fb923`, but gates
+  were still absent.
+- Source inspection found `asks_for_decision_gate` treated action/permission terms as gate intent
+  but did not treat the phrase `approval gate` as an explicit gate request.
+- Direct memory search found M6 approval evidence but no clean active harness-write approval-gate
+  MemoryItem; the existing harness evidence was historical readiness/drift state, not a compact
+  current gate.
+
+Consultation: AI Council recall found the T38 decision: avoid payload expansion, lifecycle
+mutation, and broad ranking. A new AI Council broadcast and Claude Bridge critique supported a
+phrase-local repair. Gemini warned against making bare `approval` an always-on gate trigger, so the
+implementation uses the exact phrase `approval gate` instead of broad `approval` / `approved`
+matching.
+
+Implementation:
+
+- `memory_ranker` now treats the phrase `approval gate` as an explicit decision-gate request after
+  stripping `non-gated` continuation vocabulary. Bare `gate` and bare `approval` remain non-triggers.
+- For queries that contain `approval gate`, active MemoryItems whose title or content contains the
+  same phrase are promoted above generic gate chatter such as research-method or calibration notes.
+- The service and MCP prepare-handoff fixtures now include live-like distractors: non-gated
+  calibration noise, research-method guidance, design preference, and a secondary decision.
+- Added two active project-scoped gate MemoryItems from existing docs/user rules:
+  `019e7cde-b517-77d0-aaac-c8638811d4e8` for harness adapter/hook writes and
+  `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` for M6 migration.
+
+Validation:
+
+- `cargo test -p engram-index memory_ranker::tests`
+- `cargo test -p engram-index orient_`
+- `cargo test -p engram-tests --test memory_tests test_mcp_orient_`
+- `cargo test -p engram-tests --test memory_tests`
+- `cargo test -p engram-tests --test search_tests`
+- `cargo fmt --all --check`
+- `cargo check -p engram-cli`
+- `git diff --check`
+- Installed binary hash `d9db0ee830ef261c582e31f0c327f8198d4b6d1f556f11820bcec27fc64dfe42`
+  and restarted the daemon on port `8765`, PID `82993`.
+- Codex live trace `019e7ce5-4d19-7060-aa12-ab0f6d9b5695` returned current-plan memory
+  `019e6d98-c239-7643-984d-bd91b9b077f3` first, included harness gate
+  `019e7cde-b517-77d0-aaac-c8638811d4e8` and M6 gate
+  `019e7ce5-155d-7a10-85f5-00b9dcc69cd0`, and omitted stale current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915`.
+- Native Claude Code `2.1.158` trace `019e7ce5-b4e4-7830-94a4-48f87ebf56b2` returned the same
+  candidate IDs through its own Engram MCP connection. Claude's prose summary mislabeled the first
+  item as not current-plan; `memory(get)` confirmed that ID is tagged `current-plan`, so treat that
+  boolean as a model interpretation error, not an MCP parity failure.
+
+Remaining gates are unchanged: M6 inventory/export/apply/deletion and harness adapter/hook writes
+still require explicit user approval, and stale historical current-plan guidance remains a
+review/lint issue rather than an automatic lifecycle cleanup.

@@ -3938,6 +3938,70 @@ mod tests {
         latest_plan.updated_at = OffsetDateTime::now_utc();
         let latest_plan = service.capture_memory(latest_plan).await.unwrap();
 
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Mission-class PlanWork current-plan gap resolved narrowly",
+                    "Earlier mission-class plan_work prompts now preserve current-plan continuity, \
+                     but this implementation-history item is not the current handoff plan.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "secondary-decision")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Brain Harness work follows research method",
+                    "Brain Harness work uses explicit research questions, competing hypotheses, \
+                     evidence levels, falsifiers, decision gates, and claim-ledger updates.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Preference,
+                    "Software design philosophy: deep modules and evidence over confidence",
+                    "Prefer Ousterhout-style deep modules, low cognitive load, no unrequested \
+                     features, and evidence over confidence.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "Non-gated calibration does not prove broad ranking quality",
+                    "The non-gated continuation calibration fixes one prompt class but should not \
+                     be treated as broad ranking proof.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::ToolCall,
+                    "calibration-noise",
+                )),
+            )
+            .await
+            .unwrap();
+
         let m6_gate = service
             .capture_memory(
                 MemoryItem::new(
@@ -3959,7 +4023,7 @@ mod tests {
             .capture_memory(
                 MemoryItem::new(
                     MemoryKind::Rule,
-                    "Harness adapter and hook writes require approval",
+                    "Harness adapter and hook write approval gate",
                     "Brain Harness handoffs must preserve the harness-write gate: do not install \
                      or modify Claude Code, Codex, Gemini CLI, or Cursor adapters, settings, or \
                      hooks without explicit user approval.",
@@ -4003,16 +4067,28 @@ mod tests {
             packet.brain_loop.top_items.first().map(|item| item.id),
             Some(latest_plan.id)
         );
-        assert!(packet
+        let top_titles = packet
             .brain_loop
             .top_items
             .iter()
-            .any(|item| item.id == m6_gate.id));
-        assert!(packet
-            .brain_loop
-            .top_items
-            .iter()
-            .any(|item| item.id == harness_gate.id));
+            .map(|item| item.title.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .any(|item| item.id == m6_gate.id),
+            "expected M6 gate in {top_titles:?}"
+        );
+        assert!(
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .any(|item| item.id == harness_gate.id),
+            "expected harness gate in {top_titles:?}"
+        );
         assert_eq!(
             service
                 .get_memory(&stale_repository_plan.id)

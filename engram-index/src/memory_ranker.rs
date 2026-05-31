@@ -123,6 +123,7 @@ pub(crate) fn rank_memory_items(
     sort_ranked_memory_items(&mut ranked);
     promote_current_plan_for_continuation_query(&mut ranked, context);
     promote_migration_gate_for_explicit_apply_query(&mut ranked, context);
+    promote_approval_gate_items_for_gate_query(&mut ranked, context);
     ranked
 }
 
@@ -287,6 +288,34 @@ fn promote_migration_gate_for_explicit_apply_query(
     if best_index > 0 {
         let top_score = items.first().map(|ranked| ranked.score).unwrap_or(0.0);
         items[best_index].score = (top_score + 0.001).min(1.0);
+        sort_ranked_memory_items(items);
+    }
+}
+
+fn promote_approval_gate_items_for_gate_query(
+    items: &mut [RankedMemoryItem],
+    context: MemoryRankContext<'_>,
+) {
+    let Some(query) = context.query.map(str::to_lowercase) else {
+        return;
+    };
+    let query = query.replace("non-gated", "").replace("non gated", "");
+    if !query.contains("approval gate") {
+        return;
+    }
+
+    let top_score = items.first().map(|ranked| ranked.score).unwrap_or(0.0);
+    let mut promoted = false;
+    for ranked in items
+        .iter_mut()
+        .filter(|ranked| is_approval_gate_item(&ranked.item))
+    {
+        ranked.components.guidance = ranked.components.guidance.max(1.0);
+        ranked.score = (top_score + 0.001).min(1.0);
+        promoted = true;
+    }
+
+    if promoted {
         sort_ranked_memory_items(items);
     }
 }
@@ -463,6 +492,14 @@ fn guidance_score(item: &MemoryItem, context: MemoryRankContext<'_>) -> f32 {
         let title = item.title.to_lowercase();
         let content = item.content.to_lowercase();
         let reviewed = item.trust_metadata().review_state == MemoryReviewState::Reviewed;
+        if query.contains("approval gate") {
+            if title.contains("approval gate") {
+                return if reviewed { 1.0 } else { 0.95 };
+            }
+            if content.contains("approval gate") {
+                return if reviewed { 0.95 } else { 0.9 };
+            }
+        }
         if has_gate_language(&title) {
             return if reviewed { 1.0 } else { 0.6 };
         }
@@ -502,9 +539,19 @@ fn asks_for_decision_gate(query: &str) -> bool {
     // "non-gated" is continuation vocabulary; only independent gate terms trigger gate mode.
     // Bare "gate" is often a milestone noun ("M6 gate") in continuation prompts, not an
     // approval request. Explicit action or permission terms still keep gate guidance first.
+    // The phrase "approval gate" is itself an explicit gate request; bare "approval" is not.
     let query = query.replace("non-gated", "").replace("non gated", "");
     [
-        "should", "proceed", "allowed", "allow", "apply", "safety", "block", "blocked", "must",
+        "should",
+        "proceed",
+        "allowed",
+        "allow",
+        "apply",
+        "safety",
+        "block",
+        "blocked",
+        "must",
+        "approval gate",
     ]
     .iter()
     .any(|term| query.contains(term))
@@ -603,6 +650,22 @@ fn is_actionable_migration_gate_item(item: &MemoryItem) -> bool {
     has_migration_gate_domain(&value)
         && has_migration_apply_gate_detail(&value)
         && migration_apply_gate_signal_score(item) > 0
+}
+
+fn is_approval_gate_item(item: &MemoryItem) -> bool {
+    if item.status != MemoryStatus::Active
+        || is_current_plan_guidance_item(item)
+        || is_gate_query_noise_item(item)
+    {
+        return false;
+    }
+
+    let value = format!(
+        "{} {}",
+        item.title.to_lowercase(),
+        item.content.to_lowercase()
+    );
+    value.contains("approval gate")
 }
 
 fn is_gate_query_noise_item(item: &MemoryItem) -> bool {
@@ -712,4 +775,24 @@ fn canonical_or_original(path: &Path) -> std::path::PathBuf {
 
 fn path_starts_with(path: &Path, base: &Path) -> bool {
     path == base || path.starts_with(base)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn approval_gate_phrase_triggers_gate_mode() {
+        assert!(asks_for_decision_gate(
+            "Prepare a compact Brain Harness handoff: current plan, approval gates, \
+             evidence-quality state, and next non-gated work."
+        ));
+    }
+
+    #[test]
+    fn contextual_m6_gate_prompt_stays_out_of_gate_mode() {
+        assert!(!asks_for_decision_gate(
+            "current plan next step M6 gate context and non-gated work"
+        ));
+    }
 }

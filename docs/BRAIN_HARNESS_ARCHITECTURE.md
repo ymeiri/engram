@@ -252,6 +252,11 @@ Research checkpoint, current through 2026-05-27:
   it in Brain Loop, and leaves explicit M6/harness-write gate items to normal scoped selection. It
   does not expand the payload, synthesize approval gates, mutate lifecycle state, or authorize M6 or
   harness writes.
+- T39 completed installed-runtime validation for that handoff path. The installed daemon now treats
+  exact `approval gate` wording as gate intent and live Codex/Claude Code traces surface current
+  plan plus the active M6 and harness-write gate MemoryItems while keeping stale repository
+  current-plan guidance out of lean candidates. This is prompt-class validation and capture repair,
+  not migration, lifecycle cleanup, payload expansion, or harness-write approval.
 - M6 migration remains the high-risk gate: even read-only inventory requires explicit
   user-approved scope, and write apply/deletion requires reviewed candidates, dry-run evidence,
   rollback planning, and explicit approval.
@@ -1212,6 +1217,10 @@ Proceed in this order from the current checkpoint:
 46. Keep non-gated work limited to targeted validation, evidence-quality fixes, cross-harness
     replication, and documentation synchronization until the user explicitly approves either M6
     scope or harness adapter/hook writes.
+47. Treat T39 as installed-runtime evidence for one handoff prompt class: exact `approval gate`
+    wording now retrieves active M6 and harness-write gate MemoryItems in Codex and Claude Code,
+    but this does not make `orient` a generated handoff, approval-audit tool, lifecycle-cleanup
+    mechanism, or migration/harness-write authorization path.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
