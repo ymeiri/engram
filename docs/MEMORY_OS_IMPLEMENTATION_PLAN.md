@@ -378,13 +378,11 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       did not imply M6 approval. This records a live-data retrieval gap; it does not authorize
       ranking, lifecycle, migration, `orient`, schema/storage/index, public MCP, or harness
       adapter/hook changes.
-- [ ] T43 prompt-specific mixed-query gate repair: pre-registered in
-      `docs/BRAIN_HARNESS_T43_MIXED_QUERY_GATE_REPAIR_2026-05-31.md`. The only allowed behavior
-      change is a narrow direct-`search` ranking repair for current-plan continuation queries that
-      mention M6/migration gate context but are not explicit apply/permission gate queries. It must
-      keep current-plan first, surface active M6 gate context top-k, and preserve explicit
-      gate/blocked queries without broad ranking, lifecycle, migration, `orient`,
-      schema/storage/index, public MCP, or harness adapter/hook changes.
+- [x] T43 prompt-specific mixed-query gate repair: direct `search` now keeps latest current-plan
+      guidance first while surfacing already-ranked active M6 gate context for the exact mixed
+      current-plan/M6-gate prompt class. The repair is search-only, preserves pure continuation and
+      explicit M6 apply/gate controls, and did not change broad ranking weights, lifecycle state,
+      migration state, `orient`, schema/storage/index, public MCP, or harness adapter/hook behavior.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -448,6 +446,20 @@ deterministic fixture as regression evidence. The next non-gated work should be 
 prompt-specific retrieval slice for the exact mixed prompt class, not a Claude parity run against a
 failing baseline and not M6, lifecycle, schema/storage/index, public MCP, `orient`, broad ranking,
 or harness-write work.
+
+T43 matrix note: the T42 live installed mixed-query gap is repaired for direct `search` only.
+`test_memory_search_promotes_m6_gate_context_below_current_plan_for_mixed_query` covers live-shaped
+noise, stale current-plan guidance, active M6 gate memory, pure continuation control, and explicit
+M6 apply/gate control. After installing binary
+`c8b1254ac71f53da80221a2a259014fca89e2e8e8ca1998a4f0128adce01e721` and restarting the daemon,
+trace `019e7d1c-b20a-7c52-b8af-e6d82439988c` returned current-plan memory
+`019e7d0b-3425-7c00-a395-a69c14cf2a47` first and active M6 gate memory
+`019e7ce5-155d-7a10-85f5-00b9dcc69cd0` second for the exact mixed query. Negative-control trace
+`019e7d1c-c100-7721-82ba-8061330aff8f` preserved gate/blocked context above current-plan guidance,
+pure continuation trace `019e7d1e-29ad-7540-bcfc-d28131851091` did not promote M6 gate context, and
+lean `orient` sanity trace `019e7d1e-2a48-7d63-a49d-a7da22bfa68f` stayed compact. This closes the
+immediate T42 search-ranking gap but does not prove broad ranking quality, Claude Code parity for
+this repaired prompt class, or M6/lifecycle/schema/public-MCP/`orient`/harness readiness.
 
 T23 matrix audit, 2026-05-27:
 

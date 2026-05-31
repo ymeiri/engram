@@ -123,6 +123,7 @@ pub(crate) fn rank_memory_items(
     sort_ranked_memory_items(&mut ranked);
     promote_current_plan_for_continuation_query(&mut ranked, context);
     promote_migration_gate_for_explicit_apply_query(&mut ranked, context);
+    promote_contextual_migration_gate_for_current_plan_query(&mut ranked, context);
     promote_approval_gate_items_for_gate_query(&mut ranked, context);
     ranked
 }
@@ -290,6 +291,59 @@ fn promote_migration_gate_for_explicit_apply_query(
         items[best_index].score = (top_score + 0.001).min(1.0);
         sort_ranked_memory_items(items);
     }
+}
+
+fn promote_contextual_migration_gate_for_current_plan_query(
+    items: &mut [RankedMemoryItem],
+    context: MemoryRankContext<'_>,
+) {
+    if !asks_for_contextual_migration_gate_with_current_plan(context) {
+        return;
+    }
+
+    let Some(current_plan_index) = items
+        .iter()
+        .position(|ranked| is_current_plan_guidance_item(&ranked.item))
+    else {
+        return;
+    };
+    if current_plan_index != 0 {
+        return;
+    }
+
+    let Some(gate_index) = items
+        .iter()
+        .enumerate()
+        .filter(|(_, ranked)| is_contextual_migration_gate_item(&ranked.item))
+        .max_by(|(_, left), (_, right)| {
+            contextual_migration_gate_signal_score(&left.item)
+                .cmp(&contextual_migration_gate_signal_score(&right.item))
+                .then_with(|| {
+                    migration_gate_kind_score(&left.item.kind)
+                        .cmp(&migration_gate_kind_score(&right.item.kind))
+                })
+                .then_with(|| {
+                    memory_review_rank(left.item.trust_metadata().review_state).cmp(
+                        &memory_review_rank(right.item.trust_metadata().review_state),
+                    )
+                })
+                .then_with(|| left.components.scope.total_cmp(&right.components.scope))
+                .then_with(|| left.item.updated_at.cmp(&right.item.updated_at))
+                .then_with(|| left.item.id.to_string().cmp(&right.item.id.to_string()))
+        })
+        .map(|(index, _)| index)
+    else {
+        return;
+    };
+
+    if gate_index == current_plan_index {
+        return;
+    }
+
+    items[current_plan_index].score = 1.0;
+    items[gate_index].components.guidance = items[gate_index].components.guidance.max(0.9);
+    items[gate_index].score = 0.999;
+    sort_ranked_memory_items(items);
 }
 
 fn promote_approval_gate_items_for_gate_query(
@@ -625,6 +679,22 @@ fn asks_for_explicit_migration_apply_gate(query: Option<&str>) -> bool {
     mentions_migration && asks_apply_or_permission && asks_for_decision_gate(&query)
 }
 
+fn asks_for_contextual_migration_gate_with_current_plan(context: MemoryRankContext<'_>) -> bool {
+    if !context.require_text_match
+        || !should_promote_current_plan(context)
+        || asks_for_explicit_migration_apply_gate(context.query)
+    {
+        return false;
+    }
+
+    let Some(query) = context.query.map(str::to_lowercase) else {
+        return false;
+    };
+    let query = query.replace("non-gated", "").replace("non gated", "");
+
+    has_migration_gate_domain(&query) && has_contextual_gate_mention(&query)
+}
+
 fn is_current_plan_guidance_item(item: &MemoryItem) -> bool {
     item.status == MemoryStatus::Active
         && matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
@@ -649,6 +719,24 @@ fn is_actionable_migration_gate_item(item: &MemoryItem) -> bool {
     );
     has_migration_gate_domain(&value)
         && has_migration_apply_gate_detail(&value)
+        && migration_apply_gate_signal_score(item) > 0
+}
+
+fn is_contextual_migration_gate_item(item: &MemoryItem) -> bool {
+    if item.status != MemoryStatus::Active
+        || is_current_plan_guidance_item(item)
+        || is_gate_query_noise_item(item)
+    {
+        return false;
+    }
+
+    let value = format!(
+        "{} {}",
+        item.title.to_lowercase(),
+        item.content.to_lowercase()
+    );
+    has_migration_gate_domain(&value)
+        && has_contextual_gate_mention(&value)
         && migration_apply_gate_signal_score(item) > 0
 }
 
@@ -702,11 +790,33 @@ fn has_migration_apply_gate_detail(value: &str) -> bool {
     .any(|term| value.contains(term))
 }
 
+fn has_contextual_gate_mention(value: &str) -> bool {
+    let value = value.replace("non-gated", "").replace("non gated", "");
+    ["approval gate", "review-gated", "gate", "gated"]
+        .iter()
+        .any(|term| value.contains(term))
+}
+
+fn contextual_migration_gate_signal_score(item: &MemoryItem) -> u16 {
+    let value = format!(
+        "{} {}",
+        item.title.to_lowercase(),
+        item.content.to_lowercase()
+    );
+    let approval_gate_bonus = if value.contains("approval gate") {
+        20
+    } else {
+        0
+    };
+    approval_gate_bonus + migration_apply_gate_signal_score(item)
+}
+
 fn migration_apply_gate_signal_score(item: &MemoryItem) -> u16 {
     let title = item.title.to_lowercase();
     let value = format!("{title} {}", item.content.to_lowercase());
     let mut score = [
         ("must not proceed", 10),
+        ("must not run", 9),
         ("cannot proceed", 10),
         ("do not mark", 9),
         ("do not run", 9),
@@ -793,6 +903,58 @@ mod tests {
     fn contextual_m6_gate_prompt_stays_out_of_gate_mode() {
         assert!(!asks_for_decision_gate(
             "current plan next step M6 gate context and non-gated work"
+        ));
+    }
+
+    #[test]
+    fn contextual_m6_gate_prompt_triggers_current_plan_gate_context() {
+        let context = MemoryRankContext::search(
+            Some("engram"),
+            Some("/Users/yuval.meiri/projects/engram"),
+            Some("current plan next non-gated Brain Harness feedback confidence M6 gate"),
+        );
+
+        assert!(asks_for_contextual_migration_gate_with_current_plan(
+            context
+        ));
+    }
+
+    #[test]
+    fn contextual_m6_gate_promotion_is_search_only() {
+        let context = MemoryRankContext::orientation(
+            Some("engram"),
+            Some("/Users/yuval.meiri/projects/engram"),
+            Some("current plan next non-gated Brain Harness feedback confidence M6 gate"),
+        );
+
+        assert!(!asks_for_contextual_migration_gate_with_current_plan(
+            context
+        ));
+    }
+
+    #[test]
+    fn explicit_m6_apply_prompt_does_not_trigger_current_plan_gate_context() {
+        let context = MemoryRankContext::search(
+            Some("engram"),
+            Some("/Users/yuval.meiri/projects/engram"),
+            Some("approved M6 write apply deletion cleanup legacy simplification now"),
+        );
+
+        assert!(!asks_for_contextual_migration_gate_with_current_plan(
+            context
+        ));
+    }
+
+    #[test]
+    fn pure_current_plan_prompt_does_not_trigger_migration_gate_context() {
+        let context = MemoryRankContext::search(
+            Some("engram"),
+            Some("/Users/yuval.meiri/projects/engram"),
+            Some("current plan next non-gated Brain Harness feedback confidence"),
+        );
+
+        assert!(!asks_for_contextual_migration_gate_with_current_plan(
+            context
         ));
     }
 }

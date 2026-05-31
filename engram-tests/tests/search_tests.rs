@@ -1160,6 +1160,209 @@ async fn test_memory_search_t40_mixed_query_surfaces_current_plan_and_m6_gate() 
 }
 
 #[tokio::test]
+async fn test_memory_search_promotes_m6_gate_context_below_current_plan_for_mixed_query() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    for (index, (kind, title, content)) in [
+        (
+            MemoryKind::ProjectFact,
+            "Non-gated continuation search calibration landed",
+            "The current plan next non-gated Brain Harness feedback confidence M6 gate \
+             query should retrieve the current plan before calibration notes.",
+        ),
+        (
+            MemoryKind::Limitation,
+            "Non-gated calibration does not prove broad ranking quality",
+            "The non-gated continuation calibration mentions M6 gate context, feedback, \
+             and confidence, but it is only ranking caveat noise.",
+        ),
+        (
+            MemoryKind::ProjectFact,
+            "AI Council and Claude next-step synthesis after orient contract",
+            "Brain Harness current plan and M6 gate discussions should not expand orient \
+             or migration behavior.",
+        ),
+        (
+            MemoryKind::ProjectFact,
+            "Brain Harness Architecture synced after orient contract checkpoint",
+            "Current plan and feedback confidence evidence are useful, but broad ranking \
+             quality remains unproven.",
+        ),
+        (
+            MemoryKind::Rule,
+            "Harness adapter and hook write approval gate",
+            "Brain Harness work must not install adapters or hooks without approval. This \
+             is not an M6 migration gate.",
+        ),
+        (
+            MemoryKind::ProjectFact,
+            "Memory OS completion is paused at migration review gate",
+            "M6 migration apply must not proceed without reviewed candidates, a dry-run \
+             report, rollback planning, and explicit approval.",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut item = MemoryItem::new(
+            kind,
+            title,
+            content,
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_confidence(0.99)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            format!("mixed-noise-{index}"),
+        ));
+        item.updated_at = now - time::Duration::minutes(index as i64);
+        memory_service.capture_memory(item).await.unwrap();
+    }
+
+    let mut stale_repository_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after Codex document lifecycle follow-through",
+        "The next product-facing Brain Harness slice is complete for Codex adapter guidance. \
+         Continue from this older current plan only as stale review noise.",
+        MemoryScope::Repository {
+            repository_id: None,
+            remote_url: None,
+            local_path: Some("/Users/yuval.meiri/projects/engram".to_string()),
+        },
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.8)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "old-plan"))
+    .with_tag("current-plan");
+    stale_repository_plan.updated_at = now - time::Duration::days(6);
+    let stale_repository_plan = memory_service
+        .capture_memory(stale_repository_plan)
+        .await
+        .unwrap();
+
+    let mut m6_gate = MemoryItem::new(
+        MemoryKind::Limitation,
+        "M6 migration approval gate remains explicit",
+        "Brain Harness work must not run M6 migration read-only inventory or review export \
+         without explicit user-approved scope. M6 write apply, deletion, cleanup, or legacy \
+         simplification additionally require reviewed candidates, dry-run evidence, rollback \
+         planning, and explicit approval.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "m6-approval-gate",
+    ));
+    m6_gate.updated_at = now - time::Duration::hours(2);
+    let m6_gate = memory_service.capture_memory(m6_gate).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "T42 baseline failed; next work is live mixed-query retrieval repair",
+        "The next non-gated Brain Harness work is a prompt-specific mixed-query repair. \
+         Continue from this current plan while preserving the M6 gate.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.8)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "t42-result"))
+    .with_tag("current-plan");
+    current_plan.updated_at = now;
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let mixed_results = search_service
+        .search_with_options(
+            "current plan next non-gated Brain Harness feedback confidence M6 gate",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(mixed_results[0].id, current_plan.id.to_string());
+    let m6_gate_id = m6_gate.id.to_string();
+    let m6_gate_index = mixed_results
+        .iter()
+        .position(|result| result.id == m6_gate_id)
+        .expect("expected M6 gate in mixed-query memory results");
+    assert!(
+        m6_gate_index > 0 && m6_gate_index < 5,
+        "expected M6 gate below current plan and in first five results, got index {m6_gate_index}"
+    );
+    let stale_plan_id = stale_repository_plan.id.to_string();
+    let stale_plan_index = mixed_results
+        .iter()
+        .position(|result| result.id == stale_plan_id)
+        .expect("expected stale repository plan in mixed-query memory results");
+    assert!(
+        stale_plan_index > 0,
+        "stale current-plan guidance must not outrank the latest current plan"
+    );
+
+    let pure_continuation_results = search_service
+        .search_with_options(
+            "current plan next non-gated Brain Harness feedback confidence",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(pure_continuation_results[0].id, current_plan.id.to_string());
+    assert!(
+        pure_continuation_results
+            .iter()
+            .position(|result| result.id == m6_gate_id)
+            .map(|index| index >= 5)
+            .unwrap_or(true),
+        "pure continuation query should not newly promote M6 gate into top five"
+    );
+
+    let explicit_gate_results = search_service
+        .search_with_options(
+            "approved M6 write apply deletion cleanup legacy simplification now",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_ne!(explicit_gate_results[0].id, current_plan.id.to_string());
+    assert!(
+        explicit_gate_results
+            .iter()
+            .take(2)
+            .any(|result| result.id == m6_gate.id.to_string()),
+        "explicit gate query should keep active M6 gate in top gate context"
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_keeps_gate_guidance_above_current_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();
