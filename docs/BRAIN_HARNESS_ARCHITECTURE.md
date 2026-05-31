@@ -1328,6 +1328,12 @@ Proceed in this order from the current checkpoint:
     task failure remains and stale-memory judgments increased to `31`. This supports evidence-loop
     progress while preserving all approval gates for migration, lifecycle, harness, ranking,
     schema/storage/index, public MCP, and `orient` changes.
+57. Treat T57 as Claude Code parity for the post-T56 continuation prompt plus a broader-search
+    visibility caveat. Claude Code returned T56 first in lean `orient` and exact continuation
+    `search`; the broader implementation-plan query kept T56 rank 2 behind historical non-gated
+    calibration in both Codex and Claude Code. This validates narrow continuity, not broad ranking
+    quality, and preserves all approval gates for migration, lifecycle, harness, ranking,
+    schema/storage/index, public MCP, and `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

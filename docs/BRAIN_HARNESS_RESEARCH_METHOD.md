@@ -795,6 +795,12 @@ Current next application:
   this as evidence-quality calibration only, not product completion or approval for migration,
   lifecycle writes, harness writes, ranking changes, schema/storage/index changes, public MCP
   changes, or `orient` expansion.
+- T57 validated the post-T56 continuation shape in Claude Code and documented a broader-search
+  visibility caveat. T56 surfaced first in Claude lean `orient` and exact continuation `search`;
+  the broader implementation-plan query kept T56 visible at rank 2 behind historical non-gated
+  calibration in both Codex and Claude Code. Treat this as targeted validation only, not approval
+  for broad ranking changes, migration, lifecycle writes, harness writes, schema/storage/index
+  changes, public MCP changes, or `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
