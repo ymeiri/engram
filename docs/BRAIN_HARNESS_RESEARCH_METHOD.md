@@ -757,6 +757,12 @@ Current next application:
   then harness-write for the explicit approval-gates query. Treat this as narrow cross-harness
   evidence only, not as approval for M6, lifecycle writes, harness writes, ranking changes, or
   `orient` expansion.
+- T51 documented that the T48 stale current-plan archive packet drifted after T49/T50
+  current-plan supersession. Fresh read-only get/list/lint/orient evidence showed T50 is now the
+  active project current plan, the stale repository-scoped target remains active, and lint reports
+  139 stale-feedback records with `safe_action=none`. Treat T48 as no longer executable as written
+  and T51 as a drift report only, not as approval for archival, scope correction, M6, harness
+  writes, ranking changes, or `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

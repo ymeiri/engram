@@ -200,6 +200,14 @@ Research checkpoint, current through 2026-05-27:
   `search` trace `019e7d48-905b-75c2-9d5b-e9cb657024c9` returned M6 first and harness-write
   second. This is narrow cross-harness retrieval evidence only, not approval for migration,
   lifecycle writes, harness writes, ranking changes, or `orient` expansion.
+- T51 rechecked the T48 archive packet after T49/T50 current-plan supersession. Fresh read-only
+  evidence showed the active project current plan is now T50
+  `019e7d4b-f526-7141-809d-035a7003a2ed`, while the stale repository-scoped target
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active and lint reports 139 stale-feedback
+  records with `safe_action=none`. Because T48 hard-coded T47 as the active successor and used a
+  stale 129-record archive reason, T48 is no longer executable as written. T51 is a drift report
+  only, not a refreshed approval packet or authorization for lifecycle writes, M6, harness writes,
+  ranking changes, or `orient` expansion.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
