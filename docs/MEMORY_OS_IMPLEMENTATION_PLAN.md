@@ -361,6 +361,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       cleanup. The mixed non-gated search `current plan next non-gated Brain Harness feedback
       confidence M6 gate` returned latest current-plan first but did not surface the active M6 gate
       in top memory results, so this is partial evidence, not completion or M6 authorization.
+- [x] T41 mixed-query fixture validation: after T40 current-plan capture, live search recheck
+      returned the latest current plan first and the active M6 gate in top memory results for the
+      exact T40-04 mixed query. The deterministic fixture
+      `test_memory_search_t40_mixed_query_surfaces_current_plan_and_m6_gate` now seeds
+      live-shaped current-plan, stale repository-plan, non-gated calibration, and M6 gate records,
+      and verifies current-plan-first plus M6-gate top-five behavior while preserving explicit
+      M6 write/apply/deletion gate-first behavior. No production ranking code, lifecycle state,
+      public MCP surface, `orient` payload, migration flow, schema/storage/index behavior, or
+      harness adapter/hook behavior changed.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -405,6 +414,15 @@ handoff continuity are stronger across Codex and native Claude Code; stale curre
 visibility remains healthy; M6 and harness readiness remain explicit approval gates; the mixed
 non-gated search caveat is a retrieval-quality issue, not approval for migration, lifecycle,
 ranking, hook/adapter, schema/storage, public MCP, or `orient` payload work.
+
+T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
+not a production ranking change. Live recheck after the T40 current-plan capture returned current
+plan first and active M6 gate context in top memory results, and
+`test_memory_search_t40_mixed_query_surfaces_current_plan_and_m6_gate` preserves that invariant
+with live-shaped stale/noisy records. This strengthens the current-plan/next-step retrieval row
+for one exact mixed prompt class only. It does not prove broad ranking quality or approve M6
+inventory/export/apply/deletion, lifecycle cleanup, hook/adapter writes, schema/storage changes,
+public MCP changes, or `orient` payload changes.
 
 T23 matrix audit, 2026-05-27:
 

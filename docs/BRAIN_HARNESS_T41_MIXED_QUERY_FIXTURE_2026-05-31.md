@@ -1,7 +1,7 @@
 # Brain Harness T41 Mixed-Query Fixture
 
 Date: 2026-05-31
-Status: Pre-registered before fixture implementation
+Status: Completed as validation-only fixture
 Scope: Deterministic search fixture only
 
 ## Boundary
@@ -47,3 +47,30 @@ Pass criteria:
 Assertions must avoid exact score checks and avoid over-specifying the M6 gate's rank beyond top
 five presence. If the fixture passes without production code changes, record T41 as validation
 only. If it fails, inspect root cause before considering any prompt-class local fix.
+
+## Consultation
+
+AI Council recall and broadcast, plus Claude Bridge read-only critique, agreed that this is a safe
+non-gated fixture slice if it remains an isolated regression test and avoids score/weight changes,
+M6 work, lifecycle writes, `orient` payload changes, public MCP changes, and harness writes. The
+main cautions were to avoid exact-rank overfitting, seed live-shaped stale/noisy records, and keep
+explicit migration-apply prompts gate-first.
+
+## Result
+
+The fixture `test_memory_search_t40_mixed_query_surfaces_current_plan_and_m6_gate` was added to
+`engram-tests/tests/search_tests.rs`. It seeds live-shaped records and verifies:
+
+- exact T40-04 mixed query returns the latest project current plan first,
+- active M6 gate memory appears within the first five memory results,
+- stale repository current-plan guidance does not outrank the latest current plan,
+- an explicit M6 write/apply/deletion query still returns the M6 gate first.
+
+The targeted command passed:
+
+```bash
+cargo test -p engram-tests --test search_tests test_memory_search_t40_mixed_query_surfaces_current_plan_and_m6_gate -- --nocapture
+```
+
+No production ranking code, public MCP surface, lifecycle state, `orient` payload, M6 migration
+flow, schema/storage/index behavior, or harness adapter/hook behavior changed.
