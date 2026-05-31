@@ -1345,6 +1345,14 @@ Proceed in this order from the current checkpoint:
     conditions. It does not authorize the export by itself, candidate decisions, write apply,
     deletion, lifecycle mutation, schema/storage/index changes, public MCP changes, ranking
     changes, `orient` changes, or harness adapter/hook changes.
+60. Treat T60 as evidence that the T59/default-deny retrieval boundary holds, with a separate
+    harness write caveat. Codex and Claude Code both surfaced T59 and did not claim
+    `migration_review_export` was approved, but broad continuation search still surfaced older
+    calibration/history near current guidance. Also, Claude Bridge `write=false` still triggered
+    existing Claude Code session-end rolling handoff MemoryItem writes. Do not treat `write=false`
+    Claude Bridge runs as no-write proof unless handoff behavior is controlled or explicitly
+    accepted. This does not authorize handoff cleanup, hook changes, ranking changes, `orient`
+    expansion, or M6 review export/apply.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

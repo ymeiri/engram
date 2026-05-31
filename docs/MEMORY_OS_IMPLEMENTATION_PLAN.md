@@ -476,6 +476,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `exclude_reviewed_path`, a path-existence preflight, and strict stop conditions. It does not
       run the export or authorize apply, candidate decisions, deletion, lifecycle mutation,
       schema/storage/index, public MCP, ranking, `orient`, or harness changes.
+- [x] T60 T59 gate retrieval parity: documented
+      `docs/BRAIN_HARNESS_T60_T59_GATE_RETRIEVAL_PARITY_2026-05-31.md` from predeclared Codex and
+      Claude Code retrieval probes. Both harnesses surfaced T59 and preserved default-deny for
+      `migration_review_export`, but continuation search remained noisy and the clean no-write
+      condition failed because Claude Bridge `write=false` still triggered existing Claude Code
+      session-end rolling handoff MemoryItem writes. This does not authorize review export, apply,
+      deletion, lifecycle cleanup, schema/storage/index, public MCP, ranking, `orient`, or harness
+      adapter/hook changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -529,6 +537,10 @@ separate approval gate.
 T59 records a pending review-export approval packet with exact `migration_review_export`
 parameters, the T58 `exclude_reviewed_path`, a path-existence preflight, and stop conditions for
 count drift or unexpected write/apply behavior. No export has been run.
+T60 records cross-harness retrieval parity for the T59 gate with caveats: Codex and Claude Code
+both surfaced T59 and default-deny evidence, but broad continuation search still ranked historical
+items above T59 and Claude Bridge `write=false` still wrote rolling handoff MemoryItems through
+existing Claude Code session-end behavior.
 
 | Area | Status | Current evidence | Remaining risk or gate |
 | --- | --- | --- | --- |
@@ -765,6 +777,17 @@ the next approval question for exactly one `memory(action="migration_review_expo
 using the T58 `exclude_reviewed_path` and a fixed review path. It records path-existence and count
 drift stop conditions and requires a new pause before any candidate decisions or write apply. No
 review export has been run.
+
+T60 matrix note: the T59/default-deny retrieval parity report in
+`docs/BRAIN_HARNESS_T60_T59_GATE_RETRIEVAL_PARITY_2026-05-31.md` is a retrieval pass with a write
+confound. Codex and Claude Code both surfaced T59 and preserved default-deny for
+`migration_review_export`; no prompt claimed review export was approved. Continuation `search`
+remained noisy, with historical research/calibration items above T59, and broader search still
+returned stale repository current-plan evidence near T59. The intended no-write condition failed
+because Claude Bridge `write=false` triggered existing Claude Code session-end rolling handoff
+MemoryItem writes. This does not authorize deleting or cleaning those handoffs, changing hooks or
+adapters, running M6 review export/apply, lifecycle writes, schema/storage/index changes, public
+MCP changes, ranking changes, or `orient` expansion.
 
 T23 matrix audit, 2026-05-27:
 

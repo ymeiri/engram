@@ -809,6 +809,12 @@ Current next application:
   fixed review path, path-existence preflight, and count-drift stop conditions. It does not run
   review export or authorize candidate decisions. M6 write apply, deletion, and broad legacy
   simplification remain separately gated even if review export is later approved.
+- T60 validated the T59/default-deny retrieval boundary across Codex and Claude Code with caveats.
+  Both harnesses surfaced T59 and neither claimed `migration_review_export` was approved, but
+  continuation `search` still ranked older research/calibration records above T59. The intended
+  no-write condition failed because Claude Bridge `write=false` still triggered existing Claude
+  Code session-end rolling handoff MemoryItem writes. Treat future Claude Bridge no-write claims as
+  unproven unless handoff behavior is controlled or explicitly accepted.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.
