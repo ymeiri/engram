@@ -383,11 +383,11 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       current-plan/M6-gate prompt class. The repair is search-only, preserves pure continuation and
       explicit M6 apply/gate controls, and did not change broad ranking weights, lifecycle state,
       migration state, `orient`, schema/storage/index, public MCP, or harness adapter/hook behavior.
-- [ ] T44 Claude Code parity for T43 direct-search repair: pre-registered in
-      `docs/BRAIN_HARNESS_T44_CLAUDE_T43_PARITY_2026-05-31.md`. This is read-only validation of
-      the exact repaired mixed current-plan/M6-gate prompt class and controls through Claude Code;
-      no implementation, migration, lifecycle, `orient`, schema/storage/index, public MCP, ranking,
-      or harness adapter/hook changes are authorized.
+- [x] T44 Claude Code parity for T43 direct-search repair: Claude Code reproduced the T43 installed
+      direct-search behavior for the exact mixed current-plan/M6-gate prompt class, explicit M6
+      negative control, and pure continuation control. This was read-only validation only; it did
+      not authorize implementation, migration, lifecycle, `orient`, schema/storage/index, public
+      MCP, ranking, or harness adapter/hook changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -465,6 +465,16 @@ pure continuation trace `019e7d1e-29ad-7540-bcfc-d28131851091` did not promote M
 lean `orient` sanity trace `019e7d1e-2a48-7d63-a49d-a7da22bfa68f` stayed compact. This closes the
 immediate T42 search-ranking gap but does not prove broad ranking quality, Claude Code parity for
 this repaired prompt class, or M6/lifecycle/schema/public-MCP/`orient`/harness readiness.
+
+T44 matrix note: Claude Code parity for the T43 direct-search prompt class passed without code or
+configuration changes. Claude trace `019e7d21-cec2-7c60-b570-40bb6b79574e` returned current-plan
+memory `019e7d20-d54d-7d61-99ac-f6ed805848c9` first and active M6 gate memory
+`019e7ce5-155d-7a10-85f5-00b9dcc69cd0` second for the exact mixed query. Negative-control trace
+`019e7d21-d4c6-7eb0-80a7-244042f513b0` preserved gate/blocked context above current-plan guidance,
+and pure continuation trace `019e7d21-da4e-7e72-9e40-35153ba73628` returned current-plan first with
+active M6 gate absent from the top eight. This closes the immediate Claude parity question for the
+T43 prompt class only; it does not prove broad ranking quality or authorize M6, lifecycle, public
+MCP, `orient`, broad ranking, or harness adapter/hook work.
 
 T23 matrix audit, 2026-05-27:
 

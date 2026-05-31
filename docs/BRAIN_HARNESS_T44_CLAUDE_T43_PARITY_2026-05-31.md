@@ -1,7 +1,7 @@
 # Brain Harness T44 Claude T43 Parity
 
 Date: 2026-05-31
-Status: Pre-registered
+Status: Completed
 Scope: Read-only Claude Code parity validation for the repaired T43 direct-search prompt class
 
 ## Boundary
@@ -47,3 +47,25 @@ Run Claude Code in read-only mode with only Engram MCP search/telemetry access w
 If T44 passes, it supports only this claim: Claude Code reproduces the installed T43 direct-search
 behavior for this exact prompt class and controls. It does not prove broad ranking quality, M6
 approval, lifecycle cleanup safety, hook/adapter readiness, or `orient` payload readiness.
+
+## Result
+
+Claude Code reproduced the installed T43 direct-search behavior for all three read-only checks.
+The run used the same installed daemon and direct Engram MCP `search` with
+`scenario_id=t44_t43_claude_parity_20260531`.
+
+| Check | Trace | Result |
+| --- | --- | --- |
+| Mixed query `current plan next non-gated Brain Harness feedback confidence M6 gate` | `019e7d21-cec2-7c60-b570-40bb6b79574e` | Passed: current-plan memory `019e7d20-d54d-7d61-99ac-f6ed805848c9` ranked 1, active M6 gate memory `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` ranked 2. |
+| Explicit M6 negative control `approved M6 write apply deletion cleanup legacy simplification now` | `019e7d21-d4c6-7eb0-80a7-244042f513b0` | Passed: paused migration gate `019dd35d-1a48-7103-b0e2-390225f8b418` ranked 1, active M6 gate `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` ranked 2, current-plan guidance ranked 3, and no approval was implied. |
+| Pure continuation control `current plan next non-gated Brain Harness feedback confidence` | `019e7d21-da4e-7e72-9e40-35153ba73628` | Passed: current-plan memory `019e7d20-d54d-7d61-99ac-f6ed805848c9` ranked 1 and active M6 gate memory was absent from the top eight. |
+
+Telemetry feedback was submitted and verified for all three Claude traces:
+
+- `019e7d21-fd7f-76e2-a05d-ce12143ab48e` for the mixed query;
+- `019e7d22-0ea3-7a60-9425-0984d53bf254` for the explicit M6 negative control;
+- `019e7d22-19ec-7e11-94a7-3dcebe368d63` for the pure continuation control.
+
+This closes the immediate cross-harness parity question for the T43 repaired direct-search prompt
+class. It does not authorize M6 migration work, lifecycle writes, hook/adapter writes, public MCP
+changes, `orient` payload expansion, or broad ranking changes.
