@@ -789,6 +789,12 @@ Current next application:
   `orient` and direct `search`. Treat this as narrow cross-harness evidence only, not approval for
   migration, lifecycle writes, harness writes, ranking changes, schema/storage/index changes,
   public MCP changes, or `orient` expansion.
+- T56 audited the post-T55 feedback window using the existing
+  `real_session_eval(project=engram, limit=50)` report. Feedback coverage and external-session
+  joinability improved, but one task failure remained and stale-memory judgments increased. Treat
+  this as evidence-quality calibration only, not product completion or approval for migration,
+  lifecycle writes, harness writes, ranking changes, schema/storage/index changes, public MCP
+  changes, or `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

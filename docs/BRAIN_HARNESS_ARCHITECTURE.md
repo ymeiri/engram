@@ -1323,6 +1323,11 @@ Proceed in this order from the current checkpoint:
     returned T54 current-plan memory first in lean `orient` and direct `search`. This validates the
     narrow cross-harness retrieval shape and preserves the same approval gates for migration,
     lifecycle, harness, ranking, schema/storage/index, public MCP, and `orient` changes.
+56. Treat T56 as a post-feedback telemetry audit, not a completion signal. The rolling report
+    improved feedback coverage to `33/50` and external-session trace labeling to `23/50`, but one
+    task failure remains and stale-memory judgments increased to `31`. This supports evidence-loop
+    progress while preserving all approval gates for migration, lifecycle, harness, ranking,
+    schema/storage/index, public MCP, and `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
