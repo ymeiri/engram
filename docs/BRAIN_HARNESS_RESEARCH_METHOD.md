@@ -735,6 +735,11 @@ Current next application:
   Codex/Gemini/Cursor generated adapters remain drifted. Treat this as current configuration
   evidence, not approval for adapter installation, settings edits, hook registration, migration, or
   lifecycle mutation.
+- T47 prepared a pending harness repair approval packet from read-only dry-runs, source inspection,
+  AI Council critique, and Claude Bridge critique. Treat it as a default-deny approval request only,
+  not as authorization to write adapters, edit settings, adopt user-owned files, rewrite hooks, run
+  M6, mutate lifecycle state, change schema/storage/index state, change public MCP behavior, change
+  ranking, or expand `orient`.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

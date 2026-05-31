@@ -176,6 +176,11 @@ Research checkpoint, current through 2026-05-27:
   `SessionEnd` settings registrations, and Codex/Gemini/Cursor generated adapters remain drifted.
   This is configuration evidence only, not authorization to install adapters, edit settings, or
   register hooks.
+- T47 prepared a pending approval packet for exact local harness repair writes derived from
+  read-only `harness(action="install", write=false, ...)` dry-runs. The packet asks for approval
+  only; it does not install adapters, edit settings, adopt user-owned files, rewrite hooks, run M6,
+  mutate lifecycle state, change schema/storage/index state, change public MCP behavior, change
+  ranking, or expand `orient`.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1252,6 +1257,11 @@ Proceed in this order from the current checkpoint:
     surfaces report `ready=false`; it does not authorize adapter installation, settings edits, hook
     registration, M6 work, lifecycle mutation, schema/storage/index changes, public MCP changes,
     ranking changes, or `orient` payload changes.
+52. Treat T47 as an approval-packet step, not a harness repair step. It prepares a pending user
+    decision for exact dry-run-derived local harness writes and keeps missing, conditional, or
+    ambiguous approval default-deny. The packet does not authorize user-owned adoption,
+    `settings.json` edits, hook rewrites, M6 work, lifecycle mutation, schema/storage/index
+    changes, public MCP changes, ranking changes, or `orient` payload changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
