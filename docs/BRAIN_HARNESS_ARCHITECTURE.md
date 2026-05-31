@@ -194,6 +194,12 @@ Research checkpoint, current through 2026-05-27:
   and T48 as pending approvals, but it did not individually surface M6 and harness-write gate
   memories. Treat this as a partial result and keep approval-audit behavior out of the `orient`
   hot path unless a later approved prompt-class slice justifies a narrow change.
+- T50 replicated the post-T49 pending-approval continuation shape in Claude Code through the
+  read-only Engram MCP path. Lean `orient` trace `019e7d48-6e97-7513-96af-f49d5a61bfc5`
+  surfaced the T49 current plan first, harness-write gate second, and M6 gate third; direct
+  `search` trace `019e7d48-905b-75c2-9d5b-e9cb657024c9` returned M6 first and harness-write
+  second. This is narrow cross-harness retrieval evidence only, not approval for migration,
+  lifecycle writes, harness writes, ranking changes, or `orient` expansion.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist

@@ -751,6 +751,12 @@ Current next application:
   while lean `orient` exposed the queue indirectly through the latest current-plan memory rather
   than surfacing M6 and harness-write gate memories individually. Treat this as a partial result,
   not as approval for M6, lifecycle writes, harness writes, ranking changes, or `orient` expansion.
+- T50 replicated the post-T49 pending-approval continuation shape in Claude Code using only
+  read-only Engram `orient`, `search`, and `obligations` tools. Claude Code surfaced the T49
+  current plan, harness-write gate, and M6 gate in lean `orient`, and direct `search` returned M6
+  then harness-write for the explicit approval-gates query. Treat this as narrow cross-harness
+  evidence only, not as approval for M6, lifecycle writes, harness writes, ranking changes, or
+  `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
