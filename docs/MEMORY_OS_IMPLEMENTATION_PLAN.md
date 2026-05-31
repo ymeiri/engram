@@ -388,6 +388,12 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       negative control, and pure continuation control. This was read-only validation only; it did
       not authorize implementation, migration, lifecycle, `orient`, schema/storage/index, public
       MCP, ranking, or harness adapter/hook changes.
+- [x] T45 M6 read-only scope proposal packet: prepared
+      `docs/BRAIN_HARNESS_T45_M6_READ_ONLY_SCOPE_PROPOSAL_2026-05-31.md` from existing evidence
+      only. It requests approval for exactly one bounded inventory-only
+      `memory(action="migration_inventory", ...)` call and a Markdown report. It does not authorize
+      review export, apply, deletion, lifecycle mutation, schema/storage/index changes, public MCP
+      changes, ranking or `orient` changes, or harness adapter/hook changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -475,6 +481,13 @@ and pure continuation trace `019e7d21-da4e-7e72-9e40-35153ba73628` returned curr
 active M6 gate absent from the top eight. This closes the immediate Claude parity question for the
 T43 prompt class only; it does not prove broad ranking quality or authorize M6, lifecycle, public
 MCP, `orient`, broad ranking, or harness adapter/hook work.
+
+T45 matrix note: the next M6 step is now expressed as an explicit approval packet rather than an
+implicit request. The packet asks only for one bounded inventory-only
+`memory(action="migration_inventory", project_name="engram", limit=200, include_entity_observations=true, include_session_history=true, include_work_observations=true, exclude_reviewed_path="/Users/yuval.meiri/.engram/reviews/2026-04-28-memory-os-completion")`
+call and a Markdown report. Review export, apply, deletion, lifecycle mutation, schema/storage/index
+changes, public MCP changes, ranking or `orient` changes, and harness adapter/hook changes remain
+out of scope until separately approved.
 
 T23 matrix audit, 2026-05-27:
 
