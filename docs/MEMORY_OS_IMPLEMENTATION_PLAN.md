@@ -400,6 +400,13 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 
 ## Current Completion Matrix
 
+Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
+evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
+mixed current-plan/M6 direct-search prompt class is now validated in Codex and Claude Code, while
+T45 records only a pending approval packet for one inventory-only M6 scoping run. M6 inventory,
+review export, apply, deletion, lifecycle mutation, schema/storage/index changes, public MCP
+changes, ranking or `orient` changes, and harness adapter/hook changes remain unapproved.
+
 | Area | Status | Current evidence | Remaining risk or gate |
 | --- | --- | --- | --- |
 | Memory OS substrate and MCP/CLI surfaces | Implemented | Checklist above; MCP/CLI surfaces listed below | None currently blocking the hot path. |
