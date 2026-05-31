@@ -1334,6 +1334,17 @@ Proceed in this order from the current checkpoint:
     calibration in both Codex and Claude Code. This validates narrow continuity, not broad ranking
     quality, and preserves all approval gates for migration, lifecycle, harness, ranking,
     schema/storage/index, public MCP, and `orient` changes.
+58. Treat T58 as approved inventory evidence, not migration approval. The bounded
+    inventory-only run scanned 115 sources, returned 11 candidates, was not truncated, and wrote no
+    Memory OS records. Review export, apply, deletion, lifecycle mutation, schema/storage/index
+    changes, public MCP changes, ranking changes, `orient` changes, and harness adapter/hook
+    changes remain separately gated.
+59. Treat T59 as a review-export approval packet, not a review-export step. It proposes exactly
+    one `memory(action="migration_review_export", ...)` call with the T58
+    `exclude_reviewed_path`, a fixed review path, a path-existence preflight, and count-drift stop
+    conditions. It does not authorize the export by itself, candidate decisions, write apply,
+    deletion, lifecycle mutation, schema/storage/index changes, public MCP changes, ranking
+    changes, `orient` changes, or harness adapter/hook changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

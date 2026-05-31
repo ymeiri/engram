@@ -801,7 +801,14 @@ Current next application:
   calibration in both Codex and Claude Code. Treat this as targeted validation only, not approval
   for broad ranking changes, migration, lifecycle writes, harness writes, schema/storage/index
   changes, public MCP changes, or `orient` expansion.
-- The next non-gated work should improve targeted validation, evidence quality, cross-harness
-  replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
-  inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
-  broad legacy simplification remain separately gated.
+- T58 ran the explicitly approved inventory-only M6 scope and produced bounded evidence: 115
+  sources scanned, 11 candidates returned, no truncation, and no writes. Treat this as inventory
+  evidence only, not review-export, apply, deletion, lifecycle, schema/storage/index, public MCP,
+  ranking, `orient`, or harness approval.
+- T59 prepares a pending review-export approval packet using the T58 `exclude_reviewed_path`, a
+  fixed review path, path-existence preflight, and count-drift stop conditions. It does not run
+  review export or authorize candidate decisions. M6 write apply, deletion, and broad legacy
+  simplification remain separately gated even if review export is later approved.
+- The next executable M6 step requires explicit approval of the T59 review-export scope. Until
+  then, non-gated work should improve targeted validation, evidence quality, cross-harness
+  replication, or another concrete capture/lifecycle gap surfaced by evidence.
