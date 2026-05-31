@@ -1,7 +1,7 @@
 # Brain Harness T46 Harness Readiness Re-Audit
 
 Date: 2026-05-31
-Status: Pre-registered
+Status: Completed
 Scope: Read-only harness readiness evidence refresh
 
 ## Boundary
@@ -35,8 +35,32 @@ Run read-only `harness(action="doctor", project="engram")` and record:
 - whether any result changes the completion matrix;
 - whether adapter or hook writes remain gated.
 
+## Result
+
+T46 ran only read-only harness doctor/status checks. No adapter install, settings mutation, hook
+registration, lifecycle mutation, migration action, ranking change, public MCP change, schema
+change, or `orient` payload change was performed.
+
+The default `harness(action="doctor", project="engram")` checks the generic harness policy rather
+than aggregating all supported harnesses. It returned `ready=false` because the required generic
+policy document is missing at `/Users/yuval.meiri/.engram/harness-policy.md`.
+
+| Harness | Ready | Read-only finding |
+| --- | --- | --- |
+| `generic` | false | Required generic harness policy document is missing. |
+| `claude_code` | false | Required generated adapter files are installed, but the optional settings snippet is user-owned and Claude settings still lack required `SessionStart:startup|resume|compact` and `SessionEnd` registrations. Settings also contain extra legacy Engram permission entries outside the current contract. |
+| `codex` | false | Required `codex-memory-session-skill` and `codex-resume-session-skill` are drifted; `project-agents-snippet` is installed. |
+| `gemini_cli` | false | Required `gemini-memory-session-command`, `gemini-resume-session-command`, and `gemini-global-context` are drifted; `gemini-end-session-command` is installed. |
+| `cursor` | false | Required `cursor-memory-session-skill` and `cursor-resume-session-skill` are drifted; `cursor-end-session-skill` is installed. |
+
 ## Allowed Conclusion
 
 If T46 passes, it supports only a current readiness statement for the read-only doctor surface. It
 does not authorize adapter writes, hook writes, settings changes, M6 work, lifecycle mutation, or
 hot-path changes.
+
+## Conclusion
+
+The preferred hypothesis holds: supported harness readiness still reports `ready=false`. The result
+updates the completion matrix as a current read-only evidence refresh only. Harness adapter and hook
+repair remains an explicit approval gate, separate from the M6 migration gate.

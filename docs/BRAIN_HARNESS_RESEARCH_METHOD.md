@@ -729,6 +729,12 @@ Current next application:
   run inventory, review export, apply, deletion, lifecycle mutation, schema/storage/index changes,
   public MCP changes, ranking or `orient` changes, or harness/hook changes. Missing, conditional,
   or ambiguous user approval remains default-deny.
+- T46 refreshed harness readiness evidence using only read-only doctor/status checks. Generic,
+  Claude Code, Codex, Gemini CLI, and Cursor all returned `ready=false`; generic policy is missing,
+  Claude Code lacks required `SessionStart` and `SessionEnd` settings registrations, and
+  Codex/Gemini/Cursor generated adapters remain drifted. Treat this as current configuration
+  evidence, not approval for adapter installation, settings edits, hook registration, migration, or
+  lifecycle mutation.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

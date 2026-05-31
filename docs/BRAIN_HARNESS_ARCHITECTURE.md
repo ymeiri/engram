@@ -170,6 +170,12 @@ Research checkpoint, current through 2026-05-27:
   prepared a pending approval packet for exactly one inventory-only M6 scoping run. No M6
   inventory, review export, apply, deletion, lifecycle mutation, schema/storage/index change,
   public MCP change, ranking or `orient` change, or harness/hook change was authorized or run.
+- T46 refreshed harness readiness evidence with read-only `harness(action="doctor")` and
+  `harness(action="status")` checks. Generic, Claude Code, Codex, Gemini CLI, and Cursor all
+  returned `ready=false`: generic policy is missing, Claude Code lacks required `SessionStart` and
+  `SessionEnd` settings registrations, and Codex/Gemini/Cursor generated adapters remain drifted.
+  This is configuration evidence only, not authorization to install adapters, edit settings, or
+  register hooks.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1242,6 +1248,10 @@ Proceed in this order from the current checkpoint:
     report. Review export, apply, deletion, lifecycle mutation, schema/storage/index changes,
     public MCP changes, ranking or `orient` changes, and harness adapter/hook writes remain
     unapproved.
+51. Treat T46 as a read-only harness readiness evidence refresh. It reconfirms all checked harness
+    surfaces report `ready=false`; it does not authorize adapter installation, settings edits, hook
+    registration, M6 work, lifecycle mutation, schema/storage/index changes, public MCP changes,
+    ranking changes, or `orient` payload changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
