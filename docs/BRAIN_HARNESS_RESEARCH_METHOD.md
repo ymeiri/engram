@@ -771,6 +771,11 @@ Current next application:
   decision request only, not approval to archive, create replacement memory, scope-correct, run M6,
   write harness adapters/settings/hooks, change schema/storage/index state, change public MCP
   behavior, change ranking, or expand `orient`.
+- T53 validated the post-T52 continuation shape in Claude Code using only read-only Engram
+  `orient`, `search`, and `obligations` tools. Claude Code surfaced T52 current-plan memory first
+  in both lean `orient` and direct `search`; the stale repository-scoped target remained visible as
+  pending-decision evidence only. Treat this as narrow cross-harness evidence, not approval for
+  lifecycle writes, replacement memory, M6, harness writes, ranking changes, or `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

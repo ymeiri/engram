@@ -218,6 +218,14 @@ Research checkpoint, current through 2026-05-27:
   It does not authorize lifecycle writes, create a replacement, run M6, write harness adapters,
   edit settings, register hooks, change schema/storage/index state, change public MCP behavior,
   change ranking, or expand `orient`.
+- T53 replicated the post-T52 current-plan retrieval shape in Claude Code through the read-only
+  Engram MCP path. Claude Bridge ran with only `orient`, `search`, and `obligations` allowed.
+  Lean `orient` trace `019e7d60-64af-76d3-948f-5dd6068aa3d8` and direct `search` trace
+  `019e7d60-67e9-71d0-a421-f3364d4a5131` both surfaced T52 current-plan memory
+  `019e7d5d-c450-7171-9fdb-8d1a5e745b0b` first. The stale repository-scoped current-plan target
+  remained visible below T52 and was treated as pending-decision evidence only. This is read-only
+  parity evidence only, not approval for lifecycle writes, replacement memory, M6, harness writes,
+  ranking changes, or `orient` expansion.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
