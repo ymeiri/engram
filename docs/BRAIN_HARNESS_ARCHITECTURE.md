@@ -188,6 +188,12 @@ Research checkpoint, current through 2026-05-27:
   129 recent stale-feedback records with `safe_action=none`. The packet asks for approval only; it
   does not archive the memory, mutate other memories, run M6, execute harness writes, change
   schema/storage/index state, change public MCP behavior, change ranking, or expand `orient`.
+- T49 audited pending-approval retrieval without changing code. Direct `search` surfaced the
+  active M6 gate, harness-write gate, and T48 lifecycle packet for explicit approval-gate prompts.
+  Lean `orient` surfaced the latest current-plan memory first, whose full content names T45, T47,
+  and T48 as pending approvals, but it did not individually surface M6 and harness-write gate
+  memories. Treat this as a partial result and keep approval-audit behavior out of the `orient`
+  hot path unless a later approved prompt-class slice justifies a narrow change.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist

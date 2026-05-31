@@ -746,6 +746,11 @@ Current next application:
   authorization to archive the target memory, mutate any other memory, run M6, write harness
   adapters/settings/hooks, change schema/storage/index state, change public MCP behavior, change
   ranking, or expand `orient`.
+- T49 audited pending-approval retrieval as a read-only slice. Explicit approval-gate direct
+  `search` prompts recovered the active M6, harness-write, and T48 lifecycle gates prominently,
+  while lean `orient` exposed the queue indirectly through the latest current-plan memory rather
+  than surfacing M6 and harness-write gate memories individually. Treat this as a partial result,
+  not as approval for M6, lifecycle writes, harness writes, ranking changes, or `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
