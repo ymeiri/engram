@@ -378,8 +378,10 @@ T39 matrix note: installed-runtime validation found that the T38 binary fixed st
 suppression but live data/ranking still omitted gate context. The repair was phrase-local to
 `approval gate` and captured two existing rules as active MemoryItems:
 `019e7cde-b517-77d0-aaac-c8638811d4e8` for harness writes and
-`019e7ce5-155d-7a10-85f5-00b9dcc69cd0` for M6. This is validation/capture work, not M6 or
-harness-write approval.
+`019e7ce5-155d-7a10-85f5-00b9dcc69cd0` for M6. After current-plan capture, Codex trace
+`019e7ceb-fda5-79b1-a997-725a9914840e` returned new current-plan memory
+`019e7ceb-d8bb-73f0-960c-85b667b872de` first with both gates still present. This is
+validation/capture work, not M6 or harness-write approval.
 
 T23 matrix audit, 2026-05-27:
 

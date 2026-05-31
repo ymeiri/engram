@@ -1627,6 +1627,10 @@ Validation:
   candidate IDs through its own Engram MCP connection. Claude's prose summary mislabeled the first
   item as not current-plan; `memory(get)` confirmed that ID is tagged `current-plan`, so treat that
   boolean as a model interpretation error, not an MCP parity failure.
+- After capturing the new current-plan memory, Codex trace
+  `019e7ceb-fda5-79b1-a997-725a9914840e` returned T39 current-plan memory
+  `019e7ceb-d8bb-73f0-960c-85b667b872de` first, kept both gates present, omitted stale current-plan
+  memory, and reported no open obligations.
 
 Remaining gates are unchanged: M6 inventory/export/apply/deletion and harness adapter/hook writes
 still require explicit user approval, and stale historical current-plan guidance remains a

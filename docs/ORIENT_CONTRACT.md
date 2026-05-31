@@ -145,12 +145,13 @@ Installed-runtime T39 validation then hardened the `prepare_handoff` approval-ga
 After installing binary hash
 `d9db0ee830ef261c582e31f0c327f8198d4b6d1f556f11820bcec27fc64dfe42`, Codex trace
 `019e7ce5-4d19-7060-aa12-ab0f6d9b5695` and native Claude Code `2.1.158` trace
-`019e7ce5-b4e4-7830-94a4-48f87ebf56b2` both returned current-plan memory
-`019e6d98-c239-7643-984d-bd91b9b077f3` first, surfaced harness-write gate
+`019e7ce5-b4e4-7830-94a4-48f87ebf56b2` both surfaced harness-write gate
 `019e7cde-b517-77d0-aaac-c8638811d4e8` and M6 gate
 `019e7ce5-155d-7a10-85f5-00b9dcc69cd0`, and omitted stale current-plan memory
-`019e5e0a-86b4-73e3-aa9b-ca350e83e915`. This is still prompt-class validation only; it does not
-make `orient` a generated handoff or approval-audit tool.
+`019e5e0a-86b4-73e3-aa9b-ca350e83e915`. After current-plan capture, Codex trace
+`019e7ceb-fda5-79b1-a997-725a9914840e` returned the new T39 current-plan memory
+`019e7ceb-d8bb-73f0-960c-85b667b872de` first with both gates still present. This is still
+prompt-class validation only; it does not make `orient` a generated handoff or approval-audit tool.
 
 ## Feedback Expectations
 
