@@ -1366,6 +1366,12 @@ Proceed in this order from the current checkpoint:
     gate evidence first. Claude Bridge `write=false` again wrote duplicate rolling handoffs, so
     no-write parity remains unproven and no handoff cleanup, hook change, or adapter change is
     authorized.
+63. Treat T63 as scoped telemetry drill-down hygiene, not a new approval. Scoped
+    `telemetry(action="list_feedback", project/scenario/arm, limit=N)` now filters matching traces
+    before limiting feedback, matching scoped `real_session_eval` behavior. Installed binary hash
+    `fd7287ef6186d77532c20486034f95729b89e00c043e6ef94aa870bc873846da` reproduced the behavior
+    in a live MCP smoke. This does not authorize migration, lifecycle, ranking, `orient`,
+    schema/storage/index, public MCP, or harness adapter/hook changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

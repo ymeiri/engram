@@ -17,6 +17,7 @@ const MIN_REAL_SESSION_FEEDBACK: usize = 10;
 const MIN_REAL_SESSION_FEEDBACK_COVERAGE: f32 = 0.5;
 const MIN_REAL_SESSION_INTENTS_WITH_FEEDBACK: usize = 3;
 const MIN_REAL_SESSION_OUTCOME_FEEDBACK: usize = 1;
+const DEFAULT_TELEMETRY_LIST_LIMIT: usize = 100;
 
 /// Service for retrieval traces and agent feedback.
 #[derive(Clone)]
@@ -124,15 +125,17 @@ impl TelemetryService {
             return self.list_feedback(limit).await;
         }
 
-        let traces = self.repo.list_traces(limit).await?;
-        let traces = filter_traces_by_scope(traces, project, scenario_id, arm);
-        let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
-        let feedback = self.repo.list_feedback(limit).await?;
+        let result_limit = limit.unwrap_or(DEFAULT_TELEMETRY_LIST_LIMIT);
+        let trace_scan_limit = result_limit.max(DEFAULT_TELEMETRY_LIST_LIMIT);
+        let traces = self
+            .repo
+            .list_traces_scoped(Some(trace_scan_limit), project, scenario_id, arm)
+            .await?;
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let mut feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
+        feedback.truncate(result_limit);
 
-        Ok(feedback
-            .into_iter()
-            .filter(|item| trace_ids.contains(&item.trace_id))
-            .collect())
+        Ok(feedback)
     }
 
     /// Aggregate traces and feedback by intent.
@@ -1209,29 +1212,6 @@ fn has_scope_filter(project: Option<&str>, scenario_id: Option<&str>, arm: Optio
         || normalized_label_ref(arm).is_some()
 }
 
-fn filter_traces_by_scope(
-    traces: Vec<BrainHarnessTrace>,
-    project: Option<&str>,
-    scenario_id: Option<&str>,
-    arm: Option<&str>,
-) -> Vec<BrainHarnessTrace> {
-    traces
-        .into_iter()
-        .filter(|trace| trace_matches_scope(trace, project, scenario_id, arm))
-        .collect()
-}
-
-fn trace_matches_scope(
-    trace: &BrainHarnessTrace,
-    project: Option<&str>,
-    scenario_id: Option<&str>,
-    arm: Option<&str>,
-) -> bool {
-    label_matches(trace.project.as_deref(), project)
-        && label_matches(trace.scenario_id.as_deref(), scenario_id)
-        && label_matches(trace.arm.as_deref(), arm)
-}
-
 fn applied_filters(
     project: Option<&str>,
     scenario_id: Option<&str>,
@@ -1246,13 +1226,6 @@ fn applied_filters(
 
 fn has_any_filter(filters: &RealSessionEvalAppliedFilters) -> bool {
     filters.project.is_some() || filters.scenario_id.is_some() || filters.arm.is_some()
-}
-
-fn label_matches(actual: Option<&str>, expected: Option<&str>) -> bool {
-    let Some(expected) = normalized_label_ref(expected) else {
-        return true;
-    };
-    normalized_label_ref(actual) == Some(expected)
 }
 
 fn has_outcome_feedback(feedback: &AgentFeedback) -> bool {

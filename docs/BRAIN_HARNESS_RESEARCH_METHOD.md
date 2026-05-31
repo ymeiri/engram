@@ -825,6 +825,12 @@ Current next application:
   `should we run migration_review_export` prompts kept migration gate evidence first. The Claude
   parity probe again wrote duplicate session-end handoffs despite `write=false`, so no-write parity
   remains unproven and handoff cleanup/hook changes remain gated.
+- T63 fixed scoped feedback drill-down sampling so `telemetry(action="list_feedback",
+  project/scenario/arm, limit=N)` applies scope before limiting feedback, matching scoped
+  `real_session_eval` behavior. The slice added a deterministic regression and installed-runtime
+  smoke evidence; it is telemetry evidence-loop hygiene only, not product-completion evidence or
+  approval for M6, lifecycle, ranking, `orient`, schema/storage/index, public MCP, or harness
+  changes.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.

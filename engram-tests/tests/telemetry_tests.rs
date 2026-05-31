@@ -1135,6 +1135,77 @@ async fn mcp_telemetry_list_actions_filter_by_project() {
 }
 
 #[tokio::test]
+async fn mcp_list_feedback_applies_scope_before_limit() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let scenario_id = "scoped_feedback_limit";
+    let arm = "memoryitem_orient";
+    let mut target_new_trace_id = String::new();
+
+    for (label, project, note) in [
+        ("target-old", "engram", "target old feedback"),
+        ("target-new", "engram", "target new feedback"),
+        ("newer-noise", "engram-other", "out-of-scope feedback"),
+    ] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("orient".to_string());
+        trace_request.intent = Some("implement_change".to_string());
+        trace_request.project = Some(project.to_string());
+        trace_request.scenario_id = Some(scenario_id.to_string());
+        trace_request.arm = Some(arm.to_string());
+        trace_request.query = Some(format!("{label} scoped feedback"));
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+        if label == "target-new" {
+            target_new_trace_id = trace_id.clone();
+        }
+
+        let mut feedback_request = telemetry_request("submit_feedback");
+        feedback_request.trace_id = Some(trace_id);
+        feedback_request.note = Some(note.to_string());
+
+        tools::telemetry_new(&state, feedback_request)
+            .await
+            .expect("submit_feedback should work");
+
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
+
+    let mut list_feedback_request = telemetry_request("list_feedback");
+    list_feedback_request.project = Some("engram".to_string());
+    list_feedback_request.scenario_id = Some(scenario_id.to_string());
+    list_feedback_request.arm = Some(arm.to_string());
+    list_feedback_request.limit = Some(1);
+
+    let list_feedback_response = tools::telemetry_new(&state, list_feedback_request)
+        .await
+        .expect("project-filtered list_feedback should work");
+    let list_feedback_json = parse_json(&list_feedback_response);
+    let feedback = list_feedback_json["feedback"].as_array().unwrap();
+
+    assert_eq!(list_feedback_json["count"], 1);
+    assert_eq!(
+        feedback[0]["trace_id"].as_str(),
+        Some(target_new_trace_id.as_str())
+    );
+    assert_eq!(feedback[0]["note"], "target new feedback");
+}
+
+#[tokio::test]
 async fn mcp_real_session_eval_reports_applied_filters() {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)
