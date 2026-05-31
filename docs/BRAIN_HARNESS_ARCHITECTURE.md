@@ -1317,6 +1317,12 @@ Proceed in this order from the current checkpoint:
     failure remains, stale-memory feedback is active, and external session labels are sparse. This
     supports the evidence-loop row as partially validated only and does not authorize migration,
     lifecycle, harness, ranking, schema/storage/index, public MCP, or `orient` changes.
+55. Treat T55 as Claude Code parity for the post-T54 continuation prompt only. Claude Bridge's
+    project harness exposed only file tools and produced no scoreable Engram MCP result; the
+    personal-harness rerun with only read-only Engram `orient`, `search`, and `obligations` tools
+    returned T54 current-plan memory first in lean `orient` and direct `search`. This validates the
+    narrow cross-harness retrieval shape and preserves the same approval gates for migration,
+    lifecycle, harness, ranking, schema/storage/index, public MCP, and `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

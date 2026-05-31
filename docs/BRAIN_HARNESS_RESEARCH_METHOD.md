@@ -783,6 +783,12 @@ Current next application:
   calibration only, not product completion or approval for migration, lifecycle writes, harness
   writes, ranking changes, schema/storage/index changes, public MCP changes, or `orient`
   expansion.
+- T55 validated the post-T54 continuation shape in Claude Code using only read-only Engram
+  `orient`, `search`, and `obligations` tools. The Claude Bridge project harness did not expose
+  Engram MCP tools and was unmeasured; the personal-harness rerun surfaced T54 first in lean
+  `orient` and direct `search`. Treat this as narrow cross-harness evidence only, not approval for
+  migration, lifecycle writes, harness writes, ranking changes, schema/storage/index changes,
+  public MCP changes, or `orient` expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
