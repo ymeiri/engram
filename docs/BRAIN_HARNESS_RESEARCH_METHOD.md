@@ -740,6 +740,12 @@ Current next application:
   not as authorization to write adapters, edit settings, adopt user-owned files, rewrite hooks, run
   M6, mutate lifecycle state, change schema/storage/index state, change public MCP behavior, change
   ranking, or expand `orient`.
+- T48 prepared a pending stale current-plan lifecycle approval packet from read-only `orient`,
+  `search`, scoped current-plan list, `memory(action="get")`, source inspection, AI Council
+  critique, and Claude Bridge critique. Treat it as a default-deny approval request only, not as
+  authorization to archive the target memory, mutate any other memory, run M6, write harness
+  adapters/settings/hooks, change schema/storage/index state, change public MCP behavior, change
+  ranking, or expand `orient`.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

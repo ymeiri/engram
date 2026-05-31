@@ -181,6 +181,13 @@ Research checkpoint, current through 2026-05-27:
   only; it does not install adapters, edit settings, adopt user-owned files, rewrite hooks, run M6,
   mutate lifecycle state, change schema/storage/index state, change public MCP behavior, change
   ranking, or expand `orient`.
+- T48 prepared a pending approval packet for one stale current-plan lifecycle write. Read-only
+  `orient`, `search`, scoped current-plan listing, `memory(action="get")`, and
+  `lint(action="run", write=false)` evidence show the old repository-scoped current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active below the latest T47 project plan and has
+  129 recent stale-feedback records with `safe_action=none`. The packet asks for approval only; it
+  does not archive the memory, mutate other memories, run M6, execute harness writes, change
+  schema/storage/index state, change public MCP behavior, change ranking, or expand `orient`.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1262,6 +1269,11 @@ Proceed in this order from the current checkpoint:
     ambiguous approval default-deny. The packet does not authorize user-owned adoption,
     `settings.json` edits, hook rewrites, M6 work, lifecycle mutation, schema/storage/index
     changes, public MCP changes, ranking changes, or `orient` payload changes.
+53. Treat T48 as an approval-packet step, not a lifecycle cleanup step. It prepares a pending user
+    decision for exactly one archive action on stale repository-scoped current-plan memory
+    `019e5e0a-86b4-73e3-aa9b-ca350e83e915`, contingent on fresh read-only evidence. The packet
+    does not authorize that archive by itself, other lifecycle writes, M6 work, harness writes,
+    schema/storage/index changes, public MCP changes, ranking changes, or `orient` payload changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
