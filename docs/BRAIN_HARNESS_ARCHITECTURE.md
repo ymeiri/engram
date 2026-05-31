@@ -208,6 +208,16 @@ Research checkpoint, current through 2026-05-27:
   stale 129-record archive reason, T48 is no longer executable as written. T51 is a drift report
   only, not a refreshed approval packet or authorization for lifecycle writes, M6, harness writes,
   ranking changes, or `orient` expansion.
+- T52 refreshed the stale current-plan evidence and converted the next step into a resolution
+  request rather than an archive-only approval packet. Fresh read-only evidence showed T51
+  `019e7d55-b103-70b3-a023-6398e96d6430` is now the active project-scoped current plan, target
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` is still the only active repository-scoped current-plan
+  item for `/Users/yuval.meiri/projects/engram`, and lint reports 142 stale-feedback records with
+  `safe_action=none`. AI Council and Claude Bridge critique found the scope-gap risk material, so
+  T52 asks the user to choose archive-only, replacement-then-archive, or scope-correction/merge.
+  It does not authorize lifecycle writes, create a replacement, run M6, write harness adapters,
+  edit settings, register hooks, change schema/storage/index state, change public MCP behavior,
+  change ranking, or expand `orient`.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist

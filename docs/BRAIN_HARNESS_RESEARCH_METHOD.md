@@ -763,6 +763,14 @@ Current next application:
   139 stale-feedback records with `safe_action=none`. Treat T48 as no longer executable as written
   and T51 as a drift report only, not as approval for archival, scope correction, M6, harness
   writes, ranking changes, or `orient` expansion.
+- T52 refreshed the stale current-plan evidence and recorded a resolution request instead of an
+  archive-only approval packet. Fresh read-only evidence showed T51 is now the active project
+  current plan, the stale target remains the only active repository-scoped current-plan item, and
+  lint reports 142 stale-feedback records with `safe_action=none`. AI Council and Claude Bridge
+  critique treated the archive-versus-replacement scope gap as material. Treat T52 as a user
+  decision request only, not approval to archive, create replacement memory, scope-correct, run M6,
+  write harness adapters/settings/hooks, change schema/storage/index state, change public MCP
+  behavior, change ranking, or expand `orient`.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and
