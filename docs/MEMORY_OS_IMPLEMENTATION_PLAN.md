@@ -378,6 +378,13 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       did not imply M6 approval. This records a live-data retrieval gap; it does not authorize
       ranking, lifecycle, migration, `orient`, schema/storage/index, public MCP, or harness
       adapter/hook changes.
+- [ ] T43 prompt-specific mixed-query gate repair: pre-registered in
+      `docs/BRAIN_HARNESS_T43_MIXED_QUERY_GATE_REPAIR_2026-05-31.md`. The only allowed behavior
+      change is a narrow direct-`search` ranking repair for current-plan continuation queries that
+      mention M6/migration gate context but are not explicit apply/permission gate queries. It must
+      keep current-plan first, surface active M6 gate context top-k, and preserve explicit
+      gate/blocked queries without broad ranking, lifecycle, migration, `orient`,
+      schema/storage/index, public MCP, or harness adapter/hook changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
