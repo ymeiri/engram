@@ -776,6 +776,13 @@ Current next application:
   in both lean `orient` and direct `search`; the stale repository-scoped target remained visible as
   pending-decision evidence only. Treat this as narrow cross-harness evidence, not approval for
   lifecycle writes, replacement memory, M6, harness writes, ranking changes, or `orient` expansion.
+- T54 audited the post-T53 rolling telemetry window using the existing
+  `real_session_eval(project=engram, limit=50)` report. The numerical gate still passed with
+  `bad_memory_used_count=0`, but coverage was `31/50`, one task failure remained, stale-memory
+  feedback was active, and external-session labeling was partial. Treat this as evidence-quality
+  calibration only, not product completion or approval for migration, lifecycle writes, harness
+  writes, ranking changes, schema/storage/index changes, public MCP changes, or `orient`
+  expansion.
 - The next non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence. Read-only M6
   inventory/review-export requires explicit user-approved scope; M6 write apply, deletion, and

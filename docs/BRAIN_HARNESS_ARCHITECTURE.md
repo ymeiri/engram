@@ -1312,6 +1312,11 @@ Proceed in this order from the current checkpoint:
     `019e5e0a-86b4-73e3-aa9b-ca350e83e915`, contingent on fresh read-only evidence. The packet
     does not authorize that archive by itself, other lifecycle writes, M6 work, harness writes,
     schema/storage/index changes, public MCP changes, ranking changes, or `orient` payload changes.
+54. Treat T54 as rolling telemetry calibration, not a completion gate. The current project sample
+    still passes numerically with no bad-memory-used evidence, but coverage is `31/50`, one task
+    failure remains, stale-memory feedback is active, and external session labels are sparse. This
+    supports the evidence-loop row as partially validated only and does not authorize migration,
+    lifecycle, harness, ranking, schema/storage/index, public MCP, or `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
