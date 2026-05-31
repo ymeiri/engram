@@ -370,12 +370,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       M6 write/apply/deletion gate-first behavior. No production ranking code, lifecycle state,
       public MCP surface, `orient` payload, migration flow, schema/storage/index behavior, or
       harness adapter/hook behavior changed.
-- [ ] T42 Claude Code parity for T41 mixed-query behavior: pre-registered in
-      `docs/BRAIN_HARNESS_T42_CLAUDE_T41_PARITY_2026-05-31.md`. This is read-only validation of
-      two exact `search` queries through Claude Code's Engram MCP path, with pinned current-plan,
-      M6-gate, and stale-plan IDs plus pre/post cursor checks. It does not authorize ranking,
-      lifecycle, migration, `orient`, schema/storage/index, public MCP, or harness adapter/hook
-      changes.
+- [x] T42 Claude Code parity for T41 mixed-query behavior stopped before the Claude Code scoreable
+      run. The pre-run Codex baseline returned latest current-plan memory first, but active M6 gate
+      memory `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` was absent from the top eight results and only
+      appeared at rank 17 in a diagnostic `limit=20` search for the exact mixed query. The
+      negative-control query still preserved gate/blocked context above current-plan guidance and
+      did not imply M6 approval. This records a live-data retrieval gap; it does not authorize
+      ranking, lifecycle, migration, `orient`, schema/storage/index, public MCP, or harness
+      adapter/hook changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -429,6 +431,16 @@ with live-shaped stale/noisy records. This strengthens the current-plan/next-ste
 for one exact mixed prompt class only. It does not prove broad ranking quality or approve M6
 inventory/export/apply/deletion, lifecycle cleanup, hook/adapter writes, schema/storage changes,
 public MCP changes, or `orient` payload changes.
+
+T42 matrix note: the planned Claude Code parity check was stopped before the scoreable Claude run
+because the pre-run Codex baseline failed. Trace `019e7d08-d297-71b3-b8dd-495078383ce9` returned
+current-plan memory first but omitted active M6 gate memory from the top eight results for the exact
+mixed query, and diagnostic trace `019e7d09-d6ae-7a83-a9c7-b835c25b9df4` placed the active M6 gate
+at rank 17. This re-opens the live installed mixed-query retrieval gap while preserving the T41
+deterministic fixture as regression evidence. The next non-gated work should be a new
+prompt-specific retrieval slice for the exact mixed prompt class, not a Claude parity run against a
+failing baseline and not M6, lifecycle, schema/storage/index, public MCP, `orient`, broad ranking,
+or harness-write work.
 
 T23 matrix audit, 2026-05-27:
 

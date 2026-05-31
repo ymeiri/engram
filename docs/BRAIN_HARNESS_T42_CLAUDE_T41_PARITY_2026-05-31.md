@@ -1,7 +1,7 @@
 # Brain Harness T42 Claude T41 Parity
 
 Date: 2026-05-31
-Status: Pre-registered
+Status: Stopped before Claude Code scoreable run; Codex baseline failed
 Scope: Read-only Claude Code search parity for the T41 mixed-query behavior
 
 ## Boundary
@@ -98,3 +98,34 @@ mixed-query and M6 negative-control behavior for two exact queries in the curren
 
 It does not prove broad search quality, broad cross-harness readiness, M6 approval, lifecycle
 cleanup safety, hook or adapter readiness, or any need to change `orient`.
+
+## Result
+
+T42 did not reach the Claude Code scoreable run. The pre-run Codex baseline failed the registered
+primary criterion.
+
+Evidence:
+
+- Pre-registration commit: `fa52538`.
+- Pre-run cursor: `019e7d02-9f99-7c50-9d83-33094ea4c874`.
+- Codex primary baseline trace `019e7d08-d297-71b3-b8dd-495078383ce9` returned latest current-plan
+  memory `019e7d02-9f75-7cb2-ae56-a9544a961b25` first, but did not return active M6 gate memory
+  `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` in the top eight memory results.
+- Codex diagnostic trace `019e7d09-d6ae-7a83-a9c7-b835c25b9df4` with `limit=20` returned active
+  M6 gate memory `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` at rank 17 and paused migration gate
+  memory `019dd35d-1a48-7103-b0e2-390225f8b418` at rank 19 for the exact mixed query.
+- Codex negative-control trace `019e7d08-dd64-7830-bd83-5bfb104e5ee1` still preserved the safety
+  decision: paused migration gate memory `019dd35d-1a48-7103-b0e2-390225f8b418` ranked first,
+  active M6 gate memory `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` ranked second, and current-plan
+  memory did not outrank gate context. This failed the over-specific T42 rank-1 expectation for the
+  active M6 gate ID, but it did not imply M6 approval.
+
+T42 therefore records a live-data regression relative to the intended T41 live behavior: the
+deterministic fixture remains useful, but installed direct `search` no longer surfaces active M6
+gate context in the top-k for the exact mixed query. Running Claude Code parity against this
+baseline would only prove parity to a failing Codex result, so the scoreable Claude run was skipped.
+
+Next non-gated work should be a new prompt-specific mixed-query retrieval slice. Its boundary should
+remain narrow: no M6 inventory/export/apply/deletion, no lifecycle cleanup or archive writes, no
+schema/storage/index changes, no public MCP request changes, no `orient` payload expansion, no
+harness adapter/hook writes, and no broad ranking churn beyond the exact mixed prompt class.
