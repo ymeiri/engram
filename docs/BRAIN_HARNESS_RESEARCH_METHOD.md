@@ -831,6 +831,13 @@ Current next application:
   smoke evidence; it is telemetry evidence-loop hygiene only, not product-completion evidence or
   approval for M6, lifecycle, ranking, `orient`, schema/storage/index, public MCP, or harness
   changes.
+- T64 audited post-T63 continuity and T59 packet visibility. Codex lean `orient`, broad current-plan
+  search, and exact continuation search returned T63 current-plan memory first. Explicit
+  `migration_review_export` probes preserved default-deny gate context but did not surface the T59
+  approval packet itself in top memory results; older migration/export records remained visible.
+  Claude Bridge recommended documenting the gap instead of creating a second T59 gate MemoryItem.
+  Treat the T59 document as authoritative and keep review export unapproved until explicit user
+  approval.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.

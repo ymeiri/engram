@@ -1372,6 +1372,13 @@ Proceed in this order from the current checkpoint:
     `fd7287ef6186d77532c20486034f95729b89e00c043e6ef94aa870bc873846da` reproduced the behavior
     in a live MCP smoke. This does not authorize migration, lifecycle, ranking, `orient`,
     schema/storage/index, public MCP, or harness adapter/hook changes.
+64. Treat T64 as a read-only continuity and visibility audit. T63 current-plan memory now appears
+    first for Codex lean `orient`, broad current-plan search, and exact continuation search, but
+    explicit `migration_review_export` prompts do not surface the T59 approval packet itself in top
+    memory results. The active M6 gate still preserves default-deny behavior, and the T59 document
+    remains the source of truth. This does not authorize review export, migration apply, lifecycle
+    writes, ranking changes, `orient` changes, schema/storage/index changes, public MCP changes, or
+    harness adapter/hook changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
