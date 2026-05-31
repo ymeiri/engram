@@ -383,6 +383,11 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       current-plan/M6-gate prompt class. The repair is search-only, preserves pure continuation and
       explicit M6 apply/gate controls, and did not change broad ranking weights, lifecycle state,
       migration state, `orient`, schema/storage/index, public MCP, or harness adapter/hook behavior.
+- [ ] T44 Claude Code parity for T43 direct-search repair: pre-registered in
+      `docs/BRAIN_HARNESS_T44_CLAUDE_T43_PARITY_2026-05-31.md`. This is read-only validation of
+      the exact repaired mixed current-plan/M6-gate prompt class and controls through Claude Code;
+      no implementation, migration, lifecycle, `orient`, schema/storage/index, public MCP, ranking,
+      or harness adapter/hook changes are authorized.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
