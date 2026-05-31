@@ -820,6 +820,11 @@ Current next application:
   `should we run migration_review_export` still preserve gate-first behavior. Treat this as one
   prompt-class direct-search repair, not migration approval or broad ranking evidence. The Claude
   Bridge critique retry repeated the T60 handoff-write caveat, so no-write parity remains unproven.
+- T62 installed the T61 commit into the live runtime and validated the same prompt class in Codex
+  and Claude Code: exact continuation `search` and lean `orient` returned T61 first, while explicit
+  `should we run migration_review_export` prompts kept migration gate evidence first. The Claude
+  parity probe again wrote duplicate session-end handoffs despite `write=false`, so no-write parity
+  remains unproven and handoff cleanup/hook changes remain gated.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.

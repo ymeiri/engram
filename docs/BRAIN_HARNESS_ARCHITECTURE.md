@@ -1359,6 +1359,13 @@ Proceed in this order from the current checkpoint:
     authorize broad ranking changes, `orient` expansion, M6 review export/apply, lifecycle writes,
     schema/storage/index changes, public MCP changes, or harness adapter/hook changes. The Claude
     Bridge critique retry also repeated the no-write handoff confound.
+62. Treat T62 as installed-runtime validation for T61, not a new approval. After installing binary
+    hash `25715d5c2334a423dfdf73d8fc3868037ffe9c1a180f8a3df9926c6727d1464f` and restarting
+    the daemon, Codex and Claude Code both returned T61 first for exact continuation search and
+    lean `orient`; explicit `should we run migration_review_export` prompts still kept migration
+    gate evidence first. Claude Bridge `write=false` again wrote duplicate rolling handoffs, so
+    no-write parity remains unproven and no handoff cleanup, hook change, or adapter change is
+    authorized.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
