@@ -838,6 +838,13 @@ Current next application:
   Claude Bridge recommended documenting the gap instead of creating a second T59 gate MemoryItem.
   Treat the T59 document as authoritative and keep review export unapproved until explicit user
   approval.
+- T65 prepared a pending bounded document-index visibility approval packet after read-only document
+  searches failed to surface the authoritative T59 file for exact title/path probes. AI Council and
+  Claude Bridge both preferred an approval packet over ranking changes or a parallel MemoryItem.
+  Treat the packet as a request only: do not index the docs, run M6 review export/apply, create a
+  T59 MemoryItem, mutate lifecycle state, change schema/storage or document-index behavior, change
+  public MCP behavior, change ranking, expand `orient`, or write harness adapters/hooks without
+  explicit approval.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.

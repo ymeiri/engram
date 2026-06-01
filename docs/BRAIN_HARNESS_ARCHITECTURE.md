@@ -1379,6 +1379,12 @@ Proceed in this order from the current checkpoint:
     remains the source of truth. This does not authorize review export, migration apply, lifecycle
     writes, ranking changes, `orient` changes, schema/storage/index changes, public MCP changes, or
     harness adapter/hook changes.
+65. Treat T65 as an approval packet, not an index write. It asks whether to run a bounded
+    document-index visibility repair for exactly the T58, T59, and T64 evidence docs so the
+    authoritative T59 review-export packet can be recovered through document search. It does not
+    run indexing, create a parallel T59 MemoryItem, run M6 review export/apply, mutate lifecycle
+    state, change schema/storage or document-index behavior, change public MCP behavior, change
+    ranking, expand `orient`, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
