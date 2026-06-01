@@ -879,6 +879,13 @@ Current next application:
   harness-write gate. Do not install adapters, edit settings, register hooks, run migration,
   mutate lifecycle state, change schema/storage/index behavior, change public MCP behavior, change
   ranking, expand `orient`, or change document-index behavior without explicit approval.
+- T72 refreshes the rolling telemetry evidence after T71 feedback/current-plan capture. The
+  `real_session_eval(project=engram, limit=50)` window passes numerically with zero task failures
+  and zero bad-memory-used records, but the evidence loop remains partial because coverage is
+  `32/50`, sampled intents are narrow, stale/wrong-scope judgments remain, and only `11/50` traces
+  have external-session labels. Treat this as evidence-quality calibration only, not product
+  completion or approval for M6, lifecycle, harness, ranking, schema/storage/index, public MCP,
+  document-index, or `orient` changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

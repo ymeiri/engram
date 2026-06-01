@@ -1428,6 +1428,13 @@ Proceed in this order from the current checkpoint:
     CLI/Cursor generated adapters remain drifted. T47 remains the pending write gate. This does not
     authorize adapter installation, settings edits, hook registration, migration, lifecycle,
     schema/storage/index, public MCP, ranking, `orient`, or document-index changes.
+72. Treat T72 as rolling telemetry calibration, not a completion gate. The current project sample
+    passes numerically with `feedback_trace_count=32`, `feedback_coverage=0.6399999856948853`,
+    `memory_judgment_coverage=1.0`, `task_failure_count=0`, and `bad_memory_used_count=0`, but it
+    remains partial because stale-memory feedback, one wrong-scope judgment, narrow intent
+    diversity, and sparse external-session labels remain. This does not authorize migration,
+    lifecycle, harness, ranking, schema/storage/index, public MCP, document-index, or `orient`
+    changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
