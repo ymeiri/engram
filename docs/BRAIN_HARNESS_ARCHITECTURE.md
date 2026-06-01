@@ -1422,6 +1422,12 @@ Proceed in this order from the current checkpoint:
     It does not inspect review-export files, run review apply, decide candidates, mutate lifecycle
     state, change schema/storage/index behavior, change public MCP behavior, change ranking, expand
     `orient`, or write harness adapters/hooks.
+71. Treat T71 as a read-only harness evidence refresh, not harness repair. Generic, Claude Code,
+    Codex, Gemini CLI, and Cursor still report `ready=false`; generic policy is missing, Claude
+    settings still lack required `SessionStart` and `SessionEnd` registrations, and Codex/Gemini
+    CLI/Cursor generated adapters remain drifted. T47 remains the pending write gate. This does not
+    authorize adapter installation, settings edits, hook registration, migration, lifecycle,
+    schema/storage/index, public MCP, ranking, `orient`, or document-index changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

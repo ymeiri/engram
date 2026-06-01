@@ -874,6 +874,11 @@ Current next application:
   the files, inspect the review-export snapshot, run apply, decide candidates, mutate lifecycle
   state, change schema/storage/index behavior, change public MCP behavior, change ranking, expand
   `orient`, or write harness adapters/hooks without explicit approval.
+- T71 refreshes harness readiness evidence only. Read-only status checks still report
+  `ready=false` for generic, Claude Code, Codex, Gemini CLI, and Cursor, so T47 remains the pending
+  harness-write gate. Do not install adapters, edit settings, register hooks, run migration,
+  mutate lifecycle state, change schema/storage/index behavior, change public MCP behavior, change
+  ranking, expand `orient`, or change document-index behavior without explicit approval.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

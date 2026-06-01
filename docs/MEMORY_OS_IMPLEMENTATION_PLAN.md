@@ -555,6 +555,13 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       to index exactly T59, T68, and T69; it does not run indexing, inspect M6 review-export files,
       create MemoryItems, mutate lifecycle state, change schema/storage/index behavior, change
       public MCP behavior, change ranking, expand `orient`, or write harness adapters/hooks.
+- [x] T71 harness readiness re-audit: read-only `harness(action="doctor")` /
+      `harness(action="status")` checks reconfirmed `ready=false` for generic, Claude Code, Codex,
+      Gemini CLI, and Cursor. Generic policy is still missing; Claude Code still lacks required
+      `SessionStart` and `SessionEnd` settings registrations; Codex, Gemini CLI, and Cursor retain
+      generated-adapter drift. No install, settings edit, hook registration, M6 action, lifecycle
+      mutation, schema/storage/index behavior change, public MCP change, ranking change, `orient`
+      change, or harness write was run.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -659,6 +666,9 @@ document-search results, and T59 still has stale pre-export chunks indexed. Sour
 exact-file `docs(action="index")` reuses the existing source identity and replaces chunks for that
 source. T70 asks for explicit approval to index exactly T59, T68, and T69; it does not grant T69
 inspection approval or any M6 migration action.
+T71 reconfirms from read-only harness status checks that generic, Claude Code, Codex, Gemini CLI,
+and Cursor still report `ready=false`. This updates the harness evidence date only; the T47 exact
+harness-write approval packet remains pending and unexecuted.
 
 | Area | Status | Current evidence | Remaining risk or gate |
 | --- | --- | --- | --- |
