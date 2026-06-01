@@ -1009,6 +1009,12 @@ Current next application:
   priority change is acceptable when live evidence shows actionable cleanup signals are hidden by
   generic feedback noise, but it must preserve current-plan stale-feedback priority and must not be
   treated as lifecycle cleanup approval.
+- T93 records the installed-runtime validation requirement for T92-style report-ordering changes:
+  source tests are necessary but not sufficient when the live MCP daemon may be running an older
+  binary. Refreshing the local binary and daemon is acceptable validation work, but the resulting
+  report must still be treated as read-only evidence and must not authorize `apply_safe`, archive,
+  migration, document indexing, ranking, `orient`, public MCP, schema/storage/index, or harness
+  changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

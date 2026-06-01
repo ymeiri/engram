@@ -145,6 +145,12 @@ Research checkpoint, current through 2026-05-27:
 - T92 improves read-only lint visibility for the same stale-handoff pressure: actionable
   superseded-active findings now outrank generic stale-feedback noise while stale current-plan
   feedback remains first. No lifecycle archive or `apply_safe` action was run.
+- T93 validates that T92 is active in the installed MCP runtime: after installing binary hash
+  `e54aed9a4830cc53822100930d63541bf51d06b3f27c2844e6090bfe01f5379a` and restarting the daemon on
+  port `8765`, live MCP lint returned stale current-plan feedback first and safe-action
+  superseded-active findings before generic stale-feedback rows. No `apply_safe`, lifecycle,
+  migration, document-index, ranking, `orient`, public MCP, schema/storage/index, or harness action
+  was run.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
@@ -1650,6 +1656,12 @@ Proceed in this order from the current checkpoint:
     archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state,
     change retrieval ranking, expand `orient`, change public MCP/schema/storage/index behavior,
     change document-index behavior, or write harness adapters/hooks.
+93. Treat T93 as installed-runtime validation only. It refreshes the local Engram binary and daemon
+    so the live MCP lint report matches T92 source behavior, but it does not authorize
+    `lint(action="apply_safe")`, archive old handoffs, inspect T69 files, run T70 indexing, run M6,
+    mutate lifecycle state, change retrieval ranking, expand `orient`, change public
+    MCP/schema/storage/index behavior, change document-index behavior, or write harness
+    adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

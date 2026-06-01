@@ -710,6 +710,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       ordering so safe-action superseded-active findings surface before generic stale-feedback
       noise while stale current-plan feedback stays first. No lifecycle write, M6, document-index,
       retrieval ranking, `orient`, public MCP, schema/storage/index, or harness behavior changed.
+- [x] T93 lint installed-runtime validation: documented
+      `docs/BRAIN_HARNESS_T93_LINT_INSTALLED_RUNTIME_VALIDATION_2026-06-01.md`; after source-level
+      T92 validation but stale live MCP lint output, Codex installed the current Engram binary and
+      restarted the daemon. Live MCP `lint(action="run", limit=20)` then returned stale
+      current-plan feedback first, wrong-scope feedback next, and safe-action
+      `superseded_item_still_active` rows before generic stale-feedback rows. No lifecycle write,
+      `apply_safe`, M6, document-index, retrieval ranking, `orient`, public MCP,
+      schema/storage/index, or harness behavior changed.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -1043,6 +1051,17 @@ first, then surfaces safe-action `superseded_item_still_active` findings before 
 `feedback_stale_active_memory`. This is read-only report visibility only; no lifecycle archive,
 `apply_safe`, M6, document-index, retrieval ranking, `orient`, public MCP, schema/storage/index, or
 harness behavior changed.
+
+T93 matrix note: the T92 source behavior is now validated in the installed live MCP runtime.
+Before runtime refresh, MCP lint still returned generic stale-feedback rows ahead of
+superseded-active rows despite the passing source regression. After installing binary hash
+`e54aed9a4830cc53822100930d63541bf51d06b3f27c2844e6090bfe01f5379a` and restarting the daemon on
+port `8765`, live MCP `lint(action="run", limit=20)` returned stale current-plan feedback first,
+wrong-scope feedback next, and safe-action `superseded_item_still_active` rows starting at rank 5.
+This validates installed report ordering only. It does not authorize `lint(action="apply_safe")`,
+archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change
+ranking, expand `orient`, change public MCP/schema/storage/index behavior, change document-index
+behavior, or write harness adapters/hooks.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
