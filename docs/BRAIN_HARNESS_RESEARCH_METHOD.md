@@ -976,6 +976,11 @@ Current next application:
   `mcp__engram__search`; Claude Bridge again reported `No such tool available` for both tools and
   produced no Engram trace IDs. This closes the exact T79/T85 project-harness recheck line until
   bridge or harness configuration changes, without making claims about Engram retrieval behavior.
+- T86 checks continuity state directly: after `orient` and doc reads, compare the active rolling
+  handoff against the current plan and approval gates. If the handoff is stale or too thin, update
+  only the rolling handoff with current context and exact gates. Treat handoff repair as continuity
+  maintenance only, not approval for migration, indexing, lifecycle, schema/storage, public MCP,
+  ranking, harness, or `orient` changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

@@ -671,6 +671,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       existed and no telemetry feedback was submitted. This closes that exact recheck line until
       bridge or harness configuration changes and does not approve schema, storage, public MCP,
       harness, migration, lifecycle, ranking, document-index, or `orient` changes.
+- [x] T86 rolling handoff freshness audit: documented
+      `docs/BRAIN_HARNESS_T86_ROLLING_HANDOFF_FRESHNESS_AUDIT_2026-06-01.md` and refreshed the
+      rolling handoff from low-information Claude Code handoff
+      `019e82ec-b571-7830-b8f2-661da91585e7` to current handoff
+      `019e82f3-53bc-7a83-9e39-cfdb29b06c44`. The new handoff records T85, current-plan memory
+      `019e82ee-dd81-7ba0-8f97-1933965f6d8e`, and exact T69/T70 approval phrases. This is
+      continuity repair only; it does not approve schema, storage, public MCP, harness, migration,
+      lifecycle, ranking, document-index, or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -944,6 +952,14 @@ T79 caveat under a single pre-registered `write=false`, no-Bash call with only
 project-harness exposure evidence only; do not recheck the same line until bridge or harness
 configuration changes, and do not infer anything about native Claude Code MCP behavior or Engram
 retrieval quality.
+
+T86 matrix note: the rolling handoff freshness audit in
+`docs/BRAIN_HARNESS_T86_ROLLING_HANDOFF_FRESHNESS_AUDIT_2026-06-01.md` found the active handoff
+was a low-information Claude Code session-end note that did not carry T85/T69/T70 context. Codex
+refreshed only the rolling handoff to `019e82f3-53bc-7a83-9e39-cfdb29b06c44`, preserving exact
+approval phrases and the default-deny boundaries. Treat this as continuity repair only; it does
+not approve migration, lifecycle writes, document indexing, schema/storage/index changes, public
+MCP changes, ranking changes, harness writes, or `orient` expansion.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

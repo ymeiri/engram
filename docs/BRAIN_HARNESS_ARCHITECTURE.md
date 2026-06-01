@@ -298,6 +298,11 @@ Research checkpoint, current through 2026-05-27:
   `mcp__engram__search` allowed, Claude Bridge again reported `No such tool available` for both
   tools and produced no Engram trace IDs. Treat this as project-harness exposure evidence only,
   not as evidence against native Claude Code MCP behavior or Engram retrieval quality.
+- T86 refreshed the rolling project handoff after finding the active handoff was a low-information
+  Claude Code session-end note. The new handoff records T85, current-plan memory
+  `019e82ee-dd81-7ba0-8f97-1933965f6d8e`, exact T69/T70 approval phrases, and the default-deny
+  boundaries. Treat this as continuity repair only, not migration, indexing, lifecycle, harness,
+  ranking, schema/storage/index, public MCP, or `orient` approval.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1586,6 +1591,18 @@ Proceed in this order from the current checkpoint:
     output is author-captured rather than independent proof. Do not create automation, hooks,
     schemas, public MCP surfaces, ranking changes, lifecycle changes, migration actions,
     document-index changes, or `orient` changes from this rule.
+85. Treat T85 as stable Claude Bridge project-harness exposure evidence only. A single
+    pre-registered `write=false`, no-Bash run allowed only `mcp__engram__orient` and
+    `mcp__engram__search`, and Claude Bridge reported `No such tool available` for both tools.
+    The run produced no Engram trace IDs and does not authorize migration, lifecycle writes,
+    document indexing, harness writes, ranking changes, schema/storage/index changes, public MCP
+    changes, or `orient` expansion.
+86. Treat T86 as rolling handoff continuity repair only. The previous active handoff
+    `019e82ec-b571-7830-b8f2-661da91585e7` was a low-information Claude Code session-end handoff.
+    The refreshed handoff `019e82f3-53bc-7a83-9e39-cfdb29b06c44` records T85, current-plan memory,
+    and exact T69/T70 approval gates. It does not approve migration inspection/apply/deletion,
+    lifecycle writes, document indexing, harness writes, ranking changes, schema/storage/index
+    changes, public MCP changes, or `orient` expansion.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

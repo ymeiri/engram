@@ -1,6 +1,6 @@
 # Brain Harness T86 Rolling Handoff Freshness Audit
 
-Status: Pre-registered; execution pending
+Status: Complete; rolling handoff refreshed
 Date: 2026-06-01
 Scope: Read-only handoff freshness audit plus one rolling-handoff continuity update if stale
 
@@ -61,3 +61,47 @@ Stop without updating the handoff if:
 - the operation would inspect T68 export files, index documents, run migration status/prioritize,
   run review apply, decide candidates, delete data, or mutate legacy memory lifecycle;
 - the active approval gates cannot be identified from current repo docs and Engram retrieval.
+
+## Execution Result
+
+Pre-registration commit: `f8c7b1d` (`Pre-register T86 rolling handoff freshness audit`)
+
+The active handoff before T86 was:
+
+```text
+019e82ec-b571-7830-b8f2-661da91585e7
+```
+
+It was a Claude Code session-end handoff whose only next action was to call `orient` and inspect
+the handoff. It did not include the current T85 result, T69/T70 exact approval gates, T68 count
+drift, or the active current-plan memory id.
+
+Codex updated only the rolling handoff. The new active handoff is:
+
+```text
+019e82f3-53bc-7a83-9e39-cfdb29b06c44
+```
+
+It supersedes `019e82ec-b571-7830-b8f2-661da91585e7` and records:
+
+- T85 as the latest completed product slice;
+- T86 pre-registration commit `f8c7b1d`;
+- active current-plan memory `019e82ee-dd81-7ba0-8f97-1933965f6d8e`;
+- exact T69 approval phrase: `Approve T69: inspect index.md and 0012-skip-plan.md.`;
+- exact T70 approval phrase: `Approve T70: index exact files T59, T68, and T69.`;
+- explicit denial that generic `i approve` authorizes T69, T70, M6 apply/deletion, lifecycle,
+  schema/storage/index behavior, public MCP, ranking, `orient`, or harness work.
+
+Validation re-read `handoff(action="get", project="engram")` and returned the new handoff id and
+content. A post-update `lint(action="run", limit=20)` still reported stale-feedback and
+wrong-scope review signals with `safe_action=none`; no lifecycle action was taken.
+
+## Interpretation
+
+The preferred hypothesis held: the active rolling handoff was too thin for safe future resume, and
+the narrow handoff update improved continuity without touching product behavior.
+
+This does not change the `orient` contract. Future agents should still start with lean `orient` and
+direct Engram searches, then use the handoff as continuity evidence. T69, T70, M6 apply/deletion,
+lifecycle mutation, schema/storage/index behavior changes, public MCP changes, ranking changes,
+`orient` expansion, and harness writes remain separately gated.
