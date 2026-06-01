@@ -1680,6 +1680,9 @@ Proceed in this order from the current checkpoint:
     This does not archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate
     lifecycle state, change ranking, expand `orient`, change public MCP/schema/storage/index
     behavior, change document-index behavior, or write harness adapters/hooks.
+97. Treat T97 as an approval packet only. It freezes exact archive target
+    `019e8352-a610-7f92-859f-f9d74b026ba7`, but no archive or lifecycle cleanup is authorized
+    until the exact T97 approval phrase is provided.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

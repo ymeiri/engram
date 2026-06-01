@@ -1091,6 +1091,15 @@ handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, c
 expand `orient`, change public MCP/schema/storage/index behavior, change document-index behavior,
 or write harness adapters/hooks.
 
+T97 matrix note: the stale T94 handoff lifecycle packet in
+`docs/BRAIN_HARNESS_T97_STALE_HANDOFF_T94_LIFECYCLE_APPROVAL_PACKET_2026-06-01.md` freezes one
+exact archive target, `019e8352-a610-7f92-859f-f9d74b026ba7`, because active T96 handoff
+`019e835e-81c2-7562-897a-e42c0fe8dc08` supersedes it and direct searches still return both at
+equal score. This is an approval packet only. No archive was run, no broad stale-handoff sweep was
+authorized, and T88/T95 remain separate exact approval packets for
+`019e82f3-53bc-7a83-9e39-cfdb29b06c44` and
+`019e8316-ebd1-7220-b18e-f0d33110131a`.
+
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
 plan first and active M6 gate context in top memory results, and
