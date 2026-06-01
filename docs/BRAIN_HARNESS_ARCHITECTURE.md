@@ -1385,6 +1385,14 @@ Proceed in this order from the current checkpoint:
     run indexing, create a parallel T59 MemoryItem, run M6 review export/apply, mutate lifecycle
     state, change schema/storage or document-index behavior, change public MCP behavior, change
     ranking, expand `orient`, or write harness adapters/hooks.
+66. Treat T66 as a source-only preflight for T65 executability. It confirms that the existing MCP
+    `docs(action="index", path=...)` surface can target a single file, while directory paths remain
+    broader because they call directory indexing and the default pipeline is recursive. T66 did not
+    run `docs(action="index")`, `docs(action="plan")`, CLI target-file indexing, M6 actions,
+    lifecycle writes, schema/storage or document-index behavior changes, public MCP changes,
+    ranking changes, `orient` changes, or harness adapter/hook writes. If T65 is approved, prefer
+    three exact file-path MCP index calls against the running daemon, not a directory path or CLI
+    write path.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

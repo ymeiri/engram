@@ -845,6 +845,11 @@ Current next application:
   T59 MemoryItem, mutate lifecycle state, change schema/storage or document-index behavior, change
   public MCP behavior, change ranking, expand `orient`, or write harness adapters/hooks without
   explicit approval.
+- T66 completed a source-only preflight for the pending T65 packet. The existing MCP document
+  handler can index a single file path and should be the preferred approved execution surface;
+  directory paths remain out of scope because they call directory indexing and the default pipeline
+  is recursive. T66 did not run index, plan, M6, lifecycle, schema/storage, public MCP, ranking,
+  `orient`, or harness writes.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.
