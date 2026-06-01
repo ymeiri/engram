@@ -1407,6 +1407,13 @@ Proceed in this order from the current checkpoint:
     included. No apply, candidate decision, lifecycle mutation, schema/storage/index behavior
     change, public MCP change, ranking change, `orient` change, or harness write followed. Further
     M6 progress requires a new user decision on the count drift.
+69. Treat T69 as a decision packet, not inspection approval. AI Council and Claude Bridge agreed
+    that the ambiguous `i approve` reply after T68 is not a safe approval chain for further M6
+    action. The next recommended slice is exact read-only inspection of only the written T68 export
+    snapshot's `index.md` and `candidates/0012-skip-plan.md`, but that requires a reply naming T69
+    and both files. T69 does not inspect candidate contents, rerun export, run apply, status, or
+    prioritize, mutate lifecycle state, change schema/storage/index behavior, change public MCP
+    behavior, change ranking, expand `orient`, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -862,6 +862,11 @@ Current next application:
   one `skip` candidate appeared. This is evidence, not migration completion: no review apply,
   candidate decision, lifecycle mutation, schema/storage/index behavior change, public MCP change,
   ranking change, `orient` change, or harness write followed.
+- T69 turns the post-T68 ambiguity into an approval packet. AI Council and Claude Bridge agreed
+  that the ambiguous `i approve` reply is not scoped authorization for further M6 action. The next
+  recommended step is exact read-only inspection of only `index.md` and
+  `candidates/0012-skip-plan.md` from the written T68 export snapshot, but only after the user
+  replies with a phrase naming T69 and both files.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
