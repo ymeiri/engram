@@ -4778,3 +4778,13 @@ document indexing remains exact-approval gated, lifecycle archive packets remain
 and harness readiness remains risky/not ready. No M6 inspection/apply/deletion, document indexing,
 lifecycle mutation, ranking, `orient`, public MCP, schema/storage/index, document-index behavior,
 or harness write was run.
+
+T106 matrix note: the harness readiness drift recheck in
+`docs/BRAIN_HARNESS_T106_HARNESS_READINESS_DRIFT_RECHECK_2026-06-01.md` reconfirmed `ready=false`
+for generic, Claude Code, Codex, Gemini CLI, and Cursor after T71/T105. Generic policy is still
+missing; Claude Code still lacks required `SessionStart` and `SessionEnd` settings registrations;
+Codex, Gemini CLI, and Cursor still have generated-adapter drift; and lint still reports stale
+current-plan feedback with `safe_action=none`. Cross-harness behavior therefore remains
+risky/not ready, T47 remains the exact harness-write gate, and no adapter install, settings edit,
+hook registration, `adopt_user_owned`, M6 action, document indexing, lifecycle mutation, ranking,
+`orient`, public MCP, schema/storage/index, or document-index behavior change was run.

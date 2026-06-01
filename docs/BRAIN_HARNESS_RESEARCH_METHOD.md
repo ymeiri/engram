@@ -1072,6 +1072,12 @@ Current next application:
   matrix and continue only non-gated evidence-quality or validation work. This must not be treated
   as approval for migration, document indexing, lifecycle archive, ranking, `orient`, public MCP,
   schema/storage/index, or harness work.
+- T106 applies a narrow read-only harness readiness drift recheck after T71/T105: rerun only
+  non-writing harness doctor/status-style evidence, lint, obligations, and git checks. If every
+  harness still reports `ready=false`, record that the completion matrix is unchanged and keep T47
+  as the exact harness-write gate. This must not be treated as approval to install adapters, edit
+  hooks/settings, adopt user-owned harness files, migrate, index documents, archive lifecycle
+  records, change ranking, expand `orient`, or change public MCP/schema/storage/index behavior.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

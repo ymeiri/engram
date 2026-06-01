@@ -1745,6 +1745,12 @@ Proceed in this order from the current checkpoint:
      T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking, expand `orient`,
      change public MCP/schema/storage/index behavior, change document-index behavior, or write
      harness adapters/hooks.
+106. Treat T106 as a read-only harness readiness drift recheck only. It reconfirms `ready=false`
+     for generic, Claude Code, Codex, Gemini CLI, and Cursor after T71/T105, and records that T47
+     remains the exact harness-write gate. It does not install adapters, edit hooks/settings, adopt
+     user-owned harness files, archive lifecycle records, inspect T69 files, run T70 indexing, run
+     M6, mutate lifecycle state, change ranking, expand `orient`, change public
+     MCP/schema/storage/index behavior, or change document-index behavior.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
