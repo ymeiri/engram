@@ -142,6 +142,9 @@ Research checkpoint, current through 2026-05-27:
   but `handoff(get)` still stopped at T87/T86 context. The rolling handoff was refreshed to
   `019e8316-ebd1-7220-b18e-f0d33110131a`; this is handoff maintenance only, not lifecycle archive,
   ranking, `orient`, M6, document-index, schema/storage/index, public MCP, or harness work.
+- T92 improves read-only lint visibility for the same stale-handoff pressure: actionable
+  superseded-active findings now outrank generic stale-feedback noise while stale current-plan
+  feedback remains first. No lifecycle archive or `apply_safe` action was run.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
@@ -1642,6 +1645,11 @@ Proceed in this order from the current checkpoint:
     This does not archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate
     lifecycle state, change ranking, expand `orient`, change public MCP/schema/storage/index
     behavior, change document-index behavior, or write harness adapters/hooks.
+92. Treat T92 as lint report visibility only. Safe-action superseded-active findings now surface
+    before generic stale-feedback rows, but this does not authorize `lint(action="apply_safe")`,
+    archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state,
+    change retrieval ranking, expand `orient`, change public MCP/schema/storage/index behavior,
+    change document-index behavior, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

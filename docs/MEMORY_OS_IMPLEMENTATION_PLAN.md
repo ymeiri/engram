@@ -705,6 +705,11 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       the active rolling handoff from T87/T86 context to T90 context. This is continuity
       maintenance only; no T69/T70/T88, M6, lifecycle archive, ranking, `orient`, public MCP,
       schema/storage/index, document-index, or harness behavior changed.
+- [x] T92 lint superseded-active visibility: documented
+      `docs/BRAIN_HARNESS_T92_LINT_SUPERSEDED_VISIBILITY_2026-06-01.md` and adjusted private lint
+      ordering so safe-action superseded-active findings surface before generic stale-feedback
+      noise while stale current-plan feedback stays first. No lifecycle write, M6, document-index,
+      retrieval ranking, `orient`, public MCP, schema/storage/index, or harness behavior changed.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -1029,6 +1034,15 @@ handoff to `019e8316-ebd1-7220-b18e-f0d33110131a`, superseding
 handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking,
 expand `orient`, change public MCP/schema/storage/index behavior, change document-index behavior,
 or write harness adapters/hooks.
+
+T92 matrix note: the lint superseded-active visibility slice in
+`docs/BRAIN_HARNESS_T92_LINT_SUPERSEDED_VISIBILITY_2026-06-01.md` responded to post-T91 evidence
+that direct search still shows old active handoffs while `lint(action="run", limit=20)` is crowded
+by generic stale-feedback rows. The private lint priority now keeps stale current-plan feedback
+first, then surfaces safe-action `superseded_item_still_active` findings before generic
+`feedback_stale_active_memory`. This is read-only report visibility only; no lifecycle archive,
+`apply_safe`, M6, document-index, retrieval ranking, `orient`, public MCP, schema/storage/index, or
+harness behavior changed.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

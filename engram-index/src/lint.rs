@@ -92,7 +92,7 @@ impl LintService {
                 LintRule::SupersededItemStillActive
                     if finding.safe_action != LintSafeAction::None =>
                 {
-                    45
+                    25
                 }
                 LintRule::MissingEvidence
                 | LintRule::HandoffMissingNextActions
@@ -740,6 +740,91 @@ mod tests {
 
         assert_eq!(report.findings.len(), 1);
         assert_eq!(report.findings[0].rule, LintRule::FeedbackStaleCurrentPlan);
+    }
+
+    #[tokio::test]
+    async fn lint_prioritizes_superseded_active_items_before_generic_feedback_noise() {
+        let service = service().await;
+        let current_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after latest slice",
+            "Current-plan guidance that stale feedback should keep first.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_tag(CURRENT_PLAN_TAG);
+        service
+            .memory_repo
+            .save_memory_item(&current_plan)
+            .await
+            .unwrap();
+
+        let old_handoff = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Superseded handoff",
+            "# Handoff\n\n## Next Actions\n- Continue from the replacement handoff.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        let replacement_handoff = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Replacement handoff",
+            "# Handoff\n\n## Next Actions\n- Continue from the latest handoff.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_superseded_item(old_handoff.id);
+        service
+            .memory_repo
+            .save_memory_item(&old_handoff)
+            .await
+            .unwrap();
+        service
+            .memory_repo
+            .save_memory_item(&replacement_handoff)
+            .await
+            .unwrap();
+
+        let mut stale_ids = vec![current_plan.id];
+        for index in 0..5 {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Generic stale item {index}"),
+                "Generic active memory with stale feedback.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+            stale_ids.push(item.id);
+            service.memory_repo.save_memory_item(&item).await.unwrap();
+        }
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = stale_ids;
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service
+            .run(LintOptions {
+                vault_path: None,
+                limit: Some(2),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(report.findings.len(), 2);
+        assert_eq!(report.findings[0].rule, LintRule::FeedbackStaleCurrentPlan);
+        assert_eq!(report.findings[1].rule, LintRule::SupersededItemStillActive);
+        assert_eq!(report.findings[1].item_id, Some(old_handoff.id));
     }
 
     #[tokio::test]
