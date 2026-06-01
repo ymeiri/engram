@@ -941,6 +941,12 @@ Current next application:
   therefore keeps real-session telemetry as weak retrieval/process evidence, defines outcome
   assessability classes, and defers schema/API work until a proxy audit or pilot proves structured
   provenance would be populated and useful.
+- T81 runs that first proxy audit over the latest 20 project feedback rows. All 20 rows had notes
+  and positive task outcome fields, but zero had non-empty `missing_context`, only the four T78
+  rows carried an explicit `ASSESSABLE_TASK_OUTCOME` label, and none had a structured transcript,
+  commit, test, user-review, or controlled-outcome artifact pointer. This supports the T80
+  distinction: current feedback notes are useful for retrieval/process explanation, but not enough
+  to justify schema/API outcome-evidence work by themselves.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

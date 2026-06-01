@@ -270,6 +270,12 @@ Research checkpoint, current through 2026-05-27:
   independently judged, following the existing `brain_harness_eval.rs` model. T80 does not change
   schema, storage, public MCP requests, ranking, harnesses, migration, lifecycle state, document
   indexing, or `orient`.
+- T81 samples the latest 20 project feedback rows as a proxy for outcome-evidence field
+  population. Every row had notes and positive outcome fields, but no non-empty
+  `missing_context`; only the four T78 rows had explicit `ASSESSABLE_TASK_OUTCOME` labels, and no
+  row included a structured transcript, commit, test, user-review, or controlled-outcome artifact
+  pointer. This supports keeping real-session telemetry weak until a controlled artifact pilot or
+  larger proxy audit justifies implementation.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1535,6 +1541,11 @@ Proceed in this order from the current checkpoint:
     Do not add `outcome_evidence` fields, schema/storage, public MCP, harness, ranking, lifecycle,
     migration, document-index, or `orient` changes until a proxy audit or pilot justifies them and
     the user explicitly approves the implementation scope.
+81. Treat T81 as weak-population evidence against immediate schema/API work. The latest 20
+    feedback rows all had notes and positive task outcome fields, but zero rows had durable
+    outcome artifact pointers and only the four pre-registered T78 rows had explicit
+    `ASSESSABLE_TASK_OUTCOME` labels. The next evidence step should be a larger read-only audit or
+    a controlled document-artifact pilot, not storage/public MCP changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

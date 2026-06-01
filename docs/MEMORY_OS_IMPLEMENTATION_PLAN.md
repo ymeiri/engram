@@ -633,6 +633,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       future controlled-outcome link contract. This is not completion or approval for schema,
       storage, public MCP, harness, migration, lifecycle, ranking, document-index, or `orient`
       changes.
+- [x] T81 feedback outcome-pointer proxy audit: documented
+      `docs/BRAIN_HARNESS_T81_FEEDBACK_OUTCOME_POINTER_PROXY_AUDIT_2026-06-01.md` from the latest
+      20 project feedback rows. Every sampled row had a note and positive task outcome fields, but
+      zero had non-empty `missing_context`, only the four T78 rows had explicit
+      `ASSESSABLE_TASK_OUTCOME` labels, and no row had a structured transcript/commit/test/user
+      review or controlled-outcome artifact pointer. This is not completion or approval for
+      schema, storage, public MCP, harness, migration, lifecycle, ranking, document-index, or
+      `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -862,6 +870,14 @@ task outcome fields but no judgment source or evidence pointer, while controlled
 real-session outcomes as weak self-report unless transcript-visible or independently judged
 evidence exists, and defers any schema/API/storage work until a read-only proxy audit or pilot
 justifies it.
+
+T81 matrix note: the feedback outcome-pointer proxy audit in
+`docs/BRAIN_HARNESS_T81_FEEDBACK_OUTCOME_POINTER_PROXY_AUDIT_2026-06-01.md` sampled the latest 20
+project feedback rows. The sample has good note hygiene and universal positive outcome fields, but
+no non-empty `missing_context`, no structured durable outcome artifact pointers, and only four
+explicit outcome-assessability labels, all from the controlled T78 batch. This is evidence against
+immediate `AgentFeedback`/`TelemetryRequest` schema work and supports either a larger read-only
+audit or a controlled document-artifact pilot as the next non-gated step.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
