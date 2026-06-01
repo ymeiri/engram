@@ -980,6 +980,13 @@ continuity repair only; it does not approve lifecycle writes, migration, documen
 schema/storage/index changes, public MCP changes, ranking changes, harness writes, or `orient`
 expansion.
 
+T88 matrix note: the stale handoff lifecycle packet in
+`docs/BRAIN_HARNESS_T88_STALE_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-01.md` freezes one exact
+archive target, `019e82f3-53bc-7a83-9e39-cfdb29b06c44`, because the active handoff
+`019e82f8-cada-7c31-b073-18ac41986b1e` supersedes it and direct searches still return both at
+equal score. This is an approval packet only. No archive was run, no broad stale-handoff sweep was
+authorized, and older active handoff noise remains a separate audit problem.
+
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
 plan first and active M6 gate context in top memory results, and

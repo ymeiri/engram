@@ -985,6 +985,11 @@ Current next application:
   `orient`, direct Engram search, `handoff(get)`, git state, and any local markdown handoff before
   trusting continuity. If a local note is stale, record that in Engram continuity records rather
   than editing external notes or changing the `orient` hot path.
+- T88 prepares a docs-only lifecycle approval packet for one immediately superseded rolling
+  handoff, `019e82f3-53bc-7a83-9e39-cfdb29b06c44`, after read-only evidence showed the current
+  handoff supersedes it and direct search still returns both at equal score. Treat T88 as an exact
+  future-approval request only, not approval for archive, broad handoff cleanup, ranking, `orient`,
+  document indexing, migration, schema/storage, public MCP, or harness work.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
