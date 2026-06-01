@@ -923,6 +923,12 @@ Current next application:
   pre-registered floor, T77 submitted no feedback and did not run a final confidence report. Treat
   this as evidence that future non-plan scoring needs richer outcome links or controlled
   non-synthetic tasks, not as authorization for gated work.
+- T78 tested the controlled non-synthetic path. It pre-registered four genuine current-work tasks
+  before execution, then ran exactly those `verify_decision` and `follow_user_preference` retrieval
+  calls. All four were task-outcome assessable from trace plus transcript/repo state and received
+  feedback. The single diagnostic `real_session_eval` passed numerically, but this validates only
+  the prospective controlled-task evidence pattern, not broad organic confidence or any gated
+  operation.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

@@ -608,6 +608,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `real_session_eval`. This is negative evidence about historical organic outcome scoring, not
       completion or approval for M6, lifecycle, harness, schema/storage/index, public MCP, ranking,
       document-index, or `orient` changes.
+- [x] T78 controlled observable task audit: documented
+      `docs/BRAIN_HARNESS_T78_CONTROLLED_OBSERVABLE_TASK_AUDIT_2026-06-01.md` from four
+      pre-registered genuine current-work tasks. The audit produced four
+      `ASSESSABLE_TASK_OUTCOME` non-`plan_work` traces, submitted feedback for all four, and ran
+      one diagnostic `real_session_eval` with `feedback_coverage=0.6000000238418579`,
+      `task_failure_count=0`, `bad_memory_used_count=0`, and `confidence_gate.passed=true`. This
+      validates prospective controlled-task outcome scoring only, not completion or approval for
+      M6, lifecycle, harness, schema/storage/index, public MCP, ranking, document-index, or
+      `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -805,6 +814,20 @@ non-plan trace bodies are insufficient for honest outcome scoring without richer
 controlled non-synthetic tasks. This does not authorize migration, lifecycle writes, harness
 writes, ranking changes, schema/storage/index changes, public MCP changes, document indexing, or
 `orient` expansion.
+
+T78 matrix note: the controlled observable-task audit in
+`docs/BRAIN_HARNESS_T78_CONTROLLED_OBSERVABLE_TASK_AUDIT_2026-06-01.md` used the T77 result to
+test the next non-gated evidence path. Four genuine current-work tasks were pre-registered and
+committed before execution, then run exactly as specified through existing `orient` and `search`
+surfaces. All four became `ASSESSABLE_TASK_OUTCOME` traces and received feedback. The single
+post-feedback `real_session_eval(project=engram, limit=50)` returned `feedback_trace_count=30`,
+`feedback_coverage=0.6000000238418579`, `outcome_trace_count=30`, `task_failure_count=0`,
+`bad_memory_used_count=0`, `wrong_scope_memory_count=0`, and `confidence_gate.passed=true`.
+Because the tasks were prospectively selected for transcript-visible outcomes, this is evidence
+that controlled non-synthetic tasks can produce honest non-plan feedback today; it is not evidence
+that historical organic traces are broadly outcome-assessable and does not authorize migration,
+lifecycle writes, harness writes, ranking changes, schema/storage/index changes, public MCP
+changes, document indexing, or `orient` expansion.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

@@ -251,6 +251,13 @@ Research checkpoint, current through 2026-05-27:
   scoring feedback was submitted and no final `real_session_eval` was run. Existing organic
   non-plan trace bodies can support retrieval spot checks, but not honest historical outcome
   scoring by themselves.
+- T78 then ran a prospective controlled observable-task audit over four genuine current-work
+  tasks, using only existing `orient`, `search`, telemetry, repo state, and transcript-visible
+  outcomes. All four pre-registered non-`plan_work` tasks were `ASSESSABLE_TASK_OUTCOME`, feedback
+  was submitted for each, and the single diagnostic `real_session_eval` passed numerically
+  (`feedback_coverage=0.60`, `task_failure_count=0`, `bad_memory_used_count=0`). This shows that
+  prospective task design can create honest non-plan outcome feedback today, but it does not prove
+  broad historical organic coverage or authorize gated work.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1495,6 +1502,13 @@ Proceed in this order from the current checkpoint:
     scoring feedback was submitted and no final `real_session_eval` was run. This does not
     authorize migration, lifecycle writes, harness writes, ranking changes, schema/storage/index
     changes, document-index actions, public MCP changes, or `orient` expansion.
+78. Treat T78 as prospective evidence-quality progress, not broad confidence proof. Four genuine
+    current-work tasks across `verify_decision` and `follow_user_preference` were pre-registered
+    before execution and all became `ASSESSABLE_TASK_OUTCOME` traces with feedback. The follow-up
+    `real_session_eval` passed numerically, but the sample was intentionally selected for
+    transcript-visible outcomes. This does not authorize migration, lifecycle writes, harness
+    writes, ranking changes, schema/storage/index changes, document-index actions, public MCP
+    changes, or `orient` expansion.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

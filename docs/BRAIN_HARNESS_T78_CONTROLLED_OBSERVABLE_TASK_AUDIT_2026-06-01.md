@@ -1,6 +1,6 @@
 # Brain Harness T78 Controlled Observable Task Audit
 
-Status: Pre-registered; task traces not yet run
+Status: Completed; feedback submitted
 Date: 2026-06-01
 Scope: Prospective, genuine current-work tasks with transcript-visible outcomes
 
@@ -91,3 +91,54 @@ whether prospective genuine tasks can produce assessable non-plan feedback with 
 - Treat any confidence-gate pass as diagnostic only. It does not authorize migration, lifecycle
   writes, harness writes, ranking changes, schema/storage/index changes, document-index actions,
   public MCP changes, or `orient` expansion.
+
+## Execution Results
+
+T78 ran exactly the four pre-registered retrieval tasks after preregistration commit `eee76d2`.
+No task was added, removed, or reclassified after execution began.
+
+| Task | Trace | Classification | Result |
+| --- | --- | --- | --- |
+| T78-V1 | `019e82a7-c5f1-7c73-987c-63f31d105a92` | `ASSESSABLE_TASK_OUTCOME` | Direct search returned active T77 current-plan memory `019e82a1-affd-7d93-b712-8a08faaa8338` first and stale repository current-plan memory `019e5e0a-86b4-73e3-aa9b-ca350e83e915` lower. |
+| T78-V2 | `019e82a7-c6b7-7742-ae61-f244a67bb4c9` | `ASSESSABLE_TASK_OUTCOME` | Lean `orient` returned active T77 current-plan memory first in candidate IDs and Brain Loop top items; stale repository current-plan memory did not outrank it. |
+| T78-P1 | `019e82a7-c86e-7aa3-a7fd-109edf7a9672` | `ASSESSABLE_TASK_OUTCOME` | Search returned reviewed user software-design preference `019e6924-256b-7093-b1c5-286ec4d02461` first; T78 remained documentation/evidence-only and did not change product behavior. |
+| T78-P2 | `019e82a7-c9ff-7d01-b4cd-8f802044bca8` | `ASSESSABLE_TASK_OUTCOME` | Search returned reviewed commit-discipline preference `019e03be-a9a5-7db2-848d-eb26ef78bcb5` first; preregistration commit staged only the intended T78 doc file and `git status --short` still showed only root `AGENTS.md` as untracked. |
+
+Summary:
+
+| Metric | Count |
+| --- | ---: |
+| Pre-registered tasks | 4 |
+| Task-outcome assessable | 4 |
+| Retrieval-only assessable | 0 |
+| Unassessable | 0 |
+| Feedback submitted | 4 |
+
+Feedback IDs:
+
+- T78-V1: `019e82a8-82da-7b22-bd31-cfed0f458fb7`
+- T78-V2: `019e82a8-9499-7c03-b983-08c5387281cc`
+- T78-P1: `019e82a8-a7be-7fb2-8c4e-6b7db8cc5f58`
+- T78-P2: `019e82a8-ba3e-7fc3-a5b8-0dd0ecde4ced`
+
+Because feedback was submitted, T78 ran `telemetry(action="real_session_eval", project="engram",
+limit=50)` exactly once after the feedback submissions. The report generated at
+`2026-06-01T10:09:19.374901Z` returned:
+
+- `trace_count=50`
+- `feedback_trace_count=30`
+- `feedback_coverage=0.6000000238418579`
+- `memory_judgment_coverage=1.0`
+- `outcome_trace_count=30`
+- `outcome_coverage=0.6000000238418579`
+- `task_failure_count=0`
+- `bad_memory_used_count=0`
+- `wrong_scope_memory_count=0`
+- `confidence_gate.passed=true`
+
+The confidence-gate pass is diagnostic only. T78 deliberately selected four current-work tasks with
+transcript-visible outcomes, so it proves that prospective task design can produce assessable
+non-plan feedback with today's surfaces. It does not prove broad historical organic outcome
+coverage, production readiness, or permission for M6, lifecycle writes, harness writes, ranking
+changes, schema/storage/index changes, document-index actions, public MCP changes, or `orient`
+expansion.
