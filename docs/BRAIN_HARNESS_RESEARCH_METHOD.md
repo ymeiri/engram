@@ -1047,6 +1047,10 @@ Current next application:
   only the rolling handoff is stale, one handoff refresh is acceptable continuity maintenance, but
   it must not be treated as archive approval, migration approval, document-index approval, ranking
   evidence, `orient` expansion, public MCP change, schema/storage/index change, or harness work.
+- T101 applies the T88/T95/T97/T99 lifecycle-packet pattern to the T98 handoff newly superseded by
+  T100. Preparing an exact archive approval packet is acceptable evidence-quality work, but it must
+  freeze one target ID, avoid `lint(action="apply_safe")` and broad handoff cleanup, and require
+  exact ID-scoped approval before any lifecycle write.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
