@@ -996,6 +996,10 @@ Current next application:
   `memory_cursor.commit_id` as additional context. This preserves cursor semantics and does not
   change public request parameters, ranking, `orient`, migration, lifecycle state, document index
   state, schema/storage/index behavior, or harness hooks/adapters.
+- T90 applies the same cursor ergonomics to the CLI path. `engram memory changes-since` help and
+  invalid timestamp errors now name `memory_cursor.timestamp`, while keeping the same
+  `--timestamp` and `--commit-id` semantics. This is CLI continuity guidance only, not a public MCP,
+  ranking, `orient`, migration, lifecycle, document-index, schema/storage/index, or harness change.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

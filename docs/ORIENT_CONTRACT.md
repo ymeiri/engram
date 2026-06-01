@@ -160,6 +160,9 @@ prompt-class validation only; it does not make `orient` a generated handoff or a
 - Agents should pass `memory_cursor.timestamp` to `memory(action="changes_since")`; if
   `memory_cursor.commit_id` is present, pass it as additional context, not as a replacement for the
   timestamp. Memory item freshness is timestamp-based.
+- CLI users should pass the same timestamp as
+  `engram memory changes-since --timestamp <memory_cursor.timestamp>` and may include
+  `--commit-id <memory_cursor.commit_id>` for context.
 - When the task result is assessable, submit `telemetry(action=submit_feedback)` before final
   response.
 - Include key behavioral fields when known: `task_success`, `preference_adhered`,

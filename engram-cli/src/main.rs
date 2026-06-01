@@ -1635,20 +1635,20 @@ enum MemoryCommands {
         json: bool,
     },
 
-    /// Print a Memory OS cursor for later changes_since calls
+    /// Print a Memory OS cursor for later changes-since calls
     Cursor {
         /// Print cursor as JSON
         #[arg(long)]
         json: bool,
     },
 
-    /// List memory and knowledge commits written after a cursor
+    /// List memory and knowledge commits written after memory_cursor.timestamp
     ChangesSince {
-        /// Cursor timestamp in RFC3339 format
+        /// Cursor timestamp from orient memory_cursor.timestamp or `engram memory cursor`
         #[arg(long)]
         timestamp: String,
 
-        /// Cursor commit ID, when known
+        /// Cursor commit ID from memory_cursor.commit_id, when known; timestamp is still required
         #[arg(long)]
         commit_id: Option<String>,
 
@@ -2904,14 +2904,35 @@ fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
 }
 
 fn parse_rfc3339_timestamp(value: &str) -> Result<OffsetDateTime> {
-    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
-        .map_err(|e| anyhow::anyhow!("Invalid RFC3339 timestamp: {}", e))
+    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).map_err(|e| {
+        anyhow::anyhow!(
+            "Invalid RFC3339 timestamp: {}. Pass memory_cursor.timestamp from orient or \
+                 `engram memory cursor`.",
+            e
+        )
+    })
 }
 
 fn format_rfc3339_timestamp(value: OffsetDateTime) -> Result<String> {
     value
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|e| anyhow::anyhow!("Invalid timestamp: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_rfc3339_timestamp_error_names_cursor_timestamp() {
+        let error = parse_rfc3339_timestamp("not-a-timestamp")
+            .expect_err("invalid timestamp should fail")
+            .to_string();
+
+        assert!(error.contains("Invalid RFC3339 timestamp"));
+        assert!(error.contains("memory_cursor.timestamp"));
+        assert!(error.contains("engram memory cursor"));
+    }
 }
 
 fn print_orientation_packet(packet: &OrientationPacket) {

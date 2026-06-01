@@ -688,6 +688,18 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       context. This is source-precedence continuity repair only; it does not approve schema,
       storage, public MCP, harness, migration, lifecycle, ranking, document-index, or `orient`
       changes.
+- [x] T88 stale handoff lifecycle approval packet: documented
+      `docs/BRAIN_HARNESS_T88_STALE_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-01.md` for exactly one
+      superseded rolling handoff target. This is an approval packet only; no archive or lifecycle
+      write was run.
+- [x] T89 changes-since MCP cursor ergonomics: documented
+      `docs/BRAIN_HARNESS_T89_CHANGES_SINCE_CURSOR_ERGONOMICS_2026-06-01.md`; the MCP error now
+      tells agents to pass `memory_cursor.timestamp` and optionally `memory_cursor.commit_id`
+      without changing cursor semantics or public request fields.
+- [x] T90 changes-since CLI cursor ergonomics: documented
+      `docs/BRAIN_HARNESS_T90_CLI_CHANGES_SINCE_CURSOR_ERGONOMICS_2026-06-01.md`; CLI help and
+      invalid timestamp errors now point at `memory_cursor.timestamp` while keeping the same
+      `--timestamp` / `--commit-id` behavior.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -994,6 +1006,14 @@ actionable instruction to pass `memory_cursor.timestamp` and optionally `memory_
 from `orient` or `memory(action="cursor")`. This is a continuity papercut fix only: no public MCP
 request parameters, ranking, `orient` payload, migration state, lifecycle state, document-index
 state, schema/storage/index behavior, or harness hooks/adapters changed.
+
+T90 matrix note: the CLI changes-since cursor ergonomics slice in
+`docs/BRAIN_HARNESS_T90_CLI_CHANGES_SINCE_CURSOR_ERGONOMICS_2026-06-01.md` applies the same cursor
+guidance to `engram memory changes-since`. CLI help now points `--timestamp` at
+`memory_cursor.timestamp`, `--commit-id` is documented as optional cursor context, and invalid
+timestamp errors name the cursor field. This is a CLI continuity papercut fix only: no CLI flag
+shape, public MCP request parameters, ranking, `orient` payload, migration state, lifecycle state,
+document-index state, schema/storage/index behavior, or harness hooks/adapters changed.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
