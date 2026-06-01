@@ -900,6 +900,12 @@ Current next application:
   design/source-reading obligations, which Codex resolved or skipped after the run. Treat this as
   cross-harness evidence only, not approval for lifecycle writes, M6, harness, ranking,
   schema/storage/index, public MCP, document-index, or `orient` changes.
+- T75 refreshes rolling telemetry after T74 feedback/current-plan capture. The sampled project
+  report has zero task failures, zero bad-memory-used records, zero wrong-scope judgments, and
+  improved external-session labeling (`36/50`), but the confidence gate fails because feedback
+  covers only one intent. Treat this as evidence-quality calibration only, not product completion
+  or approval for M6, lifecycle, harness, ranking, schema/storage/index, public MCP,
+  document-index, or `orient` changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

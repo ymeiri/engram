@@ -591,6 +591,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       design/source-reading obligations were resolved or skipped by Codex after the run. This is
       cross-harness evidence only, not approval for lifecycle, M6, harness, schema/storage/index,
       public MCP, ranking, document-index, or `orient` changes.
+- [x] T75 post-T74 telemetry audit: documented
+      `docs/BRAIN_HARNESS_T75_POST_T74_TELEMETRY_AUDIT_2026-06-01.md` from read-only telemetry
+      after T74 feedback/current-plan capture. The sampled project report had zero task failures,
+      zero bad-memory-used records, zero wrong-scope judgments, and improved external-session
+      labeling (`36/50` traces), but the confidence gate failed because only one intent had
+      feedback. Feedback coverage was `27/50` (`0.5400000214576721`) and stale-memory judgments
+      remained. This is evidence-quality calibration only, not completion or approval for M6,
+      lifecycle, harness, schema/storage/index, public MCP, ranking, document-index, or `orient`
+      changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -711,6 +720,10 @@ T74 replicates the post-T73 current-plan shape through Claude Code: T73 current-
 first in Codex and Claude Code lean `orient` and direct `search`, while the stale repository-scoped
 target remains lower-ranked noise. Claude Bridge again showed synthetic obligation noise for
 design/source cues, which Codex resolved or skipped after the run.
+T75 records the post-T74 telemetry state: zero task failures and zero bad-memory-used records
+remain, and external-session labeling improved to `36/50`, but the confidence gate fails because
+only `plan_work` has feedback in the sampled window. Evidence-loop completion therefore remains
+unproven.
 
 | Area | Status | Current evidence | Remaining risk or gate |
 | --- | --- | --- | --- |
@@ -750,6 +763,15 @@ handoff continuity are stronger across Codex and native Claude Code; stale curre
 visibility remains healthy; M6 and harness readiness remain explicit approval gates; the mixed
 non-gated search caveat is a retrieval-quality issue, not approval for migration, lifecycle,
 ranking, hook/adapter, schema/storage, public MCP, or `orient` payload work.
+
+T75 matrix note: after T74 feedback and current-plan capture,
+`real_session_eval(project=engram, limit=50)` returned `feedback_trace_count=27`,
+`feedback_coverage=0.5400000214576721`, `memory_judgment_coverage=1.0`,
+`task_failure_count=0`, `bad_memory_used_count=0`, `wrong_scope_memory_count=0`, and
+`external_session_trace_count=36`, but `confidence_gate.passed=false` because only one intent had
+feedback. Treat this as useful evidence-loop telemetry, not completion or approval for migration,
+lifecycle writes, hook/adapter writes, schema/storage changes, public MCP changes, `orient`
+expansion, document indexing, or broad ranking changes.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

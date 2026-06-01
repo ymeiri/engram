@@ -241,6 +241,10 @@ Research checkpoint, current through 2026-05-27:
   `019e8278-6bd4-73f3-8973-8ea0d3ec24bc`, all returned T73 current-plan memory first for the
   tested path. The stale repository-scoped target remained lower-ranked but noisy, and Claude's
   synthetic design/source obligations required cleanup after the run.
+- T75 refreshed rolling telemetry after T74 feedback/current-plan capture. The sampled project
+  report retained zero task failures and zero bad-memory-used records, and external-session
+  labeling improved to `36/50`, but the confidence gate failed because only `plan_work` had
+  feedback in the sampled window. Evidence-loop completion therefore remains unproven.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1464,6 +1468,11 @@ Proceed in this order from the current checkpoint:
     synthetic design/source obligations for validation prompts; close them explicitly after the
     run. This does not authorize lifecycle writes, migration, ranking, schema/storage/index, public
     MCP, document-index, harness, or `orient` changes.
+75. Treat T75 as rolling telemetry calibration, not a completion gate. The current project sample
+    has zero task failures, zero bad-memory-used records, zero wrong-scope judgments, and improved
+    external-session labeling (`36/50`), but the confidence gate fails because feedback covers only
+    one intent. This does not authorize lifecycle writes, migration, ranking, schema/storage/index,
+    public MCP, document-index, harness, or `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
