@@ -1,6 +1,6 @@
 # Brain Harness T79 Claude Bridge Observable Task Audit
 
-Status: Pre-registered; Claude Bridge task run not yet executed
+Status: Complete; harness inconclusive because Claude Bridge did not expose allowed Engram tools
 Date: 2026-06-01
 Scope: Cross-harness replication of the T78 controlled observable-task pattern through Claude Bridge
 
@@ -110,3 +110,36 @@ Only `ASSESSABLE_TASK_OUTCOME` traces may receive outcome feedback with `task_su
 - Treat any confidence-gate pass as diagnostic only. It does not authorize migration, lifecycle
   writes, harness writes, ranking changes, schema/storage/index changes, document-index actions,
   public MCP changes, or `orient` expansion.
+
+## Execution Result
+
+Pre-registration commit: `bdce09e` (`Pre-register T79 Claude Bridge audit`)
+
+The post-commit Claude Bridge call used `harness="project"`, `write=false`, no Bash allowlist, and
+only these allowed tools:
+
+- `mcp__engram__orient`
+- `mcp__engram__search`
+
+Claude Bridge did not expose either tool to the Claude Code run. Claude returned:
+
+| Task ID | Tool(s) attempted | Trace ID(s) | Returned/used memory IDs | Classification | Evidence note |
+| --- | --- | --- | --- | --- | --- |
+| T79-A | `mcp__engram__orient` | None | None | `HARNESS_INCONCLUSIVE` | The call failed with `No such tool available: mcp__engram__orient`, so the active T78 current-plan memory could not be observed through Claude Bridge. |
+| T79-B | `mcp__engram__search` | None | None | `HARNESS_INCONCLUSIVE` | The call failed with `No such tool available: mcp__engram__search`, so the reviewed user-preference memory could not be observed through Claude Bridge. |
+| T79-C | `mcp__engram__orient`, `mcp__engram__search` | None | None | `HARNESS_INCONCLUSIVE` | Both allowed tools were unavailable; Claude still stated that no gated work was authorized, but there is no Engram trace evidence for this task. |
+
+Because there were zero `ASSESSABLE_TASK_OUTCOME` traces, T79 submitted no outcome feedback and did
+not run `telemetry(action="real_session_eval")`. The stop rule also forbids retrying with alternate
+tool names or replacement tasks inside this slice.
+
+## Interpretation
+
+T79 is evidence about Claude Bridge project-harness tool exposure, not evidence against Engram
+`orient` or `search` behavior. The failure happened before any Engram retrieval call produced a
+trace. The result therefore preserves the T78 Codex-only controlled outcome evidence and adds a
+new cross-harness caveat: Claude Bridge parity audits must first prove that the target harness
+actually exposes the requested Engram tools under the selected harness and allowlist.
+
+No migration, lifecycle mutation, harness write, ranking change, schema/storage/index change,
+document-index action, public MCP change, or `orient` expansion is authorized by this result.

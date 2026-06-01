@@ -617,6 +617,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       validates prospective controlled-task outcome scoring only, not completion or approval for
       M6, lifecycle, harness, schema/storage/index, public MCP, ranking, document-index, or
       `orient` changes.
+- [x] T79 Claude Bridge observable-task audit: documented
+      `docs/BRAIN_HARNESS_T79_CLAUDE_BRIDGE_OBSERVABLE_TASK_AUDIT_2026-06-01.md` from a committed
+      pre-registration and one read-only Claude Bridge project-harness run. Claude Bridge reported
+      both allowed Engram tools, `mcp__engram__orient` and `mcp__engram__search`, as unavailable.
+      All three tasks were classified `HARNESS_INCONCLUSIVE`, no Engram trace IDs were produced,
+      and no feedback or diagnostic `real_session_eval` was submitted. This is a harness
+      tool-exposure caveat, not completion or approval for M6, lifecycle, harness,
+      schema/storage/index, public MCP, ranking, document-index, or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -828,6 +836,15 @@ that controlled non-synthetic tasks can produce honest non-plan feedback today; 
 that historical organic traces are broadly outcome-assessable and does not authorize migration,
 lifecycle writes, harness writes, ranking changes, schema/storage/index changes, public MCP
 changes, document indexing, or `orient` expansion.
+
+T79 matrix note: the Claude Bridge replication attempt in
+`docs/BRAIN_HARNESS_T79_CLAUDE_BRIDGE_OBSERVABLE_TASK_AUDIT_2026-06-01.md` was pre-registered in
+commit `bdce09e` and then run once with `harness="project"`, `write=false`, no Bash, and only
+`mcp__engram__orient` plus `mcp__engram__search` allowed. Claude Bridge reported both tools as
+unavailable. The run produced zero Engram trace IDs, zero `ASSESSABLE_TASK_OUTCOME` tasks, no
+feedback, and no final confidence report. This leaves T78's Codex controlled-task evidence intact
+but keeps cross-harness observable outcome validation partial until a harness with exposed Engram
+tools repeats the pattern.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

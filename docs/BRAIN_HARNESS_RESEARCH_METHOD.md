@@ -929,6 +929,12 @@ Current next application:
   feedback. The single diagnostic `real_session_eval` passed numerically, but this validates only
   the prospective controlled-task evidence pattern, not broad organic confidence or any gated
   operation.
+- T79 attempted to replicate the T78 observable-task pattern through Claude Bridge after committing
+  a pre-registration packet. The run used `harness="project"`, `write=false`, no Bash allowlist, and
+  only `mcp__engram__orient` plus `mcp__engram__search`, but Claude Bridge reported both allowed
+  tools as unavailable. The slice produced zero Engram trace IDs and is classified as
+  `HARNESS_INCONCLUSIVE`; no feedback or final confidence report was submitted. Treat this as a
+  harness/tool-exposure caveat, not as evidence against `orient` or `search`.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

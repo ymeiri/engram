@@ -258,6 +258,12 @@ Research checkpoint, current through 2026-05-27:
   (`feedback_coverage=0.60`, `task_failure_count=0`, `bad_memory_used_count=0`). This shows that
   prospective task design can create honest non-plan outcome feedback today, but it does not prove
   broad historical organic coverage or authorize gated work.
+- T79 pre-registered the same observable-task pattern for Claude Bridge, then ran one read-only
+  project-harness call with no Bash and only `mcp__engram__orient` plus `mcp__engram__search`
+  allowed. Claude Bridge reported both allowed tools as unavailable, so all three tasks were
+  `HARNESS_INCONCLUSIVE` with zero Engram trace IDs. No feedback or diagnostic confidence report
+  was submitted. This is a tool-exposure caveat for Claude Bridge, not evidence against the
+  Engram retrieval surfaces.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1509,6 +1515,13 @@ Proceed in this order from the current checkpoint:
     transcript-visible outcomes. This does not authorize migration, lifecycle writes, harness
     writes, ranking changes, schema/storage/index changes, document-index actions, public MCP
     changes, or `orient` expansion.
+79. Treat T79 as a Claude Bridge tool-exposure caveat. The pre-registered project-harness run used
+    `write=false`, no Bash, and only `mcp__engram__orient` plus `mcp__engram__search`, but Claude
+    Bridge reported both allowed tools as unavailable. The run produced no Engram trace IDs, no
+    task-outcome feedback, and no diagnostic `real_session_eval`. It does not invalidate the T78
+    Codex evidence and does not authorize migration, lifecycle writes, harness writes, ranking
+    changes, schema/storage/index changes, document-index actions, public MCP changes, or `orient`
+    expansion.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
