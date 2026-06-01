@@ -103,5 +103,15 @@ Validation:
 - `cargo test -p engram-tests --test telemetry_tests mcp_telemetry_list_traces_filters_by_intent`
 - `cargo test -p engram-tests --test telemetry_tests`
 
+Post-commit live validation:
+
+- Installed the T76 build into `/Users/yuval.meiri/.local/bin/engram`.
+- Restarted the global daemon on port 8765.
+- `telemetry(action="list_traces", project="engram", intent="follow_user_preference", limit=5)`
+  returned five traces, all with `intent="follow_user_preference"`.
+- `telemetry(action="list_traces", project="engram", intent="verify_decision", limit=3)`
+  returned three traces, all with `intent="verify_decision"`.
+
 T76 does not claim new non-plan confidence-gate evidence. Organic scoring should be rerun as a
-separate pre-registered audit after the fixed telemetry path is available in the live harness.
+separate pre-registered audit. Because the live validation calls exposed candidate trace bodies,
+those viewed traces must not be reused as if they were blind organic scoring evidence.

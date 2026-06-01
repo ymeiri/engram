@@ -909,7 +909,10 @@ Current next application:
 - T76 pre-registered an organic non-plan feedback audit, then stopped before scoring when
   `telemetry(action="list_traces", intent=...)` proved unable to filter by intent. The approved
   implementation slice fixed only the existing `intent` filter behavior for `list_traces` and
-  added focused MCP coverage. T76 does not submit new non-plan feedback or treat any future
+  added focused MCP coverage. Post-commit live validation installed the fixed binary, restarted the
+  daemon, and confirmed intent-filtered trace lists for `follow_user_preference` and
+  `verify_decision`; because validation opened trace bodies, those traces must not be reused as
+  blind organic scoring evidence. T76 does not submit new non-plan feedback or treat any future
   rolling confidence-gate pass as completion. It does not authorize migration, lifecycle writes,
   harness writes, ranking changes, schema/storage/index changes, document-index actions,
   `orient` expansion, or new public MCP request parameters.

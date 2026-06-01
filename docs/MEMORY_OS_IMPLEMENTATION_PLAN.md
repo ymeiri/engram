@@ -779,9 +779,13 @@ that `TelemetryRequest.intent`, persisted `intent_key`, and `idx_trace_intent` a
 `list_traces` forwarded only project, scenario, and arm filters. The narrow implementation slice
 wires the existing intent field through `telemetry(action="list_traces")`, canonicalizes aliases
 through `BrainHarnessIntent::parse`, and adds focused MCP coverage. This is instrumentation hygiene
-only: it does not submit new non-plan feedback, prove confidence-gate readiness, authorize
-migration, lifecycle writes, harness writes, ranking changes, schema/storage/index changes,
-document-index actions, `orient` expansion, or new public MCP request parameters.
+only. Post-commit live validation installed the T76 build into `/Users/yuval.meiri/.local/bin/engram`,
+restarted the global daemon on port 8765, and confirmed `list_traces` returns only the requested
+`follow_user_preference` or `verify_decision` traces. The validation opened trace bodies, so those
+viewed traces must not be reused as blind organic scoring evidence. T76 does not submit new
+non-plan feedback, prove confidence-gate readiness, authorize migration, lifecycle writes, harness
+writes, ranking changes, schema/storage/index changes, document-index actions, `orient` expansion,
+or new public MCP request parameters.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
