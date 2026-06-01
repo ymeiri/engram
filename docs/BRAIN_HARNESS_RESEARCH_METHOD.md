@@ -867,6 +867,13 @@ Current next application:
   recommended step is exact read-only inspection of only `index.md` and
   `candidates/0012-skip-plan.md` from the written T68 export snapshot, but only after the user
   replies with a phrase naming T69 and both files.
+- T70 records a separate document-visibility gap without crossing the T69 inspection gate. Read-only
+  document searches did not surface T68/T69 and still surfaced stale T59 indexed content. Source
+  inspection shows exact-file `docs(action="index")` can refresh those files by reusing the source
+  identity and replacing chunks for that source. Treat T70 as an approval packet only: do not index
+  the files, inspect the review-export snapshot, run apply, decide candidates, mutate lifecycle
+  state, change schema/storage/index behavior, change public MCP behavior, change ranking, expand
+  `orient`, or write harness adapters/hooks without explicit approval.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

@@ -1414,6 +1414,14 @@ Proceed in this order from the current checkpoint:
     and both files. T69 does not inspect candidate contents, rerun export, run apply, status, or
     prioritize, mutate lifecycle state, change schema/storage/index behavior, change public MCP
     behavior, change ranking, expand `orient`, or write harness adapters/hooks.
+70. Treat T70 as a document-visibility approval packet, not index execution or migration approval.
+    Read-only document-search probes did not surface T68 or T69 in top results and still surfaced
+    stale T59 pre-export chunks. Source inspection shows exact-file `docs(action="index")` reuses
+    an existing document source and replaces chunks for that source. T70 asks for explicit approval
+    to index exactly T59, T68, and T69, while leaving the T69 count-drift inspection gate unchanged.
+    It does not inspect review-export files, run review apply, decide candidates, mutate lifecycle
+    state, change schema/storage/index behavior, change public MCP behavior, change ranking, expand
+    `orient`, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
