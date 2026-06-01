@@ -600,6 +600,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       remained. This is evidence-quality calibration only, not completion or approval for M6,
       lifecycle, harness, schema/storage/index, public MCP, ranking, document-index, or `orient`
       changes.
+- [x] T77 organic non-plan scoring audit: documented
+      `docs/BRAIN_HARNESS_T77_ORGANIC_NON_PLAN_SCORING_PREREG_2026-06-01.md` from two
+      pre-registered intent-filtered trace windows. The audit found 30 older-unseen retrieval-only
+      assessable traces across `follow_user_preference` and `verify_decision`, but zero
+      task-outcome assessable traces, so it submitted no feedback and did not run a final
+      `real_session_eval`. This is negative evidence about historical organic outcome scoring, not
+      completion or approval for M6, lifecycle, harness, schema/storage/index, public MCP, ranking,
+      document-index, or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -786,6 +794,17 @@ viewed traces must not be reused as blind organic scoring evidence. T76 does not
 non-plan feedback, prove confidence-gate readiness, authorize migration, lifecycle writes, harness
 writes, ranking changes, schema/storage/index changes, document-index actions, `orient` expansion,
 or new public MCP request parameters.
+
+T77 matrix note: after T76, the pre-registered fixed-window audit ran
+`list_traces(project=engram, intent=follow_user_preference, limit=20)` and
+`list_traces(project=engram, intent=verify_decision, limit=20)` exactly once each. It found 14 and
+16 older-unseen retrieval-only assessable traces respectively, but zero
+`ASSESSABLE_TASK_OUTCOME` traces for either intent, so it submitted no scoring feedback and did not
+run a final `real_session_eval`. The evidence-loop gap is now clearer: existing historical organic
+non-plan trace bodies are insufficient for honest outcome scoring without richer outcome links or
+controlled non-synthetic tasks. This does not authorize migration, lifecycle writes, harness
+writes, ranking changes, schema/storage/index changes, public MCP changes, document indexing, or
+`orient` expansion.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

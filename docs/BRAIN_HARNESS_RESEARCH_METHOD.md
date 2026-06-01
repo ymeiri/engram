@@ -916,6 +916,13 @@ Current next application:
   rolling confidence-gate pass as completion. It does not authorize migration, lifecycle writes,
   harness writes, ranking changes, schema/storage/index changes, document-index actions,
   `orient` expansion, or new public MCP request parameters.
+- T77 reran that audit with a frozen cutoff and contamination list. The two fixed-window
+  intent-filtered trace listings found 14 older-unseen `follow_user_preference` traces and 16
+  older-unseen `verify_decision` traces that were retrieval-only assessable, but zero traces with
+  enough downstream outcome context to score task success or memory judgment honestly. Under the
+  pre-registered floor, T77 submitted no feedback and did not run a final confidence report. Treat
+  this as evidence that future non-plan scoring needs richer outcome links or controlled
+  non-synthetic tasks, not as authorization for gated work.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

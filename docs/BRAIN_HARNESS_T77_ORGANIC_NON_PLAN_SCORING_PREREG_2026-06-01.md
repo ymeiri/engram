@@ -1,6 +1,6 @@
 # Brain Harness T77 Organic Non-Plan Scoring Pre-Registration
 
-Status: Pre-registered; scoring not yet run
+Status: Completed; no scoring feedback submitted
 Date: 2026-06-01
 Scope: Existing organic non-`plan_work` telemetry traces, excluding T76-contaminated trace bodies
 
@@ -144,3 +144,58 @@ T77 will produce a report table with counts by intent:
 
 The valid success state is not "gate passed." The valid success state is a trustworthy answer to
 whether existing unseen organic non-plan traces can support honest outcome feedback today.
+
+## Fixed-Window Inspection Results
+
+T77 ran the two pre-registered fixed-window calls exactly once:
+
+- `telemetry(action="list_traces", project="engram", intent="follow_user_preference", limit=20)`
+- `telemetry(action="list_traces", project="engram", intent="verify_decision", limit=20)`
+
+No `real_session_eval` call was made during inspection.
+
+### Summary Table
+
+| Intent | Returned | Post-cutoff | T76-contaminated | Older unseen | Retrieval-only assessable | Task-outcome assessable | Feedback submitted |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `follow_user_preference` | 20 | 2 | 4 | 14 | 14 | 0 | 0 |
+| `verify_decision` | 20 | 1 | 3 | 16 | 16 | 0 | 0 |
+
+### Classification Notes
+
+`follow_user_preference`:
+
+- Post-cutoff: current T77 search trace `019e8299-883c-7d31-af69-aecabe0f7926` and T76 search
+  trace `019e8283-e111-78c2-831b-c76854bb6a06`.
+- T76-contaminated older traces: `019e8272-2470-7121-9ee0-11e837499355`,
+  `019e8271-a25e-7351-840d-d9daba821aba`,
+  `019e8271-05f0-7130-a5e0-6721d9da1d9d`, and
+  `019e8240-0096-7453-8c7e-cb68e7a0ff3d`.
+- The 14 older unseen traces were retrieval-only assessable: their queries asked for user
+  preferences or commit discipline and generally returned relevant preference/rule memory. They did
+  not include enough downstream assistant response or task outcome context to score
+  `task_success`, `preference_adhered`, `repeated_context_questions`, or `bad_memory_used`.
+
+`verify_decision`:
+
+- Post-cutoff: current T77 risk/gate search trace `019e8299-89d2-7511-8f6d-623f3bf56d73`.
+- T76-contaminated older traces: `019e8272-22ea-71e1-bca1-502b0e2e0585`,
+  `019e8271-a1ab-75b0-b9e7-3f0eaa467427`, and
+  `019e8271-0538-79d2-bb9e-38f3c2acd04f`.
+- The 16 older unseen traces were retrieval-only assessable: their queries asked about concrete
+  gates or decisions and often returned relevant gate/migration/harness context. They did not
+  include enough downstream assistant response or task outcome context to score outcome fields
+  without importing later audit reports or evaluator memory.
+
+### Result
+
+Under the pre-registered rules, neither target intent had three `ASSESSABLE_TASK_OUTCOME` traces.
+T77 therefore submitted no scoring feedback and did not call `real_session_eval` at the end.
+
+This is useful negative evidence: existing organic non-plan trace bodies can support retrieval
+quality spot checks, but they are not sufficient by themselves for honest historical outcome
+scoring. The next non-gated evidence slice should either add a metadata-only trace listing and/or
+capture richer task-outcome links for future traces, or pre-register a controlled non-synthetic
+task set whose outcomes are observable from the current transcript. This result does not authorize
+M6, lifecycle writes, harness writes, ranking changes, schema/storage/index changes, document-index
+actions, public MCP changes, or `orient` expansion.

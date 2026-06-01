@@ -245,6 +245,12 @@ Research checkpoint, current through 2026-05-27:
   report retained zero task failures and zero bad-memory-used records, and external-session
   labeling improved to `36/50`, but the confidence gate failed because only `plan_work` had
   feedback in the sampled window. Evidence-loop completion therefore remains unproven.
+- T77 reran the pre-registered organic non-plan scoring audit after T76 fixed intent-filtered trace
+  listing. Fixed windows for `follow_user_preference` and `verify_decision` returned only
+  retrieval-only assessable older-unseen traces and zero `ASSESSABLE_TASK_OUTCOME` traces, so no
+  scoring feedback was submitted and no final `real_session_eval` was run. Existing organic
+  non-plan trace bodies can support retrieval spot checks, but not honest historical outcome
+  scoring by themselves.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1482,6 +1488,13 @@ Proceed in this order from the current checkpoint:
     as blind organic scoring evidence. T76 does not submit non-plan feedback, approve migration,
     lifecycle writes, harness writes, ranking changes, schema/storage/index changes,
     document-index actions, `orient` expansion, or new public MCP request parameters.
+77. Treat T77 as negative evidence about historical organic scoring, not as a product-completion
+    signal. The pre-registered fixed windows for `follow_user_preference` and `verify_decision`
+    produced 30 older-unseen retrieval-only assessable traces but zero task-outcome assessable
+    traces. Because neither intent met the floor of three `ASSESSABLE_TASK_OUTCOME` traces, no
+    scoring feedback was submitted and no final `real_session_eval` was run. This does not
+    authorize migration, lifecycle writes, harness writes, ranking changes, schema/storage/index
+    changes, document-index actions, public MCP changes, or `orient` expansion.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
