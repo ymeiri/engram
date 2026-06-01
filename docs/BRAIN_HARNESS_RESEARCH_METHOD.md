@@ -1020,6 +1020,10 @@ Current next application:
   handoff is stale, one handoff refresh is acceptable continuity maintenance, but it must not be
   treated as archive approval, migration approval, document-index approval, ranking evidence,
   `orient` expansion, public MCP change, schema/storage/index change, or harness work.
+- T95 applies the T88 lifecycle-packet pattern to the newly superseded T91 handoff after T94.
+  Preparing an exact archive approval packet is acceptable evidence-quality work, but it must freeze
+  one target ID, avoid broad handoff cleanup, and require exact ID-scoped approval before any
+  lifecycle write.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

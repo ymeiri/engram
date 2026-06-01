@@ -1667,6 +1667,14 @@ Proceed in this order from the current checkpoint:
     mutate lifecycle state, change retrieval ranking, expand `orient`, change public
     MCP/schema/storage/index behavior, change document-index behavior, or write harness
     adapters/hooks.
+94. Treat T94 as rolling handoff freshness repair only. The active handoff was updated to
+    `019e8352-a610-7f92-859f-f9d74b026ba7` because `handoff(get)` lagged the T93 current plan.
+    This does not archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate
+    lifecycle state, change ranking, expand `orient`, change public MCP/schema/storage/index
+    behavior, change document-index behavior, or write harness adapters/hooks.
+95. Treat T95 as an approval packet only. It freezes exact archive target
+    `019e8316-ebd1-7220-b18e-f0d33110131a`, but no archive or lifecycle cleanup is authorized
+    until the exact T95 approval phrase is provided.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
