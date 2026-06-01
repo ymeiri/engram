@@ -276,6 +276,12 @@ Research checkpoint, current through 2026-05-27:
   row included a structured transcript, commit, test, user-review, or controlled-outcome artifact
   pointer. This supports keeping real-session telemetry weak until a controlled artifact pilot or
   larger proxy audit justifies implementation.
+- T82 creates that first controlled artifact pilot as a document-only immutable snapshot. It links
+  five trace/feedback rows to durable evidence refs, evidence strength, T80 outcome classes,
+  confounds, and pending reviewer agreement. The shape helps distinguish transcript-visible T78
+  outcomes from a positive but weak T79 startup self-report, but it remains agent-authored evidence
+  and does not justify storage, public MCP, schema, harness, ranking, lifecycle, migration,
+  document-index, or `orient` changes.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1546,6 +1552,12 @@ Proceed in this order from the current checkpoint:
     outcome artifact pointers and only the four pre-registered T78 rows had explicit
     `ASSESSABLE_TASK_OUTCOME` labels. The next evidence step should be a larger read-only audit or
     a controlled document-artifact pilot, not storage/public MCP changes.
+82. Treat T82 as a doc-only artifact-format pilot, not implementation approval. The five-row
+    snapshot shows that trace ID, feedback ID, durable evidence refs, evidence strength, outcome
+    class, confounds, and reviewer agreement are useful fields, including for rejecting a positive
+    self-report as insufficient outcome evidence. Because the rows are still agent-authored and
+    reviewer agreement is pending, do not add schema/storage, public MCP, harness, ranking,
+    lifecycle, migration, document-index, or `orient` changes from this result alone.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -947,6 +947,12 @@ Current next application:
   commit, test, user-review, or controlled-outcome artifact pointer. This supports the T80
   distinction: current feedback notes are useful for retrieval/process explanation, but not enough
   to justify schema/API outcome-evidence work by themselves.
+- T82 pilots the controlled-outcome artifact path as a doc-only immutable snapshot. It links the
+  four T78 assessable traces plus one weak T79 startup feedback row to durable refs, evidence
+  strength, T80 classes, confounds, and pending reviewer agreement. The artifact shape is useful,
+  especially for refusing to over-link positive self-report, but it still has no independent
+  reviewer and does not authorize schema/API/storage, public MCP, harness, ranking, lifecycle,
+  migration, document-index, or `orient` changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

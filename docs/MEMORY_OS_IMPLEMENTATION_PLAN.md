@@ -641,6 +641,13 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       review or controlled-outcome artifact pointer. This is not completion or approval for
       schema, storage, public MCP, harness, migration, lifecycle, ranking, document-index, or
       `orient` changes.
+- [x] T82 controlled outcome artifact pilot: documented
+      `docs/BRAIN_HARNESS_T82_CONTROLLED_OUTCOME_ARTIFACT_PILOT_2026-06-01.md` as a doc-only
+      immutable snapshot. The pilot links four T78 assessable traces and one weak T79 startup
+      feedback row to trace IDs, feedback IDs, durable evidence refs, evidence strength, T80
+      classes, confounds, and pending reviewer agreement. It validates a possible artifact shape
+      but not schema, storage, public MCP, harness, migration, lifecycle, ranking, document-index,
+      or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -878,6 +885,15 @@ no non-empty `missing_context`, no structured durable outcome artifact pointers,
 explicit outcome-assessability labels, all from the controlled T78 batch. This is evidence against
 immediate `AgentFeedback`/`TelemetryRequest` schema work and supports either a larger read-only
 audit or a controlled document-artifact pilot as the next non-gated step.
+
+T82 matrix note: the controlled outcome artifact pilot in
+`docs/BRAIN_HARNESS_T82_CONTROLLED_OUTCOME_ARTIFACT_PILOT_2026-06-01.md` tests that second path as
+a doc-only snapshot. The five-row artifact uses trace ID, feedback ID, durable evidence refs,
+evidence strength, T80 class, confounds, and reviewer agreement to preserve four T78
+transcript-visible outcomes and refuse over-linking one positive T79 startup self-report. This
+validates a reviewable artifact shape, but independent reviewer agreement remains pending and no
+schema/API/storage/public MCP/harness/ranking/lifecycle/migration/document-index/`orient` change is
+approved.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
