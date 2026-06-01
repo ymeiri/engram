@@ -1400,6 +1400,13 @@ Proceed in this order from the current checkpoint:
     create a T59 MemoryItem, run review export/apply, mutate lifecycle state, change ranking,
     expand `orient`, change schema/storage or document-index behavior, change public MCP behavior,
     or write harness adapters/hooks.
+68. Treat T68 as an approved review-export execution that stopped on its own guardrail. The exact
+    T59 `memory(action="migration_review_export", ...)` call wrote
+    `/Users/yuval.meiri/.engram/reviews/2026-05-31-t58-m6-review-export`, but the inventory
+    returned 12 candidates instead of the 11 expected from T58 because one `skip` candidate was
+    included. No apply, candidate decision, lifecycle mutation, schema/storage/index behavior
+    change, public MCP change, ranking change, `orient` change, or harness write followed. Further
+    M6 progress requires a new user decision on the count drift.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

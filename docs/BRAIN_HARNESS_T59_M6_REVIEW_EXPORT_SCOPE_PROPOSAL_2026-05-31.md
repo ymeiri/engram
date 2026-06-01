@@ -1,6 +1,6 @@
 # Brain Harness T59 M6 Review Export Scope Proposal
 
-Status: Pending user approval. No review export has been run.
+Status: Approved and executed as T68 on 2026-06-01; stopped on count drift.
 Date: 2026-05-31
 Scope: Proposed one-call review-export-only M6 scoping run
 
@@ -8,6 +8,13 @@ This packet asks whether to authorize the next bounded M6 step after the T58 inv
 one review export call that writes a review batch for human decision. It does not authorize review
 apply, candidate acceptance/rejection, deletion, lifecycle mutation, schema/storage/index changes,
 public MCP changes, ranking changes, `orient` changes, or harness adapter/hook changes.
+
+Execution note, 2026-06-01: the user approved this exact scope and Codex ran the proposed
+`memory(action="migration_review_export", ...)` call. The export wrote
+`/Users/yuval.meiri/.engram/reviews/2026-05-31-t58-m6-review-export`, but returned 12 candidates
+instead of the expected 11 because one `skip` candidate appeared. Codex stopped immediately per the
+count-drift stop condition. See
+`docs/BRAIN_HARNESS_T68_T59_REVIEW_EXPORT_RESULT_2026-06-01.md`.
 
 ## Current Evidence
 

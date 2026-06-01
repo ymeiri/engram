@@ -857,6 +857,12 @@ Current next application:
   not approve M6 review export/apply, create a T59 MemoryItem, mutate lifecycle state, change
   schema/storage or index behavior, change public MCP behavior, change ranking, expand `orient`, or
   write harness adapters/hooks.
-- The next executable M6 step requires explicit approval of the T59 review-export scope. Until
-  then, non-gated work should improve targeted validation, evidence quality, cross-harness
-  replication, or another concrete capture/lifecycle gap surfaced by evidence.
+- T68 executed the approved T59 review-export-only call and stopped on count drift. The review
+  workspace was written, but the inventory returned 12 candidates instead of the expected 11 because
+  one `skip` candidate appeared. This is evidence, not migration completion: no review apply,
+  candidate decision, lifecycle mutation, schema/storage/index behavior change, public MCP change,
+  ranking change, `orient` change, or harness write followed.
+- The next executable M6 step requires an explicit user decision on the T68 count drift and then a
+  separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
+  should improve targeted validation, evidence quality, cross-harness replication, or another
+  concrete capture/lifecycle gap surfaced by evidence.
