@@ -264,6 +264,12 @@ Research checkpoint, current through 2026-05-27:
   `HARNESS_INCONCLUSIVE` with zero Engram trace IDs. No feedback or diagnostic confidence report
   was submitted. This is a tool-exposure caveat for Claude Bridge, not evidence against the
   Engram retrieval surfaces.
+- T80 records the outcome-link design boundary exposed by T77/T78/T79. Real-session
+  `AgentFeedback` remains weak agent-reported telemetry: it has task outcome fields, but no
+  judgment source or evidence pointer. Controlled outcome evidence should stay separate and
+  independently judged, following the existing `brain_harness_eval.rs` model. T80 does not change
+  schema, storage, public MCP requests, ranking, harnesses, migration, lifecycle state, document
+  indexing, or `orient`.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1522,6 +1528,13 @@ Proceed in this order from the current checkpoint:
     Codex evidence and does not authorize migration, lifecycle writes, harness writes, ranking
     changes, schema/storage/index changes, document-index actions, public MCP changes, or `orient`
     expansion.
+80. Treat T80 as an outcome-evidence interpretation decision, not an implementation approval.
+    Existing `AgentFeedback` task outcome fields are weak self-report unless paired with
+    transcript-visible or independently judged evidence. Future controlled outcome links should be
+    separate from real-session telemetry and follow the existing controlled-eval judgment model.
+    Do not add `outcome_evidence` fields, schema/storage, public MCP, harness, ranking, lifecycle,
+    migration, document-index, or `orient` changes until a proxy audit or pilot justifies them and
+    the user explicitly approves the implementation scope.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -625,6 +625,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       and no feedback or diagnostic `real_session_eval` was submitted. This is a harness
       tool-exposure caveat, not completion or approval for M6, lifecycle, harness,
       schema/storage/index, public MCP, ranking, document-index, or `orient` changes.
+- [x] T80 outcome-link decision packet: documented
+      `docs/BRAIN_HARNESS_T80_OUTCOME_LINK_DECISION_PACKET_2026-06-01.md` after read-only source
+      inspection, AI Council broadcast, and Claude Bridge critique. The packet keeps
+      real-session telemetry unchanged, classifies `AgentFeedback` task outcome fields as weak
+      self-report unless paired with transcript-visible or independent evidence, and defines a
+      future controlled-outcome link contract. This is not completion or approval for schema,
+      storage, public MCP, harness, migration, lifecycle, ranking, document-index, or `orient`
+      changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -845,6 +853,15 @@ unavailable. The run produced zero Engram trace IDs, zero `ASSESSABLE_TASK_OUTCO
 feedback, and no final confidence report. This leaves T78's Codex controlled-task evidence intact
 but keeps cross-harness observable outcome validation partial until a harness with exposed Engram
 tools repeats the pattern.
+
+T80 matrix note: the outcome-link decision packet in
+`docs/BRAIN_HARNESS_T80_OUTCOME_LINK_DECISION_PACKET_2026-06-01.md` answers the T77/T78 evidence
+gap without changing source behavior. Source inspection found that `AgentFeedback` already has
+task outcome fields but no judgment source or evidence pointer, while controlled eval outcomes in
+`brain_harness_eval.rs` reject using-agent judgment. T80 therefore classifies ordinary
+real-session outcomes as weak self-report unless transcript-visible or independently judged
+evidence exists, and defers any schema/API/storage work until a read-only proxy audit or pilot
+justifies it.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

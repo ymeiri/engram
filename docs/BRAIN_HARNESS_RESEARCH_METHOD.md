@@ -935,6 +935,12 @@ Current next application:
   tools as unavailable. The slice produced zero Engram trace IDs and is classified as
   `HARNESS_INCONCLUSIVE`; no feedback or final confidence report was submitted. Treat this as a
   harness/tool-exposure caveat, not as evidence against `orient` or `search`.
+- T80 turns the T77/T78/T79 outcome-link gap into a read-only decision packet. Source inspection
+  shows `AgentFeedback` has task outcome fields, but no judgment source or evidence pointer, while
+  `brain_harness_eval.rs` already requires non-using-agent judgment for controlled outcomes. T80
+  therefore keeps real-session telemetry as weak retrieval/process evidence, defines outcome
+  assessability classes, and defers schema/API work until a proxy audit or pilot proves structured
+  provenance would be populated and useful.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
