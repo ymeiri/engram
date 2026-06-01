@@ -1100,6 +1100,16 @@ authorized, and T88/T95 remain separate exact approval packets for
 `019e82f3-53bc-7a83-9e39-cfdb29b06c44` and
 `019e8316-ebd1-7220-b18e-f0d33110131a`.
 
+T98 matrix note: the rolling handoff freshness repair in
+`docs/BRAIN_HARNESS_T98_ROLLING_HANDOFF_T97_FRESHNESS_REPAIR_2026-06-01.md` found live resume
+drift after T97: lean `orient`, direct `search`, docs, git, and `changes_since` recovered T97,
+while `handoff(get)` still described T95/T96 as the latest implementation context. Codex refreshed
+only the rolling handoff to `019e836a-435a-75e1-8702-ced8eabe85cc`, superseding
+`019e835e-81c2-7562-897a-e42c0fe8dc08`. This improves continuity only; it does not archive old
+handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking,
+expand `orient`, change public MCP/schema/storage/index behavior, change document-index behavior,
+or write harness adapters/hooks.
+
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
 plan first and active M6 gate context in top memory results, and
