@@ -1830,6 +1830,12 @@ Proceed in this order from the current checkpoint:
      not change `orient`, document indexing, lifecycle state, M6 state, public MCP
      parameters/response shape, schema/storage/index behavior, document-index behavior, or harness
      adapters/hooks.
+119. Treat T119 as an active-runtime gap audit, not another ranking change. If exact T70 search
+     still ranks old handoffs first after the active current-plan includes the literal approval
+     command, assume the in-thread MCP runtime may be stale until a fresh binary can attach to the
+     live store. Do not kill or restart Engram processes without an explicit maintenance decision;
+     record the gap and keep T70, T69, M6, lifecycle, public MCP/schema/storage/index,
+     document-index, and harness gates closed.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

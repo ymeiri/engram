@@ -1152,6 +1152,12 @@ Current next application:
   generic `approve`/`approval` semantics, do not treat retrieval as execution authorization, and do
   not change `orient`, document indexing, lifecycle state, public MCP/schema/storage/index
   behavior, document-index behavior, or harness writes under this rule.
+- T119 applies runtime-freshness discipline after search calibration: if a committed ranking fix and
+  repaired current-plan memory are both present but the active MCP path still returns old ranking
+  order, distinguish code/design failure from stale-runtime evidence before changing ranking again.
+  Installing a fresh binary is acceptable validation work, but attaching it to the live global
+  store may require a daemon/runtime refresh window. Do not kill or restart existing Engram
+  processes, run T70 indexing, or broaden ranking semantics without explicit approval.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

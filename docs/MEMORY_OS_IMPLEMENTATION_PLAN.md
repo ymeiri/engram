@@ -4913,3 +4913,16 @@ memory-search fixtures passed, including existing migration-gate regressions. T1
 `orient`, run document indexing, inspect T69 files, run M6 inventory/export/apply, mutate lifecycle
 state, change public MCP parameters or response shape, change schema/storage/index behavior, change
 document-index behavior, or write harness adapters/hooks.
+
+T119 matrix note:
+`docs/BRAIN_HARNESS_T119_EXACT_APPROVAL_COMMAND_RUNTIME_GAP_2026-06-01.md` records a docs-only
+runtime-gap audit after T118. Live exact T70 search still ranked old T110/T109 handoffs above
+current-plan before and after repairing active current-plan memory to include the literal
+`Approve T70: index exact files T59, T68, and T69.` phrase. Lean `orient` did recover the repaired
+T119 current-plan first, but direct exact search did not, which indicates the active in-thread MCP
+runtime has not picked up the T118 ranker code. `cargo install --path engram-cli` installed the
+current binary to `/Users/yuval.meiri/.cargo/bin/engram`, but starting a fresh HTTP server against
+the global store failed because the existing Engram process holds the RocksDB lock. No daemon
+restart, `kill`, document indexing, T69 inspection, M6 action, lifecycle mutation, ranking change,
+`orient` change, public MCP/schema/storage/index behavior change, document-index behavior change,
+or harness write was run.
