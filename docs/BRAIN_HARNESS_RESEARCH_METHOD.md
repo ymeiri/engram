@@ -894,6 +894,12 @@ Current next application:
   stale-feedback records with `safe_action=none`. Treat this as T52 evidence refresh only, not
   approval for archive, replacement, scope correction, lifecycle writes, M6, harness, ranking,
   schema/storage/index, public MCP, document-index, or `orient` changes.
+- T74 validates the post-T73 retrieval shape across Codex and Claude Code. Both harnesses returned
+  T73 current-plan memory first for the tested continuation/search path, while the stale
+  repository-scoped target remained lower-ranked noise. Claude Bridge produced synthetic
+  design/source-reading obligations, which Codex resolved or skipped after the run. Treat this as
+  cross-harness evidence only, not approval for lifecycle writes, M6, harness, ranking,
+  schema/storage/index, public MCP, document-index, or `orient` changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

@@ -580,6 +580,17 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       now has 228 recent stale-feedback records with `safe_action=none`. This refreshes T52
       evidence only; it does not approve archive, replacement, scope correction, M6, lifecycle,
       harness, schema/storage/index, public MCP, ranking, document-index, or `orient` changes.
+- [x] T74 post-T73 Claude parity: documented
+      `docs/BRAIN_HARNESS_T74_POST_T73_CLAUDE_PARITY_2026-06-01.md` from read-only Codex and
+      Claude Bridge retrieval checks. Codex traces `019e8277-3c03-7f62-8bfe-cc6a79f48212` and
+      `019e8277-484c-7df1-a977-1e303a41d333`, plus Claude traces
+      `019e8278-671d-7d02-8a04-fe0a17d31de6` and
+      `019e8278-6bd4-73f3-8973-8ea0d3ec24bc`, all returned T73 current-plan memory first for the
+      tested continuation/search path. The stale repository-scoped target remained fifth in lean
+      `orient` and second in direct `search` in both harnesses. Claude's synthetic
+      design/source-reading obligations were resolved or skipped by Codex after the run. This is
+      cross-harness evidence only, not approval for lifecycle, M6, harness, schema/storage/index,
+      public MCP, ranking, document-index, or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -696,6 +707,10 @@ still ranks first for the tested continuation prompt, while target
 `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains the sole active repository-scoped current-plan item
 and lint now reports 228 stale-feedback records with `safe_action=none`. This keeps T52 as a user
 decision request rather than an executable lifecycle packet.
+T74 replicates the post-T73 current-plan shape through Claude Code: T73 current-plan memory ranks
+first in Codex and Claude Code lean `orient` and direct `search`, while the stale repository-scoped
+target remains lower-ranked noise. Claude Bridge again showed synthetic obligation noise for
+design/source cues, which Codex resolved or skipped after the run.
 
 | Area | Status | Current evidence | Remaining risk or gate |
 | --- | --- | --- | --- |

@@ -233,6 +233,14 @@ Research checkpoint, current through 2026-05-27:
   228 recent stale-feedback records with `safe_action=none`. This keeps T52 as a user decision
   request, not approval for archive, replacement, scope correction, lifecycle writes, ranking,
   migration, harness, schema/storage/index, public MCP, document-index, or `orient` changes.
+- T74 replicated the post-T73 current-plan shape in Claude Code through Claude Bridge with
+  `write=false`, no Bash allowance, and only read-only Engram retrieval/obligation tools allowed.
+  Codex traces `019e8277-3c03-7f62-8bfe-cc6a79f48212` and
+  `019e8277-484c-7df1-a977-1e303a41d333`, plus Claude traces
+  `019e8278-671d-7d02-8a04-fe0a17d31de6` and
+  `019e8278-6bd4-73f3-8973-8ea0d3ec24bc`, all returned T73 current-plan memory first for the
+  tested path. The stale repository-scoped target remained lower-ranked but noisy, and Claude's
+  synthetic design/source obligations required cleanup after the run.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1450,6 +1458,12 @@ Proceed in this order from the current checkpoint:
     approval before archive, replacement, or scope correction. This does not authorize migration,
     lifecycle writes, ranking, schema/storage/index, public MCP, document-index, harness, or
     `orient` changes.
+74. Treat T74 as cross-harness retrieval evidence only. Codex and Claude Code both return T73
+    current-plan memory first for the tested post-T73 continuation/search path, while the stale
+    repository-scoped current-plan target remains lower-ranked noise. Claude Bridge may open
+    synthetic design/source obligations for validation prompts; close them explicitly after the
+    run. This does not authorize lifecycle writes, migration, ranking, schema/storage/index, public
+    MCP, document-index, harness, or `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
