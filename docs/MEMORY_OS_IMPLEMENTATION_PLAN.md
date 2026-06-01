@@ -700,6 +700,11 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `docs/BRAIN_HARNESS_T90_CLI_CHANGES_SINCE_CURSOR_ERGONOMICS_2026-06-01.md`; CLI help and
       invalid timestamp errors now point at `memory_cursor.timestamp` while keeping the same
       `--timestamp` / `--commit-id` behavior.
+- [x] T91 rolling handoff T90 freshness repair: documented
+      `docs/BRAIN_HARNESS_T91_ROLLING_HANDOFF_T90_FRESHNESS_REPAIR_2026-06-01.md` and refreshed
+      the active rolling handoff from T87/T86 context to T90 context. This is continuity
+      maintenance only; no T69/T70/T88, M6, lifecycle archive, ranking, `orient`, public MCP,
+      schema/storage/index, document-index, or harness behavior changed.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -1014,6 +1019,16 @@ guidance to `engram memory changes-since`. CLI help now points `--timestamp` at
 timestamp errors name the cursor field. This is a CLI continuity papercut fix only: no CLI flag
 shape, public MCP request parameters, ranking, `orient` payload, migration state, lifecycle state,
 document-index state, schema/storage/index behavior, or harness hooks/adapters changed.
+
+T91 matrix note: the rolling handoff freshness repair in
+`docs/BRAIN_HARNESS_T91_ROLLING_HANDOFF_T90_FRESHNESS_REPAIR_2026-06-01.md` found live resume
+drift after T90: lean `orient` and direct `search` recovered T90 current-plan memory first, while
+`handoff(get)` still described T87/T86 as the latest state. Codex refreshed only the rolling
+handoff to `019e8316-ebd1-7220-b18e-f0d33110131a`, superseding
+`019e82f8-cada-7c31-b073-18ac41986b1e`. This improves continuity only; it does not archive old
+handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking,
+expand `orient`, change public MCP/schema/storage/index behavior, change document-index behavior,
+or write harness adapters/hooks.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

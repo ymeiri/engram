@@ -1000,6 +1000,11 @@ Current next application:
   invalid timestamp errors now name `memory_cursor.timestamp`, while keeping the same
   `--timestamp` and `--commit-id` semantics. This is CLI continuity guidance only, not a public MCP,
   ranking, `orient`, migration, lifecycle, document-index, schema/storage/index, or harness change.
+- T91 applies the T86 continuity rule after T90: compare `orient`, direct search, `changes_since`,
+  `handoff(get)`, docs, git state, and source before trusting resume state. If only the rolling
+  handoff is stale, one handoff refresh is acceptable continuity maintenance, but it must not be
+  treated as archive approval, migration approval, document-index approval, ranking evidence,
+  `orient` expansion, public MCP change, schema/storage/index change, or harness work.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

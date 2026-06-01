@@ -138,6 +138,10 @@ Research checkpoint, current through 2026-05-27:
 - T90 applies the same cursor guidance to the CLI `engram memory changes-since` path: CLI help and
   invalid timestamp errors now point at `memory_cursor.timestamp`, while `--commit-id` remains
   optional context.
+- T91 found a follow-on resume continuity drift: lean `orient` and direct `search` recovered T90,
+  but `handoff(get)` still stopped at T87/T86 context. The rolling handoff was refreshed to
+  `019e8316-ebd1-7220-b18e-f0d33110131a`; this is handoff maintenance only, not lifecycle archive,
+  ranking, `orient`, M6, document-index, schema/storage/index, public MCP, or harness work.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
@@ -1625,6 +1629,19 @@ Proceed in this order from the current checkpoint:
     rule. It does not approve migration inspection/apply/deletion, lifecycle writes, document
     indexing, harness writes, ranking changes, schema/storage/index changes, public MCP changes,
     or `orient` expansion.
+88. Treat T88 as an approval packet only. It freezes exact archive target
+    `019e82f3-53bc-7a83-9e39-cfdb29b06c44`, but no archive or lifecycle cleanup is authorized
+    until the exact T88 approval phrase is provided.
+89. Treat T89 as an MCP cursor-ergonomics repair only. `changes_since` remains timestamp-based;
+    commit IDs are optional context, not replacements for `memory_cursor.timestamp`.
+90. Treat T90 as a CLI cursor-ergonomics repair only. `engram memory changes-since` now points users
+    at `memory_cursor.timestamp` and optional `memory_cursor.commit_id` without changing flag shape
+    or cursor semantics.
+91. Treat T91 as rolling handoff freshness repair only. The active handoff was updated to
+    `019e8316-ebd1-7220-b18e-f0d33110131a` because `handoff(get)` lagged the T90 current plan.
+    This does not archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate
+    lifecycle state, change ranking, expand `orient`, change public MCP/schema/storage/index
+    behavior, change document-index behavior, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
