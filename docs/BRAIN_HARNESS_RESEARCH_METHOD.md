@@ -1118,6 +1118,12 @@ Current next application:
   only non-gated validation or evidence-quality work. Do not treat this as approval for T111 report
   changes, M6, lifecycle writes, document indexing, harness writes, ranking, `orient`, public MCP,
   schema/storage/index, or document-index behavior changes.
+- T114 applies incident-shaped regression coverage to current-plan search noise: when live
+  direct-search evidence shows the latest project current-plan item first but stale current-plan and
+  wrong-scope Claude Code rule memories nearby, add only a deterministic relative-order fixture.
+  The fixture may assert target first and known distractors below it, but must not assert exact
+  noisy-item order, score values, broad ranking quality, lifecycle remediation, `orient` behavior,
+  or cross-harness parity.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

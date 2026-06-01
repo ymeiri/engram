@@ -4855,3 +4855,14 @@ current-plan target `019e5e0a-86b4-73e3-aa9b-ca350e83e915` with `safe_action=non
 clean except user-owned untracked root `AGENTS.md`. No telemetry behavior, public MCP
 request/response shape, confidence formula, M6 state, lifecycle state, document indexing, harness
 write, ranking, `orient`, schema/storage/index behavior, or document-index behavior changed.
+
+T114 matrix note:
+`docs/BRAIN_HARNESS_T114_CURRENT_PLAN_NOISE_FIXTURE_2026-06-01.md` records a test-only regression
+fixture for the post-T113 direct-search noise shape. The new
+`test_memory_search_t114_current_plan_outranks_stale_and_wrong_scope_noise` seeds a latest
+project-scoped current-plan MemoryItem, a stale repository-scoped current-plan distractor, and a
+Claude-Code-authored `Claude Code user-stated instruction` rule, then asserts only that the latest
+project plan ranks first and both noisy items rank below it. This preserves the observed behavior
+without changing ranking, lifecycle state, telemetry behavior, public MCP request/response shape,
+M6 state, document indexing, harness writes, `orient`, schema/storage/index behavior, or
+document-index behavior.

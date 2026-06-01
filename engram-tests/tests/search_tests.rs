@@ -1127,6 +1127,121 @@ async fn test_memory_search_prefers_project_current_plan_over_repository_plan() 
 }
 
 #[tokio::test]
+async fn test_memory_search_t114_current_plan_outranks_stale_and_wrong_scope_noise() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut stale_repository_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after Codex document lifecycle follow-through",
+        "The next product-facing Brain Harness slice is complete for Codex adapter guidance. \
+         It mentions recent failures, open risks, stale current-plan feedback, and safe_action \
+         none, but it is older repository-scoped review noise.",
+        MemoryScope::Repository {
+            repository_id: None,
+            remote_url: None,
+            local_path: Some("/Users/yuval.meiri/projects/engram".to_string()),
+        },
+        ClaimOrigin::ToolResult,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "old-plan"))
+    .with_tag("current-plan");
+    stale_repository_plan.updated_at = now - time::Duration::days(7);
+    let stale_repository_plan = memory_service
+        .capture_memory(stale_repository_plan)
+        .await
+        .unwrap();
+
+    let claude_writer = WriterProvenance::agent(
+        Harness::ClaudeCode,
+        ModelIdentity::new("anthropic", "claude-code"),
+    )
+    .with_surface("claude-code");
+    let mut wrong_scope_rule = MemoryItem::new(
+        MemoryKind::Rule,
+        "Claude Code user-stated instruction",
+        "Read-only critique request for Engram. The text mentions recent failures, caveats, \
+         open risks, wrong-scope feedback, stale current-plan guidance, safe_action none, and \
+         T113, but it is not the active project plan.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        claude_writer,
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "claude-rule-noise",
+    ));
+    wrong_scope_rule.updated_at = now - time::Duration::hours(4);
+    let wrong_scope_rule = memory_service
+        .capture_memory(wrong_scope_rule)
+        .await
+        .unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after T113 startup retrieval validation",
+        "T113 validated startup retrieval after T112. Continue only non-gated validation work; \
+         recent failures and open risks are stale repository current-plan feedback with \
+         safe_action none and a Claude Code user-stated instruction that may appear as \
+         wrong-scope noise.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.8)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::GitCommit,
+        "t113-startup-validation",
+    ))
+    .with_tag("current-plan");
+    current_plan.updated_at = now;
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "recent failures caveats open risks wrong-scope Claude Code user-stated \
+             instruction stale current-plan safe_action none T113",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, current_plan.id.to_string());
+
+    let stale_plan_id = stale_repository_plan.id.to_string();
+    let stale_plan_index = results
+        .iter()
+        .position(|result| result.id == stale_plan_id)
+        .expect("expected stale repository current-plan noise in search results");
+    assert!(
+        stale_plan_index > 0,
+        "stale repository current-plan noise must not outrank the latest project current plan"
+    );
+
+    let wrong_scope_rule_id = wrong_scope_rule.id.to_string();
+    let wrong_scope_rule_index = results
+        .iter()
+        .position(|result| result.id == wrong_scope_rule_id)
+        .expect("expected Claude Code rule noise in search results");
+    assert!(
+        wrong_scope_rule_index > 0,
+        "wrong-scope Claude Code rule noise must not outrank the latest project current plan"
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_treats_non_gated_next_slice_as_current_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

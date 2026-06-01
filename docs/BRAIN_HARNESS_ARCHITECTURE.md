@@ -1794,6 +1794,13 @@ Proceed in this order from the current checkpoint:
      current-plan memory and exact T111 gate context while keeping stale current-plan lifecycle,
      T69, T70, T47, M6, ranking, `orient`, public MCP, schema/storage/index, document-index, and
      harness-write gates closed.
+114. Treat T114 as test-only current-plan noise coverage. The fixture reproduces the live
+     post-T113 direct-search shape where the latest project-scoped current-plan MemoryItem must
+     outrank stale repository-scoped current-plan guidance and a Claude-Code-authored
+     `Claude Code user-stated instruction` rule that live feedback marked wrong-scope. It asserts
+     relative order only and does not change ranking, lifecycle, `orient`, public MCP,
+     schema/storage/index, document-index behavior, M6 state, document indexing, harness adapters,
+     or hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
