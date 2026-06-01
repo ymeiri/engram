@@ -1757,6 +1757,13 @@ Proceed in this order from the current checkpoint:
      memory first, and preserves tested migration-gate behavior. It does not change `orient`,
      score weights, lifecycle state, migration, document indexing, harness adapters/hooks/settings,
      public MCP shape, schema, or storage behavior.
+108. Treat T108 as a read-only stale current-plan evidence snapshot only. It freezes exact target
+     `019e5e0a-86b4-73e3-aa9b-ca350e83e915`, records fresh get/list/search/orient/lint evidence,
+     and keeps `safe_action=none` as the default-deny lifecycle boundary. It does not archive,
+     apply, delete, scope-correct, run `lint(action="apply_safe")`, change ranking, expand
+     `orient`, index documents, inspect M6 files, mutate lifecycle state, change public
+     MCP/schema/storage/index behavior, change document-index behavior, or write harness
+     adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

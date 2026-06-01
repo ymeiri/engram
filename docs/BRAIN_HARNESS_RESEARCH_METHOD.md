@@ -1086,6 +1086,14 @@ Current next application:
   unavailable. Do not use this as approval for broad score tuning, migration, lifecycle writes,
   document indexing, harness writes, schema/storage/index changes, public MCP changes, or `orient`
   expansion.
+- T108 applies the stale-current-plan lifecycle rule without mutating lifecycle state: if fresh
+  evidence shows `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active, repository-scoped,
+  current-plan tagged, repeatedly marked stale, and ranked below the active T107 project current
+  plan, a docs-only evidence snapshot may freeze that exact target. Because lint reports
+  `safe_action=none`, the artifact must be framed as default-deny evidence, not proxy approval; it
+  must not archive, apply, scope-correct, run `lint(action="apply_safe")`, change ranking, expand
+  `orient`, index documents, inspect M6 files, change schema/storage/index or public MCP behavior,
+  or write harness adapters/hooks.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

@@ -4800,3 +4800,15 @@ because Claude Bridge timed out and native Claude Code could not connect through
 auth/network path. This is narrow search calibration only, not broad ranking proof or approval for
 M6, lifecycle cleanup, document indexing, harness writes, `orient` expansion, public MCP changes,
 schema/storage/index behavior changes, or document-index behavior changes.
+
+T108 matrix note: `docs/BRAIN_HARNESS_T108_STALE_CURRENT_PLAN_EVIDENCE_SNAPSHOT_2026-06-01.md`
+is a read-only stale current-plan evidence snapshot for exact target
+`019e5e0a-86b4-73e3-aa9b-ca350e83e915`. Fresh T108 evidence shows T107 project current-plan memory
+`019e844f-b038-7f50-b2fc-635771b15a06` ranks first in tested `orient` and direct `search`, while
+the repository-scoped target remains active, current-plan tagged, second in tested current-plan
+searches, and linted as `feedback_stale_current_plan` with 237 recent stale-feedback records plus
+`safe_action=none`. AI Council supported freezing the exact target; Claude Bridge warned against
+proxy-approval framing, so the artifact is a default-deny evidence snapshot. No lifecycle archive,
+scope correction, `lint(action="apply_safe")`, M6 action, document indexing, harness write, ranking
+change, `orient` expansion, public MCP change, schema/storage/index behavior change, or
+document-index behavior change was run.
