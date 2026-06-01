@@ -1823,6 +1823,13 @@ Proceed in this order from the current checkpoint:
      run document indexing, inspect M6 files, mutate lifecycle state, change ranking, expand
      `orient`, change public MCP/schema/storage/index or document-index behavior, or write harness
      adapters/hooks.
+118. Treat T118 as a narrow direct `search` ranking calibration for exact approval-command prompts
+     only. The accepted shape is scoped `Approve T<number>:` retrieval that promotes only matching
+     active Decision/Rule MemoryItems tagged `current-plan`, with deterministic fixtures and
+     migration-gate regressions. T118 is retrieval-side evidence, not execution approval, and does
+     not change `orient`, document indexing, lifecycle state, M6 state, public MCP
+     parameters/response shape, schema/storage/index behavior, document-index behavior, or harness
+     adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

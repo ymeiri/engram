@@ -1145,6 +1145,13 @@ Current next application:
   write-path parity, hook readiness, project-harness readiness, exact approval, ranking proof,
   document-index approval, `orient` expansion approval, public MCP/schema/storage/index approval,
   or M6/lifecycle approval.
+- T118 applies exact-command ranking discipline to direct search only: when live evidence shows an
+  exact `Approve T<number>:` prompt ranks old handoffs above the active current-plan memory, a
+  detector may be added only if it is scoped, requires the exact command text inside an active
+  current-plan Decision/Rule, and preserves explicit migration-gate precedence. Do not broaden
+  generic `approve`/`approval` semantics, do not treat retrieval as execution authorization, and do
+  not change `orient`, document indexing, lifecycle state, public MCP/schema/storage/index
+  behavior, document-index behavior, or harness writes under this rule.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

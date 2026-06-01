@@ -4902,3 +4902,14 @@ material rather than T70/T116. The latest `real_session_eval(project=engram, lim
 the confidence gate because only two intents have feedback. T117 does not run document indexing,
 M6 inspection/export/apply, lifecycle mutation, ranking changes, `orient` changes, public MCP
 changes, schema/storage/index behavior changes, document-index behavior changes, or harness writes.
+
+T118 matrix note:
+`docs/BRAIN_HARNESS_T118_EXACT_APPROVAL_COMMAND_RANKING_2026-06-01.md` records a narrow direct
+memory-search ranking calibration for exact approval-command prompts such as
+`Approve T70: index exact files T59, T68, and T69.` The new path is search-only, requires a scoped
+`Approve T<number>:` command, and promotes only matching active Decision/Rule MemoryItems tagged
+`current-plan`; it does not treat retrieval as execution approval. Deterministic ranker and
+memory-search fixtures passed, including existing migration-gate regressions. T118 does not change
+`orient`, run document indexing, inspect T69 files, run M6 inventory/export/apply, mutate lifecycle
+state, change public MCP parameters or response shape, change schema/storage/index behavior, change
+document-index behavior, or write harness adapters/hooks.

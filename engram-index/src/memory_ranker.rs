@@ -122,6 +122,7 @@ pub(crate) fn rank_memory_items(
         .collect::<Vec<_>>();
     sort_ranked_memory_items(&mut ranked);
     promote_current_plan_for_continuation_query(&mut ranked, context);
+    promote_current_plan_for_exact_approval_command_query(&mut ranked, context);
     promote_migration_gate_for_explicit_apply_query(&mut ranked, context);
     promote_contextual_migration_gate_for_current_plan_query(&mut ranked, context);
     promote_approval_gate_items_for_gate_query(&mut ranked, context);
@@ -234,6 +235,44 @@ fn promote_current_plan_for_continuation_query(
         .iter()
         .enumerate()
         .filter(|(_, ranked)| is_current_plan_guidance_item(&ranked.item))
+        .max_by(|(_, left), (_, right)| {
+            left.components
+                .scope
+                .total_cmp(&right.components.scope)
+                .then_with(|| left.item.updated_at.cmp(&right.item.updated_at))
+                .then_with(|| left.item.id.to_string().cmp(&right.item.id.to_string()))
+        })
+        .map(|(index, _)| index)
+    else {
+        return;
+    };
+
+    if best_index > 0 {
+        let top_score = items.first().map(|ranked| ranked.score).unwrap_or(0.0);
+        items[best_index].score = (top_score + 0.001).min(1.0);
+        sort_ranked_memory_items(items);
+    }
+}
+
+fn promote_current_plan_for_exact_approval_command_query(
+    items: &mut [RankedMemoryItem],
+    context: MemoryRankContext<'_>,
+) {
+    if !context.require_text_match || (context.project.is_none() && context.cwd.is_none()) {
+        return;
+    }
+
+    let Some(command) = normalized_exact_approval_command(context.query) else {
+        return;
+    };
+
+    let Some(best_index) = items
+        .iter()
+        .enumerate()
+        .filter(|(_, ranked)| {
+            is_current_plan_guidance_item(&ranked.item)
+                && item_contains_normalized_approval_command(&ranked.item, &command)
+        })
         .max_by(|(_, left), (_, right)| {
             left.components
                 .scope
@@ -697,6 +736,57 @@ fn collapse_ascii_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn normalized_exact_approval_command(query: Option<&str>) -> Option<String> {
+    let query = normalize_approval_command_text(query?);
+    if query.contains("approval gate") || !query.starts_with("approve ") {
+        return None;
+    }
+
+    let after_approve = query.strip_prefix("approve ")?;
+    let task_ref = after_approve.split(':').next()?.trim();
+    let description = after_approve.split_once(':')?.1.trim();
+    if description.is_empty() {
+        return None;
+    }
+
+    if !is_task_reference(task_ref) {
+        return None;
+    }
+
+    Some(format!("approve {task_ref}: {description}"))
+}
+
+fn is_task_reference(value: &str) -> bool {
+    let Some(digits) = value.strip_prefix('t') else {
+        return false;
+    };
+
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+fn item_contains_normalized_approval_command(item: &MemoryItem, command: &str) -> bool {
+    let value = format!("{} {} {}", item.title, item.content, item.tags.join(" "));
+    normalize_approval_command_text(&value).contains(command)
+}
+
+fn normalize_approval_command_text(value: &str) -> String {
+    let value = collapse_ascii_whitespace(&value.to_ascii_lowercase());
+    remove_spaces_before_colons(&value)
+}
+
+fn remove_spaces_before_colons(value: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    for ch in value.chars() {
+        if ch == ':' {
+            while normalized.ends_with(' ') {
+                normalized.pop();
+            }
+        }
+        normalized.push(ch);
+    }
+    normalized
+}
+
 pub(crate) fn is_open_ended_plan_work_prompt(query: &str) -> bool {
     let query = query.to_ascii_lowercase();
     [
@@ -1024,6 +1114,36 @@ mod tests {
             "Continue from the plan and tell me whether we should run migration_review_export.",
         ] {
             assert!(asks_for_decision_gate(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn exact_approval_command_detector_is_narrow() {
+        for (query, expected) in [
+            (
+                "Approve T70: index exact files T59, T68, and T69.",
+                Some("approve t70: index exact files t59, t68, and t69."),
+            ),
+            (
+                " approve   T70 :   index exact files ",
+                Some("approve t70: index exact files"),
+            ),
+            ("approve t1: do the thing", Some("approve t1: do the thing")),
+            ("do you approve of this?", None),
+            ("the approval gate for T70", None),
+            ("I approve T70: sure", None),
+            ("approved T70: done", None),
+            ("approve: something", None),
+            ("approve T70 without colon", None),
+            ("approve", None),
+            ("approve tabc: not digits", None),
+            ("Should we proceed with migration apply?", None),
+        ] {
+            assert_eq!(
+                normalized_exact_approval_command(Some(query)).as_deref(),
+                expected,
+                "{query}"
+            );
         }
     }
 

@@ -1065,6 +1065,91 @@ async fn test_memory_search_t107_broad_next_step_promotes_current_plan() {
 }
 
 #[tokio::test]
+async fn test_memory_search_t118_exact_approval_command_promotes_matching_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+    let approval_command = "Approve T70: index exact files T59, T68, and T69.";
+
+    for (index, title) in [
+        approval_command,
+        "T109 handoff repeats Approve T70: index exact files T59, T68, and T69.",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut handoff = MemoryItem::new(
+            MemoryKind::Handoff,
+            title,
+            "Historical handoff text repeats the T70 approval command and adjacent T59/T68/T69 \
+             tokens, but it is continuity context rather than active current-plan guidance.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_confidence(0.99)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            format!("t118-old-handoff-{index}"),
+        ));
+        handoff.updated_at = now - time::Duration::minutes(index as i64);
+        memory_service.capture_memory(handoff).await.unwrap();
+    }
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "T117 current-plan keeps exact T70 gate context authoritative",
+        "The active current plan says exact approval commands should recover this plan before \
+         old handoffs. The command is `Approve T70: index exact files T59, T68, and T69.` \
+         T69 inspection and M6 write apply remain separately gated.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.9)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::GitCommit,
+        "t117-parity-audit",
+    ))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(3);
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            approval_command,
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, current_plan.id.to_string());
+
+    let non_command_results = search_service
+        .search_with_options(
+            "Approve T70 without colon",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_ne!(non_command_results[0].id, current_plan.id.to_string());
+}
+
+#[tokio::test]
 async fn test_memory_search_prefers_project_current_plan_over_repository_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();
