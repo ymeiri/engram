@@ -1168,6 +1168,17 @@ harness write was run. T88, T95, T97, T99, and T101 remain separate exact approv
 `019e835e-81c2-7562-897a-e42c0fe8dc08`, and
 `019e836a-435a-75e1-8702-ced8eabe85cc`.
 
+T104 matrix note: the rolling handoff freshness repair in
+`docs/BRAIN_HARNESS_T104_ROLLING_HANDOFF_T103_CLAUDE_BRIDGE_FRESHNESS_REPAIR_2026-06-01.md`
+found live resume drift after the T103 Claude Bridge critique: `handoff(get)` returned
+low-information Claude Code session-end handoff `019e8388-2744-79d3-b91a-61bde6da34d5`, while
+lean `orient`, direct `search`, docs, git, and current-plan memory recovered T103. Codex refreshed
+only the rolling handoff to `019e838b-6b25-7011-8b4b-b4cc61dc450f`, superseding
+`019e8388-2744-79d3-b91a-61bde6da34d5`. This improves continuity only; it does not archive old
+handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking,
+expand `orient`, change public MCP/schema/storage/index behavior, change document-index behavior,
+or write harness adapters/hooks.
+
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
 plan first and active M6 gate context in top memory results, and

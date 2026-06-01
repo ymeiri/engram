@@ -175,6 +175,13 @@ Research checkpoint, current through 2026-05-27:
 - T103 records a docs-only approval packet for the T100 handoff superseded by T102:
   `019e8378-b2f0-7260-a887-4abdf6c0e4e2`. No archive, lint safe-action, migration,
   document-index, ranking, `orient`, schema/storage/index, public MCP, or harness write was run.
+- T104 applies the T91/T94/T96/T98/T100/T102 continuity rule after T103 and a Claude Bridge
+  side-effect: `handoff(get)` returned low-information Claude session-end handoff
+  `019e8388-2744-79d3-b91a-61bde6da34d5`, while lean `orient`, direct `search`, docs, git, and
+  current-plan memory recovered T103. The rolling handoff was refreshed to
+  `019e838b-6b25-7011-8b4b-b4cc61dc450f`; this is handoff maintenance only, not lifecycle archive,
+  lint safe-action, ranking, `orient`, M6, document-index, schema/storage/index, public MCP, or
+  harness work.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
@@ -1726,6 +1733,12 @@ Proceed in this order from the current checkpoint:
 103. Treat T103 as an approval packet only. It freezes exact archive target
      `019e8378-b2f0-7260-a887-4abdf6c0e4e2`, but no archive, lifecycle cleanup, or lint safe-action
      is authorized until the exact T103 approval phrase is provided.
+104. Treat T104 as rolling handoff freshness repair only. The active handoff was updated to
+     `019e838b-6b25-7011-8b4b-b4cc61dc450f` because `handoff(get)` had been overwritten by a
+     low-information Claude Code session-end handoff after T103. This does not archive old
+     handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking,
+     expand `orient`, change public MCP/schema/storage/index behavior, change document-index
+     behavior, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
