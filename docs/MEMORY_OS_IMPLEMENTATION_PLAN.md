@@ -663,6 +663,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       limitations, or keep that subclaim indirect. This is not completion or approval for schema,
       storage, public MCP, harness, migration, lifecycle, ranking, document-index, or `orient`
       changes.
+- [x] T85 Claude Bridge project-harness tool-exposure recheck: documented
+      `docs/BRAIN_HARNESS_T85_CLAUDE_BRIDGE_PROJECT_TOOL_EXPOSURE_RECHECK_2026-06-01.md` from one
+      pre-registered `write=false`, no-Bash Claude Bridge project-harness run allowing only
+      `mcp__engram__orient` and `mcp__engram__search`. Both tools returned
+      `No such tool available`, so the classification is `TOOLS_UNAVAILABLE`; no Engram traces
+      existed and no telemetry feedback was submitted. This closes that exact recheck line until
+      bridge or harness configuration changes and does not approve schema, storage, public MCP,
+      harness, migration, lifecycle, ranking, document-index, or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -927,6 +935,15 @@ if a controlled row genuinely depends on terminal state, pre-register the exact 
 preserve short raw output with interpretation and limitations; otherwise keep the subclaim indirect.
 Copied output remains author-captured evidence, not independent proof. This does not approve
 schema/API/storage/public MCP/harness/ranking/lifecycle/migration/document-index/`orient` changes.
+
+T85 matrix note: the Claude Bridge project-harness tool-exposure recheck in
+`docs/BRAIN_HARNESS_T85_CLAUDE_BRIDGE_PROJECT_TOOL_EXPOSURE_RECHECK_2026-06-01.md` repeated the
+T79 caveat under a single pre-registered `write=false`, no-Bash call with only
+`mcp__engram__orient` and `mcp__engram__search` allowed. Claude Bridge reported
+`No such tool available` for both tools and produced no Engram trace IDs. Treat this as stable
+project-harness exposure evidence only; do not recheck the same line until bridge or harness
+configuration changes, and do not infer anything about native Claude Code MCP behavior or Engram
+retrieval quality.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current

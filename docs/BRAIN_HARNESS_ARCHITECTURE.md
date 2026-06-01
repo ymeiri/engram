@@ -293,6 +293,11 @@ Research checkpoint, current through 2026-05-27:
   output, or command output should preserve scoped raw output with interpretation and limitations,
   or keep the subclaim indirect. Copied terminal output remains author-captured evidence, not
   independent proof.
+- T85 rechecked the Claude Bridge project-harness Engram tool-exposure caveat from T79. In one
+  pre-registered `write=false`, no-Bash run with only `mcp__engram__orient` and
+  `mcp__engram__search` allowed, Claude Bridge again reported `No such tool available` for both
+  tools and produced no Engram trace IDs. Treat this as project-harness exposure evidence only,
+  not as evidence against native Claude Code MCP behavior or Engram retrieval quality.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist

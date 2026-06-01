@@ -971,6 +971,11 @@ Current next application:
   limitations are explicit; Claude Bridge noted a standalone `git status` capture now would not
   retroactively strengthen T82-4. Future controlled rows should apply the raw-output rule only when
   terminal state genuinely matters.
+- T85 applies that discipline to a narrow Claude Bridge project-harness capability check. One
+  pre-registered `write=false`, no-Bash run allowed only `mcp__engram__orient` and
+  `mcp__engram__search`; Claude Bridge again reported `No such tool available` for both tools and
+  produced no Engram trace IDs. This closes the exact T79/T85 project-harness recheck line until
+  bridge or harness configuration changes, without making claims about Engram retrieval behavior.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

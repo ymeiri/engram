@@ -1,6 +1,6 @@
 # Brain Harness T85 Claude Bridge Project Tool Exposure Recheck
 
-Status: Pre-registered; execution pending
+Status: Complete; tools unavailable in Claude Bridge project harness
 Date: 2026-06-01
 Scope: One read-only Claude Bridge project-harness Engram tool-exposure check
 
@@ -106,3 +106,50 @@ actually exist. All other outcomes submit no T85 telemetry feedback.
 Because the classification depends on bridge/tool-call output, the execution result must preserve
 the exact Claude Bridge parameters above and a short raw excerpt of the returned bridge output. That
 excerpt is author-captured evidence, not independent or cryptographic proof.
+
+## Execution Result
+
+Pre-registration commit: `90828f5` (`Pre-register T85 Claude Bridge tool exposure recheck`)
+
+The single Claude Bridge call used:
+
+```text
+harness="project"
+write=false
+cwd="/Users/yuval.meiri/projects/engram"
+allowBash=[]
+allowTool=[
+  "mcp__engram__orient",
+  "mcp__engram__search"
+]
+```
+
+Claude returned this raw bridge output excerpt:
+
+```text
+| `mcp__engram__orient` | FAILED | none | `No such tool available: mcp__engram__orient` | - |
+| `mcp__engram__search` | FAILED | none | `No such tool available: mcp__engram__search` | - |
+
+Final classification: TOOLS_UNAVAILABLE
+
+Neither Engram MCP tool is registered in this harness context. The errors are identical
+namespace-resolution failures (`No such tool available`), not permission or configuration
+rejections - the MCP server is simply not connected.
+```
+
+## Interpretation
+
+T85 repeats T79's Claude Bridge project-harness exposure caveat under the same constrained setup.
+The project harness did not expose `mcp__engram__orient` or `mcp__engram__search`, and no Engram
+trace IDs were produced.
+
+Per the pre-registered stop rules:
+
+- no retry or personal-harness fallback was run;
+- no telemetry feedback was submitted because there were no Engram traces;
+- this exact project-harness tool-exposure recheck line is closed until the bridge or harness
+  configuration changes.
+
+This result is not evidence against Engram `orient` or `search` behavior. It does not authorize
+M6, lifecycle writes, harness writes, schema/storage/index changes, public MCP changes, document
+indexing, ranking changes, or `orient` expansion.
