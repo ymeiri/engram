@@ -1779,6 +1779,16 @@ Proceed in this order from the current checkpoint:
      traces, change confidence formulas, change public MCP request parameters, change ranking,
      expand `orient`, mutate lifecycle state, run M6, index documents, or write harness
      adapters/hooks.
+111. Treat T111 as paused until the project owner chooses an eval-design direction. The candidate
+     was a contextual recommendation string on the existing `real_session_eval` report when callers
+     use the broad default sample, but the required model critique materially disagreed about
+     whether public advisory text should change. No T111 code or docs behavior changed.
+112. Treat T112 as a docs-only recommendation-surface audit. It records that repo-local code uses
+     `RealSessionEvalReport.recommendations` as serialized advisory text and tests only targeted
+     substrings, with no repo-local automated control-flow consumer found. This narrows one risk
+     but does not approve adding the T111 string, changing report contents, altering confidence
+     formulas, changing public MCP request parameters, running M6, mutating lifecycle state,
+     indexing documents, changing ranking, expanding `orient`, or writing harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

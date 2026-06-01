@@ -4834,3 +4834,13 @@ measurement caveat without changing telemetry behavior. AI Council split on chan
 immediately, and Claude Bridge timed out, so T110 does not change `DEFAULT_REAL_SESSION_EVAL_LIMIT`,
 confidence formulas, public MCP request parameters, M6 state, lifecycle state, document indexing,
 harness writes, ranking, `orient`, schema/storage/index behavior, or document-index behavior.
+
+T112 matrix note: `docs/BRAIN_HARNESS_T112_RECOMMENDATION_SURFACE_AUDIT_2026-06-01.md` is a
+docs-only audit of the existing `RealSessionEvalReport.recommendations` surface after the T111
+eval-design disagreement. Source and repo search show the field is documented as operator-facing
+follow-up text, is serialized through the existing telemetry report, and has no repo-local
+control-flow consumer; current tests assert only targeted substrings. Because the field is still
+observable MCP output and external agents may read it as guidance, T112 does not add a
+recommendation string or resolve T111. No telemetry behavior, public MCP request/response shape,
+confidence formula, M6 state, lifecycle state, document indexing, harness write, ranking,
+`orient`, schema/storage/index behavior, or document-index behavior changed.

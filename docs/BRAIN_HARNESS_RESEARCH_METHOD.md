@@ -1106,6 +1106,11 @@ Current next application:
   before changing defaults or confidence logic. A default-window change, dual-window gate, or
   warning safeguard should be treated as a separate eval-design slice with caller audit and
   variance evidence.
+- T112 applies a docs-only surface audit before a T111 behavior choice: when models disagree about
+  adding advisory report text, first check whether repo-local code treats the existing
+  `recommendations` list as machine-stable control flow. If the repo only serializes it and tests
+  substrings, the risk is narrower but still public because MCP callers may read it as guidance.
+  Do not add the advisory string without an explicit T111 option choice.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
