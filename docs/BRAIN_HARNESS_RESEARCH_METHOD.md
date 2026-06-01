@@ -981,6 +981,10 @@ Current next application:
   only the rolling handoff with current context and exact gates. Treat handoff repair as continuity
   maintenance only, not approval for migration, indexing, lifecycle, schema/storage, public MCP,
   ranking, harness, or `orient` changes.
+- T87 adds source-precedence evidence to resume work. When multiple resume sources exist, verify
+  `orient`, direct Engram search, `handoff(get)`, git state, and any local markdown handoff before
+  trusting continuity. If a local note is stale, record that in Engram continuity records rather
+  than editing external notes or changing the `orient` hot path.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

@@ -303,6 +303,11 @@ Research checkpoint, current through 2026-05-27:
   `019e82ee-dd81-7ba0-8f97-1933965f6d8e`, exact T69/T70 approval phrases, and the default-deny
   boundaries. Treat this as continuity repair only, not migration, indexing, lifecycle, harness,
   ranking, schema/storage/index, public MCP, or `orient` approval.
+- T87 clarified resume source precedence. Current Engram `orient`, direct search, and
+  `handoff(get)` recover T86/T69/T70 context, while `/Users/yuval.meiri/notes/engram/handoff.md`
+  is stale 2026-04-17 open-source launch context. Older handoff MemoryItems may still appear lower
+  in direct search, so future agents should prefer `handoff(get)` and latest current-plan memory
+  over conflicting handoff search results.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1603,6 +1608,13 @@ Proceed in this order from the current checkpoint:
     and exact T69/T70 approval gates. It does not approve migration inspection/apply/deletion,
     lifecycle writes, document indexing, harness writes, ranking changes, schema/storage/index
     changes, public MCP changes, or `orient` expansion.
+87. Treat T87 as resume-source precedence repair only. The local markdown handoff at
+    `/Users/yuval.meiri/notes/engram/handoff.md` is stale open-source launch context from
+    2026-04-17 and must not override Engram `orient`, current-plan memory, repo docs, or
+    `handoff(get)`. The refreshed handoff `019e82f8-cada-7c31-b073-18ac41986b1e` records that
+    rule. It does not approve migration inspection/apply/deletion, lifecycle writes, document
+    indexing, harness writes, ranking changes, schema/storage/index changes, public MCP changes,
+    or `orient` expansion.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

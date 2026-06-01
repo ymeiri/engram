@@ -679,6 +679,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       `019e82ee-dd81-7ba0-8f97-1933965f6d8e`, and exact T69/T70 approval phrases. This is
       continuity repair only; it does not approve schema, storage, public MCP, harness, migration,
       lifecycle, ranking, document-index, or `orient` changes.
+- [x] T87 resume source precedence audit: documented
+      `docs/BRAIN_HARNESS_T87_RESUME_SOURCE_PRECEDENCE_AUDIT_2026-06-01.md` and clarified the
+      rolling handoff from `019e82f3-53bc-7a83-9e39-cfdb29b06c44` to
+      `019e82f8-cada-7c31-b073-18ac41986b1e`. T87 found the local
+      `/Users/yuval.meiri/notes/engram/handoff.md` is a stale 2026-04-17 open-source launch
+      handoff, while current Engram `orient`, direct search, and `handoff(get)` surface T86/T69/T70
+      context. This is source-precedence continuity repair only; it does not approve schema,
+      storage, public MCP, harness, migration, lifecycle, ranking, document-index, or `orient`
+      changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -960,6 +969,16 @@ refreshed only the rolling handoff to `019e82f3-53bc-7a83-9e39-cfdb29b06c44`, pr
 approval phrases and the default-deny boundaries. Treat this as continuity repair only; it does
 not approve migration, lifecycle writes, document indexing, schema/storage/index changes, public
 MCP changes, ranking changes, harness writes, or `orient` expansion.
+
+T87 matrix note: the resume source precedence audit in
+`docs/BRAIN_HARNESS_T87_RESUME_SOURCE_PRECEDENCE_AUDIT_2026-06-01.md` confirmed that current
+Engram sources recover the active plan and handoff, while `/Users/yuval.meiri/notes/engram/handoff.md`
+is stale open-source launch context from 2026-04-17. Direct search can still surface older handoff
+MemoryItems lower in the result set, so the rolling handoff now explicitly says to use
+`handoff(get)` and the latest current-plan memory as current resume sources. Treat this as
+continuity repair only; it does not approve lifecycle writes, migration, document indexing,
+schema/storage/index changes, public MCP changes, ranking changes, harness writes, or `orient`
+expansion.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
