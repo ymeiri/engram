@@ -156,6 +156,9 @@ Research checkpoint, current through 2026-05-27:
   was refreshed to `019e8352-a610-7f92-859f-f9d74b026ba7`; this is handoff maintenance only, not
   lifecycle archive, ranking, `orient`, M6, document-index, schema/storage/index, public MCP, or
   harness work.
+- T99 records a docs-only approval packet for the T96 handoff superseded by T98:
+  `019e835e-81c2-7562-897a-e42c0fe8dc08`. No archive, lint safe-action, migration, document-index,
+  ranking, `orient`, schema/storage/index, public MCP, or harness write was run.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.
@@ -1688,6 +1691,9 @@ Proceed in this order from the current checkpoint:
     This does not archive old handoffs, inspect T69 files, run T70 indexing, run M6, mutate
     lifecycle state, change ranking, expand `orient`, change public MCP/schema/storage/index
     behavior, change document-index behavior, or write harness adapters/hooks.
+99. Treat T99 as an approval packet only. It freezes exact archive target
+    `019e835e-81c2-7562-897a-e42c0fe8dc08`, but no archive, lifecycle cleanup, or lint safe-action
+    is authorized until the exact T99 approval phrase is provided.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
