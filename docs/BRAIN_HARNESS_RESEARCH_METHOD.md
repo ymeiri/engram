@@ -850,6 +850,13 @@ Current next application:
   directory paths remain out of scope because they call directory indexing and the default pipeline
   is recursive. T66 did not run index, plan, M6, lifecycle, schema/storage, public MCP, ranking,
   `orient`, or harness writes.
+- T67 executed the approved T65 exact-file index scope through MCP `docs(action="index", path=...)`
+  for only the T58, T59, and T64 evidence docs. T59 now appears rank 1 for exact title and
+  filename-stem document searches and appears in explicit review-export document probes, but
+  absolute-path semantic search remains weak. Treat this as partial visibility repair only: it does
+  not approve M6 review export/apply, create a T59 MemoryItem, mutate lifecycle state, change
+  schema/storage or index behavior, change public MCP behavior, change ranking, expand `orient`, or
+  write harness adapters/hooks.
 - The next executable M6 step requires explicit approval of the T59 review-export scope. Until
   then, non-gated work should improve targeted validation, evidence quality, cross-harness
   replication, or another concrete capture/lifecycle gap surfaced by evidence.

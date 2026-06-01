@@ -1393,6 +1393,13 @@ Proceed in this order from the current checkpoint:
     ranking changes, `orient` changes, or harness adapter/hook writes. If T65 is approved, prefer
     three exact file-path MCP index calls against the running daemon, not a directory path or CLI
     write path.
+67. Treat T67 as the approved T65 exact-file document-index result, not M6 approval. The three MCP
+    index calls targeted only the T58, T59, and T64 report files and produced 11, 9, and 8 chunks
+    respectively. T59 document-search visibility is now useful for title, filename-stem, and
+    explicit review-export prompts, but absolute-path semantic search remains weak. This did not
+    create a T59 MemoryItem, run review export/apply, mutate lifecycle state, change ranking,
+    expand `orient`, change schema/storage or document-index behavior, change public MCP behavior,
+    or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
