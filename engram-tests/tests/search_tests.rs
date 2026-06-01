@@ -945,6 +945,126 @@ async fn test_memory_search_t60_what_should_happen_next_promotes_current_plan() 
 }
 
 #[tokio::test]
+async fn test_memory_search_t107_broad_next_step_promotes_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    for (index, (kind, title, content)) in [
+        (
+            MemoryKind::ProjectFact,
+            "AI Council and Claude next-step synthesis after orient contract",
+            "On 2026-05-06, Codex consulted Claude Bridge and AI Council on the next \
+             Brain Harness step. The old synthesis says what should happen next only for \
+             that historical checkpoint.",
+        ),
+        (
+            MemoryKind::Rule,
+            "Brain Harness work follows research method",
+            "Engram Brain Harness work should state research questions, hypotheses, \
+             measurement, and what should happen next before implementation.",
+        ),
+        (
+            MemoryKind::Handoff,
+            "Rolling handoff",
+            "The rolling handoff summarizes current state and next actions, but it is \
+             continuity context rather than the active current-plan guidance item.",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut item = MemoryItem::new(
+            kind,
+            title,
+            content,
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_confidence(0.99)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            format!("t107-distractor-{index}"),
+        ));
+        item.updated_at = now - time::Duration::minutes(index as i64);
+        memory_service.capture_memory(item).await.unwrap();
+    }
+
+    let mut m6_gate = MemoryItem::new(
+        MemoryKind::Limitation,
+        "M6 migration approval gate remains explicit",
+        "Brain Harness work must not run M6 migration read-only inventory or review export \
+         without explicit user-approved scope. M6 write apply, deletion, cleanup, or legacy \
+         simplification additionally require reviewed candidates, dry-run evidence, rollback \
+         planning, and explicit approval.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ManualReview,
+        "m6-approval-gate",
+    ));
+    m6_gate.updated_at = now - time::Duration::hours(2);
+    let m6_gate = memory_service.capture_memory(m6_gate).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after T106 harness readiness drift recheck",
+        "T106 recorded a docs-only read-only harness readiness drift recheck. The next \
+         product-moving gate remains exact T69, but without that approval the next work \
+         must stay non-gated and evidence-focused.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.93)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "t106-report"))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(1);
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    for query in [
+        "what should happen next Engram Brain Harness",
+        "what should we do next for Engram?",
+    ] {
+        let results = search_service
+            .search_with_options(
+                query,
+                10,
+                Some(0.0),
+                Some(&[SearchLayer::Memory]),
+                SearchOptions {
+                    project: Some("engram".to_string()),
+                    cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+                },
+            )
+            .await
+            .expect("Failed to search");
+
+        assert_eq!(results[0].id, current_plan.id.to_string(), "{query}");
+    }
+
+    let explicit_gate_results = search_service
+        .search_with_options(
+            "should we proceed with M6 migration apply?",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(explicit_gate_results[0].id, m6_gate.id.to_string());
+}
+
+#[tokio::test]
 async fn test_memory_search_prefers_project_current_plan_over_repository_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

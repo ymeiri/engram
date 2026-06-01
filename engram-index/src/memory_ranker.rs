@@ -740,7 +740,10 @@ fn asks_for_current_plan_guidance(query: &str) -> bool {
         "next steps",
         "pick up where",
         "resume",
+        "what should happen next",
         "what should i do next",
+        "what should we do next",
+        "what do we do next",
         "what's left",
         "what is left",
         "where we left off",
@@ -994,6 +997,22 @@ mod tests {
         ] {
             assert!(!asks_for_decision_gate(query), "{query}");
         }
+    }
+
+    #[test]
+    fn what_should_happen_next_is_current_plan_guidance() {
+        for query in [
+            "what should happen next Engram Brain Harness",
+            "what should we do next for Engram?",
+            "what do we do next",
+        ] {
+            assert!(asks_for_current_plan_guidance(query), "{query}");
+            assert!(!asks_for_decision_gate(query), "{query}");
+        }
+
+        assert!(!asks_for_current_plan_guidance(
+            "what happened next in the old synthesis"
+        ));
     }
 
     #[test]

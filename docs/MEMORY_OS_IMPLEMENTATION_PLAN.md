@@ -4788,3 +4788,15 @@ current-plan feedback with `safe_action=none`. Cross-harness behavior therefore 
 risky/not ready, T47 remains the exact harness-write gate, and no adapter install, settings edit,
 hook registration, `adopt_user_owned`, M6 action, document indexing, lifecycle mutation, ranking,
 `orient`, public MCP, schema/storage/index, or document-index behavior change was run.
+
+T107 matrix note: the broad next-step direct-search calibration in
+`docs/BRAIN_HARNESS_T107_BROAD_NEXT_STEP_SEARCH_CALIBRATION_2026-06-01.md` adds only exact
+`what should happen next` / `what should we do next` / `what do we do next` current-plan guidance
+phrases. Deterministic search fixtures and installed Codex MCP runtime trace
+`019e8443-2d4d-7f30-969b-b7b235324ad5` now return active T106 current-plan memory first for
+`what should happen next Engram Brain Harness`, while explicit M6/apply traces still return
+migration gate context above current-plan guidance. Cross-harness parity is not validated for T107
+because Claude Bridge timed out and native Claude Code could not connect through the configured
+auth/network path. This is narrow search calibration only, not broad ranking proof or approval for
+M6, lifecycle cleanup, document indexing, harness writes, `orient` expansion, public MCP changes,
+schema/storage/index behavior changes, or document-index behavior changes.

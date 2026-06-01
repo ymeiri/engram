@@ -1078,6 +1078,14 @@ Current next application:
   as the exact harness-write gate. This must not be treated as approval to install adapters, edit
   hooks/settings, adopt user-owned harness files, migrate, index documents, archive lifecycle
   records, change ranking, expand `orient`, or change public MCP/schema/storage/index behavior.
+- T107 applies the current-plan ranking rule to direct `search` only, not `orient`: if live evidence
+  shows broad next-step wording such as `what should happen next` ranks stale synthesis or generic
+  method notes above the active current-plan MemoryItem, a lexical phrase calibration is acceptable
+  only with deterministic distractor fixtures, explicit migration/apply gate regressions,
+  installed-runtime validation, and a documented cross-harness parity caveat when Claude Code is
+  unavailable. Do not use this as approval for broad score tuning, migration, lifecycle writes,
+  document indexing, harness writes, schema/storage/index changes, public MCP changes, or `orient`
+  expansion.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

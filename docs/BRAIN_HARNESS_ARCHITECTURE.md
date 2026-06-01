@@ -1751,6 +1751,12 @@ Proceed in this order from the current checkpoint:
      user-owned harness files, archive lifecycle records, inspect T69 files, run T70 indexing, run
      M6, mutate lifecycle state, change ranking, expand `orient`, change public
      MCP/schema/storage/index behavior, or change document-index behavior.
+107. Treat T107 as a narrow direct `search` current-plan phrase calibration only. It adds
+     `what should happen next` / `what should we do next` wording to existing current-plan
+     guidance detection, validates that broad next-step prompts return the active current-plan
+     memory first, and preserves tested migration-gate behavior. It does not change `orient`,
+     score weights, lifecycle state, migration, document indexing, harness adapters/hooks/settings,
+     public MCP shape, schema, or storage behavior.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
