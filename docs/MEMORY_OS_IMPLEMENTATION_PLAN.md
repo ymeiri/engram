@@ -987,6 +987,14 @@ archive target, `019e82f3-53bc-7a83-9e39-cfdb29b06c44`, because the active hando
 equal score. This is an approval packet only. No archive was run, no broad stale-handoff sweep was
 authorized, and older active handoff noise remains a separate audit problem.
 
+T89 matrix note: the changes-since cursor ergonomics slice in
+`docs/BRAIN_HARNESS_T89_CHANGES_SINCE_CURSOR_ERGONOMICS_2026-06-01.md` keeps the existing
+timestamp-based cursor semantics but improves the commit-id-only MCP error. Agents now get an
+actionable instruction to pass `memory_cursor.timestamp` and optionally `memory_cursor.commit_id`
+from `orient` or `memory(action="cursor")`. This is a continuity papercut fix only: no public MCP
+request parameters, ranking, `orient` payload, migration state, lifecycle state, document-index
+state, schema/storage/index behavior, or harness hooks/adapters changed.
+
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
 plan first and active M6 gate context in top memory results, and

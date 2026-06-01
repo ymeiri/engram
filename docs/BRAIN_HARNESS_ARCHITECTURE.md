@@ -132,6 +132,9 @@ Research checkpoint, current through 2026-05-27:
   direct search can still surface superseded active handoff MemoryItems. T88 records a docs-only
   approval packet for one exact archive target; no lifecycle write, ranking change, or `orient`
   expansion has been run.
+- T89 tightened the `orient` to `changes_since` loop without changing cursor semantics:
+  `changes_since` remains timestamp-based, but a commit-id-only MCP call now tells agents to pass
+  `memory_cursor.timestamp` and optionally `memory_cursor.commit_id`.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.

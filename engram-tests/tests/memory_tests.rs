@@ -636,6 +636,23 @@ async fn test_mcp_memory_commit_and_changes_since() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_changes_since_commit_id_error_names_cursor_timestamp() {
+    let state = setup_tool_state().await;
+
+    let mut changes = request("changes_since");
+    changes.commit_id = Some("019e8304-b42e-7170-811f-b1a211ce18b8".to_string());
+
+    let error = tools::memory_new(&state, changes)
+        .await
+        .expect_err("changes_since should require cursor timestamp");
+
+    assert!(error.contains("timestamp required for changes_since"));
+    assert!(error.contains("commit_id was provided"));
+    assert!(error.contains("memory_cursor.timestamp"));
+    assert!(error.contains("memory_cursor.commit_id"));
+}
+
+#[tokio::test]
 async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
     let state = setup_tool_state().await;
 

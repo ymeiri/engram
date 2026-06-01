@@ -990,6 +990,12 @@ Current next application:
   handoff supersedes it and direct search still returns both at equal score. Treat T88 as an exact
   future-approval request only, not approval for archive, broad handoff cleanup, ranking, `orient`,
   document indexing, migration, schema/storage, public MCP, or harness work.
+- T89 fixes a narrow `orient` to `changes_since` ergonomics gap: a commit-id-only
+  `changes_since` call failed correctly but tersely. The runtime error and orient contract now
+  explain that agents must pass `memory_cursor.timestamp` and may include
+  `memory_cursor.commit_id` as additional context. This preserves cursor semantics and does not
+  change public request parameters, ranking, `orient`, migration, lifecycle state, document index
+  state, schema/storage/index behavior, or harness hooks/adapters.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

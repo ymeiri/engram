@@ -8649,7 +8649,7 @@ pub struct MemoryRequestNew {
 
     /// Cursor commit ID (for changes_since)
     pub commit_id: Option<String>,
-    /// Cursor timestamp in RFC3339 format (required for changes_since)
+    /// Cursor timestamp in RFC3339 format (required for changes_since; use memory_cursor.timestamp)
     pub timestamp: Option<String>,
     /// Project name for changes_since relevance scoring.
     pub relevance_project: Option<String>,
@@ -9238,7 +9238,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         "changes_since" => {
-            let timestamp = parse_rfc3339(&required(&request.timestamp, "timestamp", "changes_since")?)?;
+            let timestamp = parse_rfc3339(&required_changes_since_timestamp(&request)?)?;
             let commit_id = request
                 .commit_id
                 .as_deref()
@@ -9487,6 +9487,34 @@ fn required(value: &Option<String>, field: &str, action: &str) -> Result<String,
         .clone()
         .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| format!("{field} required for {action}"))
+}
+
+fn required_changes_since_timestamp(request: &MemoryRequestNew) -> Result<String, String> {
+    if let Some(timestamp) = request
+        .timestamp
+        .clone()
+        .filter(|timestamp| !timestamp.trim().is_empty())
+    {
+        return Ok(timestamp);
+    }
+
+    if request
+        .commit_id
+        .as_deref()
+        .is_some_and(|commit_id| !commit_id.trim().is_empty())
+    {
+        return Err(
+            "timestamp required for changes_since; commit_id was provided, but changes_since also \
+             needs memory_cursor.timestamp because memory item updates are timestamp-based. Pass \
+             memory_cursor.timestamp from orient/cursor alongside memory_cursor.commit_id."
+                .to_string(),
+        );
+    }
+
+    Err(
+        "timestamp required for changes_since; pass memory_cursor.timestamp from orient/cursor."
+            .to_string(),
+    )
 }
 
 fn parse_id(value: &str, label: &str) -> Result<engram_core::id::Id, String> {

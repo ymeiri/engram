@@ -157,6 +157,9 @@ prompt-class validation only; it does not make `orient` a generated handoff or a
 
 - Agents should preserve the `trace_id` returned by `orient` so feedback can link to the exact
   orientation packet.
+- Agents should pass `memory_cursor.timestamp` to `memory(action="changes_since")`; if
+  `memory_cursor.commit_id` is present, pass it as additional context, not as a replacement for the
+  timestamp. Memory item freshness is timestamp-based.
 - When the task result is assessable, submit `telemetry(action=submit_feedback)` before final
   response.
 - Include key behavioral fields when known: `task_success`, `preference_adhered`,
