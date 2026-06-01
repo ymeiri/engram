@@ -1789,6 +1789,11 @@ Proceed in this order from the current checkpoint:
      but does not approve adding the T111 string, changing report contents, altering confidence
      formulas, changing public MCP request parameters, running M6, mutating lifecycle state,
      indexing documents, changing ranking, expanding `orient`, or writing harness adapters/hooks.
+113. Treat T113 as read-only startup retrieval validation after T112. Fresh Codex lean `orient`,
+     direct searches, handoff, obligations, lint, repo docs, and git checks recovered the T112
+     current-plan memory and exact T111 gate context while keeping stale current-plan lifecycle,
+     T69, T70, T47, M6, ranking, `orient`, public MCP, schema/storage/index, document-index, and
+     harness-write gates closed.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

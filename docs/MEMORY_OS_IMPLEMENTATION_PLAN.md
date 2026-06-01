@@ -4844,3 +4844,14 @@ observable MCP output and external agents may read it as guidance, T112 does not
 recommendation string or resolve T111. No telemetry behavior, public MCP request/response shape,
 confidence formula, M6 state, lifecycle state, document indexing, harness write, ranking,
 `orient`, schema/storage/index behavior, or document-index behavior changed.
+
+T113 matrix note:
+`docs/BRAIN_HARNESS_T113_POST_T112_STARTUP_RETRIEVAL_VALIDATION_2026-06-01.md` records a
+read-only post-T112 startup validation. Fresh Codex lean `orient` and direct searches returned the
+T112 current-plan memory first for continuation/current-plan probes, recovered the reviewed
+software-design preference in preference-oriented `orient`, and surfaced T111 gate context without
+treating generic `i approve` as authorization. Obligations were clean; lint still reported stale
+current-plan target `019e5e0a-86b4-73e3-aa9b-ca350e83e915` with `safe_action=none`; git remained
+clean except user-owned untracked root `AGENTS.md`. No telemetry behavior, public MCP
+request/response shape, confidence formula, M6 state, lifecycle state, document indexing, harness
+write, ranking, `orient`, schema/storage/index behavior, or document-index behavior changed.

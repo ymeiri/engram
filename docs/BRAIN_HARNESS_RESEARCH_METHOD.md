@@ -1111,6 +1111,13 @@ Current next application:
   `recommendations` list as machine-stable control flow. If the repo only serializes it and tests
   substrings, the risk is narrower but still public because MCP callers may read it as guidance.
   Do not add the advisory string without an explicit T111 option choice.
+- T113 applies the startup completion-matrix discipline after T112: when a generic approval or goal
+  continuation follows a gated docs-only slice, rerun live `orient`, direct searches, handoff,
+  obligations, lint, repo docs, and git checks before acting. If T112 current-plan and T111 gate
+  context are recovered and no exact gate phrase is present, record read-only evidence and continue
+  only non-gated validation or evidence-quality work. Do not treat this as approval for T111 report
+  changes, M6, lifecycle writes, document indexing, harness writes, ranking, `orient`, public MCP,
+  schema/storage/index, or document-index behavior changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
