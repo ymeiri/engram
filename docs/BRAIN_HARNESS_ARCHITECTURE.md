@@ -288,6 +288,11 @@ Research checkpoint, current through 2026-05-27:
   preserved only in an authored doc summary, not raw git-status output. This strengthens the
   artifact shape while adding a future evidence-quality requirement for raw terminal/test/status
   evidence when such subclaims matter.
+- T84 codifies that requirement in the research method instead of running a standalone raw-output
+  demonstration. A future controlled artifact row that depends on git status, staged diff, test
+  output, or command output should preserve scoped raw output with interpretation and limitations,
+  or keep the subclaim indirect. Copied terminal output remains author-captured evidence, not
+  independent proof.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1570,6 +1575,12 @@ Proceed in this order from the current checkpoint:
     terminal evidence should preserve raw durable output instead of relying on authored summaries.
     This does not authorize schema/storage, public MCP, harness, ranking, lifecycle, migration,
     document-index, or `orient` changes.
+84. Treat T84 as a research-method refinement, not a terminal-output pilot or implementation
+    approval. The method now requires exact scoped command/output preservation only when a
+    controlled artifact row genuinely depends on terminal state, and requires limitations that the
+    output is author-captured rather than independent proof. Do not create automation, hooks,
+    schemas, public MCP surfaces, ranking changes, lifecycle changes, migration actions,
+    document-index changes, or `orient` changes from this rule.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

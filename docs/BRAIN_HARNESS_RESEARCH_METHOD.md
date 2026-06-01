@@ -182,6 +182,13 @@ Before running a dogfood scenario or eval, write:
 - expected failure modes,
 - whether user judgment is required.
 
+If a controlled artifact row's classification or subclaim depends on git status, staged diff, test
+output, command output, or another terminal state, pre-register the exact command and scope. Preserve
+the raw output in the committed artifact when it is short enough to review and materially reduces
+ambiguity, with interpretation and limitations next to it. Copied terminal output is still
+author-captured, not independent or cryptographic proof; if it is not preserved, keep the
+terminal-dependent subclaim indirect or downgrade its evidence strength.
+
 ### 6.6 Preserve Ambiguity
 
 If the result is contaminated, underpowered, or mixed, record that. Do not convert ambiguity into a
@@ -959,6 +966,11 @@ Current next application:
   artifact-quality gap: T82-4's staging-discipline subclaim relies on the authored T78 summary
   rather than raw preserved git-status output. Future controlled rows should preserve raw terminal
   evidence when a subclaim depends on it.
+- T84 turns that caveat into a research-method rule rather than a standalone terminal-output
+  demonstration. AI Council agreed raw output can improve auditability only when scoped and
+  limitations are explicit; Claude Bridge noted a standalone `git status` capture now would not
+  retroactively strengthen T82-4. Future controlled rows should apply the raw-output rule only when
+  terminal state genuinely matters.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

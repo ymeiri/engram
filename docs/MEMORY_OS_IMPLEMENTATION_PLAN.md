@@ -655,6 +655,14 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       staging-discipline subclaim as relying on an authored doc summary rather than raw preserved
       git-status/staging evidence. This is not completion or approval for schema, storage, public
       MCP, harness, migration, lifecycle, ranking, document-index, or `orient` changes.
+- [x] T84 raw terminal evidence rule: documented
+      `docs/BRAIN_HARNESS_T84_RAW_TERMINAL_EVIDENCE_RULE_2026-06-01.md` and the research method.
+      T84 explicitly chose not to run a standalone `git status` output pilot because it would not
+      retroactively strengthen T82-4. Instead, future controlled artifact rows whose outcome
+      depends on terminal state must either preserve scoped raw output with interpretation and
+      limitations, or keep that subclaim indirect. This is not completion or approval for schema,
+      storage, public MCP, harness, migration, lifecycle, ranking, document-index, or `orient`
+      changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -911,6 +919,14 @@ requirement: future controlled rows that depend on git status, staged diff, test
 terminal state should preserve raw durable output or keep that subclaim indirect. This still does
 not approve schema/API/storage/public MCP/harness/ranking/lifecycle/migration/document-index/
 `orient` changes.
+
+T84 matrix note: the raw terminal evidence rule in
+`docs/BRAIN_HARNESS_T84_RAW_TERMINAL_EVIDENCE_RULE_2026-06-01.md` codifies the T83 caveat without
+running a disconnected standalone `git status` pilot. The rule improves future artifact quality:
+if a controlled row genuinely depends on terminal state, pre-register the exact command/scope and
+preserve short raw output with interpretation and limitations; otherwise keep the subclaim indirect.
+Copied output remains author-captured evidence, not independent proof. This does not approve
+schema/API/storage/public MCP/harness/ranking/lifecycle/migration/document-index/`orient` changes.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
