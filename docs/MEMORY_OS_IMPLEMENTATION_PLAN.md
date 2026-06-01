@@ -4812,3 +4812,15 @@ proxy-approval framing, so the artifact is a default-deny evidence snapshot. No 
 scope correction, `lint(action="apply_safe")`, M6 action, document indexing, harness write, ranking
 change, `orient` expansion, public MCP change, schema/storage/index behavior change, or
 document-index behavior change was run.
+
+T109 matrix note: `docs/BRAIN_HARNESS_T109_TELEMETRY_CONFIDENCE_AUDIT_2026-06-01.md` is a
+docs-only telemetry confidence audit. Source inspection confirms `real_session_eval` reports over a
+bounded sampled trace set and trace-linked feedback, with `intent` as secondary metadata and
+outcome fields required for stronger evidence. The latest report still fails the confidence gate
+after ordinary startup feedback scoring: `feedback_coverage=0.36000001430511475`,
+`external_session_trace_count=0`, `task_failure_count=1`, and `bad_memory_used_count=0`. AI
+Council was willing to allow isolated calibration traces, but Claude Bridge warned they risk metric
+gaming; T109 chooses the conservative path and creates no calibration traces. No telemetry code,
+M6 action, lifecycle mutation, document indexing, harness write, ranking change, `orient`
+expansion, public MCP change, schema/storage/index behavior change, or document-index behavior
+change was run.

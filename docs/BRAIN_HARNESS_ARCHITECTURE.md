@@ -1764,6 +1764,13 @@ Proceed in this order from the current checkpoint:
      `orient`, index documents, inspect M6 files, mutate lifecycle state, change public
      MCP/schema/storage/index behavior, change document-index behavior, or write harness
      adapters/hooks.
+109. Treat T109 as a docs-only telemetry confidence audit. It records the current
+     `real_session_eval(project=engram, limit=50)` failure, source-read report semantics, and the
+     AI Council / Claude Bridge disagreement about calibration traces. T109 intentionally does not
+     generate calibration traces because doing so could game the confidence gate unless they are
+     structurally excluded from decision-grade metrics. It does not change telemetry code, ranking,
+     `orient`, lifecycle state, M6 state, document indexing, public MCP/schema/storage/index
+     behavior, document-index behavior, or harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
