@@ -4767,3 +4767,14 @@ This direction uses the best ideas from:
 The decisive improvement is not better search. It is better memory lifecycle.
 
 The second decisive improvement is better identity: Engram must know which project, subproject, repository, local checkout, monorepo component, agent, harness, and model produced or needs a piece of knowledge.
+
+T105 matrix note: the post-T104 completion audit in
+`docs/BRAIN_HARNESS_T105_POST_T104_COMPLETION_MATRIX_AUDIT_2026-06-01.md` rebuilt the current
+matrix from live `orient`, direct search, `changes_since`, `handoff(get)`, obligations, repo docs,
+the stale local markdown handoff, and git status. Current-plan retrieval and the active handoff are
+healthy for the observed continuation surface, obligations are clean, and the worktree is clean
+except untracked user-owned root `AGENTS.md`. M6 remains gated at T69 count-drift inspection, T70
+document indexing remains exact-approval gated, lifecycle archive packets remain exact-ID gated,
+and harness readiness remains risky/not ready. No M6 inspection/apply/deletion, document indexing,
+lifecycle mutation, ranking, `orient`, public MCP, schema/storage/index, document-index behavior,
+or harness write was run.

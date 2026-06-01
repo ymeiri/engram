@@ -1066,6 +1066,12 @@ Current next application:
   refresh is acceptable continuity maintenance, but it must not be treated as archive approval,
   migration approval, document-index approval, ranking evidence, `orient` expansion, public MCP
   change, schema/storage/index change, or harness work.
+- T105 applies the startup completion-matrix discipline after T104: compare live `orient`, direct
+  searches, `changes_since`, `handoff(get)`, obligations, repo docs, stale local markdown handoff,
+  and git status before choosing the next slice. If no exact gate approval is present, record the
+  matrix and continue only non-gated evidence-quality or validation work. This must not be treated
+  as approval for migration, document indexing, lifecycle archive, ranking, `orient`, public MCP,
+  schema/storage/index, or harness work.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

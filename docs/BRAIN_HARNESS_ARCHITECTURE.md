@@ -1739,6 +1739,12 @@ Proceed in this order from the current checkpoint:
      handoffs, inspect T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking,
      expand `orient`, change public MCP/schema/storage/index behavior, change document-index
      behavior, or write harness adapters/hooks.
+105. Treat T105 as a read-only completion-matrix audit only. It records the post-T104 state from
+     live `orient`, direct search, `changes_since`, `handoff(get)`, obligations, repo docs, stale
+     local markdown handoff inspection, and git status. It does not archive old handoffs, inspect
+     T69 files, run T70 indexing, run M6, mutate lifecycle state, change ranking, expand `orient`,
+     change public MCP/schema/storage/index behavior, change document-index behavior, or write
+     harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
