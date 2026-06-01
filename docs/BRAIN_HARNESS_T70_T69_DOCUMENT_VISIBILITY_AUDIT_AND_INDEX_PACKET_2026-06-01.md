@@ -30,6 +30,11 @@ visibility for the repo evidence that explains that gate.
     chunks.
   - The MCP `docs(action="index", path=...)` handler accepts a single file path and calls
     `service.index_file(path)`.
+- Existing focused tests cover the two critical code-level claims behind this packet:
+  - `reusing_existing_source_identity_updates_source_and_chunk_ids` verifies that a reindexed
+    document result reuses the existing source id and rewrites chunk `source_id`s.
+  - `test_replace_chunks` verifies that saving chunks for an existing source replaces stale chunks
+    instead of appending duplicates.
 
 ## Research Question
 
