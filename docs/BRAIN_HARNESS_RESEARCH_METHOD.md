@@ -906,6 +906,13 @@ Current next application:
   covers only one intent. Treat this as evidence-quality calibration only, not product completion
   or approval for M6, lifecycle, harness, ranking, schema/storage/index, public MCP,
   document-index, or `orient` changes.
+- T76 pre-registered an organic non-plan feedback audit, then stopped before scoring when
+  `telemetry(action="list_traces", intent=...)` proved unable to filter by intent. The approved
+  implementation slice fixed only the existing `intent` filter behavior for `list_traces` and
+  added focused MCP coverage. T76 does not submit new non-plan feedback or treat any future
+  rolling confidence-gate pass as completion. It does not authorize migration, lifecycle writes,
+  harness writes, ranking changes, schema/storage/index changes, document-index actions,
+  `orient` expansion, or new public MCP request parameters.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

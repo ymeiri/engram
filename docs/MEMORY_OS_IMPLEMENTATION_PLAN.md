@@ -773,6 +773,16 @@ feedback. Treat this as useful evidence-loop telemetry, not completion or approv
 lifecycle writes, hook/adapter writes, schema/storage changes, public MCP changes, `orient`
 expansion, document indexing, or broad ranking changes.
 
+T76 matrix note: the pre-registered organic non-plan feedback audit stopped before trace scoring
+because the telemetry inspection surface could not list traces by intent. Source inspection showed
+that `TelemetryRequest.intent`, persisted `intent_key`, and `idx_trace_intent` already existed, but
+`list_traces` forwarded only project, scenario, and arm filters. The narrow implementation slice
+wires the existing intent field through `telemetry(action="list_traces")`, canonicalizes aliases
+through `BrainHarnessIntent::parse`, and adds focused MCP coverage. This is instrumentation hygiene
+only: it does not submit new non-plan feedback, prove confidence-gate readiness, authorize
+migration, lifecycle writes, harness writes, ranking changes, schema/storage/index changes,
+document-index actions, `orient` expansion, or new public MCP request parameters.
+
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
 plan first and active M6 gate context in top memory results, and

@@ -1473,6 +1473,12 @@ Proceed in this order from the current checkpoint:
     external-session labeling (`36/50`), but the confidence gate fails because feedback covers only
     one intent. This does not authorize lifecycle writes, migration, ranking, schema/storage/index,
     public MCP, document-index, harness, or `orient` changes.
+76. Treat T76 as telemetry instrumentation hygiene, not confidence evidence. The pre-registered
+    organic non-plan audit stopped before trace scoring because `list_traces` accepted `intent` but
+    did not apply it. The approved implementation slice wires that existing field through trace
+    listing and tests the behavior. T76 does not submit non-plan feedback, approve migration,
+    lifecycle writes, harness writes, ranking changes, schema/storage/index changes,
+    document-index actions, `orient` expansion, or new public MCP request parameters.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -3,9 +3,9 @@
 use crate::error::{IndexError, IndexResult};
 use engram_core::id::Id;
 use engram_core::telemetry::{
-    AgentFeedback, BrainHarnessTrace, IntentTelemetryStats, RealSessionConfidenceGate,
-    RealSessionEvalAppliedFilters, RealSessionEvalArmRow, RealSessionEvalIntentRow,
-    RealSessionEvalReport,
+    AgentFeedback, BrainHarnessIntent, BrainHarnessTrace, IntentTelemetryStats,
+    RealSessionConfidenceGate, RealSessionEvalAppliedFilters, RealSessionEvalArmRow,
+    RealSessionEvalIntentRow, RealSessionEvalReport,
 };
 use engram_store::{Db, TelemetryRepo};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -56,16 +56,19 @@ impl TelemetryService {
         Ok(self.repo.list_traces(limit).await?)
     }
 
-    /// List traces scoped by optional project, scenario, and arm filters.
+    /// List traces scoped by optional project, scenario, arm, and intent filters.
     pub async fn list_traces_scoped(
         &self,
         limit: Option<usize>,
         project: Option<&str>,
         scenario_id: Option<&str>,
         arm: Option<&str>,
+        intent: Option<&str>,
     ) -> IndexResult<Vec<BrainHarnessTrace>> {
         let applied_filters = applied_filters(project, scenario_id, arm);
-        if !has_any_filter(&applied_filters) {
+        let intent_key =
+            normalized_label(intent).map(|value| BrainHarnessIntent::parse(&value).to_string());
+        if !has_any_filter(&applied_filters) && intent_key.is_none() {
             return self.list_traces(limit).await;
         }
 
@@ -76,6 +79,7 @@ impl TelemetryService {
                 applied_filters.project.as_deref(),
                 applied_filters.scenario_id.as_deref(),
                 applied_filters.arm.as_deref(),
+                intent_key.as_deref(),
             )
             .await?)
     }
@@ -129,7 +133,7 @@ impl TelemetryService {
         let trace_scan_limit = result_limit.max(DEFAULT_TELEMETRY_LIST_LIMIT);
         let traces = self
             .repo
-            .list_traces_scoped(Some(trace_scan_limit), project, scenario_id, arm)
+            .list_traces_scoped(Some(trace_scan_limit), project, scenario_id, arm, None)
             .await?;
         let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
         let mut feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
@@ -275,6 +279,7 @@ impl TelemetryService {
                 applied_filters.project.as_deref(),
                 applied_filters.scenario_id.as_deref(),
                 applied_filters.arm.as_deref(),
+                None,
             )
             .await?;
         let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();

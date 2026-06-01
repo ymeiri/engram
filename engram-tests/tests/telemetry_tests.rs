@@ -452,7 +452,7 @@ async fn scoped_real_session_eval_applies_limit_after_scope_filters() {
     }
 
     let scoped_traces = telemetry
-        .list_traces_scoped(Some(2), Some("engram"), Some(scenario_id), Some(arm))
+        .list_traces_scoped(Some(2), Some("engram"), Some(scenario_id), Some(arm), None)
         .await
         .expect("scoped traces should be listed");
     assert_eq!(scoped_traces.len(), 2);
@@ -1058,6 +1058,59 @@ async fn mcp_telemetry_filters_traces_feedback_and_eval_by_scenario_and_arm() {
     assert_eq!(arms.len(), 1);
     assert_eq!(arms[0]["arm"], target_arm);
     assert_ne!(arms[0]["arm"], unrelated_arm);
+}
+
+#[tokio::test]
+async fn mcp_telemetry_list_traces_filters_by_intent() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut target_trace_id = String::new();
+
+    for (label, intent, project) in [
+        ("target", "follow_user_preference", "engram"),
+        ("other-intent", "plan_work", "engram"),
+        ("other-project", "follow_user_preference", "engram-other"),
+    ] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("search".to_string());
+        trace_request.intent = Some(intent.to_string());
+        trace_request.project = Some(project.to_string());
+        trace_request.query = Some(format!("{label} intent-filter telemetry"));
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+        if label == "target" {
+            target_trace_id = trace_id;
+        }
+    }
+
+    let mut list_traces_request = telemetry_request("list_traces");
+    list_traces_request.project = Some("engram".to_string());
+    list_traces_request.intent = Some("preference".to_string());
+    list_traces_request.limit = Some(1);
+    let list_traces_response = tools::telemetry_new(&state, list_traces_request)
+        .await
+        .expect("intent-filtered list_traces should work");
+    let list_traces_json = parse_json(&list_traces_response);
+    let traces = list_traces_json["traces"].as_array().unwrap();
+
+    assert_eq!(list_traces_json["count"], 1);
+    assert_eq!(traces[0]["id"].as_str(), Some(target_trace_id.as_str()));
+    assert_eq!(traces[0]["intent"], "follow_user_preference");
+    assert_eq!(traces[0]["project"], "engram");
 }
 
 #[tokio::test]

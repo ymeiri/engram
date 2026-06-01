@@ -3380,7 +3380,7 @@ pub struct TelemetryRequest {
     pub trace_id: Option<String>,
     /// Operation for record_trace: orient, search, changes_since, feedback.
     pub operation: Option<String>,
-    /// Intent for trace correlation: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
+    /// Intent for trace correlation and list_traces filtering: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
     pub intent: Option<String>,
     /// Free-form controlled eval scenario identifier for record_trace and list/report filtering.
     pub scenario_id: Option<String>,
@@ -3512,6 +3512,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                     request.project.as_deref(),
                     request.scenario_id.as_deref(),
                     request.arm.as_deref(),
+                    request.intent.as_deref(),
                 )
                 .await
                 .map_err(|e| e.to_string())?;

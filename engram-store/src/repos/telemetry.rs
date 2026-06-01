@@ -165,6 +165,7 @@ impl TelemetryRepo {
         project: Option<&str>,
         scenario_id: Option<&str>,
         arm: Option<&str>,
+        intent_key: Option<&str>,
     ) -> StoreResult<Vec<BrainHarnessTrace>> {
         debug!("Listing scoped brain harness traces");
 
@@ -177,6 +178,9 @@ impl TelemetryRepo {
         }
         if arm.is_some() {
             conditions.push("trace.arm = $arm");
+        }
+        if intent_key.is_some() {
+            conditions.push("intent_key = $intent_key");
         }
         let where_clause = if conditions.is_empty() {
             String::new()
@@ -202,6 +206,9 @@ impl TelemetryRepo {
         }
         if let Some(arm) = arm {
             query = query.bind(("arm", arm.to_string()));
+        }
+        if let Some(intent_key) = intent_key {
+            query = query.bind(("intent_key", intent_key.to_string()));
         }
 
         let mut result = query.await?;
