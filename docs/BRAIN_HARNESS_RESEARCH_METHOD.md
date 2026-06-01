@@ -886,6 +886,14 @@ Current next application:
   have external-session labels. Treat this as evidence-quality calibration only, not product
   completion or approval for M6, lifecycle, harness, ranking, schema/storage/index, public MCP,
   document-index, or `orient` changes.
+- T73 refreshes the stale repository-scoped current-plan evidence after T72. Read-only `orient`,
+  `search`, `memory(get/list)`, and `lint` evidence show T72 current-plan memory still ranks first
+  for the tested continuation prompt, while target
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active, remains the only active
+  repository-scoped current-plan item for `/Users/yuval.meiri/projects/engram`, and now has 228
+  stale-feedback records with `safe_action=none`. Treat this as T52 evidence refresh only, not
+  approval for archive, replacement, scope correction, lifecycle writes, M6, harness, ranking,
+  schema/storage/index, public MCP, document-index, or `orient` changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

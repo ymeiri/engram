@@ -226,6 +226,13 @@ Research checkpoint, current through 2026-05-27:
   remained visible below T52 and was treated as pending-decision evidence only. This is read-only
   parity evidence only, not approval for lifecycle writes, replacement memory, M6, harness writes,
   ranking changes, or `orient` expansion.
+- T73 later refreshed that stale repository-scoped current-plan evidence after T72. T72 current
+  plan `019e826e-e059-7e10-8ee3-facf9b470bfb` still ranks first for the tested continuation
+  prompt, but target `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains the only active
+  repository-scoped current-plan item for `/Users/yuval.meiri/projects/engram` and lint now reports
+  228 recent stale-feedback records with `safe_action=none`. This keeps T52 as a user decision
+  request, not approval for archive, replacement, scope correction, lifecycle writes, ranking,
+  migration, harness, schema/storage/index, public MCP, document-index, or `orient` changes.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1435,6 +1442,14 @@ Proceed in this order from the current checkpoint:
     diversity, and sparse external-session labels remain. This does not authorize migration,
     lifecycle, harness, ranking, schema/storage/index, public MCP, document-index, or `orient`
     changes.
+73. Treat T73 as a stale-current-plan lifecycle evidence refresh, not a lifecycle action. The stale
+    repository-scoped current-plan target `019e5e0a-86b4-73e3-aa9b-ca350e83e915` remains active,
+    remains the only active repository-scoped current-plan item for this checkout, and now has 228
+    stale-feedback records with `safe_action=none`; T72 current-plan memory still ranks first for
+    the tested continuation prompt. T52 still requires an explicit user option and exact write
+    approval before archive, replacement, or scope correction. This does not authorize migration,
+    lifecycle writes, ranking, schema/storage/index, public MCP, document-index, harness, or
+    `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
