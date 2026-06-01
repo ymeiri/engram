@@ -13,7 +13,7 @@ use engram_index::{
 use engram_mcp::tools::{self, OrientRequest, SearchRequest, TelemetryRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 
 async fn setup_services() -> (TelemetryService, MemoryService) {
     let config = StoreConfig::memory();
@@ -555,6 +555,91 @@ async fn real_session_eval_report_anchors_feedback_to_sampled_traces() {
     assert_eq!(report.outcome_feedback_count, 1);
     assert_eq!(report.outcome_trace_count, 1);
     assert_eq!(report.outcome_coverage, 0.5);
+}
+
+#[tokio::test]
+async fn real_session_eval_default_sample_can_mask_recent_window_failure() {
+    let (telemetry, _) = setup_services().await;
+    let base = OffsetDateTime::now_utc();
+    let used_memory_id = engram_core::Id::new();
+    let intents = [
+        BrainHarnessIntent::PlanWork,
+        BrainHarnessIntent::ImplementChange,
+        BrainHarnessIntent::VerifyDecision,
+    ];
+
+    for index in 0..30 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_intent(Some(intents[index % intents.len()].clone()))
+            .with_project(Some("engram".to_string()))
+            .with_returned_memory_ids(vec![used_memory_id]);
+        trace.query = Some(format!("historical feedback-rich trace {index}"));
+        trace.created_at = base - Duration::seconds((100 + index) as i64);
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("historical trace should be recorded");
+
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.used_memory_ids = vec![used_memory_id];
+        feedback.task_success = Some(true);
+        feedback.preference_adhered = Some(true);
+        feedback.bad_memory_used = Some(false);
+        telemetry
+            .submit_feedback(feedback)
+            .await
+            .expect("historical feedback should be accepted");
+    }
+
+    for index in 0..50 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Search)
+            .with_intent(Some(BrainHarnessIntent::PlanWork))
+            .with_project(Some("engram".to_string()))
+            .with_returned_memory_ids(vec![used_memory_id]);
+        trace.query = Some(format!("recent sparse-feedback trace {index}"));
+        trace.created_at = base + Duration::seconds(index as i64);
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("recent trace should be recorded");
+
+        if index < 20 {
+            let mut feedback = AgentFeedback::new(trace.id);
+            feedback.used_memory_ids = vec![used_memory_id];
+            feedback.task_success = Some(true);
+            feedback.preference_adhered = Some(true);
+            feedback.bad_memory_used = Some(false);
+            telemetry
+                .submit_feedback(feedback)
+                .await
+                .expect("recent feedback should be accepted");
+        }
+    }
+
+    let recent_report = telemetry
+        .real_session_eval_report(Some(50))
+        .await
+        .expect("recent-window report should build");
+    assert_eq!(recent_report.sample_limit, 50);
+    assert_eq!(recent_report.trace_count, 50);
+    assert_eq!(recent_report.feedback_trace_count, 20);
+    assert_eq!(recent_report.feedback_coverage, 0.4);
+    assert!(!recent_report.confidence_gate.passed);
+    assert!(recent_report
+        .confidence_gate
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("feedback coverage")));
+
+    let default_report = telemetry
+        .real_session_eval_report(None)
+        .await
+        .expect("default report should build");
+    assert!(default_report.sample_limit > recent_report.sample_limit);
+    assert_eq!(default_report.trace_count, 80);
+    assert_eq!(default_report.feedback_trace_count, 50);
+    assert_eq!(default_report.feedback_coverage, 0.625);
+    assert!(default_report.confidence_gate.passed);
 }
 
 #[tokio::test]

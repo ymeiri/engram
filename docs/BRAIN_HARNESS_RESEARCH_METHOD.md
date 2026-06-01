@@ -1101,6 +1101,11 @@ Current next application:
   structural exclusion path and the user approves that eval-design change. Ordinary startup
   feedback can be scored as part of harness discipline, but it must not be presented as controlled
   cross-intent proof.
+- T110 applies the same rule to eval-window semantics: when the larger default telemetry sample can
+  pass while a recent `limit=50` sample fails, preserve that divergence in an executable regression
+  before changing defaults or confidence logic. A default-window change, dual-window gate, or
+  warning safeguard should be treated as a separate eval-design slice with caller audit and
+  variance evidence.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

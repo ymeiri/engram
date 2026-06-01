@@ -1771,6 +1771,14 @@ Proceed in this order from the current checkpoint:
      structurally excluded from decision-grade metrics. It does not change telemetry code, ranking,
      `orient`, lifecycle state, M6 state, document indexing, public MCP/schema/storage/index
      behavior, document-index behavior, or harness adapters/hooks.
+110. Treat T110 as executable measurement evidence, not telemetry behavior change. It adds
+     `real_session_eval_default_sample_can_mask_recent_window_failure` to prove the current larger
+     default `real_session_eval` sample can pass while an explicit recent `limit=50` window fails.
+     AI Council split on changing the default immediately, and Claude Bridge timed out, so T110
+     preserves behavior and records the safer docs/test overlap. It does not generate calibration
+     traces, change confidence formulas, change public MCP request parameters, change ranking,
+     expand `orient`, mutate lifecycle state, run M6, index documents, or write harness
+     adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

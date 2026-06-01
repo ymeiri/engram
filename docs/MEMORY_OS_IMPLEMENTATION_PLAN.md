@@ -4824,3 +4824,13 @@ gaming; T109 chooses the conservative path and creates no calibration traces. No
 M6 action, lifecycle mutation, document indexing, harness write, ranking change, `orient`
 expansion, public MCP change, schema/storage/index behavior change, or document-index behavior
 change was run.
+
+T110 matrix note: `docs/BRAIN_HARNESS_T110_TELEMETRY_WINDOW_REGRESSION_2026-06-01.md` adds an
+executable telemetry-window regression,
+`real_session_eval_default_sample_can_mask_recent_window_failure`. The test constructs a recent
+50-trace sparse-feedback window that fails the confidence gate and a larger default sample that
+passes because older feedback-rich traces dominate. This preserves T109's default-vs-recent
+measurement caveat without changing telemetry behavior. AI Council split on changing the default
+immediately, and Claude Bridge timed out, so T110 does not change `DEFAULT_REAL_SESSION_EVAL_LIMIT`,
+confidence formulas, public MCP request parameters, M6 state, lifecycle state, document indexing,
+harness writes, ranking, `orient`, schema/storage/index behavior, or document-index behavior.
