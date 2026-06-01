@@ -1,6 +1,6 @@
 # Brain Harness T83 T82 Second-Reader Review
 
-Status: Pre-registered; execution pending
+Status: Complete; second-reader review recorded
 Date: 2026-06-01
 Scope: Read-only second-reader review of the T82 controlled outcome artifact
 
@@ -89,3 +89,46 @@ Return a compact table and a short conclusion.
   `docs/BRAIN_HARNESS_T80_OUTCOME_LINK_DECISION_PACKET_2026-06-01.md` lines 124-147.
 - T81 proxy audit result:
   `docs/BRAIN_HARNESS_T81_FEEDBACK_OUTCOME_POINTER_PROXY_AUDIT_2026-06-01.md` lines 42-65.
+
+## Execution Result
+
+Pre-registration commit: `7d84503` (`Pre-register T83 second-reader review`)
+
+Claude Bridge was called once with:
+
+- `harness="isolated"`
+- `write=false`
+- no Bash allowlist
+- no tool allowlist
+
+Claude returned a row-level second-reader table. It said the artifact matched the supplied prompt
+excerpt; that statement is not used as extra evidence because the pre-registration did not permit
+tool/file reads. The assessment below relies on the returned row classifications and the evidence
+excerpts supplied in the prompt.
+
+| Row | T82 class | Claude agreement | Evidence-strength judgment | Durable refs sufficient? | T83 interpretation |
+| --- | --- | --- | --- | --- | --- |
+| T82-1 | `TRANSCRIPT_VISIBLE_OUTCOME` | Agree | Moderate: retrieval ordering direct, downstream success indirect through T78 doc summary. | Yes, with telemetry read access. | Agreement supports T82's classification; the task was itself retrieval-order verification. |
+| T82-2 | `TRANSCRIPT_VISIBLE_OUTCOME` | Agree | Moderate: orient output shape direct, compactness claim indirect through T78 doc summary. | Yes, with telemetry read access. | Agreement supports T82's classification; residual compactness evidence remains summary-based. |
+| T82-3 | `TRANSCRIPT_VISIBLE_OUTCOME` | Agree | Moderate-strong: preference return direct, no-behavior-change supported by commit diff/doc refs. | Yes. | Agreement supports T82's classification more strongly than T82-1/2 because repo diff evidence exists. |
+| T82-4 | `TRANSCRIPT_VISIBLE_OUTCOME` | Agree, weakest of the four | Moderate: preference return direct, staging-discipline subclaim summarized in T78 doc. | Marginal for staging discipline. | Classification remains acceptable, but future artifacts should preserve raw git-status/staging evidence or downgrade that subclaim. |
+| T82-5 | `SELF_REPORTED_OUTCOME` | Agree | Weak: direct only for retrieval/process context. | Yes, sufficient to confirm the weak class. | Agreement strengthens the refusal: do not import the later T79 doc as a post-hoc downstream outcome link. |
+
+Claude's conclusion:
+
+- T82-5 should remain `SELF_REPORTED_OUTCOME`.
+- The artifact shape is reviewable enough for a future approval packet.
+- The future packet should preserve T82's restraint around `CONTROLLED_LINKED_OUTCOME` until a
+  reviewer agreement field is filled by a process that is not the authoring agent.
+- T82-4 exposes one artifact-quality gap: raw terminal/status output was not preserved
+  independently.
+
+## Decision
+
+T83 strengthens the T82 artifact-format result but does not authorize implementation.
+
+The next non-gated evidence improvement should be a narrower artifact-quality repair in future
+controlled rows: when a row's outcome depends on git status, staged diff, test output, or similar
+terminal evidence, preserve that raw output in a durable committed artifact or keep the subclaim
+indirect. No schema/storage/public MCP/harness/ranking/lifecycle/migration/document-index/`orient`
+change is approved.

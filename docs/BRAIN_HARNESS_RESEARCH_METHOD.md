@@ -953,6 +953,12 @@ Current next application:
   especially for refusing to over-link positive self-report, but it still has no independent
   reviewer and does not authorize schema/API/storage, public MCP, harness, ranking, lifecycle,
   migration, document-index, or `orient` changes.
+- T83 pre-registers and runs one read-only Claude Bridge second-reader review of the T82 artifact.
+  Claude agrees with all five T82 classes and explicitly keeps T82-5 as
+  `SELF_REPORTED_OUTCOME`. The review strengthens the artifact-format evidence but flags one
+  artifact-quality gap: T82-4's staging-discipline subclaim relies on the authored T78 summary
+  rather than raw preserved git-status output. Future controlled rows should preserve raw terminal
+  evidence when a subclaim depends on it.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

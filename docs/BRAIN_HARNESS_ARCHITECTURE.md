@@ -282,6 +282,12 @@ Research checkpoint, current through 2026-05-27:
   outcomes from a positive but weak T79 startup self-report, but it remains agent-authored evidence
   and does not justify storage, public MCP, schema, harness, ranking, lifecycle, migration,
   document-index, or `orient` changes.
+- T83 adds a read-only Claude Bridge second-reader review of the T82 artifact. Claude agreed with
+  all five T82 classes and explicitly kept the weak T79 startup row as `SELF_REPORTED_OUTCOME`.
+  It also flagged T82-4 as the weakest positive row because staging-discipline evidence was
+  preserved only in an authored doc summary, not raw git-status output. This strengthens the
+  artifact shape while adding a future evidence-quality requirement for raw terminal/test/status
+  evidence when such subclaims matter.
 - MCP `memory(action=list)` now honors explicit scope filters before applying `limit`, closing an
   evidence-sampling gap where a project-scoped current-plan list for Engram could return older
   repository-scoped Engram guidance and wrong-project `voice-layer` guidance. This is a specialist
@@ -1558,6 +1564,12 @@ Proceed in this order from the current checkpoint:
     self-report as insufficient outcome evidence. Because the rows are still agent-authored and
     reviewer agreement is pending, do not add schema/storage, public MCP, harness, ranking,
     lifecycle, migration, document-index, or `orient` changes from this result alone.
+83. Treat T83 as second-reader artifact validation, not production readiness. Claude Bridge agreed
+    with all five T82 classes and confirmed T82-5 should remain `SELF_REPORTED_OUTCOME`, but it
+    also identified that future rows depending on git status, staged diffs, test output, or other
+    terminal evidence should preserve raw durable output instead of relying on authored summaries.
+    This does not authorize schema/storage, public MCP, harness, ranking, lifecycle, migration,
+    document-index, or `orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

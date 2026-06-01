@@ -648,6 +648,13 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       classes, confounds, and pending reviewer agreement. It validates a possible artifact shape
       but not schema, storage, public MCP, harness, migration, lifecycle, ranking, document-index,
       or `orient` changes.
+- [x] T83 T82 second-reader review: pre-registered and documented
+      `docs/BRAIN_HARNESS_T83_T82_SECOND_READER_REVIEW_2026-06-01.md`. A read-only Claude Bridge
+      review agreed with all five T82 classes, kept T82-5 as `SELF_REPORTED_OUTCOME`, and said the
+      artifact shape is reviewable enough for a future approval packet. It also flagged T82-4's
+      staging-discipline subclaim as relying on an authored doc summary rather than raw preserved
+      git-status/staging evidence. This is not completion or approval for schema, storage, public
+      MCP, harness, migration, lifecycle, ranking, document-index, or `orient` changes.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -894,6 +901,16 @@ transcript-visible outcomes and refuse over-linking one positive T79 startup sel
 validates a reviewable artifact shape, but independent reviewer agreement remains pending and no
 schema/API/storage/public MCP/harness/ranking/lifecycle/migration/document-index/`orient` change is
 approved.
+
+T83 matrix note: the second-reader review in
+`docs/BRAIN_HARNESS_T83_T82_SECOND_READER_REVIEW_2026-06-01.md` was pre-registered, then run once
+through Claude Bridge with `harness="isolated"`, `write=false`, no Bash, and no tool allowlist.
+Claude agreed with all five T82 classes and explicitly preserved T82-5 as
+`SELF_REPORTED_OUTCOME`. The review strengthens the artifact shape but adds an evidence-quality
+requirement: future controlled rows that depend on git status, staged diff, test output, or other
+terminal state should preserve raw durable output or keep that subclaim indirect. This still does
+not approve schema/API/storage/public MCP/harness/ranking/lifecycle/migration/document-index/
+`orient` changes.
 
 T41 matrix note: the T40-04 mixed-query caveat is now covered by deterministic fixture evidence,
 not a production ranking change. Live recheck after the T40 current-plan capture returned current
