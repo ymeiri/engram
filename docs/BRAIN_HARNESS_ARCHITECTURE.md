@@ -1801,6 +1801,14 @@ Proceed in this order from the current checkpoint:
      relative order only and does not change ranking, lifecycle, `orient`, public MCP,
      schema/storage/index, document-index behavior, M6 state, document indexing, harness adapters,
      or hooks.
+115. Treat T115 as read-only document-search visibility evidence. T59 remains recoverable from the
+     earlier T67 exact-file indexing, but T68, T69, T70, T113, and T114 are absent from the tested
+     top-five document-search results, and the document index still reports 2012 orphan chunks out
+     of 4114 total chunks. This keeps repo-file reads/current-plan memory authoritative for recent
+     Brain Harness evidence and does not approve document indexing, orphan cleanup, reindex,
+     lifecycle mutation, M6 inspection/apply, ranking, `orient`, public MCP, schema/storage/index,
+     document-index behavior, or harness work. Do not silently broaden T70 beyond its exact
+     T59/T68/T69 scope.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

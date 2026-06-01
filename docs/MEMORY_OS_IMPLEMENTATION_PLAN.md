@@ -4866,3 +4866,15 @@ project plan ranks first and both noisy items rank below it. This preserves the 
 without changing ranking, lifecycle state, telemetry behavior, public MCP request/response shape,
 M6 state, document indexing, harness writes, `orient`, schema/storage/index behavior, or
 document-index behavior.
+
+T115 matrix note:
+`docs/BRAIN_HARNESS_T115_POST_T114_DOCUMENT_VISIBILITY_AUDIT_2026-06-01.md` records a read-only
+document-search visibility audit after T114. Existing document search still recovers T59 from the
+earlier T67 exact-file indexing, but tested T68, T69, T70, T113, and T114 title/gate queries did
+not return those packets in the top five. `docs(action="stats")` reported `source_count=76`,
+`chunk_count=4114`, `searchable_chunk_count=2102`, and `orphan_chunk_count=2012`. This keeps
+repo-file reads, `orient`, direct memory search, and `handoff(get)` authoritative for recent
+startup evidence until an exact indexing scope is approved. T115 did not run document indexing,
+cleanup, reindex, orphan recovery, M6 inspection/apply, lifecycle mutation, ranking changes,
+`orient` changes, public MCP changes, schema/storage/index behavior changes, document-index
+behavior changes, or harness writes.

@@ -1124,6 +1124,12 @@ Current next application:
   The fixture may assert target first and known distractors below it, but must not assert exact
   noisy-item order, score values, broad ranking quality, lifecycle remediation, `orient` behavior,
   or cross-harness parity.
+- T115 applies read-only document-visibility evidence after a current-plan/doc slice: verify exact
+  document-search recovery before relying on indexed docs as current continuity evidence. If recent
+  reports are absent, record the gap and keep repo-file reads/current-plan memory authoritative.
+  Do not run indexing, cleanup, reindex, orphan recovery, M6 inspection/apply, ranking changes,
+  `orient` changes, public MCP changes, schema/storage/index changes, or harness writes without an
+  exact approved scope, and do not broaden T70 beyond its named T59/T68/T69 files.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
