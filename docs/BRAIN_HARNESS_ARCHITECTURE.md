@@ -151,6 +151,11 @@ Research checkpoint, current through 2026-05-27:
   superseded-active findings before generic stale-feedback rows. No `apply_safe`, lifecycle,
   migration, document-index, ranking, `orient`, public MCP, schema/storage/index, or harness action
   was run.
+- T94 applies the T91 continuity rule after T93: lean `orient`, direct `search`, docs, git, and
+  `changes_since` recovered T93, but `handoff(get)` still stopped at T90/T91. The rolling handoff
+  was refreshed to `019e8352-a610-7f92-859f-f9d74b026ba7`; this is handoff maintenance only, not
+  lifecycle archive, ranking, `orient`, M6, document-index, schema/storage/index, public MCP, or
+  harness work.
 - A native Claude Code CLI smoke then confirmed the same direct `search` behavior in trace
   `019e68ac-678e-7683-a241-08119fc6b03c`, with current-plan memory
   `019e689c-b188-70e2-acfc-2d00f956bd24` as the top result.

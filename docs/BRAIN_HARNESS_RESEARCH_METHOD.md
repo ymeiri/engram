@@ -1015,6 +1015,11 @@ Current next application:
   report must still be treated as read-only evidence and must not authorize `apply_safe`, archive,
   migration, document indexing, ranking, `orient`, public MCP, schema/storage/index, or harness
   changes.
+- T94 applies the T91 continuity rule after T93: compare `orient`, direct search, `changes_since`,
+  `handoff(get)`, docs, git state, and source before trusting resume state. If only the rolling
+  handoff is stale, one handoff refresh is acceptable continuity maintenance, but it must not be
+  treated as archive approval, migration approval, document-index approval, ranking evidence,
+  `orient` expansion, public MCP change, schema/storage/index change, or harness work.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
