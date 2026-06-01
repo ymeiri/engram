@@ -1816,6 +1816,13 @@ Proceed in this order from the current checkpoint:
      `Approve T70: index exact files T59, T68, and T69.` It does not run document indexing, inspect
      M6 files, mutate lifecycle state, change ranking, expand `orient`, change public
      MCP/schema/storage/index or document-index behavior, or write harness adapters/hooks.
+117. Treat T117 as a docs-only Claude parity audit. Claude Bridge personal-harness read-only probes
+     recovered the T116 current-plan memory first through `orient` and direct search, while the
+     project harness still lacked Engram MCP tool exposure. Exact T70 phrase retrieval remains
+     noisy, and document search still does not surface recent T70/T116 gate packets. T117 does not
+     run document indexing, inspect M6 files, mutate lifecycle state, change ranking, expand
+     `orient`, change public MCP/schema/storage/index or document-index behavior, or write harness
+     adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

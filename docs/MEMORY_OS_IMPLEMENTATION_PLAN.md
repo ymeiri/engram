@@ -4890,3 +4890,15 @@ confidence gate with `feedback_coverage=0.47999998927116394` and only two intent
 T116 does not run document indexing, M6 inspection/export/apply, lifecycle mutation, ranking
 changes, `orient` changes, public MCP changes, schema/storage/index behavior changes,
 document-index behavior changes, or harness writes.
+
+T117 matrix note:
+`docs/BRAIN_HARNESS_T117_T116_CLAUDE_PARITY_AUDIT_2026-06-01.md` records a docs-only
+cross-harness read-path audit after T116. Fresh Codex startup evidence returned the T116 current
+plan first in `orient` and direct current-plan search. Claude Bridge project-harness probing still
+found no Engram MCP tools, but personal-harness probing returned the T116 current plan first in
+both `orient` and direct search. Exact T70 phrase retrieval remains noisy: direct search still
+ranked older handoffs above the T116 current plan, and document search returned older T64/T59/T58
+material rather than T70/T116. The latest `real_session_eval(project=engram, limit=50)` still fails
+the confidence gate because only two intents have feedback. T117 does not run document indexing,
+M6 inspection/export/apply, lifecycle mutation, ranking changes, `orient` changes, public MCP
+changes, schema/storage/index behavior changes, document-index behavior changes, or harness writes.

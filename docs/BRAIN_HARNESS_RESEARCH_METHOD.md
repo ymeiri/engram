@@ -1138,6 +1138,13 @@ Current next application:
   or generic approval as authorization for T70 indexing, T69 inspection, T111 behavior changes,
   M6 writes, lifecycle cleanup, harness writes, ranking changes, `orient` expansion, public MCP
   changes, schema/storage/index changes, or document-index behavior changes.
+- T117 applies cross-harness evidence discipline after an approval-scope audit: read-only Claude
+  parity probes may improve the completion matrix only for the exact read path they exercise. If a
+  project harness lacks Engram tools but a personal harness recovers the current plan first, record
+  both facts and keep harness readiness partial. Do not treat personal-harness read-path success as
+  write-path parity, hook readiness, project-harness readiness, exact approval, ranking proof,
+  document-index approval, `orient` expansion approval, public MCP/schema/storage/index approval,
+  or M6/lifecycle approval.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another
