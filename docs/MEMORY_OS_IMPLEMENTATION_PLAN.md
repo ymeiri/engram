@@ -4878,3 +4878,15 @@ startup evidence until an exact indexing scope is approved. T115 did not run doc
 cleanup, reindex, orphan recovery, M6 inspection/apply, lifecycle mutation, ranking changes,
 `orient` changes, public MCP changes, schema/storage/index behavior changes, document-index
 behavior changes, or harness writes.
+
+T116 matrix note:
+`docs/BRAIN_HARNESS_T116_APPROVAL_SCOPE_AUDIT_2026-06-01.md` records a docs-only approval-scope
+audit after a stale completed T65 approval phrase and generic approval appeared in the thread.
+Current live evidence shows T65 was already completed by T67, T70 remains pending with the exact
+phrase `Approve T70: index exact files T59, T68, and T69.`, obligations are clean, lint still
+reports stale/wrong-scope memory with no safe current-plan lifecycle action, document search still
+misses T70/T114 in the tested top five, and `real_session_eval(project=engram, limit=50)` fails the
+confidence gate with `feedback_coverage=0.47999998927116394` and only two intents with feedback.
+T116 does not run document indexing, M6 inspection/export/apply, lifecycle mutation, ranking
+changes, `orient` changes, public MCP changes, schema/storage/index behavior changes,
+document-index behavior changes, or harness writes.

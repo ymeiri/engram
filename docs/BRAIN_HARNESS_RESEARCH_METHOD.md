@@ -1130,6 +1130,14 @@ Current next application:
   Do not run indexing, cleanup, reindex, orphan recovery, M6 inspection/apply, ranking changes,
   `orient` changes, public MCP changes, schema/storage/index changes, or harness writes without an
   exact approved scope, and do not broaden T70 beyond its named T59/T68/T69 files.
+- T116 applies approval-scope hygiene after stale or generic approval language: if the latest user
+  wording names a completed approval packet or says only a generic approval, verify the current
+  gate against `orient`, direct search, repo docs, handoff, obligations, lint, git status, and
+  relevant live diagnostics before running any write. If the exact current gate phrase is absent,
+  record the matrix and continue only non-gated evidence work. Do not treat completed T65 approval
+  or generic approval as authorization for T70 indexing, T69 inspection, T111 behavior changes,
+  M6 writes, lifecycle cleanup, harness writes, ranking changes, `orient` expansion, public MCP
+  changes, schema/storage/index changes, or document-index behavior changes.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

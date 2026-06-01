@@ -1809,6 +1809,13 @@ Proceed in this order from the current checkpoint:
      lifecycle mutation, M6 inspection/apply, ranking, `orient`, public MCP, schema/storage/index,
      document-index behavior, or harness work. Do not silently broaden T70 beyond its exact
      T59/T68/T69 scope.
+116. Treat T116 as a docs-only approval-scope audit. The historical T65 exact-file indexing approval
+     is already completed by T67 and cannot authorize the pending T70 write. A generic approval does
+     not satisfy the exact T70, T69, T111, lifecycle, M6, or harness gates. T116 records the live
+     startup matrix and keeps the next write gate at the exact phrase
+     `Approve T70: index exact files T59, T68, and T69.` It does not run document indexing, inspect
+     M6 files, mutate lifecycle state, change ranking, expand `orient`, change public
+     MCP/schema/storage/index or document-index behavior, or write harness adapters/hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
