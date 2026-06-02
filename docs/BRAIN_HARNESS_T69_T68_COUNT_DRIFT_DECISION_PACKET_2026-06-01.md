@@ -1,8 +1,13 @@
 # Brain Harness T69 T68 Count Drift Decision Packet
 
-Status: Pending explicit user approval
+Status: Approved and executed by T121
 Date: 2026-06-01
 Scope: Approval packet for read-only inspection of the T68 review-export count drift
+
+Execution note, 2026-06-02: the user approved the exact phrase
+`Approve T69: inspect index.md and 0012-skip-plan.md.` T121 read only those two files and recorded
+the result in
+`docs/BRAIN_HARNESS_T121_T69_COUNT_DRIFT_INSPECTION_RESULT_2026-06-02.md`.
 
 T68 correctly stopped after the approved T59 review-export-only call because the export returned
 12 candidates instead of the expected 11. The later user reply, `i approve`, is not safely scoped
@@ -61,8 +66,8 @@ Claude Bridge read-only critique agreed with that recommendation and added two s
 | Current-plan / next-step retrieval | Validated for approved prompt classes | T64/T67/T68 startup searches recovered current plan and active M6 gate | Broad implementation-plan searches can still surface stale history |
 | T58 inventory | Validated | 115 sources, 11 candidates, no writes | Spent scope; do not rerun without fresh approval |
 | T67 document visibility | Partially validated | T59 title and filename-stem document searches improved | T59 was later edited after indexing; absolute-path semantic search remains weak |
-| T68 review export | Partially validated | Review workspace exists; 12 candidates, no writes | Count drift requires explicit user decision before further M6 progress |
-| T69 inspection | Missing and gated | Council and Claude recommend exact read-only inspection packet | Requires approval phrase below |
+| T68 review export | Partially validated | Review workspace exists; 12 candidates, no writes | T121 explains the count drift; M6 still requires separate candidate review/apply approval |
+| T69 inspection | Completed by T121 | Exact user approval was received; T121 read only `index.md` and `candidates/0012-skip-plan.md` | No remaining gate for this read-only inspection |
 | M6 apply/deletion/lifecycle | Blocked | No reviewed candidates, no dry-run apply, no rollback plan | Requires separate explicit approval after candidate review evidence |
 
 ## Proposed Approved Read-Only Inspection
@@ -90,10 +95,10 @@ Stop without reading further if any of these occur:
   prioritize, apply, deletion, lifecycle mutation, schema/storage/index work, ranking, `orient`,
   public MCP changes, or harness writes.
 
-## Approval Question
+## Historical Approval Question
 
-T69 requires explicit scoped authorization. The count drift from T68 is: sources 115 to 116, and
-candidates 11 to 12, with the extra candidate listed as type `skip` at
+At the time of this packet, T69 required explicit scoped authorization. The count drift from T68
+was: sources 115 to 116, and candidates 11 to 12, with the extra candidate listed as type `skip` at
 `candidates/0012-skip-plan.md`.
 
 To authorize read-only inspection of exactly two files, reply with:

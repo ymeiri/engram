@@ -1165,7 +1165,15 @@ Current next application:
   T70 document-index approval, M6 approval, lifecycle approval, broad ranking proof, `orient`
   expansion approval, public MCP/schema/storage/index approval, document-index behavior approval,
   or harness-write approval.
-- The next executable M6 step requires an explicit user decision on the T68 count drift and then a
-  separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
-  should improve targeted validation, evidence quality, cross-harness replication, or another
-  concrete capture/lifecycle gap surfaced by evidence.
+- T121 applies exact-scope read-only migration inspection discipline: when the user approves a
+  packet naming exact files from a written review-export snapshot, inspect only those files and
+  separate count reconciliation from migration decisions. A generated `skip` candidate can explain
+  inventory/export drift without becoming an apply candidate. Do not use count reconciliation as
+  approval for candidate accept/reject/skip decisions, review apply, rerun/prioritize, deletion,
+  lifecycle mutation, document indexing, ranking, `orient`, public MCP/schema/storage/index,
+  document-index behavior, or harness writes.
+- The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
+  gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
+  deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
+  evidence quality, cross-harness replication, or another concrete capture/lifecycle gap surfaced
+  by evidence.

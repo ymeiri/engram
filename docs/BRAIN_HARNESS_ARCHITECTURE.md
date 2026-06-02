@@ -1852,6 +1852,13 @@ Proceed in this order from the current checkpoint:
      inspection, M6 actions, lifecycle mutation, public
      MCP/schema/storage/index changes, document-index behavior changes, `orient` expansion, broad
      ranking work, or harness writes.
+121. Treat T121 as approved read-only execution of T69. The only inspected files were the written
+     T68 export snapshot's `index.md` and `candidates/0012-skip-plan.md`. The T68 count drift is
+     explained by one generated `skip` candidate from a `session_event` plan source, leaving 9
+     review plus 2 quarantine candidates as the review-actionable M6 queue. This closes the T69
+     inspection gate but does not authorize T70 indexing, candidate decisions, M6 apply, rerun or
+     prioritize, deletion, lifecycle mutation, public MCP/schema/storage/index changes,
+     document-index behavior changes, `orient` expansion, ranking work, or harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
