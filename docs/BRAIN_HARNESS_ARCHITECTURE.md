@@ -1966,6 +1966,14 @@ Proceed in this order from the current checkpoint:
      `write_policy` to `nudge`. The installed Claude `SessionEnd` hook still defaults to `durable`
      and is now reported as drifted, so installed hook/settings repair and cross-harness adapter
      readiness remain separate exact approval gates.
+136. Treat T135 as a refreshed docs-only harness-repair approval packet, not approval itself. T47
+     is stale because fresh post-T133A dry-runs now plan a generated update for the installed
+     Claude `SessionEnd` hook, which T47 listed as skipped/already installed. T135 asks for exact
+     approval of five one-at-a-time harness install writes after matching fresh dry-runs, with
+     `adopt_user_owned=false` and Claude Code `settings_target=settings.local.json`. It does not
+     authorize harness writes, user-owned adoption, `settings.json` edits, unlisted hook/command
+     edits, M6 action, lifecycle mutation, ranking, `orient`, public MCP/schema/storage/index
+     changes, or document-index behavior changes until the user explicitly approves that wording.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

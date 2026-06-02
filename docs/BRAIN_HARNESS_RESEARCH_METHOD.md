@@ -1248,6 +1248,12 @@ Current next application:
   the daemon, live render evidence can validate the source repair while installed hooks/settings
   remain intentionally unrepaired. A drifted installed hook after live-render success is not a failed
   source repair; it is a separate harness-write approval gate.
+- T135 applies refreshed-approval-packet discipline after live runtime drift is resolved. Do not
+  reuse an older exact approval packet when fresh dry-runs change the planned write manifest. Record
+  the delta, list exact planned file effects, require a matching fresh dry-run immediately before
+  each write, and keep user-owned adoption, unlisted hooks/settings, M6, lifecycle, ranking,
+  `orient`, public MCP/schema/storage/index, and document-index changes out of scope unless the user
+  explicitly approves them.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

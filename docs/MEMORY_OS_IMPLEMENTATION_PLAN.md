@@ -5236,3 +5236,15 @@ drifted. Claude Code, Codex, Gemini CLI, and Cursor readiness remain false. No i
 hooks/settings, `harness install`, `adopt_user_owned`, public MCP parameters, schema/storage/index
 behavior, ranking, `orient`, migration, lifecycle state, document-index behavior, or M6 quarantine
 candidates were changed or inspected.
+
+T135 matrix note:
+`docs/BRAIN_HARNESS_T135_REFRESHED_HARNESS_REPAIR_APPROVAL_PACKET_2026-06-02.md` refreshes the
+stale T47 harness repair packet using fresh post-T133A read-only status and dry-run evidence. The
+key delta is that Claude Code now plans an update to
+`/Users/yuval.meiri/.claude/hooks/engram-session-end.sh`; T47 listed that hook as skipped/already
+installed, so it should not be reused as approval. T135 remains docs-only and requests exact
+approval for five one-at-a-time harness install writes after matching fresh dry-runs, all with
+`adopt_user_owned=false` and Claude Code `settings_target=settings.local.json`. It does not
+authorize harness writes, user-owned adoption, `settings.json` edits, unlisted hook/command edits,
+M6 action, lifecycle mutation, ranking, `orient`, public MCP/schema/storage/index changes, or
+document-index behavior changes until the user explicitly approves the T135 wording.
