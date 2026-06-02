@@ -1172,6 +1172,13 @@ Current next application:
   approval for candidate accept/reject/skip decisions, review apply, rerun/prioritize, deletion,
   lifecycle mutation, document indexing, ranking, `orient`, public MCP/schema/storage/index,
   document-index behavior, or harness writes.
+- T122 applies small-batch candidate-review gating after count reconciliation: when the next useful
+  migration step is candidate inspection, prepare an approval packet instead of reading candidates
+  under generic continuation language. Prefer a first batch small enough to validate report shape
+  and stop conditions before reading the rest of the queue. Keep candidate-file inspection,
+  status/prioritize dry runs, apply, quarantine handling, T70 indexing, lifecycle mutation,
+  ranking, `orient`, public MCP/schema/storage/index, document-index behavior, and harness writes
+  as distinct operation classes with distinct exact approval phrases.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

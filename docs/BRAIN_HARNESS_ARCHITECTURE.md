@@ -1859,6 +1859,14 @@ Proceed in this order from the current checkpoint:
      inspection gate but does not authorize T70 indexing, candidate decisions, M6 apply, rerun or
      prioritize, deletion, lifecycle mutation, public MCP/schema/storage/index changes,
      document-index behavior changes, `orient` expansion, ranking work, or harness writes.
+122. Treat T122 as a docs-only M6 candidate-review approval packet. It may list candidate filenames
+     from the already-approved T69 `index.md`, but it does not read candidate files or run
+     migration status/prioritize/apply/rerun. The recommended next gate is T123, a first-batch
+     read-only inspection of candidate files 0001-0004 from the written T68 snapshot only. Keep
+     remaining review candidates, quarantine candidates, T70 indexing, status/prioritize, apply,
+     deletion, lifecycle mutation, public MCP/schema/storage/index changes, document-index
+     behavior changes, `orient` expansion, ranking work, and harness writes behind separate exact
+     approval gates.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
