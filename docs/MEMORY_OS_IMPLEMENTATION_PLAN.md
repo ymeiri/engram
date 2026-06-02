@@ -5309,3 +5309,17 @@ full `search_tests` integration suite, `cargo fmt --all --check`, `cargo check -
 `git diff --check`. T140 does not install a binary, restart the daemon, validate installed runtime,
 change `orient`, mutate lifecycle state, alter handoff semantics, run M6, inspect quarantine
 candidates, write harness files, or change public MCP/schema/storage/index/document-index behavior.
+
+T141 matrix note:
+`docs/BRAIN_HARNESS_T141_T140_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` records a docs-only
+approval packet for the next T140 validation step. Fresh read-only startup evidence after T140
+showed lean `orient` trace `019e8874-f501-7863-b67e-2c6e7cca890f` returning T140 current-plan
+memory first, while live direct search trace `019e8875-01bb-7763-a9d9-86c10830e3fc` still ranked
+active rolling handoff `019e8872-cb39-74b0-9594-e052aeb6d993` above current-plan guidance for a
+T140 continuation prompt. The packet asks for exact approval before running only the known
+runtime-refresh sequence (`cargo install --path engram-cli --force --root /Users/yuval.meiri/.local`,
+`engram daemon stop`, `engram daemon start`) plus read-only live validation of the T140 query
+class. T141 does not run the refresh and does not authorize harness install, hooks/settings/
+adapters, `adopt_user_owned`, lifecycle mutation, T139 archive, M6/migration/quarantine, `orient`,
+ranking source, public MCP, schema/storage/index, document-index behavior, shell profile, PATH,
+auth, or service configuration changes.

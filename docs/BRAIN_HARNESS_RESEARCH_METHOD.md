@@ -1284,6 +1284,13 @@ Current next application:
   the prompt classifier or promotion boundary needed for that prompt class. Preserve explicit
   gate/action regressions, keep gate context retrievable, and do not use source-test success as
   installed-runtime proof unless a separate binary/daemon refresh is explicitly approved and run.
+- T141 applies runtime-refresh approval discipline after a source-level ranking fix: if live MCP
+  behavior still reflects pre-fix runtime state, write only a default-deny approval packet until
+  the user explicitly approves the binary install and daemon restart. The packet must name the
+  exact install and restart commands, pre-state binary/daemon evidence, read-only validation
+  prompts, pass/fail criteria, and stop conditions for any hook/settings/harness, lifecycle, M6,
+  schema/storage/index, document-index, public MCP, ranking-source, `orient`, shell profile, PATH,
+  auth, or service-configuration drift.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

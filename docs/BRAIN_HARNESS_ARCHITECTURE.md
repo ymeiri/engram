@@ -2011,6 +2011,16 @@ Proceed in this order from the current checkpoint:
      mode, but allows current-plan promotion when continuation intent is primary. It does not change
      `orient`, lifecycle state, handoff semantics, M6, harness writes, public MCP, schema/storage/
      index, or document-index behavior.
+142. Treat T141 as a docs-only, default-deny runtime-refresh approval packet for the committed
+     T140 source fix. Fresh startup evidence after T140 shows lean `orient` returns the T140
+     current plan first, while live direct search still ranks the latest active rolling handoff
+     above current-plan guidance for a T140 continuation prompt. T141 asks for exact approval to
+     run only `cargo install --path engram-cli --force --root /Users/yuval.meiri/.local`,
+     `engram daemon stop`, `engram daemon start`, and read-only live validation of the T140 query
+     class. It does not authorize harness installs, hooks/settings/adapters, `adopt_user_owned`,
+     lifecycle mutation, T139 archive, M6/migration/quarantine, `orient`, ranking source, public
+     MCP, schema/storage/index, document-index behavior, shell profile, PATH, auth, or service
+     configuration changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
