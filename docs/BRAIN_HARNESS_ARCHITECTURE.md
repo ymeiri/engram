@@ -1836,6 +1836,19 @@ Proceed in this order from the current checkpoint:
      live store. Do not kill or restart Engram processes without an explicit maintenance decision;
      record the gap and keep T70, T69, M6, lifecycle, public MCP/schema/storage/index,
      document-index, and harness gates closed.
+120. Treat T120 as approved runtime-refresh validation for T118, not a new ranking or migration
+     step. After replacing `/Users/yuval.meiri/.local/bin/engram` with the current source hash
+     `ff7e2994cf5f49ba0d7d276cf9e2e71acb587d9947e6695832cb4e085ef5a726` and restarting the
+     daemon from PID `1236` to PID `85557`, active MCP search trace
+     `019e8724-de63-7003-8d57-db2a05a53525` returned current-plan memory
+     `019e8506-1b1e-7da0-9a21-96f098765a43` first for
+     `Approve T70: index exact files T59, T68, and T69.` Migration controls
+     `019e8725-7fdf-76f1-8ae0-8a73419760c5` and
+     `019e8725-8016-7bb1-aff4-9da9c827384d` still returned default-deny M6 gate evidence first.
+     This closes the immediate stale-runtime caveat for T118 in Codex MCP, but it does not
+     authorize T70 indexing, T69 inspection, M6 actions, lifecycle mutation, public
+     MCP/schema/storage/index changes, document-index behavior changes, `orient` expansion, broad
+     ranking work, or harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

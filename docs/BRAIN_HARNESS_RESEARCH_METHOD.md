@@ -1158,6 +1158,13 @@ Current next application:
   Installing a fresh binary is acceptable validation work, but attaching it to the live global
   store may require a daemon/runtime refresh window. Do not kill or restart existing Engram
   processes, run T70 indexing, or broaden ranking semantics without explicit approval.
+- T120 applies the approved runtime-refresh discipline for T118: when the user explicitly approves
+  the refresh, align the installed local binary with current source, restart only the Engram HTTP
+  daemon, and validate through MCP traces rather than process state alone. A passing exact
+  `Approve T<number>:` trace closes the stale-runtime caveat for that prompt class only; it is not
+  T70 document-index approval, M6 approval, lifecycle approval, broad ranking proof, `orient`
+  expansion approval, public MCP/schema/storage/index approval, document-index behavior approval,
+  or harness-write approval.
 - The next executable M6 step requires an explicit user decision on the T68 count drift and then a
   separate approval gate for any apply/deletion/lifecycle operation. Until then, non-gated work
   should improve targeted validation, evidence quality, cross-harness replication, or another

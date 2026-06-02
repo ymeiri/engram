@@ -4926,3 +4926,17 @@ the global store failed because the existing Engram process holds the RocksDB lo
 restart, `kill`, document indexing, T69 inspection, M6 action, lifecycle mutation, ranking change,
 `orient` change, public MCP/schema/storage/index behavior change, document-index behavior change,
 or harness write was run.
+
+T120 matrix note:
+`docs/BRAIN_HARNESS_T120_RUNTIME_REFRESH_VALIDATION_2026-06-02.md` records the approved runtime
+refresh that closed the immediate T119 stale-runtime caveat. `/Users/yuval.meiri/.local/bin/engram`
+was replaced from current source and now matches `/Users/yuval.meiri/.cargo/bin/engram` at SHA-256
+`ff7e2994cf5f49ba0d7d276cf9e2e71acb587d9947e6695832cb4e085ef5a726`; the old HTTP daemon PID
+`1236` was stopped cleanly and the refreshed daemon started as PID `85557` on port `8765`. Active
+MCP trace `019e8724-de63-7003-8d57-db2a05a53525` now returns current-plan memory
+`019e8506-1b1e-7da0-9a21-96f098765a43` first for
+`Approve T70: index exact files T59, T68, and T69.`, while migration controls
+`019e8725-7fdf-76f1-8ae0-8a73419760c5` and `019e8725-8016-7bb1-aff4-9da9c827384d` still return
+default-deny M6 gate evidence first. T120 does not run T70 indexing, inspect T69 files, run M6,
+mutate lifecycle state, change ranking logic, expand `orient`, change public MCP or
+schema/storage/index behavior, change document-index behavior, or write harness adapters/hooks.
