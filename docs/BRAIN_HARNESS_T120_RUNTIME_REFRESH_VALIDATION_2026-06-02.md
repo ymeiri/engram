@@ -59,6 +59,16 @@ Post-refresh MCP validation:
     `019e7ce5-155d-7a10-85f5-00b9dcc69cd0` second for
     `Approve M6 migration_review_apply write apply deletion rollback plan`.
 
+Post-feedback eval snapshot:
+
+- After scoring the T120 startup, runtime, and final verification traces,
+  `real_session_eval(project="engram", limit=50)` at `2026-06-02T07:07:20Z` returned
+  `feedback_trace_count=27`, `feedback_coverage=0.5400000214576721`,
+  `distinct_intent_count=3`, `bad_memory_used_count=0`, and `confidence_gate.passed=true`.
+- The report still has `requires_user_approval=true`, one historical task failure in the sampled
+  window, no external session labels, and weak agent-assessed evidence. Treat this as a useful
+  rolling signal, not as M6 approval or product completion.
+
 ## Completion Matrix Delta
 
 | Area | State | Evidence | Remaining risk or gate |
@@ -67,6 +77,7 @@ Post-refresh MCP validation:
 | Runtime freshness | Repaired for active daemon | `.local` binary now hash-matches `.cargo` at `ff7e2994...`; daemon PID `85557` is running on port `8765` | Existing stdio proxy processes remain numerous; validate through MCP trace rather than process count alone. |
 | Broad next-step retrieval | Healthy for tested prompt | Trace `019e8724-dea5-7532-a1f8-9f613fc0a795` returned T119 current-plan first | This is one live prompt, not broad ranking proof. |
 | Explicit M6 apply gates | Preserved | Traces `019e8725-7fdf-76f1-8ae0-8a73419760c5` and `019e8725-8016-7bb1-aff4-9da9c827384d` returned migration gate evidence first | M6 inspection/apply/deletion remains separately approval-gated. |
+| Feedback confidence gate | Numerically passing after T120 scoring | `real_session_eval(limit=50)` returned `confidence_gate.passed=true`, coverage `0.54`, three intents with feedback, and no bad memory used | The report still requires user approval and is weak rolling evidence; it does not authorize M6. |
 | Document index visibility | Unchanged/risky | No document indexing was run | T70 exact-file indexing remains a separate gate. |
 
 ## Interpretation

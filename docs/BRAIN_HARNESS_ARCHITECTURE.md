@@ -1845,8 +1845,11 @@ Proceed in this order from the current checkpoint:
      `Approve T70: index exact files T59, T68, and T69.` Migration controls
      `019e8725-7fdf-76f1-8ae0-8a73419760c5` and
      `019e8725-8016-7bb1-aff4-9da9c827384d` still returned default-deny M6 gate evidence first.
-     This closes the immediate stale-runtime caveat for T118 in Codex MCP, but it does not
-     authorize T70 indexing, T69 inspection, M6 actions, lifecycle mutation, public
+     After scoring T120 traces, `real_session_eval(project=engram, limit=50)` passed numerically
+     with `feedback_coverage=0.5400000214576721`, three intents with feedback, and no bad memory
+     used, but still reports `requires_user_approval=true`. This closes the immediate
+     stale-runtime caveat for T118 in Codex MCP, but it does not authorize T70 indexing, T69
+     inspection, M6 actions, lifecycle mutation, public
      MCP/schema/storage/index changes, document-index behavior changes, `orient` expansion, broad
      ranking work, or harness writes.
 

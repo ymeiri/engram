@@ -4937,6 +4937,9 @@ MCP trace `019e8724-de63-7003-8d57-db2a05a53525` now returns current-plan memory
 `019e8506-1b1e-7da0-9a21-96f098765a43` first for
 `Approve T70: index exact files T59, T68, and T69.`, while migration controls
 `019e8725-7fdf-76f1-8ae0-8a73419760c5` and `019e8725-8016-7bb1-aff4-9da9c827384d` still return
-default-deny M6 gate evidence first. T120 does not run T70 indexing, inspect T69 files, run M6,
-mutate lifecycle state, change ranking logic, expand `orient`, change public MCP or
-schema/storage/index behavior, change document-index behavior, or write harness adapters/hooks.
+default-deny M6 gate evidence first. After T120 feedback scoring,
+`real_session_eval(project=engram, limit=50)` passed numerically with coverage `0.54`, three
+intents with feedback, and no bad memory used, but still reports `requires_user_approval=true` and
+remains weak rolling evidence. T120 does not run T70 indexing, inspect T69 files, run M6, mutate
+lifecycle state, change ranking logic, expand `orient`, change public MCP or schema/storage/index
+behavior, change document-index behavior, or write harness adapters/hooks.
