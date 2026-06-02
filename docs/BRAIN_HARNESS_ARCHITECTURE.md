@@ -1903,6 +1903,16 @@ Proceed in this order from the current checkpoint:
      packet. T126 does not authorize adapter installs, settings edits, hook registration,
      user-owned file adoption, M6 action, lifecycle mutation, public MCP/schema/storage/index
      changes, document-index behavior changes, `orient` expansion, ranking work, or harness writes.
+127. Treat T127 as a read-only startup continuity audit, not a retrieval or lifecycle repair.
+     Lean `orient` and direct continuation search recover the T126 current plan first, scoped
+     current-plan listing returns exactly one active Engram project current-plan item, and
+     `handoff(get)` returns the T126 handoff. The audit also records that exact T125 wording is
+     still noisy with older active handoffs, broad searches still surface stale repository-scoped
+     current-plan memory lower down, the T126 report is not top-five visible through
+     `docs(search)`, and rolling telemetry fails the confidence gate at 38% feedback coverage.
+     T127 does not authorize T125 quarantine inspection, document indexing, lifecycle mutation,
+     M6 status/prioritize/apply/rerun, ranking work, `orient` expansion, public
+     MCP/schema/storage/index changes, document-index behavior changes, or harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

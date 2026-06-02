@@ -1203,6 +1203,12 @@ Current next application:
   ranking changes, `orient` expansion, public MCP/schema/storage/index behavior changes, or
   document-index behavior changes. Keep T47 as the exact harness-write approval packet until the
   user approves that scope.
+- T127 applies startup-continuity audit discipline: read-only `orient`, direct search,
+  `memory(list)`, `handoff(get)`, `docs(search)`, `lint(run)`, telemetry, and obligations evidence
+  may update the matrix, but noisy exact-gate retrieval, stale lower-ranked current-plan memory,
+  or fresh-doc visibility gaps do not justify lifecycle mutation, document indexing, ranking
+  changes, `orient` expansion, public MCP/schema/storage/index behavior changes, M6 action, or
+  harness writes without separate exact approval.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
