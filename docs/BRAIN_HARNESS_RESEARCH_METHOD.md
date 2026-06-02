@@ -1179,6 +1179,12 @@ Current next application:
   status/prioritize dry runs, apply, quarantine handling, T70 indexing, lifecycle mutation,
   ranking, `orient`, public MCP/schema/storage/index, document-index behavior, and harness writes
   as distinct operation classes with distinct exact approval phrases.
+- The approved T70 indexing execution applies document-visibility evidence discipline: exact-file
+  indexing can improve source visibility, but validation must report query-specific misses instead
+  of claiming global recovery. If a reindexed file remains noisy for title search, continue using
+  repo files and more specific filename/scope queries for gates. Do not treat document indexing as
+  M6 candidate-review/apply approval or as approval to change ranking, `orient`, public
+  MCP/schema/storage/index behavior, document-index behavior, lifecycle state, or harness files.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

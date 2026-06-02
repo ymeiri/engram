@@ -1555,6 +1555,13 @@ Proceed in this order from the current checkpoint:
     stale T59 pre-export chunks. Source inspection shows exact-file `docs(action="index")` reuses
     an existing document source and replaces chunks for that source. T70 asks for explicit approval
     to index exactly T59, T68, and T69, while leaving the T69 count-drift inspection gate unchanged.
+    After exact approval, Codex indexed exactly those three files and recorded chunk counts
+    T59=9, T68=8, T69=9. T68 and T69 exact-title visibility improved, while T59 exact-title search
+    remained noisy, so repo files and more specific filename/scope queries remain authoritative
+    before M6 decisions. The execution remains document visibility only and does not authorize M6
+    candidate inspection, status/prioritize/apply/rerun, deletion, lifecycle mutation, ranking,
+    `orient`, public MCP/schema/storage/index changes, document-index behavior changes, or harness
+    writes.
     It does not inspect review-export files, run review apply, decide candidates, mutate lifecycle
     state, change schema/storage/index behavior, change public MCP behavior, change ranking, expand
     `orient`, or write harness adapters/hooks.

@@ -1,8 +1,13 @@
 # Brain Harness T70 T69 Document Visibility Audit And Index Packet
 
-Status: Pending explicit user approval. No document indexing has been run.
+Status: Approved and executed.
 Date: 2026-06-01
 Scope: Read-only document visibility audit plus proposed exact-file indexing for T59/T68/T69
+
+Execution note, 2026-06-02: the user approved the exact phrase
+`Approve T70: index exact files T59, T68, and T69.` Codex indexed exactly the T59, T68, and T69
+report files and recorded the result in
+`docs/BRAIN_HARNESS_T70_EXACT_FILE_INDEX_RESULT_2026-06-02.md`.
 
 This packet asks whether to authorize a bounded document-index write for three existing Brain
 Harness evidence documents. It does not authorize M6 review-export inspection, review apply,
