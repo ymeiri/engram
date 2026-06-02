@@ -1932,6 +1932,15 @@ Proceed in this order from the current checkpoint:
      authorize hook/settings/adapter writes, harness install, lifecycle mutation, M6 action,
      ranking, `orient`, public MCP/schema/storage/index behavior changes, document-index behavior
      changes, or candidate inspection.
+132. Treat T132 as a read-only post-T129 startup/gate audit, not an implementation slice. Codex
+     lean `orient` and exact T130 approval search recover the T129 current plan, but broad direct
+     current-plan searches still rank handoffs first, fresh T129 docs are not top-five visible in
+     document search, Claude Code and Codex harnesses still report `ready=false`, and lint still
+     reports stale current-plan and superseded-active pressure with no approved lifecycle write.
+     T132 does not authorize T130/T131, hook/settings/adapter writes, harness install, T125, T47,
+     M6 actions, lifecycle mutation, document indexing, ranking, `orient`, public
+     MCP/schema/storage/index behavior changes, document-index behavior changes, or user-owned file
+     adoption.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

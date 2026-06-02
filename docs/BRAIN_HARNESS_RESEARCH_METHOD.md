@@ -1221,6 +1221,11 @@ Current next application:
   a hook behavior problem, not an `orient` or ranking problem. Use AI critique to expose fix options,
   but treat the recommended hook-template change as an exact approval gate until the user approves
   the code slice and validation scope.
+- T132 applies post-root-cause startup audit discipline: after documenting a gated fix, verify that
+  startup retrieval, exact approval search, current-plan listing, and handoff recovery still point
+  at the correct next gate before doing anything else. If broad searches remain handoff-noisy or
+  fresh docs are not visible through document search, record the gap as evidence quality, not as
+  approval for ranking, document indexing, lifecycle mutation, or `orient` expansion.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

@@ -5170,3 +5170,18 @@ packet as the smallest safe slice and treating the likely hook-template fix as a
 gate. T129 does not change code, installed hooks, settings, adapters, lifecycle state, migration
 state, document indexing, candidate files, ranking, `orient`, public MCP parameters, or
 schema/storage/index behavior.
+
+T132 matrix note:
+`docs/BRAIN_HARNESS_T132_POST_T129_STARTUP_GATE_AUDIT_2026-06-02.md` records a read-only
+post-T129 startup and gate audit. Lean `orient` recovered the T129 current-plan memory first, exact
+T130 approval search returned the current plan first and T129 handoff second, scoped current-plan
+listing returned exactly one active project current-plan item, and `handoff(get)` returned the T129
+handoff. Broad direct current-plan searches remain handoff-noisy, the T129 report is not top-five
+visible through `docs(search)`, Claude Code and Codex harnesses still report `ready=false`, lint
+still reports stale/wrong-scope feedback for repository-scoped current-plan memory
+`019e5e0a-86b4-73e3-aa9b-ca350e83e915`, and telemetry passes numerically with
+`feedback_coverage=0.5` while still requiring user approval. T132 does not authorize T130, T131,
+T125, T47, migration status/prioritize/apply/rerun, lifecycle mutation, document indexing,
+ranking changes, `orient` expansion, public MCP/schema/storage/index behavior changes,
+document-index behavior changes, hook/settings/adapter writes, harness install, or user-owned file
+adoption.
