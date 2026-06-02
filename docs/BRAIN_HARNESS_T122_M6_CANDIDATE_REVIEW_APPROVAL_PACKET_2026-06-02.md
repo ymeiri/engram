@@ -1,12 +1,15 @@
 # Brain Harness T122 M6 Candidate Review Approval Packet
 
-Status: Approved and partially executed by T123
+Status: Approved and executed through T124 for review candidates
 Date: 2026-06-02
 Scope: Approval packet for the next read-only M6 candidate-review inspection
 
 Execution note, 2026-06-02: the user approved the exact T123 phrase. Codex read only candidate
 files 0001-0004 and recorded the result in
 `docs/BRAIN_HARNESS_T123_M6_CANDIDATE_0001_0004_INSPECTION_RESULT_2026-06-02.md`.
+The user later approved the exact T124 phrase. Codex read only candidate files 0005-0009 and
+recorded the result in
+`docs/BRAIN_HARNESS_T124_M6_CANDIDATE_0005_0009_INSPECTION_RESULT_2026-06-02.md`.
 
 T121 explained the T68 count drift without making migration decisions. The written T68 review
 export snapshot still has 9 review candidates, 2 quarantine candidates, and 1 skip candidate. T122
@@ -101,13 +104,15 @@ status/prioritize/apply/rerun, read other candidates, index documents, mutate li
 change schema/storage/index or public MCP behavior, change ranking, expand `orient`, or write
 harness adapters/hooks.
 
-## Later Gates, Not Approved By T122
+## Later Gates
 
-These are examples of future gates, not approval to execute them now:
+The T124 review-candidate gate was later approved and executed:
 
 ```text
 Approve T124: read-only inspect candidate files 0005-0009 from the written T68 M6 review-export snapshot; no quarantine files, no status/prioritize/apply, no candidate decisions, and no writes except the inspection report.
 ```
+
+The remaining candidate-inspection gate is quarantine-only:
 
 ```text
 Approve T125: read-only inspect quarantine candidate files 0010-0011 from the written T68 M6 review-export snapshot; no review files, no status/prioritize/apply, no candidate decisions, and no writes except the inspection report.

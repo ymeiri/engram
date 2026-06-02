@@ -1,8 +1,12 @@
 # Brain Harness T123 M6 Candidate 0001-0004 Inspection Result
 
-Status: Completed approved read-only inspection
+Status: Completed approved read-only inspection; followed by T124
 Date: 2026-06-02
 Scope: Read-only inspection of candidate files 0001-0004 from the written T68 M6 review-export snapshot
+
+Follow-up note, 2026-06-02: the user later approved T124. Codex read only candidate files 0005-0009
+and recorded the result in
+`docs/BRAIN_HARNESS_T124_M6_CANDIDATE_0005_0009_INSPECTION_RESULT_2026-06-02.md`.
 
 The user approved the exact T123 gate:
 
@@ -72,9 +76,9 @@ review candidates, while preserving separate gates for quarantine review, status
 deletion, lifecycle mutation, document indexing, ranking, `orient`, public MCP/schema/storage/index
 behavior, document-index behavior, and harness writes.
 
-## Next Gate
+## Historical Next Gate
 
-The next narrow candidate-inspection gate remains the second review batch:
+Before T124 was approved, the next narrow candidate-inspection gate was the second review batch:
 
 ```text
 Approve T124: read-only inspect candidate files 0005-0009 from the written T68 M6 review-export snapshot; no quarantine files, no status/prioritize/apply, no candidate decisions, and no writes except the inspection report.

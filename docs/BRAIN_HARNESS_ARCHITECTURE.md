@@ -1882,6 +1882,15 @@ Proceed in this order from the current checkpoint:
      T123 does not authorize quarantine inspection, status/prioritize/apply/rerun, active memory
      writes, deletion, lifecycle mutation, public MCP/schema/storage/index changes, document-index
      behavior changes, `orient` expansion, ranking work, or harness writes.
+124. Treat T124 as approved read-only inspection evidence only. Codex read only candidate files
+     0005-0009 from the written T68 M6 review-export snapshot, completing inspection of the 9
+     review candidates without inspecting quarantine files or making decisions. Candidate 0005 has
+     stale/later-narrowed Claude Code readiness and obligation-list leak claims; candidate 0006 is
+     harness-write-adjacent; candidates 0008 and 0009 contain older next-step guidance likely
+     narrowed by later current-plan and retrieval work. T124 does not authorize quarantine
+     inspection, status/prioritize/apply/rerun, active memory writes, deletion, lifecycle mutation,
+     public MCP/schema/storage/index changes, document-index behavior changes, `orient` expansion,
+     ranking work, or harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

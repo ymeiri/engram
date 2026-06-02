@@ -1191,6 +1191,12 @@ Current next application:
   claims contradicted by newer audits, should be recorded as review risks rather than resolved
   silently. Do not read additional candidates, run status/prioritize/apply, or write active memory
   without a separate exact gate.
+- T124 extends the same discipline to the remaining review candidates: completing read-only
+  inspection of all `review` candidates is still not candidate review completion for migration.
+  Quarantine candidates, candidate decisions, status/prioritize dry runs, apply, lifecycle changes,
+  document indexing, ranking, `orient`, public MCP/schema/storage/index behavior, and harness
+  writes remain separate gates. Historical next-step guidance inside candidate content should be
+  treated as evidence to review, not as current authorization.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
