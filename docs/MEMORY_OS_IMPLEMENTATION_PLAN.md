@@ -5185,3 +5185,16 @@ T125, T47, migration status/prioritize/apply/rerun, lifecycle mutation, document
 ranking changes, `orient` expansion, public MCP/schema/storage/index behavior changes,
 document-index behavior changes, hook/settings/adapter writes, harness install, or user-owned file
 adoption.
+
+T130 matrix note:
+`docs/BRAIN_HARNESS_T130_CLAUDE_SESSION_END_HOOK_DEFAULT_2026-06-02.md` records the approved narrow
+repair for the T129 root cause. The generated command-style Claude `SessionEnd` hook now defaults
+missing hook-input `write_policy` to `nudge` instead of `durable`; daemon handling still writes
+handoffs only for explicit `write_policy=durable`. Focused validation covered missing-policy
+no-write behavior, explicit durable handoff writes, rendered adapter output, tempdir-installed
+generated hook output, MCP `render_adapter` output, all `engram-index` harness unit tests, the MCP
+harness integration file, formatting, `cargo check -p engram-cli`, and whitespace checks. T130 did
+not edit installed user hooks/settings, run harness install, change public MCP parameters,
+schema/storage/index behavior, ranking, `orient`, migration, lifecycle state, document-index
+behavior, or user-owned files. Claude Code harness readiness remains separately gated because real
+settings/adapters were not installed or repaired.

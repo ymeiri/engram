@@ -1932,6 +1932,14 @@ Proceed in this order from the current checkpoint:
      authorize hook/settings/adapter writes, harness install, lifecycle mutation, M6 action,
      ranking, `orient`, public MCP/schema/storage/index behavior changes, document-index behavior
      changes, or candidate inspection.
+130. Treat T130 as the approved narrow hook-template repair for that root cause. The generated
+     command-style Claude `SessionEnd` hook now defaults missing hook-input `write_policy` to
+     `nudge`, while daemon-side hook handling still writes handoffs only for explicit `durable`.
+     Focused tests cover missing-policy no-write behavior, explicit durable handoff writes,
+     rendered adapter output, tempdir-installed generated hook output, and MCP `render_adapter`
+     output. T130 does not edit installed user hooks/settings, run harness install, change public
+     MCP parameters, schema/storage/index behavior, ranking, `orient`, migration, lifecycle state,
+     document-index behavior, or user-owned files.
 132. Treat T132 as a read-only post-T129 startup/gate audit, not an implementation slice. Codex
      lean `orient` and exact T130 approval search recover the T129 current plan, but broad direct
      current-plan searches still rank handoffs first, fresh T129 docs are not top-five visible in

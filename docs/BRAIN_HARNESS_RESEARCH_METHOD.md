@@ -1226,6 +1226,13 @@ Current next application:
   at the correct next gate before doing anything else. If broad searches remain handoff-noisy or
   fresh docs are not visible through document search, record the gap as evidence quality, not as
   approval for ranking, document indexing, lifecycle mutation, or `orient` expansion.
+- T130 applies narrow hook-template repair discipline: once the exact hook default change is
+  approved, change only the generated command-template fallback and prove both sides of the write
+  boundary. Missing hook-input `write_policy` must be non-durable, explicit `durable` must still
+  write, and rendered/generated output must match the new default. Do not treat this as permission
+  to edit installed user hooks/settings, run harness install, change daemon write semantics, expand
+  public MCP parameters, or touch ranking, `orient`, migration, schema/storage/index behavior, or
+  lifecycle state.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

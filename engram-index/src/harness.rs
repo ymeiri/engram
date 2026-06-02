@@ -2082,7 +2082,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty')
-WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "durable"')
+WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "nudge"')
 
 if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
   CWD="${CLAUDE_PROJECT_DIR:-}"
@@ -2770,6 +2770,17 @@ mod tests {
     }
 
     #[test]
+    fn render_claude_session_end_hook_defaults_missing_write_policy_to_nudge() {
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::ClaudeCode, Some("claude-session-end-hook"));
+        assert_eq!(adapters.len(), 1);
+        let contents = &adapters[0].contents;
+
+        assert!(contents.contains(r#".write_policy // "nudge""#));
+        assert!(!contents.contains(r#".write_policy // "durable""#));
+    }
+
+    #[test]
     fn render_adapter_mentions_commit_preferences() {
         let adapters = HarnessService::new()
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
@@ -2938,6 +2949,8 @@ mod tests {
             fs::read_to_string(root.path().join(".claude/hooks/engram-session-end.sh")).unwrap();
         assert!(session_end_hook.contains("daemon.port"));
         assert!(session_end_hook.contains("SessionEnd"));
+        assert!(session_end_hook.contains(r#".write_policy // "nudge""#));
+        assert!(!session_end_hook.contains(r#".write_policy // "durable""#));
 
         let status = service
             .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
@@ -3076,6 +3089,82 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("not part of the current Claude harness contract")));
+    }
+
+    #[tokio::test]
+    async fn hook_event_session_end_missing_write_policy_does_not_write_handoff() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "SessionEnd".to_string(),
+                    session_id: Some("claude-session-1".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    transcript_path: Some("/tmp/transcript.jsonl".to_string()),
+                    reason: Some("shutdown".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: None,
+                    obligations: None,
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!outcome.handoff_written);
+        assert!(outcome
+            .additional_context
+            .contains(r#"<engram_hook event="SessionEnd" write_policy="nudge">"#));
+        assert!(handoff
+            .get(Some("engram"), None)
+            .await
+            .unwrap()
+            .item
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn hook_event_session_end_explicit_durable_writes_handoff() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "SessionEnd".to_string(),
+                    session_id: Some("claude-session-1".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    transcript_path: Some("/tmp/transcript.jsonl".to_string()),
+                    reason: Some("shutdown".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: None,
+                    obligations: None,
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(outcome.handoff_written);
+        let handoff = handoff.get(Some("engram"), None).await.unwrap();
+        let item = handoff
+            .item
+            .expect("explicit durable SessionEnd should write");
+        assert!(item.content.contains("Claude Code Session-End Handoff"));
+        assert!(item.content.contains("claude-session-1"));
     }
 
     #[tokio::test]
