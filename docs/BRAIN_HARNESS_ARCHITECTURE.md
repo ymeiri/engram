@@ -1891,6 +1891,18 @@ Proceed in this order from the current checkpoint:
      inspection, status/prioritize/apply/rerun, active memory writes, deletion, lifecycle mutation,
      public MCP/schema/storage/index changes, document-index behavior changes, `orient` expansion,
      ranking work, or harness writes.
+125. Keep T125 as the exact gate for quarantine candidate inspection. It is not approved by generic
+     continuation language. Do not read candidate files 0010-0011, make candidate decisions, run
+     status/prioritize/apply/rerun, write active memory, delete data, mutate lifecycle state,
+     change public MCP/schema/storage/index behavior, change document-index behavior, expand
+     `orient`, change ranking, or write harness adapters/hooks without separate exact approval.
+126. Treat T126 as a read-only harness readiness evidence refresh, not a repair. Generic, Claude
+     Code, Codex, Gemini CLI, and Cursor still report `ready=false`: generic policy is missing,
+     Claude Code lacks required `SessionStart` and `SessionEnd` settings registrations, and
+     Codex/Gemini/Cursor generated adapters remain drifted. T47 remains the exact harness-write
+     packet. T126 does not authorize adapter installs, settings edits, hook registration,
+     user-owned file adoption, M6 action, lifecycle mutation, public MCP/schema/storage/index
+     changes, document-index behavior changes, `orient` expansion, ranking work, or harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

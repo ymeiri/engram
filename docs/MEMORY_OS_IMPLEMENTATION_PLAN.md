@@ -760,6 +760,20 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       deletion, lifecycle mutation, document indexing, ranking, `orient`, public
       MCP/schema/storage/index behavior change, document-index behavior change, or harness write
       was run.
+- [ ] T125 M6 quarantine candidate inspection gate: requires exact user approval before reading
+      candidate files 0010-0011 from the written T68 review-export snapshot. Do not inspect
+      quarantine files, run status/prioritize/apply/rerun, make candidate decisions, write active
+      memory, delete data, mutate lifecycle state, index documents, change ranking, expand
+      `orient`, change public MCP/schema/storage/index behavior, change document-index behavior, or
+      write harness adapters/hooks without a separate exact gate.
+- [x] T126 harness readiness recheck: documented
+      `docs/BRAIN_HARNESS_T126_HARNESS_READINESS_RECHECK_2026-06-02.md` from read-only
+      `harness(action="doctor")` and per-harness `harness(action="status")` evidence. Generic,
+      Claude Code, Codex, Gemini CLI, and Cursor still report `ready=false`. This refreshes the
+      evidence date only; T47 remains the harness-write approval packet. No install, adapter write,
+      settings edit, hook registration, user-owned file adoption, M6 action, lifecycle mutation,
+      document indexing, ranking, `orient`, public MCP/schema/storage/index behavior change,
+      document-index behavior change, or harness write was run.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -886,6 +900,12 @@ project-observation `review` candidates. Candidate 0005 has the same historical 
 and an obligation-list bug later narrowed by scope-fix work; candidates 0008 and 0009 contain older
 next-step guidance likely narrowed by later current-plan/retrieval work; candidate 0006 is
 harness-write-adjacent and must not authorize harness writes.
+T126 rechecks harness readiness without writes after T124. Generic, Claude Code, Codex, Gemini CLI,
+and Cursor all still report `ready=false`: generic policy is missing, Claude Code lacks required
+`SessionStart` and `SessionEnd` settings registrations, and Codex/Gemini/Cursor generated adapters
+remain drifted. T126 does not execute the T47 harness repair packet or authorize any adapter,
+settings, hook, lifecycle, M6, ranking, `orient`, public MCP, schema/storage/index, or
+document-index behavior change.
 T71 reconfirms from read-only harness status checks that generic, Claude Code, Codex, Gemini CLI,
 and Cursor still report `ready=false`. This updates the harness evidence date only; the T47 exact
 harness-write approval packet remains pending and unexecuted.
@@ -5061,3 +5081,13 @@ narrowed by later work; candidate 0006 is harness-write-adjacent. T124 does not 
 status/prioritize/apply/rerun, write active memory, delete data, mutate lifecycle state, index
 documents, change ranking logic, expand `orient`, change public MCP or schema/storage/index
 behavior, change document-index behavior, or write harness adapters/hooks.
+
+T126 matrix note:
+`docs/BRAIN_HARNESS_T126_HARNESS_READINESS_RECHECK_2026-06-02.md` records a read-only harness
+readiness recheck after T124. Generic, Claude Code, Codex, Gemini CLI, and Cursor all still report
+`ready=false`. Generic policy is missing; Claude Code still lacks required `SessionStart` and
+`SessionEnd` settings registrations; Codex, Gemini CLI, and Cursor still have generated-adapter
+drift. T126 updates evidence only and does not run T47 harness repair, inspect T125 quarantine
+candidates, run status/prioritize/apply/rerun, write active memory, delete data, mutate lifecycle
+state, index documents, change ranking logic, expand `orient`, change public MCP or
+schema/storage/index behavior, change document-index behavior, or write harness adapters/hooks.

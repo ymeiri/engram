@@ -1197,6 +1197,12 @@ Current next application:
   document indexing, ranking, `orient`, public MCP/schema/storage/index behavior, and harness
   writes remain separate gates. Historical next-step guidance inside candidate content should be
   treated as evidence to review, not as current authorization.
+- T126 applies read-only harness-readiness refresh discipline: rerunning `harness(status/doctor)`
+  may update the evidence date, but `ready=false` results do not by themselves justify repair
+  writes, hook registration, settings edits, user-owned file adoption, M6 work, lifecycle mutation,
+  ranking changes, `orient` expansion, public MCP/schema/storage/index behavior changes, or
+  document-index behavior changes. Keep T47 as the exact harness-write approval packet until the
+  user approves that scope.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
