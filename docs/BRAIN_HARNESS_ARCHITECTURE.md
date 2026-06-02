@@ -2073,6 +2073,19 @@ Proceed in this order from the current checkpoint:
      requires recording partial validation failure. Do not change `orient`, ranking-source behavior,
      public MCP contracts, schema/storage/index behavior, lifecycle state, harness files, M6, or
      document-index behavior without separate exact approval.
+148. Treat T146 as a docs-only approval packet for the no-prompt `plan_work` orient current-plan
+     miss, not implementation approval. Fresh live traces show `plan_work` with explicit
+     continuation/current-plan prompt and no-prompt `resume_session` return the post-T145 current
+     plan first, while no-prompt `plan_work` trace `019e89ba-e9e6-7ef2-9904-b4d648074d83` still
+     misses it. Source and Claude Bridge inspection show two local affected sites: `plan_work`
+     decision-list promotion requires non-empty query text via
+     `query.is_some_and(is_open_ended_plan_work_prompt)`, and Brain Loop group ordering only pins
+     current-plan decisions for `resume_session`/`prepare_handoff`. The proposed fix is a narrow
+     no-prompt `plan_work` predicate/pin plus focused fixtures asserting both
+     `active_decisions.first()` and `brain_loop.top_items.first()`. Implementation still requires
+     exact approval and must not change public MCP shape, payloads, broad ranking,
+     schema/storage/index, lifecycle, harness files, M6, document-index behavior, runtime, or
+     user-owned files.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

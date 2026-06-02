@@ -1325,6 +1325,14 @@ Current next application:
   that as partial validation failure and require a separate approval gate before any `orient`,
   ranking-source, public MCP, schema/storage/index, lifecycle, harness, M6, or document-index
   behavior change.
+- T146 applies no-prompt task-boundary discipline for `orient`: do not treat a no-prompt
+  `plan_work` miss as permission for broad ranking or payload changes. First prove the failure is
+  specific by comparing no-prompt `plan_work`, explicit continuation/current-plan `plan_work`, and
+  no-prompt `resume_session`; then use a focused fixture and exact approval before changing the
+  hot path. Claude Bridge identified that the fix must cover both decision-list promotion and
+  Brain Loop top-item ordering; a single-site decision-list change is only a partial fix. Guard
+  against over-promotion by testing explicit implementation prompts and non-project/no-current-plan
+  cases.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

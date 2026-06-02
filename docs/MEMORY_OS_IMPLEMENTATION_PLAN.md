@@ -5392,3 +5392,17 @@ not pass overall. The next narrow work is a read-only root-cause and fixture pro
 `orient` miss; any implementation changing `orient`, ranking-source behavior, public MCP,
 schema/storage/index, lifecycle state, harness files, M6, or document-index behavior remains
 separately approval-gated.
+
+T146 matrix note:
+`docs/BRAIN_HARNESS_T146_NO_PROMPT_PLAN_WORK_ORIENT_APPROVAL_PACKET_2026-06-02.md` records a
+docs-only approval packet for the no-prompt `plan_work` current-plan miss exposed by T145. Fresh
+read-only live traces show the gap is specific: explicit continuation/current-plan `plan_work`
+trace `019e89ba-e8a0-7b71-bfad-23dd08bca7fd` and no-prompt `resume_session` trace
+`019e89ba-e945-73e1-9115-94d0217bd0e7` return the post-T145 current plan first, while no-prompt
+`plan_work` trace `019e89ba-e9e6-7ef2-9904-b4d648074d83` still returns generic guidance. Source
+inspection points to the current predicate requiring query text before `plan_work` current-plan
+promotion, with Brain Loop group ordering as a second local affected site. T146 does not implement
+the fix; it asks for exact approval to add focused fixtures and a narrow no-prompt `plan_work`
+promotion/pin that proves both `active_decisions.first()` and `brain_loop.top_items.first()`,
+without changing public MCP shape, payloads, broad ranking, schema/storage/index, lifecycle,
+harness files, M6, document-index behavior, runtime, or user-owned files.
