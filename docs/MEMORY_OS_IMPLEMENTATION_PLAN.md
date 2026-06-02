@@ -5271,3 +5271,15 @@ registrations; and user-owned Claude settings snippet left untouched. T137 did n
 `harness(install)` dry-runs because T135 requires those immediately before approved writes. It made
 no harness/settings writes, daemon/binary changes, lifecycle, ranking, `orient`, schema/storage/
 index, document-index, M6, or public MCP changes. T135 remains the next product-moving exact gate.
+
+T138 matrix note:
+`docs/BRAIN_HARNESS_T138_CRITICAL_VALIDATION_BASELINE_2026-06-02.md` records a non-destructive
+validation baseline after T137. The first `cargo clippy --all-targets -- -D warnings` run exposed
+one existing `engram-cli/src/main.rs` `items_after_test_module` failure. T138 fixed only that
+mechanical ordering issue by moving the existing CLI timestamp test module to the end of the file;
+the test body and assertions did not change. On the final tree, `cargo fmt --all --check`, focused
+harness/orient/obligation/telemetry/lint/Brain Harness/search tests, `cargo check -p engram-cli`,
+`cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets`, and `git diff --check`
+passed. T138 does not install or repair harnesses, change lifecycle state, run M6, inspect
+quarantine candidates, change ranking or `orient`, change public MCP/schema/storage/index, or
+change document-index behavior. T135 remains the next product-moving exact gate.

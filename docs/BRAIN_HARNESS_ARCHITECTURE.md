@@ -1987,6 +1987,13 @@ Proceed in this order from the current checkpoint:
      `harness(install)`, edit hooks/settings/adapters, install binaries, restart daemons, change
      lifecycle state, run M6, or touch ranking/`orient`/public MCP/schema/storage/index/
      document-index behavior. T135 remains the next product-moving exact approval gate.
+139. Treat T138 as a validation baseline plus a narrow CI-lint fix, not a product-readiness
+     shortcut. Full final-tree `cargo test --all-targets`, focused Brain Harness tests,
+     `cargo check -p engram-cli`, `cargo fmt --all --check`, `cargo clippy --all-targets -- -D
+     warnings`, and `git diff --check` passed after moving the existing CLI timestamp test module
+     to the end of `engram-cli/src/main.rs`. This does not authorize or prove installed harness
+     readiness, M6 migration completion, lifecycle cleanup, ranking/`orient` changes, public MCP
+     changes, schema/storage/index changes, or document-index behavior changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -2919,22 +2919,6 @@ fn format_rfc3339_timestamp(value: OffsetDateTime) -> Result<String> {
         .map_err(|e| anyhow::anyhow!("Invalid timestamp: {}", e))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn invalid_rfc3339_timestamp_error_names_cursor_timestamp() {
-        let error = parse_rfc3339_timestamp("not-a-timestamp")
-            .expect_err("invalid timestamp should fail")
-            .to_string();
-
-        assert!(error.contains("Invalid RFC3339 timestamp"));
-        assert!(error.contains("memory_cursor.timestamp"));
-        assert!(error.contains("engram memory cursor"));
-    }
-}
-
 fn print_orientation_packet(packet: &OrientationPacket) {
     println!("{}", packet.context_pack);
 }
@@ -9080,4 +9064,20 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_rfc3339_timestamp_error_names_cursor_timestamp() {
+        let error = parse_rfc3339_timestamp("not-a-timestamp")
+            .expect_err("invalid timestamp should fail")
+            .to_string();
+
+        assert!(error.contains("Invalid RFC3339 timestamp"));
+        assert!(error.contains("memory_cursor.timestamp"));
+        assert!(error.contains("engram memory cursor"));
+    }
 }

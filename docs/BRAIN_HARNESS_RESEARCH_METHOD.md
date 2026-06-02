@@ -1266,6 +1266,11 @@ Current next application:
   readiness evidence, note whether the gate shape changed, and stop before hook/settings/adapter
   writes, user-owned adoption, lifecycle cleanup, M6, ranking, `orient`, public MCP, schema/storage/
   index, or document-index work unless the user explicitly approves that exact mutation.
+- T138 applies validation-baseline discipline: when a non-destructive validation run exposes a
+  narrow CI-lint failure, fix only the failure needed to make the validation truthful, then rerun
+  the affected test, lint, full tests, and diff hygiene on the final tree. Do not convert a green
+  repository baseline into proof of installed harness readiness, migration completion, lifecycle
+  hygiene, or broad ranking quality.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
