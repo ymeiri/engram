@@ -1297,6 +1297,12 @@ Current next application:
   and `HEAD` now contains later behavior changes, pause before install/restart unless the user
   approves the current exact gate. A green source baseline is evidence for source health only, not
   installed daemon parity, harness readiness, lifecycle cleanup, or migration completion.
+- T143 applies fixture-before-runtime-refresh discipline: when fresh live evidence shows a
+  runtime-stale result shape that is close to an existing approved prompt class, add the smallest
+  source fixture that models the new distractor before changing code or refreshing runtime. If the
+  fixture passes without source changes, treat the result as stronger evidence for the existing
+  runtime-refresh gate, not as installed parity. If it fails, decide separately whether the source
+  change is still within the approved prompt class or needs a new approval gate.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

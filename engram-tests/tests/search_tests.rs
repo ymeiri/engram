@@ -1239,6 +1239,73 @@ async fn test_memory_search_t140_continuation_with_approval_gate_context_promote
 }
 
 #[tokio::test]
+async fn test_memory_search_t143_current_handoff_does_not_outrank_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    let mut latest_handoff = MemoryItem::new(
+        MemoryKind::Handoff,
+        "Rolling handoff",
+        "T142 is complete. Commit 293b322 records a source-only validation baseline after \
+         T140/T141. The next product-moving step is still exact T141 approval: install the \
+         current engram-cli binary, restart the daemon, and run read-only live validation of the \
+         T140 continuation/current-plan approval-gate-context query class only.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.99)
+    .with_evidence(EvidenceRef::new(
+        EvidenceKind::ToolCall,
+        "t143-latest-handoff",
+    ));
+    latest_handoff.updated_at = now;
+    let latest_handoff = memory_service.capture_memory(latest_handoff).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "Current plan after T142 source validation baseline",
+        "T142 is complete as a source-only validation baseline. Continue toward the Engram Brain \
+         Harness goal from this current plan. The next product-moving slice remains T141: install \
+         the current engram-cli binary, restart the daemon, and run read-only live validation of \
+         the T140 continuation/current-plan approval-gate-context query class only.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.8)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "293b322"))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(1);
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "current plan next step continue move forward Engram Brain Harness after T142 T141 \
+             T140 approval gates",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, current_plan.id.to_string());
+    assert!(
+        results
+            .iter()
+            .any(|result| result.id == latest_handoff.id.to_string()),
+        "fresh handoff context should remain retrievable"
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_prefers_project_current_plan_over_repository_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

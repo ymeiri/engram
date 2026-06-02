@@ -5334,3 +5334,15 @@ already committed and rerunning its install/restart wording at current `HEAD` wo
 the later T140 ranking source change, T142 did not rerun T133A. The next runtime-moving step remains
 exact T141 approval for binary install, daemon restart, and read-only live validation of the T140
 continuation/current-plan approval-gate-context query class.
+
+T143 matrix note:
+`docs/BRAIN_HARNESS_T143_CURRENT_HANDOFF_SEARCH_FIXTURE_2026-06-02.md` records a source-level
+regression fixture for the fresh post-T142 handoff-vs-current-plan shape. Live read-only evidence
+showed lean `orient` trace `019e8884-e4d7-7cb2-bbe2-39b26935c3ce` returning T142 current-plan
+memory first, while direct search trace `019e8884-fedb-73d0-802e-bed68d71f4f3` returned the fresh
+rolling handoff first for a T140/T141 approval-gate-context continuation query. The new integration
+fixture proves current source already ranks the active project `decision` tagged `current-plan`
+above a fresher rolling handoff for that query while keeping the handoff retrievable. Validation
+passed with the focused T143 test, ranker unit tests, full `search_tests`, `cargo fmt --all
+--check`, `cargo check -p engram-cli`, and `git diff --check`. No ranker source changed; T141
+runtime refresh remains the next exact approval gate.

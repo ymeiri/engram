@@ -2030,6 +2030,15 @@ Proceed in this order from the current checkpoint:
      run M6, inspect quarantine candidates, or change public MCP/schema/storage/index/ranking/
      `orient`/document-index behavior. Exact T141 approval remains required before refreshing the
      installed runtime for live T140 validation.
+144. Treat T143 as source-fixture hardening for T141, not a runtime refresh. Fresh live evidence
+     after T142 showed lean `orient` returning the T142 current-plan memory first, while direct
+     search returned the fresh T142 rolling handoff first for the T140/T141 approval-gate-context
+     continuation query. T143 adds a deterministic source fixture for that exact fresh-handoff
+     distractor shape and it passes without ranking-source changes: the active `decision` tagged
+     `current-plan` outranks the fresh handoff while the handoff remains retrievable. T143 does not
+     install a binary, restart the daemon, change ranking source, mutate lifecycle, edit harness
+     files, run M6, or change `orient`/public MCP/schema/storage/index/document-index behavior.
+     Exact T141 approval remains the runtime-moving next gate.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
