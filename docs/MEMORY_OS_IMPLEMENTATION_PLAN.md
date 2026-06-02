@@ -5323,3 +5323,14 @@ class. T141 does not run the refresh and does not authorize harness install, hoo
 adapters, `adopt_user_owned`, lifecycle mutation, T139 archive, M6/migration/quarantine, `orient`,
 ranking source, public MCP, schema/storage/index, document-index behavior, shell profile, PATH,
 auth, or service configuration changes.
+
+T142 matrix note:
+`docs/BRAIN_HARNESS_T142_POST_T141_SOURCE_VALIDATION_BASELINE_2026-06-02.md` records a source-only
+validation baseline after T140/T141. `cargo fmt --all --check`, focused T140 ranker tests, focused
+`search_tests`, `cargo check -p engram-cli`, `cargo clippy --all-targets -- -D warnings`,
+`cargo test --all-targets`, and `git diff --check` passed. T142 does not prove installed runtime
+parity, installed harness readiness, lifecycle cleanup, or migration completion. Because T133A is
+already committed and rerunning its install/restart wording at current `HEAD` would also deploy
+the later T140 ranking source change, T142 did not rerun T133A. The next runtime-moving step remains
+exact T141 approval for binary install, daemon restart, and read-only live validation of the T140
+continuation/current-plan approval-gate-context query class.

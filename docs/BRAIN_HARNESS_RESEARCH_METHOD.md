@@ -1291,6 +1291,12 @@ Current next application:
   prompts, pass/fail criteria, and stop conditions for any hook/settings/harness, lifecycle, M6,
   schema/storage/index, document-index, public MCP, ranking-source, `orient`, shell profile, PATH,
   auth, or service-configuration drift.
+- T142 applies source-baseline discipline after a gated runtime-refresh packet: run the broad source
+  checks needed to ensure the committed tree is healthy, but do not relabel stale approval wording
+  as permission to refresh a newer runtime. If a prior runtime-refresh slice is already committed
+  and `HEAD` now contains later behavior changes, pause before install/restart unless the user
+  approves the current exact gate. A green source baseline is evidence for source health only, not
+  installed daemon parity, harness readiness, lifecycle cleanup, or migration completion.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

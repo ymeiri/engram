@@ -2021,6 +2021,15 @@ Proceed in this order from the current checkpoint:
      lifecycle mutation, T139 archive, M6/migration/quarantine, `orient`, ranking source, public
      MCP, schema/storage/index, document-index behavior, shell profile, PATH, auth, or service
      configuration changes.
+143. Treat T142 as a source-only validation baseline after T140/T141, not installed runtime parity.
+     Formatting, focused T140 ranker/search tests, `cargo check -p engram-cli`,
+     `cargo clippy --all-targets -- -D warnings`, full `cargo test --all-targets`, and
+     `git diff --check` passed on the committed source tree. T142 did not install a binary,
+     restart the daemon, rerun T133A under stale wording, validate live T140 behavior, edit
+     hooks/settings/adapters, run `harness install`, use `adopt_user_owned`, mutate lifecycle state,
+     run M6, inspect quarantine candidates, or change public MCP/schema/storage/index/ranking/
+     `orient`/document-index behavior. Exact T141 approval remains required before refreshing the
+     installed runtime for live T140 validation.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
