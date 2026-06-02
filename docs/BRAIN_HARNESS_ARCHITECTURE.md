@@ -1994,6 +1994,14 @@ Proceed in this order from the current checkpoint:
      to the end of `engram-cli/src/main.rs`. This does not authorize or prove installed harness
      readiness, M6 migration completion, lifecycle cleanup, ranking/`orient` changes, public MCP
      changes, schema/storage/index changes, or document-index behavior changes.
+140. Treat T139 as a docs-only, default-deny lifecycle approval packet for exactly one stale
+     repository-scoped current-plan MemoryItem:
+     `019e5e0a-86b4-73e3-aa9b-ca350e83e915`. Fresh read-only evidence shows T138 current-plan
+     memory remains first while the stale item still surfaces as active retrieval noise; lint reports
+     207 stale-feedback records and 14 wrong-scope records with `safe_action=none`; a direct graph
+     depth-1 check showed no MemoryItem directly depending on the target. T139 does not authorize
+     the archive itself. Any future archive requires exact user approval plus fresh matching
+     get/list/orient-or-search/lint/graph checks with no intervening writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

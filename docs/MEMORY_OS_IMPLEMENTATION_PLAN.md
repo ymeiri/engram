@@ -5283,3 +5283,17 @@ harness/orient/obligation/telemetry/lint/Brain Harness/search tests, `cargo chec
 passed. T138 does not install or repair harnesses, change lifecycle state, run M6, inspect
 quarantine candidates, change ranking or `orient`, change public MCP/schema/storage/index, or
 change document-index behavior. T135 remains the next product-moving exact gate.
+
+T139 matrix note:
+`docs/BRAIN_HARNESS_T139_STALE_CURRENT_PLAN_LIFECYCLE_APPROVAL_PACKET_2026-06-02.md` records a
+docs-only, default-deny approval packet for exactly one future lifecycle write: archiving stale
+repository-scoped current-plan MemoryItem `019e5e0a-86b4-73e3-aa9b-ca350e83e915`. Fresh read-only
+evidence showed T138 current-plan memory `019e885c-abde-7811-9314-7654bb6667a9` remains first in
+lean `orient` and direct current-plan search while the stale target remains active retrieval noise;
+lint reported 207 stale-feedback records and 14 wrong-scope records for the target with
+`safe_action=none`; direct graph depth 1 showed only evidence, repository scope, capture, and
+supersedes edges, with no MemoryItem directly depending on the target. T139 does not authorize the
+archive itself, `lint apply_safe`, any other lifecycle mutation, handoff semantic change, M6,
+quarantine inspection, harness writes, ranking/`orient`, public MCP, schema/storage/index, or
+document-index behavior changes. Any future archive requires exact user approval and fresh matching
+pre-write evidence with no intervening writes.

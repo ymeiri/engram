@@ -1271,6 +1271,14 @@ Current next application:
   the affected test, lint, full tests, and diff hygiene on the final tree. Do not convert a green
   repository baseline into proof of installed harness readiness, migration completion, lifecycle
   hygiene, or broad ranking quality.
+- T139 applies stale-current-plan lifecycle packet discipline: a packet may ask for exact approval
+  for one archive only when it is docs-only, default-deny, names the UUID/title/scope, acknowledges
+  `safe_action=none` as a human-approval requirement rather than an auto-fix, includes a direct
+  graph/dependency check, defines drift concretely, and requires fresh matching pre-write evidence
+  with no intervening writes. Stop before archive, `lint apply_safe`, other lifecycle mutation,
+  handoff semantic changes, ranking/`orient`, M6, quarantine inspection, harness writes, public MCP,
+  schema/storage/index, or document-index behavior changes unless the user explicitly approves that
+  exact mutation.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
