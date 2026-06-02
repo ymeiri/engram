@@ -5406,3 +5406,29 @@ the fix; it asks for exact approval to add focused fixtures and a narrow no-prom
 promotion/pin that proves both `active_decisions.first()` and `brain_loop.top_items.first()`,
 without changing public MCP shape, payloads, broad ranking, schema/storage/index, lifecycle,
 harness files, M6, document-index behavior, runtime, or user-owned files.
+
+T146 source/result matrix note:
+`docs/BRAIN_HARNESS_T146_NO_PROMPT_PLAN_WORK_ORIENT_RESULT_2026-06-02.md` records the approved
+source implementation committed as `d12b2ca` (`Fix no-prompt plan_work current-plan orient`). The
+source change stays internal to `orient`: no/empty-prompt project/cwd-boundary `plan_work` promotes
+the latest current-plan decision into `active_decisions` and pins it first in Brain Loop, while
+specific implementation prompts and no-boundary/no-current-plan cases are guarded by focused MCP
+fixtures. Validation passed for the full `memory_tests` file, the `search_tests current` subset,
+the service-layer `orient_` sweep, `cargo fmt --all --check`, `cargo check -p engram-cli`, and
+`git diff --check`. T146 did not install a binary or restart the daemon; live no-prompt `orient`
+traces after the source commit still show stale runtime behavior.
+
+T147 matrix note:
+`docs/BRAIN_HARNESS_T147_T146_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` records a docs-only,
+default-deny runtime-refresh approval packet for the committed T146 source fix. Current source
+baseline is `d12b2ca17500d0979852fe9a35ff7dc6468aa091`, the installed
+`/Users/yuval.meiri/.local/bin/engram` hash remains
+`3d801be9dcae4b26bd03b27cadd0d4449cc32322e7d0cb3bcff0b0ac58b6686b`, and the daemon remains PID
+`10768` until an approved refresh is run. Startup trace `019e89f7-c60f-7713-8768-b3915d0ae124`
+still returned generic no-prompt `plan_work` Brain Loop items, while direct search trace
+`019e89f7-c81b-7042-9fda-4627a37240ae` returned T147 current-plan memory first. T147 asks for
+exact approval before installing the current binary, restarting the daemon, and running read-only
+live validation for no-prompt, empty-prompt, and explicit implementation-prompt `plan_work`
+orientation. It does not authorize harness writes, lifecycle mutation, M6/migration/quarantine,
+schema/storage/index changes, document-index changes, public MCP changes, payload changes,
+PATH/profile/auth configuration changes, rollback, force-kill, deletion, or old-binary reinstall.

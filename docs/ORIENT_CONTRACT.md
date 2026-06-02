@@ -141,6 +141,13 @@ guidance for capture supersession and orientation post-prioritization. Other act
 with that tag remain normal evidence and are not auto-superseded by
 `memory(action=capture_current_plan)`.
 
+T146 source validation closes the source-level no-prompt `plan_work` gap without changing the
+request or response contract. For no/empty-prompt `plan_work` at a project/cwd task boundary, the
+source now promotes the latest current-plan decision into `active_decisions` and pins it first in
+Brain Loop. Focused fixtures guard explicit implementation prompts and no-boundary/no-current-plan
+cases. This is not installed-runtime evidence yet: live MCP traces still show old no-prompt
+behavior until the T147 runtime-refresh packet is explicitly approved and executed.
+
 Installed-runtime T39 validation then hardened the `prepare_handoff` approval-gate wording path.
 After installing binary hash
 `d9db0ee830ef261c582e31f0c327f8198d4b6d1f556f11820bcec27fc64dfe42`, Codex trace

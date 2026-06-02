@@ -2086,6 +2086,22 @@ Proceed in this order from the current checkpoint:
      exact approval and must not change public MCP shape, payloads, broad ranking,
      schema/storage/index, lifecycle, harness files, M6, document-index behavior, runtime, or
      user-owned files.
+149. Treat T146 source implementation as a narrow source-level `orient` repair, not live-runtime
+     parity. Commit `d12b2ca` makes no/empty-prompt project/cwd-boundary `plan_work` promote the
+     latest current-plan decision and pin it first in Brain Loop, with fixtures for full/lean
+     project-boundary output, explicit implementation-prompt guard, and no-boundary/no-current-plan
+     guard. The source validation passed, but no binary install or daemon restart ran under T146,
+     so live MCP `orient` still reflects the old runtime until a separate runtime refresh is
+     approved.
+150. Treat T147 as the runtime-refresh approval packet for the committed T146 source fix, not
+     approval itself. It pins execution to binary-relevant source baseline `d12b2ca`, current
+     installed hash `3d801be9...`, and daemon PID `10768`, then asks for exact approval before
+     installing `/Users/yuval.meiri/.local/bin/engram`, restarting the daemon, and running
+     read-only live validation for no-prompt, empty-prompt, and explicit implementation-prompt
+     `plan_work` `orient`. It does not authorize harness writes, lifecycle changes, M6/migration/
+     quarantine, schema/storage/index changes, document-index behavior changes, public MCP/payload
+     changes, PATH/profile/auth configuration, rollback, force-kill, deletion, or old-binary
+     reinstall.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -1333,6 +1333,17 @@ Current next application:
   Brain Loop top-item ordering; a single-site decision-list change is only a partial fix. Guard
   against over-promotion by testing explicit implementation prompts and non-project/no-current-plan
   cases.
+- T146 source execution shows how to separate source proof from live-runtime proof: commit
+  `d12b2ca` implements the two-site no/empty-prompt `plan_work` source fix and passes focused MCP
+  fixtures plus orientation/search regressions, but live MCP `orient` remains stale until a
+  separately approved binary install and daemon restart. Do not count source tests as installed
+  Codex/Claude parity.
+- T147 applies the same binary-source-invariant packet discipline to T146 runtime refresh: exact
+  approval must precede `cargo install`, daemon restart, and live validation; the packet must stop
+  on binary-relevant drift, pre-state hash/PID drift, no-prompt/empty-prompt validation failure, or
+  explicit implementation-prompt guard regression. It does not authorize lifecycle, M6, harness,
+  schema/storage/index, document-index, public MCP/payload, PATH/profile/auth, rollback, deletion,
+  or old-binary reinstall work.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
