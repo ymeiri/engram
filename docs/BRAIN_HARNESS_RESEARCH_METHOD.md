@@ -1311,6 +1311,12 @@ Current next application:
   failures to stop, and keep rollback, force-kill, old-binary reinstall, shell/PATH/auth/service
   configuration, lifecycle, M6, harness, `orient`, ranking-source, public MCP, schema/storage/index,
   and document-index work out of scope unless separately approved.
+- T145 applies binary-source-invariant approval discipline: a runtime-refresh packet that pins full
+  repository HEAD can self-stale when the packet itself is committed. Prefer a deny-by-default
+  invariant over binary-relevant paths instead: name the source baseline, allow only docs-only
+  committed drift, require committed/staged/unstaged binary-relevant diff checks as the first
+  execution step after exact approval, and stop on any ambiguous path, pre-state hash/PID drift, or
+  need for source/ranking/`orient`/lifecycle/M6/harness/schema/storage/index/document-index work.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

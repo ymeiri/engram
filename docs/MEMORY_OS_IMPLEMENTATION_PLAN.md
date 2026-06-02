@@ -5362,3 +5362,19 @@ authorize harness install, hooks/settings/adapters, `adopt_user_owned`, lifecycl
 archive, M6/migration/quarantine, `orient`, ranking source, public MCP, schema/storage/index,
 document-index behavior, shell profile/PATH/auth/service configuration, rollback, force-kill,
 deletion, or old-binary reinstall commands.
+
+T145 matrix note:
+`docs/BRAIN_HARNESS_T145_BINARY_SOURCE_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` records a
+refreshed, docs-only/default-deny runtime-refresh approval packet that supersedes stale T141 and
+stale T144. T144 became self-stale because it stopped on any HEAD drift and then its own docs-only
+commit moved HEAD from source baseline `ab2f5e25b78f1224a7dbc4d5615c143f286a750b` to
+`7baf1365ff72ad3007082be0763a28d5918b0b3f`. Read-only diff evidence showed only docs changes and
+no `Cargo.toml`, `Cargo.lock`, or `engram-*` drift; the installed binary hash and daemon PID
+remain `837ef2cabf08f1481ff66d44911387cf3e5d1941f86a41431780dde48bdef724` and `23341`.
+T145 replaces the full-HEAD invariant with a deny-by-default binary-source invariant: after exact
+approval, the first checks must prove no committed, staged, or unstaged binary-relevant drift from
+`ab2f5e25` before any install command runs. It does not run the refresh or authorize stale
+T141/T144 execution, harness install, hooks/settings/adapters, user-owned edits, lifecycle
+mutation, T139 archive, M6/migration/quarantine, `orient`, ranking source, public MCP,
+schema/storage/index, document-index behavior, shell profile/PATH/auth/service configuration,
+rollback, force-kill, deletion, or old-binary reinstall commands.

@@ -2051,6 +2051,17 @@ Proceed in this order from the current checkpoint:
      archive, M6/migration/quarantine, `orient`, ranking source, public MCP, schema/storage/index,
      document-index behavior, shell profile/PATH/auth/service configuration, rollback commands,
      force-kill commands, or deletion/reinstallation recovery.
+146. Treat T145 as the refreshed runtime-refresh approval packet that supersedes stale T141 and
+     stale T144. T144 pinned execution to full repository HEAD `ab2f5e25...`, but committing the
+     docs-only T144 packet moved HEAD to `7baf136...`; a read-only diff showed only docs changes
+     and no `Cargo.toml`, `Cargo.lock`, or `engram-*` drift. T145 fixes the self-staling packet
+     design by requiring exact approval plus first-step binary-relevant diff checks from source
+     baseline `ab2f5e25...` before any install. It still authorizes no runtime refresh until exact
+     user approval, and it does not authorize stale T141/T144 execution, harness install, hooks/
+     settings/adapters, user-owned edits, lifecycle mutation, T139 archive, M6/migration/
+     quarantine, `orient`, ranking source, public MCP, schema/storage/index, document-index
+     behavior, shell profile/PATH/auth/service configuration, rollback, force-kill, deletion, or
+     old-binary reinstall commands.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
