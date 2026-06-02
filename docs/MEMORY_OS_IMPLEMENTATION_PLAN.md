@@ -5198,3 +5198,18 @@ not edit installed user hooks/settings, run harness install, change public MCP p
 schema/storage/index behavior, ranking, `orient`, migration, lifecycle state, document-index
 behavior, or user-owned files. Claude Code harness readiness remains separately gated because real
 settings/adapters were not installed or repaired.
+
+T133 matrix note:
+`docs/BRAIN_HARNESS_T133_POST_T130_LIVE_RUNTIME_GAP_AUDIT_2026-06-02.md` records a read-only
+source-vs-live audit after T130. Source and committed tests are T130-correct:
+`engram-index/src/harness.rs` defaults missing hook-input `write_policy` to `nudge`. The running MCP
+runtime is not yet T130-correct: live `harness(render_adapter)` still renders
+`.write_policy // "durable"`, and the installed generated Claude hook at
+`/Users/yuval.meiri/.claude/hooks/engram-session-end.sh` still defaults to `durable`. Claude Code,
+Codex, Gemini CLI, and Cursor doctors still report `ready=false`, lint still reports stale active
+memory pressure, and telemetry remains weak despite a numerical pass. T133 does not install a
+binary, restart a daemon, edit installed hooks/settings, run `harness install`, change public MCP
+parameters, schema/storage/index behavior, ranking, `orient`, migration, lifecycle state,
+document-index behavior, or user-owned files. The next recommended gate is binary refresh plus
+daemon restart plus read-only live validation only; installed hook/settings repair remains a
+separate exact harness-write approval.

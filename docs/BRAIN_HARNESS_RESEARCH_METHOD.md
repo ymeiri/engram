@@ -1233,6 +1233,12 @@ Current next application:
   to edit installed user hooks/settings, run harness install, change daemon write semantics, expand
   public MCP parameters, or touch ranking, `orient`, migration, schema/storage/index behavior, or
   lifecycle state.
+- T133 applies source-vs-live discipline for harness fixes: after a source-level harness repair,
+  separately verify the running MCP runtime and installed generated hook before claiming product
+  readiness. If source says `nudge` but live render or installed hook still says `durable`, record a
+  live-runtime drift gap and pause for explicit approval before binary install, daemon restart,
+  harness install, or user hook/settings edits. Do not convert live drift into ranking, `orient`,
+  lifecycle, migration, schema/storage/index, or public MCP work.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

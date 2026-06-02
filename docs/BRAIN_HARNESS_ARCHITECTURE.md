@@ -1949,6 +1949,12 @@ Proceed in this order from the current checkpoint:
      M6 actions, lifecycle mutation, document indexing, ranking, `orient`, public
      MCP/schema/storage/index behavior changes, document-index behavior changes, or user-owned file
      adoption.
+133. Treat T133 as a read-only source-vs-live drift audit after T130. Source and tests are
+     T130-correct, but the live MCP `harness(render_adapter)` output and installed generated Claude
+     `SessionEnd` hook still default missing `write_policy` to `durable`. This means the committed
+     repair has not been proven in the running product. The next gated slice is a binary refresh,
+     daemon restart, and read-only live validation only; hook/settings repair or `harness install`
+     remains a separate approval gate.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
