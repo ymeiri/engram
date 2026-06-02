@@ -5213,3 +5213,14 @@ parameters, schema/storage/index behavior, ranking, `orient`, migration, lifecyc
 document-index behavior, or user-owned files. The next recommended gate is binary refresh plus
 daemon restart plus read-only live validation only; installed hook/settings repair remains a
 separate exact harness-write approval.
+
+T134 matrix note:
+`docs/BRAIN_HARNESS_T134_T133A_LIVE_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` prepares the
+exact T133A approval wording and validation scope. It records the same live evidence after startup:
+source is still `nudge`, live MCP render and installed Claude hook are still `durable`, Claude Code
+readiness is still false, and lint still reports stale active memory pressure. T134 does not install
+a binary, restart a daemon, edit installed hooks/settings, run `harness install`, use
+`adopt_user_owned`, change public MCP parameters, schema/storage/index behavior, ranking, `orient`,
+migration, lifecycle state, document-index behavior, or inspect M6 quarantine candidates. If the
+user approves T133A exactly, the next slice is binary install, daemon restart, and read-only live
+render/doctor validation only; hook/settings repair remains a separate exact approval gate.

@@ -1955,6 +1955,11 @@ Proceed in this order from the current checkpoint:
      repair has not been proven in the running product. The next gated slice is a binary refresh,
      daemon restart, and read-only live validation only; hook/settings repair or `harness install`
      remains a separate approval gate.
+134. Treat T134 as the exact approval packet for T133A, not approval itself. If the user approves
+     T133A, install the current `engram-cli` binary, restart the daemon, and run read-only live
+     render/doctor validation only. Do not edit installed hooks/settings, run `harness install`,
+     use `adopt_user_owned`, change public MCP/schema/storage/index/ranking/`orient`/migration/
+     lifecycle/document-index behavior, or inspect M6 quarantine candidates under this approval.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

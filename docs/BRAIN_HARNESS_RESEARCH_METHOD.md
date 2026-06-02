@@ -1239,6 +1239,11 @@ Current next application:
   live-runtime drift gap and pause for explicit approval before binary install, daemon restart,
   harness install, or user hook/settings edits. Do not convert live drift into ranking, `orient`,
   lifecycle, migration, schema/storage/index, or public MCP work.
+- T134 applies approval-packet discipline for runtime refreshes: a binary install plus daemon
+  restart is a runtime-validation gate, not a harness repair gate. State exact commands,
+  validations, exclusions, and stop conditions before asking the user. Keep installed hooks/settings,
+  `harness install`, `adopt_user_owned`, migration, lifecycle, ranking, `orient`, public MCP, and
+  schema/storage/index behavior out of scope unless separately approved.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
