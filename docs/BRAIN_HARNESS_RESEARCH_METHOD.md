@@ -1279,6 +1279,11 @@ Current next application:
   handoff semantic changes, ranking/`orient`, M6, quarantine inspection, harness writes, public MCP,
   schema/storage/index, or document-index behavior changes unless the user explicitly approves that
   exact mutation.
+- T140 applies narrow ranking-repair discipline: when live retrieval shows a current-plan miss,
+  first create a deterministic failing fixture with the actual distractor shape, then repair only
+  the prompt classifier or promotion boundary needed for that prompt class. Preserve explicit
+  gate/action regressions, keep gate context retrievable, and do not use source-test success as
+  installed-runtime proof unless a separate binary/daemon refresh is explicitly approved and run.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

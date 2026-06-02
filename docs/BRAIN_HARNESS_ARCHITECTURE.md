@@ -2002,6 +2002,15 @@ Proceed in this order from the current checkpoint:
      depth-1 check showed no MemoryItem directly depending on the target. T139 does not authorize
      the archive itself. Any future archive requires exact user approval plus fresh matching
      get/list/orient-or-search/lint/graph checks with no intervening writes.
+141. Treat T140 as a narrow direct-search ranking repair for continuation prompts that mention
+     approval gates as context. The live query
+     `current plan next step continue move forward Engram Brain Harness after T139 T135 T139
+     approval gate` returned old active rolling handoffs above the latest current-plan memory
+     because `approval gate` text disabled current-plan promotion and later triggered raw
+     approval-gate promotion. T140 keeps explicit gate/action and handoff-summary prompts in gate
+     mode, but allows current-plan promotion when continuation intent is primary. It does not change
+     `orient`, lifecycle state, handoff semantics, M6, harness writes, public MCP, schema/storage/
+     index, or document-index behavior.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -393,7 +393,7 @@ fn promote_approval_gate_items_for_gate_query(
         return;
     };
     let query = query.replace("non-gated", "").replace("non gated", "");
-    if !query.contains("approval gate") {
+    if !query.contains("approval gate") || !asks_for_decision_gate(&query) {
         return;
     }
 
@@ -632,25 +632,39 @@ fn asks_for_decision_gate(query: &str) -> bool {
     // "non-gated" is continuation vocabulary; only independent gate terms trigger gate mode.
     // Bare "gate" is often a milestone noun ("M6 gate") in continuation prompts, not an
     // approval request. Explicit action or permission terms still keep gate guidance first.
-    // The phrase "approval gate" is itself an explicit gate request; bare "approval" is not.
+    // Approval-gate wording inside a continuation prompt is context unless the query is asking
+    // for a gate/handoff summary. Bare "approval" is not a gate request.
     let query = query
         .to_ascii_lowercase()
         .replace("non-gated", "")
         .replace("non gated", "");
-    has_modal_gate_action(&query)
-        || [
-            "proceed",
-            "allowed",
-            "allow",
-            "apply",
-            "safety",
-            "block",
-            "blocked",
-            "must",
-            "approval gate",
-        ]
-        .iter()
-        .any(|term| query.contains(term))
+    if has_modal_gate_action(&query) {
+        return true;
+    }
+    if query.contains("approval gate") {
+        return !asks_for_current_plan_guidance(&query) || has_gate_summary_intent(&query);
+    }
+    [
+        "proceed", "allowed", "allow", "apply", "safety", "block", "blocked", "must",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
+}
+
+fn has_gate_summary_intent(query: &str) -> bool {
+    [
+        "handoff",
+        "gate summary",
+        "gate summaries",
+        "approval summary",
+        "approval summaries",
+        "prepare a compact",
+        "prepare compact",
+        "summarize approval",
+        "summarise approval",
+    ]
+    .iter()
+    .any(|term| query.contains(term))
 }
 
 fn has_modal_gate_action(query: &str) -> bool {
@@ -1112,8 +1126,37 @@ mod tests {
             "Should we run migration_review_export?",
             "What is the current plan, and should we proceed with the migration?",
             "Continue from the plan and tell me whether we should run migration_review_export.",
+            "approved M6 write apply deletion cleanup legacy simplification now",
         ] {
             assert!(asks_for_decision_gate(query), "{query}");
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+            assert!(!should_promote_current_plan(context), "{query}");
+        }
+    }
+
+    #[test]
+    fn continuation_with_approval_gate_context_promotes_current_plan() {
+        for query in [
+            "current plan next step continue move forward Engram Brain Harness after T139 T135 \
+             T139 approval gate",
+            "what is the current plan and next step after T139, considering approval gates",
+            "continue the current plan after T139; include any approval gate constraints",
+            "move forward with Engram Brain Harness from current plan after T139 approval gate",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+            assert!(
+                asks_for_current_plan_guidance(&query.to_lowercase()),
+                "{query}"
+            );
+            assert!(should_promote_current_plan(context), "{query}");
         }
     }
 

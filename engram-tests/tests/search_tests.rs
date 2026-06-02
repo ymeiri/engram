@@ -1150,6 +1150,95 @@ async fn test_memory_search_t118_exact_approval_command_promotes_matching_curren
 }
 
 #[tokio::test]
+async fn test_memory_search_t140_continuation_with_approval_gate_context_promotes_current_plan() {
+    let (search_service, memory_service) = setup_search_and_memory_service().await;
+    let now = OffsetDateTime::now_utc();
+
+    for (index, content) in [
+        "T138 is complete. Continue the Engram Brain Harness after T139 and T135; the handoff \
+         repeats approval gate context but is not the active current-plan guidance.",
+        "T133A and T135 harness repair approval gate details are preserved here as historical \
+         rolling handoff continuity context.",
+        "T139 and T135 approval gate notes mention current plan, next step, continue, move \
+         forward, and Brain Harness, but this older handoff should not lead the search result.",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut handoff = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Rolling handoff",
+            content,
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_confidence(0.99)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            format!("t140-handoff-distractor-{index}"),
+        ));
+        handoff.updated_at = now - time::Duration::minutes(index as i64);
+        memory_service.capture_memory(handoff).await.unwrap();
+    }
+
+    let mut m6_gate = MemoryItem::new(
+        MemoryKind::Limitation,
+        "M6 migration approval gate remains explicit",
+        "M6 migration and quarantine inspection remain gated. This approval gate context should \
+         stay retrievable, but it is not itself the current plan.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::UserStated,
+        writer(),
+    )
+    .with_confidence(0.98)
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "t140-m6-gate"));
+    m6_gate.updated_at = now - time::Duration::hours(2);
+    let m6_gate = memory_service.capture_memory(m6_gate).await.unwrap();
+
+    let mut current_plan = MemoryItem::new(
+        MemoryKind::Decision,
+        "T139 stale current-plan approval packet committed; archive remains gated",
+        "T139 is complete. Continue toward the Engram Brain Harness goal from this current plan. \
+         The next step must respect T135 and T139 approval gates; without exact approval, work \
+         stays non-gated and evidence-focused.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_status(MemoryStatus::Active)
+    .with_confidence(0.8)
+    .with_evidence(EvidenceRef::new(EvidenceKind::GitCommit, "t139-packet"))
+    .with_tag("current-plan");
+    current_plan.updated_at = now - time::Duration::minutes(1);
+    let current_plan = memory_service.capture_memory(current_plan).await.unwrap();
+
+    let results = search_service
+        .search_with_options(
+            "current plan next step continue move forward Engram Brain Harness after T139 T135 \
+             T139 approval gate",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            },
+        )
+        .await
+        .expect("Failed to search");
+
+    assert_eq!(results[0].id, current_plan.id.to_string());
+    assert!(
+        results
+            .iter()
+            .any(|result| result.id == m6_gate.id.to_string()),
+        "approval gate context should remain retrievable"
+    );
+}
+
+#[tokio::test]
 async fn test_memory_search_prefers_project_current_plan_over_repository_plan() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let now = OffsetDateTime::now_utc();

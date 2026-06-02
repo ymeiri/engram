@@ -5297,3 +5297,15 @@ archive itself, `lint apply_safe`, any other lifecycle mutation, handoff semanti
 quarantine inspection, harness writes, ranking/`orient`, public MCP, schema/storage/index, or
 document-index behavior changes. Any future archive requires exact user approval and fresh matching
 pre-write evidence with no intervening writes.
+
+T140 matrix note:
+`docs/BRAIN_HARNESS_T140_APPROVAL_GATE_CONTEXT_SEARCH_FIX_2026-06-02.md` records a narrow
+direct-search ranking repair after live trace `019e8866-0e96-7b73-a107-e4a756684bf0` returned old
+active rolling handoffs above the T139 current-plan memory for a continuation query that mentioned
+T135/T139 approval gates as context. The fix refines `approval gate` classification so continuation
+queries still promote the latest current-plan MemoryItem, while explicit permission/action and
+handoff-summary prompts remain gate-mode. Focused validation passed with ranker unit tests, the
+full `search_tests` integration suite, `cargo fmt --all --check`, `cargo check -p engram-cli`, and
+`git diff --check`. T140 does not install a binary, restart the daemon, validate installed runtime,
+change `orient`, mutate lifecycle state, alter handoff semantics, run M6, inspect quarantine
+candidates, write harness files, or change public MCP/schema/storage/index/document-index behavior.
