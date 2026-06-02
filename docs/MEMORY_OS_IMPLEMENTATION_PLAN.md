@@ -5155,3 +5155,18 @@ gate detail from the canonical handoff. T128 does not authorize hook changes, ha
 lifecycle mutation, document indexing, candidate inspection, ranking, `orient`, public
 MCP/schema/storage/index behavior changes, document-index behavior changes, or M6
 status/prioritize/apply/rerun.
+
+T129 matrix note:
+`docs/BRAIN_HARNESS_T129_CLAUDE_SESSION_END_HANDOFF_ROOT_CAUSE_2026-06-02.md` records a docs-only
+root-cause packet for the T128 handoff-continuity failure. Source inspection shows the daemon writes
+Claude `SessionEnd` handoffs only when `write_policy=durable`, while the generated command-style
+Claude session-end hook defaults a missing hook-input `write_policy` to `durable` before calling
+`harness(action="hook_event")`. Because rolling handoff updates supersede the previous active
+handoff, this can overwrite a rich Codex handoff with a low-information Claude session-end stub
+even when the surrounding bridge task was launched with `write=false`. Live Claude harness doctor
+still reports `ready=false`: generated files are installed, but required `SessionStart` and
+`SessionEnd` settings registrations are missing. AI Council consensus recommended a docs-only
+packet as the smallest safe slice and treating the likely hook-template fix as an exact approval
+gate. T129 does not change code, installed hooks, settings, adapters, lifecycle state, migration
+state, document indexing, candidate files, ranking, `orient`, public MCP parameters, or
+schema/storage/index behavior.

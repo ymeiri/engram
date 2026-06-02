@@ -1214,6 +1214,13 @@ Current next application:
   Record the failure as handoff-continuity evidence, skip prompt-generated obligations only with
   explicit rationale, and do not repair hooks/settings/adapters or disable handoff writes without a
   separate exact harness-write gate.
+- T129 applies root-cause packet discipline for harness write-path failures: if source and live
+  doctor evidence explain an accidental write path, record the causal chain and approval boundary
+  before changing generated hooks, settings, adapters, daemon hook behavior, lifecycle state, or
+  diagnostics. A generated hook default that turns missing write policy into durable write intent is
+  a hook behavior problem, not an `orient` or ranking problem. Use AI critique to expose fix options,
+  but treat the recommended hook-template change as an exact approval gate until the user approves
+  the code slice and validation scope.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

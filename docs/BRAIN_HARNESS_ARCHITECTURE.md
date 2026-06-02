@@ -1922,6 +1922,16 @@ Proceed in this order from the current checkpoint:
      repair gap. T128 does not authorize hook changes, harness repair, lifecycle mutation,
      document indexing, candidate inspection, ranking, `orient`, public MCP/schema/storage/index
      behavior changes, document-index behavior changes, or M6 status/prioritize/apply/rerun.
+129. Treat T129 as a docs-only root-cause packet for the T128 handoff-continuity failure. The
+     likely write path is now source-grounded: the generated Claude session-end command hook
+     defaults missing hook-input `write_policy` to `durable`, the daemon writes `SessionEnd`
+     handoffs only for `durable`, and rolling handoff updates supersede previous handoffs. This
+     explains how a bridge task launched with `write=false` can still end with a low-information
+     Claude session-end handoff replacing the rich Codex handoff. The smallest safe next code slice
+     requires exact approval to change the generated hook template and tests; T129 itself does not
+     authorize hook/settings/adapter writes, harness install, lifecycle mutation, M6 action,
+     ranking, `orient`, public MCP/schema/storage/index behavior changes, document-index behavior
+     changes, or candidate inspection.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
