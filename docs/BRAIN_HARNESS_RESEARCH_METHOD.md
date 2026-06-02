@@ -1185,6 +1185,12 @@ Current next application:
   repo files and more specific filename/scope queries for gates. Do not treat document indexing as
   M6 candidate-review/apply approval or as approval to change ranking, `orient`, public
   MCP/schema/storage/index behavior, document-index behavior, lifecycle state, or harness files.
+- T123 applies read-only candidate inspection discipline: candidate files may be summarized only
+  within the exact approved batch, and the report must separate metadata/content inspection from
+  accept/reject/quarantine decisions. Later-context conflicts, such as historical harness readiness
+  claims contradicted by newer audits, should be recorded as review risks rather than resolved
+  silently. Do not read additional candidates, run status/prioritize/apply, or write active memory
+  without a separate exact gate.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

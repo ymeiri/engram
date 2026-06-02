@@ -1,8 +1,12 @@
 # Brain Harness T122 M6 Candidate Review Approval Packet
 
-Status: Pending explicit user approval
+Status: Approved and partially executed by T123
 Date: 2026-06-02
 Scope: Approval packet for the next read-only M6 candidate-review inspection
+
+Execution note, 2026-06-02: the user approved the exact T123 phrase. Codex read only candidate
+files 0001-0004 and recorded the result in
+`docs/BRAIN_HARNESS_T123_M6_CANDIDATE_0001_0004_INSPECTION_RESULT_2026-06-02.md`.
 
 T121 explained the T68 count drift without making migration decisions. The written T68 review
 export snapshot still has 9 review candidates, 2 quarantine candidates, and 1 skip candidate. T122
@@ -69,11 +73,12 @@ candidates/0010-quarantine-telemetry-recall-432971.md
 candidates/0011-quarantine-gotchas-shared-worktree-branch-loss.md
 ```
 
-## Recommended Next Gate
+## Historical T123 Gate
 
-The recommended next slice is a small first-batch read-only inspection of the first four review
-candidate files. It is intentionally smaller than all 11 non-skip files so candidate-review
-quality, report shape, and stop conditions can be validated before reading the remaining queue.
+Before T123 was approved, the recommended next slice was a small first-batch read-only inspection
+of the first four review candidate files. It was intentionally smaller than all 11 non-skip files
+so candidate-review quality, report shape, and stop conditions could be validated before reading
+the remaining queue.
 
 To authorize this exact read-only inspection, reply with:
 
@@ -113,16 +118,16 @@ step needs a separate exact approval phrase. Status/prioritize must not be bundl
 file inspection. Apply/deletion/lifecycle mutation requires reviewed candidates, a dry-run report,
 a rollback plan, and explicit write approval.
 
-The separate T70 document-visibility gate also remains unchanged:
+The separate T70 document-visibility gate was later approved and executed:
 
 ```text
 Approve T70: index exact files T59, T68, and T69.
 ```
 
-T70 indexing does not approve M6 candidate review/apply, and M6 candidate review does not approve
-T70 indexing.
+T70 indexing did not approve M6 candidate review/apply, and M6 candidate review does not approve
+document indexing.
 
-## Measurement For T123 If Approved
+## Historical Measurement For T123
 
 Before reading candidate files:
 

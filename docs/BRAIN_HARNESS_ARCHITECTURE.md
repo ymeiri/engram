@@ -1874,6 +1874,14 @@ Proceed in this order from the current checkpoint:
      deletion, lifecycle mutation, public MCP/schema/storage/index changes, document-index
      behavior changes, `orient` expansion, ranking work, and harness writes behind separate exact
      approval gates.
+123. Treat T123 as approved read-only inspection evidence only. Codex read only candidate files
+     0001-0004 from the written T68 M6 review-export snapshot. All four are project-observation
+     `review` candidates from May 24 dogfood/Claude Code validation work, and no candidate
+     decisions were made. Candidate 0004's Claude Code readiness wording conflicts with later
+     readiness audits and must be treated as time-bound or stale before any acceptance decision.
+     T123 does not authorize quarantine inspection, status/prioritize/apply/rerun, active memory
+     writes, deletion, lifecycle mutation, public MCP/schema/storage/index changes, document-index
+     behavior changes, `orient` expansion, ranking work, or harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
