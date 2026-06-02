@@ -1361,6 +1361,257 @@ async fn test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates() 
 }
 
 #[tokio::test]
+async fn test_mcp_orient_no_prompt_plan_work_surfaces_current_plan_at_project_boundary() {
+    let state = setup_tool_state().await;
+
+    let mut current_plan = with_writer(request("add"));
+    current_plan.kind = Some("decision".to_string());
+    current_plan.title = Some("Current plan: implement T146 no-prompt orientation".to_string());
+    current_plan.content = Some(
+        "Latest current plan: implement the narrow no-prompt PlanWork current-plan fix before \
+         any migration, schema, harness, public MCP, payload, lifecycle, or runtime change."
+            .to_string(),
+    );
+    current_plan.origin = Some("tool_result".to_string());
+    current_plan.scope_type = Some("project".to_string());
+    current_plan.project_name = Some("engram".to_string());
+    current_plan.tags = vec!["current-plan".to_string()];
+    current_plan.evidence = manual_review_evidence("T146 current-plan fixture.");
+    let current_plan_response = tools::memory_new(&state, current_plan)
+        .await
+        .expect("current-plan add should work");
+    let current_plan_id = parse_json(&current_plan_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut secondary = with_writer(request("add"));
+    secondary.kind = Some("decision".to_string());
+    secondary.title = Some("Secondary implementation note".to_string());
+    secondary.content =
+        Some("A later non-current decision should not displace the current plan.".to_string());
+    secondary.origin = Some("tool_result".to_string());
+    secondary.scope_type = Some("project".to_string());
+    secondary.project_name = Some("engram".to_string());
+    secondary.evidence = manual_review_evidence("Secondary no-prompt fixture.");
+    tools::memory_new(&state, secondary)
+        .await
+        .expect("secondary decision add should work");
+
+    let mut rule = with_writer(request("add"));
+    rule.kind = Some("rule".to_string());
+    rule.title = Some("Brain Harness changes stay narrow".to_string());
+    rule.content = Some(
+        "No-prompt orientation fixes should not expand orient payload shape, public MCP \
+         parameters, migration behavior, harness behavior, or storage schema."
+            .to_string(),
+    );
+    rule.origin = Some("user_stated".to_string());
+    rule.scope_type = Some("project".to_string());
+    rule.project_name = Some("engram".to_string());
+    rule.evidence = manual_review_evidence("No-prompt rule fixture.");
+    tools::memory_new(&state, rule)
+        .await
+        .expect("rule add should work");
+
+    let mut preference = with_writer(request("add"));
+    preference.kind = Some("preference".to_string());
+    preference.title = Some("Prefer evidence before ranking changes".to_string());
+    preference.content =
+        Some("Ranking behavior should change only with focused fixture evidence.".to_string());
+    preference.origin = Some("user_stated".to_string());
+    preference.scope_type = Some("project".to_string());
+    preference.project_name = Some("engram".to_string());
+    preference.evidence = manual_review_evidence("No-prompt preference fixture.");
+    tools::memory_new(&state, preference)
+        .await
+        .expect("preference add should work");
+
+    let full_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_project_boundary".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("no-prompt full orient should work");
+    let full_json = parse_json(&full_response);
+
+    assert_eq!(full_json["active_decisions"][0]["id"], current_plan_id);
+    assert_eq!(
+        full_json["brain_loop"]["top_items"][0]["id"],
+        current_plan_id
+    );
+    assert!(full_json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id.as_str() == Some(current_plan_id.as_str())));
+
+    let lean_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_project_boundary".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: Some(OrientResponseShape::Lean),
+        },
+    )
+    .await
+    .expect("no-prompt lean orient should work");
+    let lean_json = parse_json(&lean_response);
+
+    assert_eq!(lean_json["response_shape"], "lean");
+    assert_eq!(
+        lean_json["brain_loop"]["top_items"][0]["id"],
+        current_plan_id
+    );
+    assert!(lean_json.get("context_pack").is_none());
+    assert!(lean_json.get("active_decisions").is_none());
+    assert!(lean_json["brain_loop"]["top_items"][0]
+        .get("trust")
+        .is_none());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_no_prompt_plan_work_without_boundary_or_plan_does_not_synthesize_plan() {
+    let state = setup_tool_state().await;
+
+    let mut current_plan = with_writer(request("add"));
+    current_plan.kind = Some("decision".to_string());
+    current_plan.title = Some("Current plan: project-scoped only".to_string());
+    current_plan.content = Some(
+        "Project-scoped current plan should not appear in an unscoped orientation.".to_string(),
+    );
+    current_plan.origin = Some("tool_result".to_string());
+    current_plan.scope_type = Some("project".to_string());
+    current_plan.project_name = Some("engram".to_string());
+    current_plan.tags = vec!["current-plan".to_string()];
+    current_plan.evidence = manual_review_evidence("Unscoped current-plan guard fixture.");
+    let current_plan_response = tools::memory_new(&state, current_plan)
+        .await
+        .expect("current-plan add should work");
+    let current_plan_id = parse_json(&current_plan_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut global_rule = with_writer(request("add"));
+    global_rule.kind = Some("rule".to_string());
+    global_rule.title = Some("Global orientation rule".to_string());
+    global_rule.content =
+        Some("Global memory can appear when no project boundary is available.".to_string());
+    global_rule.origin = Some("user_stated".to_string());
+    global_rule.scope_type = Some("global".to_string());
+    global_rule.evidence = manual_review_evidence("Unscoped global rule fixture.");
+    let global_rule_response = tools::memory_new(&state, global_rule)
+        .await
+        .expect("global rule add should work");
+    let global_rule_id = parse_json(&global_rule_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let unscoped_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: None,
+            prompt: None,
+            project: None,
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_unscoped_guard".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("unscoped orient should work");
+    let unscoped_json = parse_json(&unscoped_response);
+
+    assert_eq!(
+        unscoped_json["brain_loop"]["top_items"][0]["id"],
+        global_rule_id
+    );
+    assert!(unscoped_json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|id| id.as_str() != Some(current_plan_id.as_str())));
+
+    let no_plan_state = setup_tool_state().await;
+    let mut scoped_rule = with_writer(request("add"));
+    scoped_rule.kind = Some("rule".to_string());
+    scoped_rule.title = Some("Scoped orientation rule".to_string());
+    scoped_rule.content = Some(
+        "No-prompt project orientation without current-plan memory should stay rule-led."
+            .to_string(),
+    );
+    scoped_rule.origin = Some("user_stated".to_string());
+    scoped_rule.scope_type = Some("project".to_string());
+    scoped_rule.project_name = Some("engram".to_string());
+    scoped_rule.evidence = manual_review_evidence("No-current-plan guard fixture.");
+    let scoped_rule_response = tools::memory_new(&no_plan_state, scoped_rule)
+        .await
+        .expect("scoped rule add should work");
+    let scoped_rule_id = parse_json(&scoped_rule_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let no_plan_response = tools::orient(
+        &no_plan_state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_no_current_plan".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("no-current-plan orient should work");
+    let no_plan_json = parse_json(&no_plan_response);
+
+    assert_eq!(
+        no_plan_json["brain_loop"]["top_items"][0]["id"],
+        scoped_rule_id
+    );
+    assert!(no_plan_json["active_decisions"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
 async fn test_mcp_orient_routes_inferred_memory_to_review_needed() {
     let state = setup_tool_state().await;
 
@@ -1445,6 +1696,27 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
         .await
         .expect("migration add should work");
 
+    let mut current_plan = with_writer(request("add"));
+    current_plan.kind = Some("decision".to_string());
+    current_plan.title = Some("Current plan: finish no-prompt orientation".to_string());
+    current_plan.content = Some(
+        "Latest current plan covers no-prompt PlanWork continuity and should not override a \
+         specific implementation prompt."
+            .to_string(),
+    );
+    current_plan.origin = Some("tool_result".to_string());
+    current_plan.scope_type = Some("project".to_string());
+    current_plan.project_name = Some("engram".to_string());
+    current_plan.tags = vec!["current-plan".to_string()];
+    current_plan.evidence = manual_review_evidence("Specific prompt guard fixture.");
+    let current_plan_response = tools::memory_new(&state, current_plan)
+        .await
+        .expect("current-plan add should work");
+    let current_plan_id = parse_json(&current_plan_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
     let throttling_response = tools::orient(
         &state,
         OrientRequest {
@@ -1468,9 +1740,17 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
         throttling_json["active_decisions"][0]["title"],
         "Prefer token bucket throttling"
     );
+    assert_ne!(
+        throttling_json["active_decisions"][0]["id"],
+        current_plan_id
+    );
     assert_eq!(
         throttling_json["brain_loop"]["top_items"][0]["title"],
         "Prefer token bucket throttling"
+    );
+    assert_ne!(
+        throttling_json["brain_loop"]["top_items"][0]["id"],
+        current_plan_id
     );
 
     let migration_response = tools::orient(

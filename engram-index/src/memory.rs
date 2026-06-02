@@ -1178,10 +1178,13 @@ impl MemoryService {
             input.cwd.as_deref(),
             input.prompt.as_deref(),
         );
+        let has_task_boundary =
+            has_orientation_task_boundary(effective_project, input.cwd.as_deref());
         let relevant_active = prioritize_current_plan_for_orientation(
             relevant_active,
             input.intent.as_ref(),
             input.prompt.as_deref(),
+            has_task_boundary,
         );
         let mut relevant_review = filter_relevant(
             review,
@@ -1252,6 +1255,7 @@ impl MemoryService {
             cwd: input.cwd.as_deref(),
             query: input.prompt.as_deref(),
             intent: input.intent.as_ref(),
+            has_task_boundary,
             decisions: &active_decisions,
             rules: &active_rules,
             preferences: &preferences,
@@ -1420,13 +1424,14 @@ fn prioritize_current_plan_for_orientation(
     items: Vec<MemoryItem>,
     intent: Option<&BrainHarnessIntent>,
     query: Option<&str>,
+    has_task_boundary: bool,
 ) -> Vec<MemoryItem> {
     let suppress_older = matches!(
         intent,
         Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
     );
-    let promote_latest =
-        suppress_older || should_prioritize_current_plan_for_plan_work(intent, query);
+    let promote_latest = suppress_older
+        || should_prioritize_current_plan_for_plan_work(intent, query, has_task_boundary);
     if !promote_latest {
         return items;
     }
@@ -1441,9 +1446,21 @@ fn prioritize_current_plan_for_orientation(
 fn should_prioritize_current_plan_for_plan_work(
     intent: Option<&BrainHarnessIntent>,
     query: Option<&str>,
+    has_task_boundary: bool,
 ) -> bool {
-    matches!(intent, Some(BrainHarnessIntent::PlanWork))
-        && query.is_some_and(is_open_ended_plan_work_prompt)
+    if !matches!(intent, Some(BrainHarnessIntent::PlanWork)) || !has_task_boundary {
+        return false;
+    }
+
+    match query.map(str::trim) {
+        None | Some("") => true,
+        Some(query) => is_open_ended_plan_work_prompt(query),
+    }
+}
+
+fn has_orientation_task_boundary(project: Option<&str>, cwd: Option<&str>) -> bool {
+    project.is_some_and(|project| !project.trim().is_empty())
+        || cwd.is_some_and(|cwd| !cwd.trim().is_empty())
 }
 
 fn prioritize_latest_current_plan(
@@ -1886,6 +1903,7 @@ struct BrainLoopParts<'a> {
     cwd: Option<&'a str>,
     query: Option<&'a str>,
     intent: Option<&'a BrainHarnessIntent>,
+    has_task_boundary: bool,
     decisions: &'a [MemoryItem],
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
@@ -1947,10 +1965,9 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
             score: 0.0,
         },
     ];
-    let continuity_current_plan = matches!(
-        parts.intent,
-        Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
-    ) && parts.decisions.first().is_some_and(is_current_plan_item);
+    let continuity_current_plan =
+        should_pin_current_plan_in_brain_loop(parts.intent, parts.query, parts.has_task_boundary)
+            && parts.decisions.first().is_some_and(is_current_plan_item);
     let follow_user_preference =
         matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference))
             && !parts.preferences.is_empty();
@@ -2002,6 +2019,25 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
             return items;
         }
     }
+}
+
+fn should_pin_current_plan_in_brain_loop(
+    intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
+    has_task_boundary: bool,
+) -> bool {
+    if matches!(
+        intent,
+        Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
+    ) {
+        return true;
+    }
+
+    if !matches!(intent, Some(BrainHarnessIntent::PlanWork)) || !has_task_boundary {
+        return false;
+    }
+
+    matches!(query.map(str::trim), None | Some(""))
 }
 
 fn brain_loop_item(item: &MemoryItem, reason: &str) -> BrainLoopItem {
