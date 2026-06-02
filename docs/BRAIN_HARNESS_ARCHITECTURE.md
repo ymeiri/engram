@@ -2062,6 +2062,17 @@ Proceed in this order from the current checkpoint:
      quarantine, `orient`, ranking source, public MCP, schema/storage/index, document-index
      behavior, shell profile/PATH/auth/service configuration, rollback, force-kill, deletion, or
      old-binary reinstall commands.
+147. Treat T145 execution as an operational runtime refresh with partial validation failure, not as
+     full completion. After exact approval, the binary-relevant prechecks passed, the installed
+     `/Users/yuval.meiri/.local/bin/engram` hash changed from `837ef2...` to `3d801be9...`, and the
+     daemon restarted from PID `23341` to PID `10768`. The three listed direct live search queries
+     all ranked `Current plan after T145 binary-source runtime packet`
+     (`019e889b-5453-7dc2-9e34-a72538ac65a4`) first, above rolling handoff noise. However, exact
+     no-prompt lean `orient` trace `019e89b6-6fa0-71f2-977a-f9046eaabbdf` returned generic
+     plan-work guidance instead of current-plan guidance, so the T145 packet's stop condition
+     requires recording partial validation failure. Do not change `orient`, ranking-source behavior,
+     public MCP contracts, schema/storage/index behavior, lifecycle state, harness files, M6, or
+     document-index behavior without separate exact approval.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

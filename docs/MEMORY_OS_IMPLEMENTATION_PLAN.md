@@ -5378,3 +5378,17 @@ T141/T144 execution, harness install, hooks/settings/adapters, user-owned edits,
 mutation, T139 archive, M6/migration/quarantine, `orient`, ranking source, public MCP,
 schema/storage/index, document-index behavior, shell profile/PATH/auth/service configuration,
 rollback, force-kill, deletion, or old-binary reinstall commands.
+
+T145 execution matrix note:
+`docs/BRAIN_HARNESS_T145_RUNTIME_REFRESH_VALIDATION_RESULT_2026-06-02.md` records the approved
+runtime refresh and partial validation failure. The required binary-source prechecks passed, the
+installed `.local/bin/engram` hash changed from
+`837ef2cabf08f1481ff66d44911387cf3e5d1941f86a41431780dde48bdef724` to
+`3d801be9dcae4b26bd03b27cadd0d4449cc32322e7d0cb3bcff0b0ac58b6686b`, and the daemon restarted
+from PID `23341` to PID `10768`. The three listed direct T140/T143 live search queries all returned
+active T145 current-plan memory first, above rolling handoff noise. Exact no-prompt lean `orient`
+trace `019e89b6-6fa0-71f2-977a-f9046eaabbdf` did not return current-plan guidance, so T145 does
+not pass overall. The next narrow work is a read-only root-cause and fixture proposal for this
+`orient` miss; any implementation changing `orient`, ranking-source behavior, public MCP,
+schema/storage/index, lifecycle state, harness files, M6, or document-index behavior remains
+separately approval-gated.

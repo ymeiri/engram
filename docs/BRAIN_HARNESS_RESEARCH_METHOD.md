@@ -1317,6 +1317,14 @@ Current next application:
   committed drift, require committed/staged/unstaged binary-relevant diff checks as the first
   execution step after exact approval, and stop on any ambiguous path, pre-state hash/PID drift, or
   need for source/ranking/`orient`/lifecycle/M6/harness/schema/storage/index/document-index work.
+- T145 execution shows how to classify partial runtime validation: successful install/restart plus
+  passing direct search queries is not enough if another listed validation class fails. On
+  2026-06-02 the approved refresh installed hash `3d801be9...` and restarted daemon PID `10768`;
+  direct T140/T143 searches ranked T145 current-plan memory first, but exact no-prompt lean
+  `orient` trace `019e89b6-6fa0-71f2-977a-f9046eaabbdf` returned generic plan-work guidance. Record
+  that as partial validation failure and require a separate approval gate before any `orient`,
+  ranking-source, public MCP, schema/storage/index, lifecycle, harness, M6, or document-index
+  behavior change.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
