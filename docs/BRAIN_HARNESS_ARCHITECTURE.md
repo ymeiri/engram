@@ -1960,6 +1960,12 @@ Proceed in this order from the current checkpoint:
      render/doctor validation only. Do not edit installed hooks/settings, run `harness install`,
      use `adopt_user_owned`, change public MCP/schema/storage/index/ranking/`orient`/migration/
      lifecycle/document-index behavior, or inspect M6 quarantine candidates under this approval.
+135. Treat T133A as a successful live-runtime refresh validation, not a harness repair. Installing
+     the current `/Users/yuval.meiri/.local/bin/engram` and restarting the daemon changed live
+     `harness(render_adapter, claude_code, claude-session-end-hook)` output to default missing
+     `write_policy` to `nudge`. The installed Claude `SessionEnd` hook still defaults to `durable`
+     and is now reported as drifted, so installed hook/settings repair and cross-harness adapter
+     readiness remain separate exact approval gates.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

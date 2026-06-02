@@ -1244,6 +1244,10 @@ Current next application:
   validations, exclusions, and stop conditions before asking the user. Keep installed hooks/settings,
   `harness install`, `adopt_user_owned`, migration, lifecycle, ranking, `orient`, public MCP, and
   schema/storage/index behavior out of scope unless separately approved.
+- T133A confirms the runtime-refresh boundary: after installing the current binary and restarting
+  the daemon, live render evidence can validate the source repair while installed hooks/settings
+  remain intentionally unrepaired. A drifted installed hook after live-render success is not a failed
+  source repair; it is a separate harness-write approval gate.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

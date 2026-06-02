@@ -5224,3 +5224,15 @@ a binary, restart a daemon, edit installed hooks/settings, run `harness install`
 migration, lifecycle state, document-index behavior, or inspect M6 quarantine candidates. If the
 user approves T133A exactly, the next slice is binary install, daemon restart, and read-only live
 render/doctor validation only; hook/settings repair remains a separate exact approval gate.
+
+T133A matrix note:
+`docs/BRAIN_HARNESS_T133A_LIVE_RUNTIME_REFRESH_VALIDATION_2026-06-02.md` records the approved
+runtime refresh. The current repo binary was installed to `/Users/yuval.meiri/.local/bin/engram`,
+the Engram daemon restarted on port 8765, and live `harness(render_adapter, claude_code,
+claude-session-end-hook)` now renders `.write_policy // "nudge"`. This validates the T130 repair in
+the running MCP runtime. It does not repair installed hooks/settings: the installed Claude
+`SessionEnd` hook still renders `.write_policy // "durable"` and Claude Code doctor reports it as
+drifted. Claude Code, Codex, Gemini CLI, and Cursor readiness remain false. No installed
+hooks/settings, `harness install`, `adopt_user_owned`, public MCP parameters, schema/storage/index
+behavior, ranking, `orient`, migration, lifecycle state, document-index behavior, or M6 quarantine
+candidates were changed or inspected.
