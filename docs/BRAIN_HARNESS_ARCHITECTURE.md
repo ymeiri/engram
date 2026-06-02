@@ -1981,6 +1981,12 @@ Proceed in this order from the current checkpoint:
      semantics changes, ranking changes, `orient` changes, schema/storage/index changes, M6 action,
      document-index behavior changes, or harness/settings writes. Any cleanup or behavior change
      remains an exact approval gate.
+138. Treat T137 as a read-only installed-harness readiness recheck. Live `harness(status)` and
+     `harness(doctor)` still report `ready=false` for generic, Codex, Gemini CLI, Cursor, and
+     Claude Code, with failures matching the T135 repair gate. T137 did not run
+     `harness(install)`, edit hooks/settings/adapters, install binaries, restart daemons, change
+     lifecycle state, run M6, or touch ranking/`orient`/public MCP/schema/storage/index/
+     document-index behavior. T135 remains the next product-moving exact approval gate.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

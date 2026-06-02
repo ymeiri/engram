@@ -1260,6 +1260,12 @@ Current next application:
   `handoff(update)` semantic changes, ranking changes, `orient` changes, M6, schema/storage/index,
   document-index behavior, or harness/settings work unless the user explicitly approves the exact
   mutation.
+- T137 applies readiness-recheck discipline: after a docs-only gate packet, a later read-only
+  status/doctor recheck may confirm whether the gate is still product-relevant, but it is not a
+  substitute for approval and should not run `harness(install)` pre-write dry-runs early. Preserve
+  readiness evidence, note whether the gate shape changed, and stop before hook/settings/adapter
+  writes, user-owned adoption, lifecycle cleanup, M6, ranking, `orient`, public MCP, schema/storage/
+  index, or document-index work unless the user explicitly approves that exact mutation.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

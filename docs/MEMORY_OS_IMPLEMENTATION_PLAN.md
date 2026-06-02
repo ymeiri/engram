@@ -5259,3 +5259,15 @@ explains the shape: `handoff(update)` adds a supersedes edge to the previous han
 the new handoff, while `capture_current_plan` explicitly marks older current-plan guidance
 `superseded`. T136 made no lifecycle, ranking, `orient`, schema/storage/index, document-index,
 M6, or harness/settings change. Lifecycle cleanup or handoff semantics repair remains exact-gated.
+
+T137 matrix note:
+`docs/BRAIN_HARNESS_T137_HARNESS_READINESS_RECHECK_2026-06-02.md` records a read-only installed
+harness readiness recheck after T136. Lean `orient` and direct search recover the active T136
+current-plan memory first. Live `harness(status)` and `harness(doctor)` still return
+`ready=false` for generic, Codex, Gemini CLI, Cursor, and Claude Code. The failures match the T135
+gate shape: missing generic policy adapter; drifted Codex, Gemini CLI, and Cursor generated
+adapters; drifted Claude `SessionEnd` hook; missing Claude SessionStart/SessionEnd settings
+registrations; and user-owned Claude settings snippet left untouched. T137 did not run
+`harness(install)` dry-runs because T135 requires those immediately before approved writes. It made
+no harness/settings writes, daemon/binary changes, lifecycle, ranking, `orient`, schema/storage/
+index, document-index, M6, or public MCP changes. T135 remains the next product-moving exact gate.
