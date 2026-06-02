@@ -1974,6 +1974,13 @@ Proceed in this order from the current checkpoint:
      authorize harness writes, user-owned adoption, `settings.json` edits, unlisted hook/command
      edits, M6 action, lifecycle mutation, ranking, `orient`, public MCP/schema/storage/index
      changes, or document-index behavior changes until the user explicitly approves that wording.
+137. Treat T136 as a read-only evidence audit for stale active rolling handoff noise. Source and
+     live MCP evidence show `handoff(update)` records a supersedes edge to the previous handoff but
+     does not mark the previous handoff `superseded`, so old rolling handoffs remain active and can
+     surface in direct search. T136 does not authorize lifecycle archive/apply, `handoff(update)`
+     semantics changes, ranking changes, `orient` changes, schema/storage/index changes, M6 action,
+     document-index behavior changes, or harness/settings writes. Any cleanup or behavior change
+     remains an exact approval gate.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -5248,3 +5248,14 @@ approval for five one-at-a-time harness install writes after matching fresh dry-
 authorize harness writes, user-owned adoption, `settings.json` edits, unlisted hook/command edits,
 M6 action, lifecycle mutation, ranking, `orient`, public MCP/schema/storage/index changes, or
 document-index behavior changes until the user explicitly approves the T135 wording.
+
+T136 matrix note:
+`docs/BRAIN_HARNESS_T136_STALE_ACTIVE_HANDOFF_NOISE_AUDIT_2026-06-02.md` records a read-only
+audit of active rolling handoff noise. The current plan is not ambiguous: lean `orient`,
+`handoff(get)`, and scoped current-plan listing recover the T135 gate. The noise is real anyway:
+MCP listing returned 50 active project-scoped rolling handoffs at the requested limit, including a
+T135->T133A->T134->T133 chain and low-information Claude session-end stubs. Source inspection
+explains the shape: `handoff(update)` adds a supersedes edge to the previous handoff but saves only
+the new handoff, while `capture_current_plan` explicitly marks older current-plan guidance
+`superseded`. T136 made no lifecycle, ranking, `orient`, schema/storage/index, document-index,
+M6, or harness/settings change. Lifecycle cleanup or handoff semantics repair remains exact-gated.

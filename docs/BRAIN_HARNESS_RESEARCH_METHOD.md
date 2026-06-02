@@ -1254,6 +1254,12 @@ Current next application:
   each write, and keep user-owned adoption, unlisted hooks/settings, M6, lifecycle, ranking,
   `orient`, public MCP/schema/storage/index, and document-index changes out of scope unless the user
   explicitly approves them.
+- T136 applies lifecycle-evidence discipline: direct-search noise from active rolling handoffs can
+  be audited and documented without fixing it. If source and live evidence show a superseded-active
+  chain, preserve exact IDs, query traces, and code references, then stop before archive/apply,
+  `handoff(update)` semantic changes, ranking changes, `orient` changes, M6, schema/storage/index,
+  document-index behavior, or harness/settings work unless the user explicitly approves the exact
+  mutation.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
