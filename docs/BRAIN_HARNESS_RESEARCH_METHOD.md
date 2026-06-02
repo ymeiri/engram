@@ -1209,6 +1209,11 @@ Current next application:
   or fresh-doc visibility gaps do not justify lifecycle mutation, document indexing, ranking
   changes, `orient` expansion, public MCP/schema/storage/index behavior changes, M6 action, or
   harness writes without separate exact approval.
+- T128 applies cross-harness parity discipline: a Claude Code retrieval pass is not a harness pass
+  if session-end automation writes or supersedes handoff state during a read-only bridge run.
+  Record the failure as handoff-continuity evidence, skip prompt-generated obligations only with
+  explicit rationale, and do not repair hooks/settings/adapters or disable handoff writes without a
+  separate exact harness-write gate.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

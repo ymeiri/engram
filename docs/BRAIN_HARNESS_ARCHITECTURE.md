@@ -1913,6 +1913,15 @@ Proceed in this order from the current checkpoint:
      T127 does not authorize T125 quarantine inspection, document indexing, lifecycle mutation,
      M6 status/prioritize/apply/rerun, ranking work, `orient` expansion, public
      MCP/schema/storage/index changes, document-index behavior changes, or harness writes.
+128. Treat T128 as a mixed Claude Code parity result. Claude Code recovers T127 current-plan memory
+     first in lean `orient` and broad continuation search, which supports current-plan retrieval
+     parity for the tested prompt class. Handoff continuity fails: Claude Code session-end
+     automation writes stub handoffs despite bridge `write=false`, superseding the rich T127
+     handoff and dropping T125/T47 gate context from canonical `handoff(get)`. Do not treat T128 as
+     harness readiness or hook correctness; carry it as evidence for the pending harness/hook
+     repair gap. T128 does not authorize hook changes, harness repair, lifecycle mutation,
+     document indexing, candidate inspection, ranking, `orient`, public MCP/schema/storage/index
+     behavior changes, document-index behavior changes, or M6 status/prioritize/apply/rerun.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

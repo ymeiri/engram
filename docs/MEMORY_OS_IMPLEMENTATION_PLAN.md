@@ -787,6 +787,17 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       candidate decision, candidate active-memory write, deletion, lifecycle mutation, document
       indexing, ranking, `orient`, public MCP/schema/storage/index behavior change, document-index
       behavior change, or harness write was run.
+- [x] T128 Claude Code post-T127 parity check: documented
+      `docs/BRAIN_HARNESS_T128_CLAUDE_POST_T127_PARITY_CHECK_2026-06-02.md` after a read-only
+      Claude Bridge run. Claude Code recovered T127 current-plan memory first in lean `orient` and
+      broad continuation search, and scoped current-plan listing returned exactly one active
+      Engram project current-plan item. Exact T125 search remained noisy: the current plan ranked
+      fifth behind handoffs. Handoff continuity failed because Claude Code session-end automation
+      wrote stub handoffs despite bridge `write=false`, superseding the rich T127 handoff. Codex
+      skipped two prompt-generated Claude obligations as inapplicable. T128 does not authorize hook
+      changes, harness repair, lifecycle mutation, document indexing, candidate inspection,
+      ranking, `orient`, public MCP/schema/storage/index behavior changes, document-index behavior
+      changes, or M6 status/prioritize/apply/rerun.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -928,6 +939,13 @@ still surface stale repository-scoped current-plan memory
 `019e5e0a-86b4-73e3-aa9b-ca350e83e915` lower down, the T126 report is not top-five visible
 through document search, lint still reports stale/wrong-scope feedback with no safe lifecycle
 action, and rolling telemetry fails the confidence gate at 38% feedback coverage.
+T128 replicates the post-T127 startup retrieval in Claude Code through Claude Bridge. Claude Code
+returns the active T127 current plan first in lean `orient` and broad continuation search, but exact
+T125 search remains noisy and ranks the current plan fifth behind handoffs. More importantly,
+Claude Code session-end automation writes stub handoffs despite bridge `write=false`, superseding
+the rich T127 handoff and leaving current-plan memory as the only reliable carrier of T125/T47 gate
+context until Codex restores the handoff. This is a cross-harness continuity failure, not a
+retrieval pass.
 T71 reconfirms from read-only harness status checks that generic, Claude Code, Codex, Gemini CLI,
 and Cursor still report `ready=false`. This updates the harness evidence date only; the T47 exact
 harness-write approval packet remains pending and unexecuted.
@@ -5126,3 +5144,14 @@ quarantine candidates, run status/prioritize/apply/rerun, make candidate decisio
 candidate memory, delete data, mutate lifecycle state, index documents, change ranking logic,
 expand `orient`, change public MCP or schema/storage/index behavior, change document-index
 behavior, or write harness adapters/hooks.
+
+T128 matrix note:
+`docs/BRAIN_HARNESS_T128_CLAUDE_POST_T127_PARITY_CHECK_2026-06-02.md` records a read-only Claude
+Code parity check after T127. Claude Code recovered T127 current-plan memory first in lean
+`orient` and broad continuation search, but exact T125 search remained noisy and ranked current
+plan fifth behind handoffs. Handoff continuity failed: Claude Code session-end automation wrote
+stub handoffs despite bridge `write=false`, superseding the rich T127 handoff and dropping T125/T47
+gate detail from the canonical handoff. T128 does not authorize hook changes, harness repair,
+lifecycle mutation, document indexing, candidate inspection, ranking, `orient`, public
+MCP/schema/storage/index behavior changes, document-index behavior changes, or M6
+status/prioritize/apply/rerun.
