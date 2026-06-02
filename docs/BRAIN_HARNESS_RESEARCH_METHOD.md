@@ -1303,6 +1303,14 @@ Current next application:
   fixture passes without source changes, treat the result as stronger evidence for the existing
   runtime-refresh gate, not as installed parity. If it fails, decide separately whether the source
   change is still within the approved prompt class or needs a new approval gate.
+- T144 applies stale-approval-packet discipline: if a runtime-refresh packet names an older HEAD
+  after later source fixtures or validation commits land, do not reuse it. Write a refreshed,
+  docs-only/default-deny packet anchored to the current HEAD, current binary hash, current daemon
+  PID, current live traces, and current source-validation evidence. The refreshed packet must
+  explicitly supersede the stale packet, define exact validation queries, require partial-query
+  failures to stop, and keep rollback, force-kill, old-binary reinstall, shell/PATH/auth/service
+  configuration, lifecycle, M6, harness, `orient`, ranking-source, public MCP, schema/storage/index,
+  and document-index work out of scope unless separately approved.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,

@@ -2039,6 +2039,18 @@ Proceed in this order from the current checkpoint:
      install a binary, restart the daemon, change ranking source, mutate lifecycle, edit harness
      files, run M6, or change `orient`/public MCP/schema/storage/index/document-index behavior.
      Exact T141 approval remains the runtime-moving next gate.
+145. Treat T144 as the refreshed runtime-refresh approval packet that supersedes stale T141.
+     Current HEAD is `ab2f5e25b78f1224a7dbc4d5615c143f286a750b`; the installed
+     `/Users/yuval.meiri/.local/bin/engram` hash remains
+     `837ef2cabf08f1481ff66d44911387cf3e5d1941f86a41431780dde48bdef724`, and the daemon
+     remains PID `23341`. Fresh direct live searches still rank active rolling handoffs above
+     current-plan guidance for T140/T143 continuation prompts, while T143 source fixtures pass.
+     T144 asks for exact approval to run only the known install/restart sequence plus read-only
+     validation of the listed T140/T143 query shapes. It does not authorize stale T141 execution,
+     harness install, hooks/settings/adapters, `adopt_user_owned`, lifecycle mutation, T139
+     archive, M6/migration/quarantine, `orient`, ranking source, public MCP, schema/storage/index,
+     document-index behavior, shell profile/PATH/auth/service configuration, rollback commands,
+     force-kill commands, or deletion/reinstallation recovery.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

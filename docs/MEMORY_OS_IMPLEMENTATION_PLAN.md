@@ -5346,3 +5346,19 @@ above a fresher rolling handoff for that query while keeping the handoff retriev
 passed with the focused T143 test, ranker unit tests, full `search_tests`, `cargo fmt --all
 --check`, `cargo check -p engram-cli`, and `git diff --check`. No ranker source changed; T141
 runtime refresh remains the next exact approval gate.
+
+T144 matrix note:
+`docs/BRAIN_HARNESS_T144_T143_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` records a refreshed,
+docs-only/default-deny runtime-refresh approval packet that supersedes stale T141. Current HEAD is
+`ab2f5e25b78f1224a7dbc4d5615c143f286a750b`, while the installed binary hash remains
+`837ef2cabf08f1481ff66d44911387cf3e5d1941f86a41431780dde48bdef724` and daemon PID remains
+`23341`. Fresh live `orient` trace `019e8889-f44b-7d32-8363-b0105366eb8a` returned T143
+current-plan memory first, but direct live traces `019e888a-116a-7923-940c-cc5668240877` and
+`019e888a-125f-7273-93a9-ea1a21bc34d4` still returned active rolling handoffs above current-plan
+guidance. T144 asks for exact approval before running only `cargo install --path engram-cli
+--force --root /Users/yuval.meiri/.local`, `engram daemon stop`, `engram daemon start`, and
+read-only live validation of the listed T140/T143 query shapes. It does not run the refresh or
+authorize harness install, hooks/settings/adapters, `adopt_user_owned`, lifecycle mutation, T139
+archive, M6/migration/quarantine, `orient`, ranking source, public MCP, schema/storage/index,
+document-index behavior, shell profile/PATH/auth/service configuration, rollback, force-kill,
+deletion, or old-binary reinstall commands.
