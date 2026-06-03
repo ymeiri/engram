@@ -5437,3 +5437,19 @@ promotion. T147 closes the installed-runtime gap for the T146 no-prompt `plan_wo
 It does not authorize harness writes, lifecycle mutation, M6/migration/quarantine,
 schema/storage/index changes, document-index changes, public MCP changes, payload changes,
 PATH/profile/auth configuration changes, rollback, force-kill, deletion, or old-binary reinstall.
+
+T150 matrix note:
+`docs/BRAIN_HARNESS_T150_POST_T147_HARNESS_SIDE_EFFECT_AUDIT_2026-06-03.md` records the read-only
+post-T147 continuation audit. T147 remains complete, and the active T146 runtime-refresh limitation
+`019e89f4-7dba-7ae1-a559-85d924af31a3` is now stale because installed-runtime live validation
+passed. The stale limitation is still a separate lifecycle approval gate, not an implicit archive or
+supersede authorization. During read-only Claude Bridge critique, Claude Code still wrote two
+session-end stub handoffs (`019e8bc0-59a2-7051-b667-e88a1a4861c0` and
+`019e8bc0-59a2-7051-b667-e87463bc9b3b`), and read-only harness status/doctor checks still report
+Claude Code `ready=false` with drifted installed SessionEnd hook/settings state. Therefore the next
+product-moving gate is the existing exact T135 harness repair approval, and Claude Bridge should not
+be used again for Engram Brain Harness consultation until T135 is approved/executed unless the user
+explicitly accepts the known side-effect risk. T150 does not authorize harness writes, lifecycle
+mutation, M6/migration/quarantine, schema/storage/index changes, document-index behavior changes,
+ranking or `orient` changes, public MCP/payload changes, user-owned file adoption, deletion,
+rollback, force-kill, or old-binary reinstall.

@@ -2113,6 +2113,17 @@ Proceed in this order from the current checkpoint:
      writes, lifecycle cleanup, M6/migration/quarantine, public MCP/payload changes,
      schema/storage/index changes, document-index behavior changes, PATH/profile/auth configuration,
      rollback, force-kill, deletion, and old-binary reinstall remain separately gated.
+152. Treat T150 as a read-only post-T147 gate audit, not authorization to mutate lifecycle or
+     harness state. T147 is complete, and active limitation
+     `019e89f4-7dba-7ae1-a559-85d924af31a3` is now stale because the installed runtime was
+     refreshed and live no/empty-prompt `plan_work` `orient` passed. However, lifecycle cleanup
+     still requires separate exact approval with fresh target, search/orient, lint, and graph
+     evidence. A read-only Claude Bridge critique still caused Claude Code to write two session-end
+     stub handoffs, and `harness status/doctor` still reports Claude Code `ready=false` because the
+     installed SessionEnd hook/settings state is drifted. The next product-moving gate is therefore
+     the exact T135 harness repair approval; do not use Claude Bridge again for Engram Brain Harness
+     consultation until that repair is approved and executed unless the user explicitly accepts the
+     known side-effect risk.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
