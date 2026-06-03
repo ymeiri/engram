@@ -5794,3 +5794,22 @@ document-index behavior, deletion, cleanup, rollback, force-kill, old-binary rei
 user-owned-file edits. The next product-moving gates remain exact T172 approval or exact T174
 approval; M6 migration write-apply remains separately gated by reviewed decisions, dry-run/rollback
 evidence, telemetry readiness, and explicit user approval.
+
+T179 matrix note:
+`docs/BRAIN_HARNESS_T179_T172_NATIVE_CLAUDE_EFFECTIVE_HOOK_RESULT_2026-06-03.md` records the
+exact-approved T172 native Claude effective-hook validation and approved recovery attempt. Preflight
+matched the packet: Claude target/version was `2.1.161`, monitored user-level hashes matched,
+harness status/doctor were `ready=true`, obligations were clean, git had no tracked diff, and no
+native Claude process was already running. The single native PTY emitted visible Engram
+`SessionStart:startup` activation text, received only the approved `/hooks` input, but produced no
+visible effective-hook configuration output. Initial EOF did not exit. The approved recovery sent
+Ctrl-C, then EOF after prompt control returned; Claude still requested repeated Ctrl-D and remained
+live as PID `49349`, so no further input or force-kill was run. Postflight comparisons found no
+tracked git changes, no monitored Claude hash drift, no Memory OS writes, no obligation changes,
+and unchanged harness readiness. T179 is a hard-stop result: it proves native startup hook output
+is visible, but it does not close the effective-hook visibility gate and does not prove
+prompt-bearing native Claude behavior, missing SessionEnd `write_policy` behavioral semantics,
+M6 migration readiness, lifecycle cleanup, ranking/`orient`, public MCP, schema/storage/index,
+document-index behavior, deletion, rollback, force-kill, or user-owned-file changes. The next step
+requires explicit user approval to resolve PID `49349` or a new bounded native validation/recovery
+packet; T174 remains the separate M6 read-only scoping gate.
