@@ -2187,6 +2187,15 @@ Proceed in this order from the current checkpoint:
      graph depth 1 shows only prompt evidence plus project scope. T160 does not archive anything or
      rerun T135 harness writes; it asks for exact future approval for this single archive after
      fresh get/orient-or-search/target-visibility/lint/graph/git/obligations checks.
+161. Treat T161 as a duplicate-approval completion-gate audit, not a harness repair step. T135 was
+     already executed and validated by T152, and fresh read-only status/doctor checks still show
+     all five generated harnesses `ready=true`. The remaining completion work is not more T135
+     repair; it is exact-gated native Claude/effective-hook behavior, lifecycle cleanup for stale
+     and wrong-scope active memory, M6 migration/quarantine completion or explicit deferral, and
+     broader cross-harness behavioral evidence. T161 does not authorize harness install, native
+     Claude, Claude Bridge, lifecycle mutation, M6 work, ranking/`orient`, schema/storage/index,
+     public MCP, document-index, deletion, rollback, force-kill, old-binary reinstall, or
+     user-owned-file edits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

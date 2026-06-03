@@ -5555,3 +5555,18 @@ scope. T160 does not archive the item, rerun harness writes, use Claude, run M6/
 quarantine, change ranking/`orient`, run `lint apply_safe`, change public MCP/schema/storage/index
 or document-index behavior, delete anything, or touch user-owned files. Any future archive requires
 the exact T160 approval phrase and fresh matching pre-write evidence.
+
+T161 matrix note:
+`docs/BRAIN_HARNESS_T161_DUPLICATE_T135_COMPLETION_GATE_AUDIT_2026-06-03.md` records a
+read-only/docs-only audit after a late duplicate T135 approval. T135 was already executed and
+validated in T152, so the duplicate approval does not reopen harness writes. Fresh status and
+doctor checks still report `ready=true` for generic, Codex, Gemini CLI, Cursor, and Claude Code,
+while Claude Code keeps the known user-owned snippet, legacy-permission, split-settings, and soft
+lifecycle caveats. Current T160 plan retrieval remains healthy for the duplicate-approval prompt,
+but read-only lint still reports stale/wrong-scope active memory and many superseded-active items,
+and telemetry feedback coverage is 42%, below the 50% confidence gate. The full goal remains
+incomplete until native Claude/effective hook behavior, lifecycle cleanup, M6 migration/quarantine
+completion or explicit deferral, and broader cross-harness behavior are handled under exact gates.
+T161 does not run harness install, native Claude, Claude Bridge, lifecycle mutation, M6/migration/
+quarantine, ranking/`orient`, `lint apply_safe`, schema/storage/index/public MCP/document-index
+changes, deletion, rollback, force-kill, old-binary reinstall, or user-owned-file edits.

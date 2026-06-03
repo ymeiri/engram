@@ -1387,3 +1387,10 @@ Current next application:
   permission, and keep T135 duplicate approval, `lint apply_safe`, ranking/`orient`, native Claude,
   Claude Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
   document-index, deletion, and user-owned-file changes out of scope.
+- T161 applies duplicate-approval audit discipline: when a user approves a gate that evidence shows
+  was already executed and validated, record the duplicate as consumed instead of rerunning writes.
+  Recheck the live state read-only, update the completion matrix, and keep exact-gated work behind
+  its own approval phrase. Do not treat duplicate approval as permission for harness install,
+  lifecycle mutation, `lint apply_safe`, native Claude, Claude Bridge, M6/migration/quarantine,
+  ranking/`orient`, schema/storage/index, public MCP, document-index, deletion, rollback,
+  force-kill, old-binary reinstall, or user-owned-file edits.
