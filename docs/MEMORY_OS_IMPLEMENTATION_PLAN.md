@@ -5995,3 +5995,24 @@ apply_safe`, M6/migration/quarantine, native Claude, Claude Bridge, process sign
 ranking/`orient`/source/public MCP/schema/storage/index/document-index behavior changes, deletion,
 rollback, old-binary reinstall, or user-owned-file edits. It records that telemetry remains a
 completion blocker, not completion proof.
+
+T190 matrix note:
+`docs/BRAIN_HARNESS_T190_T172_RECOVERY_OPTION_2_REPEAT_RESULT_2026-06-03.md` records a second
+bounded execution of the user-approved T172 recovery option 2 wording after T185. Fresh preflight
+matched the live-process state: PID `49349` was still `/Users/yuval.meiri/.local/bin/claude` on
+`ttys000`, Claude Code remained `2.1.161`, the symlink target and monitored user/project Claude
+hashes matched T172/T179/T185/T186, harness status/doctor remained `ready=true` with known
+warnings, obligations were clean, Memory OS had no new item or commit changes since the latest
+current-plan cursor, and git had no tracked diff. Codex sent exactly one Ctrl-C byte to
+`/dev/ttys000`; it did not use a process signal, send EOF, send another Ctrl-C, run `/hooks`, send
+natural-language input, launch Claude, run Claude Bridge, edit hooks/settings/adapters, run harness
+install, mutate lifecycle or migration state, change ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior, delete, roll back, force-kill, reinstall
+binaries, or touch user-owned files. PID `49349` remained live after Ctrl-C. EOF was not sent
+because the approval made EOF conditional on Claude returning to a prompt, and prompt-return state
+could not be verified from the app terminal, open process handles, `.claude/sessions/49349.json`,
+or sampled project JSONL transcript files. Postflight found no tracked git changes, no monitored
+hash drift, no Memory OS writes, no obligation changes, and unchanged harness readiness. T190 does
+not close the live-process cleanup gate or the T172 effective-hook visibility gate; the already
+written T186 process-level SIGINT packet remains a separate exact-approval gate before any
+`kill -INT 49349` signal can be sent.
