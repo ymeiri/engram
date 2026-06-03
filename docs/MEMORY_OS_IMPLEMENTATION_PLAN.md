@@ -6095,3 +6095,22 @@ user-owned files. Its proposed future approval allows indexing exactly
 then read-only document-search validation and a docs-only result. T193/T191/T187 lifecycle
 archives, T192 document indexing, T186 live-process cleanup, T172 effective-hook visibility,
 M6/migration, and broad Brain Harness completion remain separate exact-gated work.
+
+T195 matrix note:
+`docs/BRAIN_HARNESS_T195_TELEMETRY_COMPLETION_GATE_AUDIT_2026-06-03.md` records telemetry feedback
+and a docs-only completion-gate audit after T194. Four current traces were scored:
+startup orient `019e8e9b-3074-7231-a3e3-8565b6005052`, current-plan search
+`019e8e9b-539e-7f52-91b6-f981c6ec7b97`, completion-blocker search
+`019e8e9b-546f-7872-9b89-0e4ed6b12552`, and design-philosophy search
+`019e8e9b-553c-7871-b03b-cb473c201dff`. The current 50-trace project telemetry window now passes
+the numerical confidence gate with `feedback_trace_count=39`, `feedback_coverage=78%`,
+`memory_judgment_trace_coverage=82.22%`, six intents, `task_failure_count=0`, and
+`bad_memory_used_count=0`; this removes the specific T189 telemetry blocker. The result is still
+weak completion evidence because `external_session_trace_count=0`, `stale_memory_count=93`, direct
+design-preference search still ranked stale handoffs above the reviewed preference in one trace,
+and T194/T192 document indexing, T193/T191/T187 lifecycle archives, T186 native-Claude cleanup,
+T172 effective-hook visibility, M6/migration, and broad Brain Harness completion remain separate
+exact-gated work. T195 does not run document indexing, lifecycle archive, `lint apply_safe`, native
+Claude or Claude Bridge actions, process signals, harness writes, ranking/`orient`/source/public
+MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
+or user-owned-file edits.
