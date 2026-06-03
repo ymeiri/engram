@@ -6182,3 +6182,24 @@ parameters, `orient`, ranking, schema/storage/index/document-index behavior, lif
 harness files/settings/hooks/adapters, M6/migration/quarantine state, deletion, rollback, or
 user-owned files. A real host-session contract or harness integration slice remains separately
 approval-gated and should not be inferred from this audit.
+
+T199 matrix note:
+`docs/BRAIN_HARNESS_T199_EXTERNAL_SESSION_CALLER_AUDIT_2026-06-03.md` records a
+docs-only/read-only caller-side audit after T198. Fresh source evidence shows the MCP tools already
+expose and pass through `external_session_id` for `search`, `orient`, `telemetry`, and
+`memory(changes_since)`, while the direct CLI `orient` and `memory changes-since` commands hard-code
+`external_session_id: None`, and the stdio proxy forwards MCP transport session headers without
+injecting Brain Harness telemetry labels. Fresh runtime telemetry at `2026-06-03T18:13:56Z` still
+had `external_session_trace_count=0`, `unspecified_external_session_trace_count=50`,
+`external_session_feedback_count=0`, and `confidence_gate.passed=false` because feedback coverage
+fell to 40% after new unscored traces; the 20 newest project traces all had
+`external_session_id=null`. AI Council and Claude Bridge agreed that read-only caller mapping is
+useful, but any patch that makes live labels non-null is a host/caller or harness contract change
+requiring exact approval. T199 does not change source code, add CLI flags/env defaults, mutate MCP
+request/response shape, inject `mcp-session-id`, edit hooks/settings/adapters, run native Claude or
+Claude Bridge actions beyond the read-only critique, run document indexing, archive memory, run
+`lint apply_safe`, run M6/migration/quarantine actions, change ranking/`orient`,
+schema/storage/index/document-index behavior, delete, roll back, reinstall binaries, or touch
+user-owned files. External-session joinability and telemetry confidence remain incomplete; the next
+implementation requires an exact-approved host/caller label contract or a separate exact-approved
+M6/read-only scoping gate.
