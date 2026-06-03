@@ -6036,3 +6036,23 @@ public MCP/schema/storage/index/document-index behavior, M6/migration/quarantine
 Claude Bridge, process signals, harness installs/settings/hooks/adapters, deletion, rollback,
 force-kill, or user-owned files. It intentionally excludes already-packeted T187 targets, which
 remain separately exact-gated.
+
+T192 matrix note:
+`docs/BRAIN_HARNESS_T192_T191_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny exact-file document-index approval packet for the newest T191 lifecycle
+packet and this implementation plan. Fresh lean `orient` trace
+`019e8e8d-5e29-7581-b681-ddde8f33879f` and direct current-plan search trace
+`019e8e8d-66a5-7993-9a0c-31ddfd3991f7` recover active current-plan memory
+`019e8e8a-a124-7822-87df-817e2d78be05` first, but exact document-layer probes for the T191 title,
+filename stem, commit probe, and five archive target IDs return older indexed lifecycle and
+document-index artifacts rather than T191. T192 does not run `docs(action="index")`, change
+document-index behavior, archive memory, run `lint apply_safe`, signal PID `49349`, send native
+Claude input, launch Claude or Claude Bridge, run harness install, mutate lifecycle or migration
+state, inspect M6/quarantine candidates, change ranking or `orient`, change public
+MCP/schema/storage/index behavior, delete, roll back, reinstall binaries, or touch user-owned
+files. Its proposed future approval allows indexing exactly
+`docs/BRAIN_HARNESS_T191_POST_T190_STALE_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md` and
+`docs/MEMORY_OS_IMPLEMENTATION_PLAN.md` after fresh git/path/document-search/obligations evidence,
+then read-only document-search validation and a docs-only result. T186 live-process cleanup, T191
+lifecycle archive, T187 lifecycle archive, M6/migration, and broad Brain Harness completion remain
+separate exact-gated work.
