@@ -2124,6 +2124,16 @@ Proceed in this order from the current checkpoint:
      the exact T135 harness repair approval; do not use Claude Bridge again for Engram Brain Harness
      consultation until that repair is approved and executed unless the user explicitly accepts the
      known side-effect risk.
+153. Treat T152 as the approved execution result for the exact T135 harness repair. Fresh dry-runs
+     matched T135 before each one-at-a-time write, and the local generated adapters now report
+     `ready=true` for generic, Codex, Gemini CLI, Cursor, and Claude Code. The approved writes were
+     limited to generated adapters plus Claude Code `settings.local.json`; root `AGENTS.md`,
+     `/Users/yuval.meiri/.claude/settings.json`, and the user-owned Claude settings snippet were
+     not edited or adopted. T152 closes the local generated-adapter readiness gap, but it does not
+     prove native Claude Code hook behavior, mutate lifecycle cleanup state, run M6/migration/
+     quarantine, or change ranking, `orient`, schema/storage/index, public MCP, or document-index
+     behavior. The next cross-harness step should be a separate read-only-first post-repair
+     validation gate because running Claude Code can trigger lifecycle hooks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

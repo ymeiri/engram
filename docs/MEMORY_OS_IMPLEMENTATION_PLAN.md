@@ -5453,3 +5453,19 @@ explicitly accepts the known side-effect risk. T150 does not authorize harness w
 mutation, M6/migration/quarantine, schema/storage/index changes, document-index behavior changes,
 ranking or `orient` changes, public MCP/payload changes, user-owned file adoption, deletion,
 rollback, force-kill, or old-binary reinstall.
+
+T152 matrix note:
+`docs/BRAIN_HARNESS_T152_T135_HARNESS_REPAIR_VALIDATION_RESULT_2026-06-03.md` records the approved
+T135 harness repair execution. Fresh dry-runs matched T135 before each approved one-at-a-time write:
+generic policy creation, Codex skill updates, Gemini CLI command/context updates, Cursor skill
+updates, and Claude Code generated SessionEnd hook plus `settings.local.json` merge. The run used
+`adopt_user_owned=false`, did not edit root `AGENTS.md`, did not edit
+`/Users/yuval.meiri/.claude/settings.json`, and preserved the user-owned Claude settings snippet.
+Post-write live `harness(status)` and `harness(doctor)` checks report `ready=true` for generic,
+Codex, Gemini CLI, Cursor, and Claude Code. Claude Code still warns about preserved user-owned
+snippet state, extra legacy Engram permissions, split settings, and soft lifecycle enforcement.
+`settings.local.json` parses, the installed SessionEnd hook is executable, and the hook defaults
+missing `write_policy` to `nudge`. T152 closes the local generated-adapter readiness gap, but it
+does not run native Claude Code behavioral validation, mutate lifecycle cleanup state, run
+M6/migration/quarantine, change ranking or `orient`, change public MCP/schema/storage/index
+behavior, or change document-index behavior.
