@@ -5707,3 +5707,18 @@ force-kill, old-binary reinstall, or user-owned-file adoption. Its proposed futu
 exactly one native Claude PTY session with one `/hooks` input plus EOF, pre/post state comparisons,
 and observation/reporting of any side effects caused by that exact session, with no retries or
 cleanup.
+
+T173 matrix note:
+`docs/BRAIN_HARNESS_T173_TELEMETRY_AND_STALE_APPROVAL_FOLLOW_THROUGH_2026-06-03.md` records a
+docs-only/telemetry-only follow-through after duplicate/stale T125 and T154 approvals. Git and
+docs evidence show T125 was already completed by T169 (`3dfc23d`) and T154 by T170 (`ebe835d`), so
+neither was rerun. Baseline telemetry over the current 50-trace window failed at 48% feedback
+coverage despite five feedback-bearing intents; after honest feedback on six assessable current
+retrieval traces, the window passed at 30/50 feedback traces, 60% coverage, five intents, and zero
+bad-memory use. The feedback explicitly recorded missing-context/noise where searches missed the
+completed T169/T170 result reports. T173 does not authorize native Claude, Claude Bridge, `/hooks`,
+prompt-bearing Claude, harness writes, lifecycle archive, `lint apply_safe`, M6/migration/
+quarantine, candidate decisions, ranking/`orient`, public MCP/schema/storage/index/document-index
+behavior changes, deletion, rollback, force-kill, old-binary reinstall, or user-owned-file edits.
+The next product-moving gate remains exact T172 approval; M6 candidate decisions and migration
+dry-run/apply planning remain separate approval gates.
