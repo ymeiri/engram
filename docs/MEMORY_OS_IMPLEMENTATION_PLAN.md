@@ -5883,3 +5883,17 @@ MCP, schema/storage/index/document-index behavior, lifecycle state, M6/migration
 native Claude, Claude Bridge, harness files/settings/hooks/adapters, user-owned files, deletion,
 rollback, force-kill, or installed runtime configuration. The goal remains incomplete; T182, T181,
 T180, T174, and high-risk migration completion remain separate exact approval gates.
+
+T184 matrix note:
+`docs/BRAIN_HARNESS_T184_T182_T183_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny exact-file document-index visibility packet for the newest T182 and T183
+gate documents. Fresh document-only searches for the T182 exact title, T183 exact title, T183
+commit probe `c75b509 Record T183 completion gate audit`, and T182/T183 current-plan wording
+returned older indexed documents rather than the new T182/T183 files. T184 intentionally excludes
+`docs/MEMORY_OS_IMPLEMENTATION_PLAN.md` because the updated implementation plan remains part of
+the separate pending T181 exact-file indexing gate with T179/T180. T184 does not run document
+indexing or change document-index behavior; it asks for exact future approval to index only T182
+and T183. It does not authorize T182 ranking/source/test changes, T181 indexing, T180 native
+Claude input or process recovery, T174 M6 scoping, lifecycle archive, `lint apply_safe`, candidate
+decisions, M6/migration/quarantine work, ranking/`orient`, public MCP/schema/storage/index
+behavior changes, deletion, rollback, old-binary reinstall, or user-owned-file edits.
