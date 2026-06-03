@@ -5866,3 +5866,20 @@ quarantine, native Claude, Claude Bridge, harness files/settings/hooks/adapters,
 deletion, rollback, force-kill, or installed runtime configuration. It asks for exact future
 approval to add a focused fixture and the smallest prompt-class source adjustment, with explicit
 gate/action prompts preserved.
+
+T183 matrix note:
+`docs/BRAIN_HARNESS_T183_POST_T182_COMPLETION_GATE_AUDIT_2026-06-03.md` records a
+docs-only/read-only completion and gate audit after T182 current-plan capture. Fresh lean `orient`
+trace `019e8e5a-c517-71f3-ad5e-51df3ee34904` and simple direct-search trace
+`019e8e5a-c6f1-7bd1-9cfa-d5fa3cbb11f0` returned active T182 current-plan memory
+`019e8e59-e203-76e0-9996-6be2a3fdd8f0` first, while exact observed direct memory-search trace
+`019e8e5b-4f3e-72e1-8b0c-4e53b830a233` still ranked older rolling handoffs above current-plan
+guidance for `current next action after T181 exact approval gate non-gated work Brain Harness T180
+T174 document indexing`. Exact T182 approval-query trace `019e8e5b-4f8b-7e11-a37f-d38c165d2b33`
+returned T182 first, and explicit migration-apply trace `019e8e5b-4fb8-7951-9f90-128b1bddcd10`
+kept the migration review gate first. Document search did not recover the new T182 packet because
+it has not been exact-file indexed. T183 does not change source behavior, ranking, `orient`, public
+MCP, schema/storage/index/document-index behavior, lifecycle state, M6/migration/quarantine,
+native Claude, Claude Bridge, harness files/settings/hooks/adapters, user-owned files, deletion,
+rollback, force-kill, or installed runtime configuration. The goal remains incomplete; T182, T181,
+T180, T174, and high-risk migration completion remain separate exact approval gates.
