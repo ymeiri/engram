@@ -5469,3 +5469,18 @@ missing `write_policy` to `nudge`. T152 closes the local generated-adapter readi
 does not run native Claude Code behavioral validation, mutate lifecycle cleanup state, run
 M6/migration/quarantine, change ranking or `orient`, change public MCP/schema/storage/index
 behavior, or change document-index behavior.
+
+T153/T154 matrix note:
+`docs/BRAIN_HARNESS_T153_POST_T152_CLAUDE_STATIC_PREFLIGHT_2026-06-03.md` records static post-T152
+preflight evidence only. It did not run native Claude Code, Claude Bridge, lifecycle hooks, harness
+install, M6/migration/quarantine, lifecycle cleanup, ranking, `orient`, schema/storage/index,
+public MCP, document-index, deletion, rollback, force-kill, or user-owned adoption actions. Static
+checks found all five harnesses still `ready=true`, `settings.local.json` parses, the installed
+SessionEnd hook is executable, and the hook defaults missing `write_policy` to `nudge`. Static
+inspection also found existing explicit `"write_policy": "durable"` values in Claude settings for
+other lifecycle hook inputs, so T153 is not proof that all effective Claude lifecycle behavior is
+non-durable. `docs/BRAIN_HARNESS_T154_NATIVE_CLAUDE_VALIDATION_APPROVAL_PACKET_2026-06-03.md` is
+the next default-deny approval packet for a native Claude non-session smoke limited to
+`claude --version` and `claude --help`. Do not run Claude Bridge, prompt-bearing Claude commands,
+interactive Claude sessions, Claude `/hooks`, or broader Engram Brain Harness validation without
+separate exact approval.

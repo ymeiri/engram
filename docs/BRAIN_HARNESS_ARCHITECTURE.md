@@ -2134,6 +2134,16 @@ Proceed in this order from the current checkpoint:
      quarantine, or change ranking, `orient`, schema/storage/index, public MCP, or document-index
      behavior. The next cross-harness step should be a separate read-only-first post-repair
      validation gate because running Claude Code can trigger lifecycle hooks.
+154. Treat T153 as static post-T152 Claude preflight evidence, not native Claude behavioral proof.
+     T153 confirmed all five harnesses still report `ready=true`, the installed Claude SessionEnd
+     command hook defaults missing `write_policy` to `nudge`, and `settings.local.json` parses.
+     It also confirmed a key remaining caveat: existing Claude settings still contain explicit
+     durable hook policies outside the SessionEnd command hook, settings are split across
+     `settings.json` and `settings.local.json`, and native Claude Code/Claude Bridge execution can
+     still trigger lifecycle side effects. T154 is the next exact approval packet for a native
+     Claude non-session smoke, limited to `claude --version` and `claude --help`. Do not run Claude
+     Bridge, prompt-bearing Claude commands, interactive Claude sessions, Claude `/hooks`, or broader
+     Engram Brain Harness validation without separate exact approval.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
