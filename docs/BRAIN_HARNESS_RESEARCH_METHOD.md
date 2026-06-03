@@ -1401,3 +1401,11 @@ Current next application:
   index, or document-index changes. When exact approval-packet searches fail to surface the packet
   docs, submit missing-context feedback and read exact phrases from the repo packet files instead
   of broadening ranking without approval.
+- T163 applies exact-file document-index packet discipline to recent gate docs: when approval
+  packets and audits are missing from document search, a docs-only/default-deny packet may ask for
+  exact indexing approval if it names every file, defines read-only preflight and validation
+  queries, and keeps indexing execution separate from the underlying approval gates. Do not treat
+  missing document visibility as permission for document-index writes, ranking/`orient` changes,
+  packet MemoryItem creation, lifecycle mutation, native Claude, Claude Bridge, harness writes,
+  M6/migration/quarantine work, schema/storage/index changes, public MCP changes, deletion, or
+  cleanup.

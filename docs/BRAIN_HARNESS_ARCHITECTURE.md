@@ -2206,6 +2206,14 @@ Proceed in this order from the current checkpoint:
      `lint apply_safe`, M6/migration/quarantine, ranking/`orient`, public MCP, schema/storage/
      index, document-index behavior, deletion, rollback, force-kill, old-binary reinstall, or
      user-owned-file edits.
+163. Treat T163 as a default-deny document-visibility packet, not indexing execution. It asks for
+     exact approval to index only seven named recent gate/audit docs, T154, T157, T158, T159,
+     T160, T161, and T162, after T162 showed exact approval-packet retrieval noise and fresh
+     read-only `docs(search)` checks still missed those docs. T163 does not run indexing or change
+     document-index behavior; it also does not authorize native Claude, Claude Bridge, harness
+     writes, lifecycle archive, `lint apply_safe`, M6/migration/quarantine, ranking/`orient`,
+     public MCP, schema/storage/index behavior, deletion, rollback, force-kill, old-binary
+     reinstall, or user-owned-file edits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

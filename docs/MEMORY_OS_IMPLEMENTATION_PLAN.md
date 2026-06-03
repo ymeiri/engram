@@ -5583,3 +5583,14 @@ separately approved retrieval/document visibility slice exists. T162 does not au
 Claude, Claude Bridge, harness writes, lifecycle archive or `lint apply_safe`, M6/migration/
 quarantine work, ranking/`orient`, public MCP/schema/storage/index/document-index behavior changes,
 deletion, rollback, force-kill, old-binary reinstall, or user-owned-file edits.
+
+T163 matrix note:
+`docs/BRAIN_HARNESS_T163_RECENT_GATE_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny approval packet for exact-file indexing of seven recent Brain Harness gate
+and audit docs: T154, T157, T158, T159, T160, T161, and T162. Fresh read-only document stats still
+match the post-T70 state, and exact document searches for T154/T158/T160/T162 remain noisy or miss
+the target docs in the top five. T163 does not run document indexing, change document-index
+behavior, create packet MemoryItems, run native Claude or Claude Bridge, write harness files,
+archive lifecycle memory, run `lint apply_safe`, inspect M6 quarantine files, make migration
+decisions, change ranking/`orient`, change public MCP/schema/storage/index behavior, delete
+anything, or touch user-owned files. Future execution requires the exact T163 approval phrase.
