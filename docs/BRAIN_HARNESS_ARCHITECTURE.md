@@ -2144,6 +2144,12 @@ Proceed in this order from the current checkpoint:
      Claude non-session smoke, limited to `claude --version` and `claude --help`. Do not run Claude
      Bridge, prompt-bearing Claude commands, interactive Claude sessions, Claude `/hooks`, or broader
      Engram Brain Harness validation without separate exact approval.
+155. Treat T155 as the current completion-gate audit after T153, not completion proof. The audit
+     confirms the latest current-plan retrieval works for the current prompt class and all five
+     generated harness adapters still report `ready=true`, but the full Brain Harness goal remains
+     incomplete because native Claude behavior, effective Claude hooks, lifecycle cleanup,
+     M6/migration completion, and broader cross-harness behavior are still unproven or
+     approval-gated. Generic continuation is not T154 approval.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -5484,3 +5484,13 @@ the next default-deny approval packet for a native Claude non-session smoke limi
 `claude --version` and `claude --help`. Do not run Claude Bridge, prompt-bearing Claude commands,
 interactive Claude sessions, Claude `/hooks`, or broader Engram Brain Harness validation without
 separate exact approval.
+
+T155 matrix note:
+`docs/BRAIN_HARNESS_T155_COMPLETION_GATE_AUDIT_2026-06-03.md` records a read-only/docs-only
+completion-gate audit after T153. The audit found the current T153 plan first in lean `orient` and
+direct search, rechecked all five harnesses as `ready=true`, and used MCP lint after local CLI lint
+failed on the daemon-owned database lock. Duplicate or late T135 approval does not reopen harness
+writes because T135 was already executed and validated in T152. The full goal remains incomplete:
+native Claude behavior, effective Claude hook configuration, lifecycle cleanup, M6/migration
+completion or explicit deferral, and broader cross-harness behavioral validation are still missing
+or approval-gated. Generic continuation is not T154 approval.
