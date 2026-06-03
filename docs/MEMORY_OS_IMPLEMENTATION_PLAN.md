@@ -6159,3 +6159,26 @@ document-index behavior changes, deletion, rollback, old-binary reinstall, or us
 edits. T194/T192 document indexing, T193/T191/T187 lifecycle archives, T172 effective-hook
 visibility, M6/migration, external-session joinability, telemetry coverage stability, and broad
 Brain Harness completion remain separate incomplete or exact-gated work.
+
+T198 matrix note:
+`docs/BRAIN_HARNESS_T198_EXTERNAL_SESSION_JOINABILITY_RECHECK_2026-06-03.md` records a
+docs-only/read-only external-session joinability audit after T197. Fresh runtime telemetry at
+`2026-06-03T18:05:42Z` showed the current project 50-trace window has
+`external_session_trace_count=0`, `distinct_external_session_count=0`,
+`unspecified_external_session_trace_count=50`, `external_session_feedback_count=0`, and
+`confidence_gate.passed=false` because feedback coverage dropped to 44% after new unscored traces.
+Fresh `list_traces(project=engram, limit=15)` showed all 15 newest traces have
+`external_session_id=null`. Source inspection found current core support intact:
+`BrainHarnessTrace` and `AgentFeedback` store the optional label, feedback inherits the trace
+label when omitted, reports aggregate trace/feedback external-session counts, `orient`, `search`,
+`telemetry`, and `memory(changes_since)` pass caller-supplied labels through, and CLI
+`orient`/`changes-since` still pass `None`. Validation passed with
+`cargo test -p engram-tests --test telemetry_tests mcp_telemetry_tool_records_trace_feedback_and_stats -- --exact`
+and the full `cargo test -p engram-tests --test telemetry_tests` target (`23 passed`). T198
+therefore keeps external-session joinability incomplete but classifies the current zero-count gap
+as caller/host adoption and host-session availability, not a core telemetry storage/report
+implementation failure. It does not synthesize labels, change telemetry formulas, public MCP
+parameters, `orient`, ranking, schema/storage/index/document-index behavior, lifecycle state,
+harness files/settings/hooks/adapters, M6/migration/quarantine state, deletion, rollback, or
+user-owned files. A real host-session contract or harness integration slice remains separately
+approval-gated and should not be inferred from this audit.
