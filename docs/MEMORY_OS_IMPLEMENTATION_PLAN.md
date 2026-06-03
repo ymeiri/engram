@@ -5813,3 +5813,22 @@ M6 migration readiness, lifecycle cleanup, ranking/`orient`, public MCP, schema/
 document-index behavior, deletion, rollback, force-kill, or user-owned-file changes. The next step
 requires explicit user approval to resolve PID `49349` or a new bounded native validation/recovery
 packet; T174 remains the separate M6 read-only scoping gate.
+
+T180 matrix note:
+`docs/BRAIN_HARNESS_T180_T179_NATIVE_CLAUDE_LIVE_PROCESS_RECOVERY_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny approval packet for the next native-Claude cleanup gate after
+T179. Fresh read-only evidence shows PID `49349` is still live as
+`/Users/yuval.meiri/.local/bin/claude`, Claude Code remains `2.1.161`, the symlink target remains
+`/Users/yuval.meiri/.local/share/claude/versions/2.1.161`, monitored user-level and project-local
+Claude hashes still match T179, harness status/doctor remain `ready=true` with known caveats, and
+git is clean except pre-existing untracked root `AGENTS.md`. T180 does not send input, signal or
+kill the process, launch native Claude, run Claude Bridge, probe `/hooks`, edit hooks/settings/
+adapters, run harness install, mutate lifecycle or migration state, change ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior, delete, roll back, reinstall binaries, or touch
+user-owned files. Its proposed future approval allows only one additional Ctrl-C to the same live
+PTY if that exact PTY route is still available, followed by read-only comparisons and a docs-only
+result. It explicitly forbids EOF, another Ctrl-C, process-level signals, force-kill, new native
+Claude sessions, and fallback cleanup. T180 can resolve the live-process gate if executed cleanly,
+but it cannot close the effective-hook visibility gate, prompt-bearing native Claude behavior,
+missing SessionEnd `write_policy` behavior, M6 migration readiness, lifecycle cleanup, or broad
+Brain Harness completion.
