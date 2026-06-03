@@ -5570,3 +5570,16 @@ completion or explicit deferral, and broader cross-harness behavior are handled 
 T161 does not run harness install, native Claude, Claude Bridge, lifecycle mutation, M6/migration/
 quarantine, ranking/`orient`, `lint apply_safe`, schema/storage/index/public MCP/document-index
 changes, deletion, rollback, force-kill, old-binary reinstall, or user-owned-file edits.
+
+T162 matrix note:
+`docs/BRAIN_HARNESS_T162_TELEMETRY_COVERAGE_FOLLOW_THROUGH_2026-06-03.md` records a
+docs-only/telemetry-only follow-through for the T161 confidence-gate gap. The real-session eval
+moved from 34% feedback coverage across two intents to 50% feedback coverage across four intents,
+so the current 50-trace sample now passes the telemetry confidence gate. This is a threshold pass
+in a sliding window, not durable migration readiness. Four verify-decision searches for exact
+approval gates produced missing-context feedback because packet docs did not reliably surface;
+`rg` against the repo packet files remains the authority for exact approval phrases until a
+separately approved retrieval/document visibility slice exists. T162 does not authorize native
+Claude, Claude Bridge, harness writes, lifecycle archive or `lint apply_safe`, M6/migration/
+quarantine work, ranking/`orient`, public MCP/schema/storage/index/document-index behavior changes,
+deletion, rollback, force-kill, old-binary reinstall, or user-owned-file edits.

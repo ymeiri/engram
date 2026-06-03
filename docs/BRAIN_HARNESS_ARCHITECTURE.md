@@ -2196,6 +2196,16 @@ Proceed in this order from the current checkpoint:
      Claude, Claude Bridge, lifecycle mutation, M6 work, ranking/`orient`, schema/storage/index,
      public MCP, document-index, deletion, rollback, force-kill, old-binary reinstall, or
      user-owned-file edits.
+162. Treat T162 as telemetry evidence follow-through, not approval-gated product work. It records
+     that feedback submissions moved the current 50-trace real-session eval from 34% coverage and
+     two intents to 50% coverage and four intents, so the confidence gate currently passes. Because
+     the pass is exactly at threshold in a sliding window, it is evidence quality improvement, not
+     migration readiness. T162 also records that exact approval-packet searches are noisy and
+     generated missing-context feedback; repo packet files remain the authority for exact phrases.
+     T162 does not authorize native Claude, Claude Bridge, harness writes, lifecycle archive,
+     `lint apply_safe`, M6/migration/quarantine, ranking/`orient`, public MCP, schema/storage/
+     index, document-index behavior, deletion, rollback, force-kill, old-binary reinstall, or
+     user-owned-file edits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

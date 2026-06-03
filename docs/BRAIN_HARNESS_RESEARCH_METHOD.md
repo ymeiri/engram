@@ -1394,3 +1394,10 @@ Current next application:
   lifecycle mutation, `lint apply_safe`, native Claude, Claude Bridge, M6/migration/quarantine,
   ranking/`orient`, schema/storage/index, public MCP, document-index, deletion, rollback,
   force-kill, old-binary reinstall, or user-owned-file edits.
+- T162 applies telemetry follow-through discipline: feedback submission can close an evidence
+  quality gap without code or lifecycle changes, but a threshold pass in the current 50-trace
+  sample is not durable proof and does not authorize migration, quarantine inspection, lifecycle
+  archive, native Claude execution, harness writes, ranking/`orient`, public MCP, schema/storage/
+  index, or document-index changes. When exact approval-packet searches fail to surface the packet
+  docs, submit missing-context feedback and read exact phrases from the repo packet files instead
+  of broadening ranking without approval.
