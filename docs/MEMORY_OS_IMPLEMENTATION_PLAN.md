@@ -5748,3 +5748,16 @@ It does not authorize native Claude, Claude Bridge, Claude `/hooks`, prompt-bear
 harness writes, lifecycle archive, `lint apply_safe`, M6/migration/quarantine, candidate
 decisions, ranking/`orient`, public MCP/schema/storage/index behavior changes, deletion, rollback,
 force-kill, old-binary reinstall, or user-owned-file edits.
+
+T176 matrix note:
+`docs/BRAIN_HARNESS_T176_T175_DOCUMENT_INDEX_RESULT_2026-06-03.md` records the exact-approved T175
+document-index execution. Codex indexed only the T172, T173, and T174 packet/report files named by
+T175 through three file-path `docs(action="index", path=...)` calls. The run added three sources
+and 37 searchable chunks with no warnings. Post-index validation returned T172 in the top five for
+both approved T172 probes, T173 first for its exact title probe, and T174 in the top five for both
+approved T174 probes. T176 is document visibility evidence only: it does not authorize or execute
+the T172 native Claude effective-hook session, the T174 read-only M6 scoping packet, candidate
+decisions, migration apply, lifecycle cleanup, harness writes, ranking/`orient`, public MCP,
+schema/storage/index behavior, document-index behavior, deletion, cleanup, rollback, force-kill,
+old-binary reinstall, or user-owned-file edits. The next product-moving gates remain exact T172
+approval or exact T174 approval.
