@@ -5918,3 +5918,25 @@ readiness. T185 does not close the live-process cleanup gate or the T172 effecti
 gate; the next cleanup step still needs explicit fresh approval that states whether EOF without
 visible prompt evidence, another Ctrl-C, a process-level signal, force-kill, or user/manual
 intervention is allowed.
+
+T186 matrix note:
+`docs/BRAIN_HARNESS_T186_T185_NATIVE_CLAUDE_SIGINT_CLEANUP_APPROVAL_PACKET_2026-06-03.md` records
+a docs-only/default-deny approval packet for the next native-Claude cleanup gate after T185. Fresh
+read-only evidence shows PID `49349` is still live as `/Users/yuval.meiri/.local/bin/claude` on
+`ttys000`, Claude Code remains `2.1.161`, the symlink target remains
+`/Users/yuval.meiri/.local/share/claude/versions/2.1.161`, monitored user-level and project-local
+Claude hashes still match T179/T180/T185, harness status/doctor remain `ready=true` with known
+caveats, obligations are clean, Memory OS has no new item or commit changes since the latest
+current-plan cursor, and git is clean except pre-existing untracked root `AGENTS.md`. T186 does
+not send input, signal or kill the process, launch native Claude, run Claude Bridge, probe
+`/hooks`, edit hooks/settings/adapters, run harness install, mutate lifecycle or migration state,
+change ranking/`orient`, public MCP/schema/storage/index/document-index behavior, delete, roll
+back, reinstall binaries, or touch user-owned files. Its proposed future approval allows only one
+process-level `SIGINT` using `kill -INT 49349` after fresh matching read-only preflight and no
+intervening writes, followed by read-only comparisons and a docs-only result. It explicitly
+forbids PTY input, EOF, Ctrl-C bytes, any other signal, a second `SIGINT`, `SIGTERM`, `SIGKILL`,
+force-kill, new native Claude sessions, and fallback cleanup. T186 can resolve the live-process
+gate if executed cleanly, but it cannot close the effective-hook visibility gate, prompt-bearing
+native Claude behavior, missing SessionEnd `write_policy` behavior, M6 migration readiness,
+lifecycle cleanup, ranking/`orient`, public MCP, schema/storage/index, document-index behavior, or
+broad Brain Harness completion.
