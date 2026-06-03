@@ -2214,6 +2214,16 @@ Proceed in this order from the current checkpoint:
      writes, lifecycle archive, `lint apply_safe`, M6/migration/quarantine, ranking/`orient`,
      public MCP, schema/storage/index behavior, deletion, rollback, force-kill, old-binary
      reinstall, or user-owned-file edits.
+164. Treat T164 as a no-approval continuation audit, not a new gate or executable approval. It
+     confirms T163 remains the active current plan, all seven T163 target files exist, document
+     stats still match the post-T70/pre-T163 state, and exact document searches still miss the
+     recent gate docs in the top five. It also confirms current telemetry passes at 27/50 feedback
+     coverage but remains sliding-window evidence with missing-context records, while lint still
+     reports stale/wrong-scope/superseded active memory. T164 does not index documents, mutate
+     lifecycle state, run Claude, inspect M6 quarantine files, write harness state, change ranking
+     or `orient`, change public MCP/schema/storage/index behavior, delete anything, or touch
+     user-owned files. The next executable product-moving step remains the exact T163 approval
+     phrase.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

@@ -5594,3 +5594,17 @@ behavior, create packet MemoryItems, run native Claude or Claude Bridge, write h
 archive lifecycle memory, run `lint apply_safe`, inspect M6 quarantine files, make migration
 decisions, change ranking/`orient`, change public MCP/schema/storage/index behavior, delete
 anything, or touch user-owned files. Future execution requires the exact T163 approval phrase.
+
+T164 matrix note:
+`docs/BRAIN_HARNESS_T164_NO_APPROVAL_GATE_STATE_AUDIT_2026-06-03.md` records a read-only/docs-only
+continuation audit after no exact approval phrase was provided. It confirms that T163 current-plan
+memory still surfaces first in lean `orient` and direct current-plan search, all seven T163 target
+files exist, document stats still match the post-T70/pre-T163 state, and exact document searches
+for T154/T157/T158/T159/T160/T161/T162 still miss the recent target docs in the top five. Telemetry
+now passes the current 50-trace confidence gate at 27/50 feedback coverage across four intents, but
+the pass remains a sliding-window evidence-quality signal with missing-context records, not M6
+readiness. Lint still reports stale/wrong-scope/superseded active memory with no applied safe
+action. T164 does not run document indexing, lifecycle archive, `lint apply_safe`, native Claude,
+Claude Bridge, harness writes, M6/migration/quarantine, ranking/`orient`, public MCP,
+schema/storage/index, deletion, rollback, force-kill, old-binary reinstall, or user-owned-file
+edits. The next executable product-moving gate remains exact T163 approval.

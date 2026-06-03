@@ -1409,3 +1409,10 @@ Current next application:
   packet MemoryItem creation, lifecycle mutation, native Claude, Claude Bridge, harness writes,
   M6/migration/quarantine work, schema/storage/index changes, public MCP changes, deletion, or
   cleanup.
+- T164 applies no-approval continuation discipline: when the user asks to continue without an exact
+  gate phrase, refresh read-only evidence, record the matrix if it changed, and keep the next
+  executable action behind the existing exact approval. A telemetry threshold pass, file-existence
+  preflight, or repeated document-search miss is not approval for document indexing, lifecycle
+  archive, `lint apply_safe`, native Claude, Claude Bridge, harness writes, M6/migration/
+  quarantine, ranking/`orient`, public MCP, schema/storage/index, deletion, or user-owned-file
+  changes.
