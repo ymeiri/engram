@@ -6056,3 +6056,22 @@ files. Its proposed future approval allows indexing exactly
 then read-only document-search validation and a docs-only result. T186 live-process cleanup, T191
 lifecycle archive, T187 lifecycle archive, M6/migration, and broad Brain Harness completion remain
 separate exact-gated work.
+
+T193 matrix note:
+`docs/BRAIN_HARNESS_T193_STALE_T106_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny lifecycle packet for one active stale rolling handoff MemoryItem:
+`019e839e-f061-71c2-95d3-f4c44029ac7b`. Fresh evidence shows current-plan retrieval remains healthy
+with current-plan memory `019e8e8f-a725-7700-b8b6-55a13049d484` first, latest `handoff(get)`
+returns `019e8e8f-fae1-77f0-8b77-68053c3173e7`, and the target is still active, project-scoped,
+kind `handoff`, tagged `handoff`/`rolling`, and describes T106/T69/T70/T47-era gates. Focused
+memory search still returns stale active rolling handoff noise including the target. Graph evidence
+shows local supersession around the target, including `019e83a4-79fd-7f72-ab8b-4a953d3dd7b9`
+superseding it, but the path from latest handoff to the target only traverses project scope and
+does not prove a direct latest-to-target supersession chain. T193 therefore asks only for exact
+future approval to archive this one target after fresh matching read-only preflight; it does not
+archive memory, run `lint apply_safe`, change handoff semantics, ranking, `orient`, public
+MCP/schema/storage/index/document-index behavior, M6/migration/quarantine, native Claude, Claude
+Bridge, Claude hooks, process signals, harness installs/settings/hooks/adapters, deletion,
+rollback, or user-owned files. T192 document indexing, T191/T187 lifecycle archives, T186
+live-process cleanup, T172 effective-hook visibility, M6/migration, and broad Brain Harness
+completion remain separate exact-gated work.
