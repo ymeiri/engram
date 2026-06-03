@@ -6016,3 +6016,23 @@ hash drift, no Memory OS writes, no obligation changes, and unchanged harness re
 not close the live-process cleanup gate or the T172 effective-hook visibility gate; the already
 written T186 process-level SIGINT packet remains a separate exact-approval gate before any
 `kill -INT 49349` signal can be sent.
+
+T191 matrix note:
+`docs/BRAIN_HARNESS_T191_POST_T190_STALE_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny lifecycle packet for five active rolling handoffs now superseded
+by the latest T190 handoff:
+`019e8e83-4461-7500-909c-241183737348`,
+`019e8e7b-5977-7f93-be7c-742da46f6831`,
+`019e8e77-dfbc-7ae2-990a-df9368b75fc3`,
+`019e8e71-1932-72e3-bac4-bd5abe9248f5`, and
+`019e8e6c-361a-73a0-933e-fcb12c599247`. Fresh evidence shows latest
+`handoff(get)` returns `019e8e84-44bf-7d31-bded-88fe36f96659`, direct current-plan search still
+returns active current-plan memory `019e8e84-1927-7a11-85f0-36792b244ad1` first, focused handoff
+search still surfaces the proposed targets as active handoff noise, `memory(get)` and graph
+evidence show the direct supersession chain from `019e8e84-44bf...` through the five targets, and
+`memory(changes_since)` from the startup cursor returned no memory item or commit changes. T191
+does not archive anything, run `lint apply_safe`, change handoff semantics, ranking, `orient`,
+public MCP/schema/storage/index/document-index behavior, M6/migration/quarantine, native Claude,
+Claude Bridge, process signals, harness installs/settings/hooks/adapters, deletion, rollback,
+force-kill, or user-owned files. It intentionally excludes already-packeted T187 targets, which
+remain separately exact-gated.
