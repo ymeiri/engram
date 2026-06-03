@@ -2242,9 +2242,14 @@ Proceed in this order from the current checkpoint:
      archive. It records that exact-approved T159 archived only MemoryItem
      `019e89f4-7dba-7ae1-a559-85d924af31a3`; post-archive `memory(get)` shows `status=archived`,
      lean `orient` still returns the active current plan first, targeted search omits the archived
-     target, and `changes_since` shows exactly that archive state change. Lifecycle cleanup remains
-     partial: T160 is still exact-gated, and broad lint/superseded-active cleanup remains out of
-     scope.
+     target, and `changes_since` shows exactly that archive state change.
+168. Treat T168 as the completed execution result for the T160 wrong-scope Claude Code prompt
+     capture lifecycle archive. It records that exact-approved T160 archived only MemoryItem
+     `019e7f52-4fc2-7f61-93b4-9a741aba966e`; post-archive `memory(get)` shows `status=archived`,
+     lean `orient` still returns the active current plan first, targeted search omits the archived
+     target, lint no longer reports wrong-scope feedback for that ID, and `changes_since` shows
+     exactly that archive state change. Lifecycle cleanup remains partial: broad lint/
+     superseded-active cleanup remains out of scope.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

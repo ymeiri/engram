@@ -1393,6 +1393,14 @@ Current next application:
   permission, and keep T135 duplicate approval, `lint apply_safe`, ranking/`orient`, native Claude,
   Claude Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
   document-index, deletion, and user-owned-file changes out of scope.
+- T168 applies wrong-scope prompt-capture archive result discipline: after exact approval and the
+  single T160 archive write, record the result separately with post-archive `memory(get)`,
+  `orient`, targeted search, lint, `changes_since`, obligations, and git evidence. If fresh lint
+  counts differ from the packet but strengthen the wrong-scope signal, preserve that drift in the
+  result while using the exact approved archive payload. Treat the result report as documentation
+  only; it does not authorize another archive, `lint apply_safe`, ranking/`orient`, native Claude,
+  Claude Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
+  document-index, deletion, or user-owned-file changes.
 - T161 applies duplicate-approval audit discipline: when a user approves a gate that evidence shows
   was already executed and validated, record the duplicate as consumed instead of rerunning writes.
   Recheck the live state read-only, update the completion matrix, and keep exact-gated work behind

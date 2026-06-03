@@ -5545,16 +5545,13 @@ harness writes because T135 was already executed and validated in T152.
 
 T160 matrix note:
 `docs/BRAIN_HARNESS_T160_WRONG_SCOPE_CLAUDE_PROMPT_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md`
-records a docs-only/default-deny lifecycle request for wrong-scope active Claude Code prompt
-capture MemoryItem `019e7f52-4fc2-7f61-93b4-9a741aba966e`. Fresh evidence shows T135 remains
-executed and all five harnesses still report `ready=true`, current T159 plan retrieval remains
-healthy, the target is a one-time telemetry evidence-loop critique prompt captured as an active
-`rule`, exact search still returns it first for that old prompt class, lint reports 4 wrong-scope
-feedback records with `safe_action=none`, and graph depth 1 shows only prompt evidence plus project
-scope. T160 does not archive the item, rerun harness writes, use Claude, run M6/migration/
+recorded a docs-only/default-deny lifecycle request for wrong-scope active Claude Code prompt
+capture MemoryItem `019e7f52-4fc2-7f61-93b4-9a741aba966e`. It identified a one-time telemetry
+evidence-loop critique prompt captured as an active `rule`, not durable project guidance. The
+packet itself did not archive the item, rerun harness writes, use Claude, run M6/migration/
 quarantine, change ranking/`orient`, run `lint apply_safe`, change public MCP/schema/storage/index
-or document-index behavior, delete anything, or touch user-owned files. Any future archive requires
-the exact T160 approval phrase and fresh matching pre-write evidence.
+or document-index behavior, delete anything, or touch user-owned files. The later exact-approved
+archive execution is recorded separately in T168.
 
 T161 matrix note:
 `docs/BRAIN_HARNESS_T161_DUPLICATE_T135_COMPLETION_GATE_AUDIT_2026-06-03.md` records a
@@ -5632,8 +5629,7 @@ showed exactly that archive state change. T166 does not run `lint apply_safe`, a
 memory, change handoff semantics, ranking/`orient`, public MCP/schema/storage/index/document-index
 behavior, native Claude, Claude Bridge, harness files, M6/migration/quarantine, deletion, or
 user-owned-file edits. Lifecycle cleanup remained partial at T166 time; T159 is now closed by T167,
-while T160 still requires separate exact approval and broad superseded-active handoff/memory cleanup
-remains out of scope.
+T160 is now closed by T168, and broad superseded-active handoff/memory cleanup remains out of scope.
 
 T167 matrix note:
 `docs/BRAIN_HARNESS_T167_T159_LIFECYCLE_ARCHIVE_RESULT_2026-06-03.md` records execution of the
@@ -5646,5 +5642,18 @@ longer reports any finding for that ID, and `changes_since` showed exactly that 
 change. T167 does not run `lint apply_safe`, archive any other memory, change handoff semantics,
 ranking/`orient`, public MCP/schema/storage/index/document-index behavior, native Claude, Claude
 Bridge, harness files, M6/migration/quarantine, deletion, or user-owned-file edits. Lifecycle
-cleanup remains partial: T160 still requires separate exact approval, and broad superseded-active
+cleanup remained partial at T167 time; T160 is now closed by T168, while broad superseded-active
 handoff/memory cleanup remains out of scope.
+
+T168 matrix note:
+`docs/BRAIN_HARNESS_T168_T160_LIFECYCLE_ARCHIVE_RESULT_2026-06-03.md` records execution of the
+exact-approved T160 single-target lifecycle archive. After fresh matching read-only evidence and no
+intervening writes, Codex archived only wrong-scope Claude Code prompt-capture MemoryItem
+`019e7f52-4fc2-7f61-93b4-9a741aba966e` with the approved T160 payload. Post-archive validation
+shows the target is `status=archived`, lean `orient` continues to return the active current plan
+first, targeted memory search no longer returns the archived target, `lint(run, write=false)` no
+longer reports any finding for that ID, and `changes_since` showed exactly that archive state
+change. T168 does not run `lint apply_safe`, archive any other memory, change handoff semantics,
+ranking/`orient`, public MCP/schema/storage/index/document-index behavior, native Claude, Claude
+Bridge, harness files, M6/migration/quarantine, deletion, or user-owned-file edits. Lifecycle
+cleanup remains partial: broad superseded-active handoff/memory cleanup remains out of scope.
