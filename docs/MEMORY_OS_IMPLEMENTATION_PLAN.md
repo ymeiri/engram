@@ -5693,3 +5693,17 @@ until effective native Claude hook behavior, prompt-bearing native behavior, mis
 `write_policy` behavior, M6 migration completion or explicit deferral, reviewed candidate
 decisions/dry-run evidence, sliding-window telemetry confidence, and broad lifecycle cleanup or
 deferral are handled under their own gates.
+
+T172 matrix note:
+`docs/BRAIN_HARNESS_T172_NATIVE_CLAUDE_EFFECTIVE_HOOK_VALIDATION_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny approval packet for the next recommended Claude gate. Fresh
+read-only evidence still shows Claude Code `ready=true`, the same monitored user-level Claude
+settings/hook hashes as T170, binary target `2.1.161`, clean obligations, and git status clean
+except the pre-existing untracked root `AGENTS.md`; project-local `.claude` files are also present
+and must be monitored. The packet does not execute native Claude, Claude Bridge, `/hooks`, prompt-
+bearing Claude, lifecycle writes, harness installs, settings/hook edits, M6/migration/quarantine,
+ranking/`orient`, public MCP/schema/storage/index/document-index changes, deletion, rollback,
+force-kill, old-binary reinstall, or user-owned-file adoption. Its proposed future approval allows
+exactly one native Claude PTY session with one `/hooks` input plus EOF, pre/post state comparisons,
+and observation/reporting of any side effects caused by that exact session, with no retries or
+cleanup.
