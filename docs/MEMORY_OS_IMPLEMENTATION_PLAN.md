@@ -5657,3 +5657,39 @@ change. T168 does not run `lint apply_safe`, archive any other memory, change ha
 ranking/`orient`, public MCP/schema/storage/index/document-index behavior, native Claude, Claude
 Bridge, harness files, M6/migration/quarantine, deletion, or user-owned-file edits. Lifecycle
 cleanup remains partial: broad superseded-active handoff/memory cleanup remains out of scope.
+
+T169 matrix note:
+`docs/BRAIN_HARNESS_T169_T125_QUARANTINE_INSPECTION_REPORT_2026-06-03.md` records the exact-approved
+T125 read-only inspection of quarantine candidate files 0010-0011 from the written T68 M6
+review-export snapshot. T123/T124 had already inspected candidate files 0001-0009, so T169 closes
+the remaining bounded inspection gap for the T68 snapshot. T169 does not decide, accept, edit,
+reject, promote, archive, delete, apply, or migrate any candidate and does not run migration
+status/prioritize/apply/rerun, lifecycle mutation, ranking/`orient`, public MCP/schema/storage/
+index/document-index behavior changes, native Claude, Claude Bridge, harness writes, or
+user-owned-file edits. The next M6 step remains separate: reviewed candidate decisions and/or a
+status/dry-run/apply plan with rollback and explicit approval.
+
+T170 matrix note:
+`docs/BRAIN_HARNESS_T170_T154_NATIVE_CLAUDE_SMOKE_RESULT_2026-06-03.md` records the exact-approved
+T154 native Claude non-session smoke. The only native commands executed were
+`/Users/yuval.meiri/.local/bin/claude --version` and
+`/Users/yuval.meiri/.local/bin/claude --help`. Both exited successfully; `--version` returned
+`2.1.161 (Claude Code)`, monitored Claude settings/hook hashes remained unchanged, Memory OS
+`changes_since` from the pre-command cursor returned zero items/commits after each command,
+obligations stayed clean, and harness status remained ready with known warnings. T170 records a
+binary-target drift from T156's observed `2.1.160` symlink target to `2.1.161`. T170 does not prove
+interactive Claude Code hook behavior, prompt-bearing native Claude behavior, missing SessionEnd
+`write_policy` behavior, or whole-home hidden-write absence; those remain separate approval gates.
+
+T171 matrix note:
+`docs/BRAIN_HARNESS_T171_POST_T170_COMPLETION_GATE_AUDIT_2026-06-03.md` records a docs-only/read-only
+completion audit after T169/T170. Fresh evidence shows lean `orient` returns active current-plan
+MemoryItem `019e8d9a-9ba3-7b31-90b5-70d296d6d63a` first, all five harnesses report `ready=true`,
+Claude Code still has split-settings/user-owned-snippet/legacy-permission/effective-hook caveats,
+obligations doctor is clean, and read-only lint still reports wrong-scope active-memory plus broad
+superseded-active findings with no safe action applied. The current 50-trace telemetry gate fails
+at 32% feedback coverage across two feedback-bearing intents. The full goal remains incomplete
+until effective native Claude hook behavior, prompt-bearing native behavior, missing SessionEnd
+`write_policy` behavior, M6 migration completion or explicit deferral, reviewed candidate
+decisions/dry-run evidence, sliding-window telemetry confidence, and broad lifecycle cleanup or
+deferral are handled under their own gates.
