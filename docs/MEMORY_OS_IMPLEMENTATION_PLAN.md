@@ -5775,3 +5775,22 @@ Claude `/hooks`, prompt-bearing Claude, harness writes, lifecycle archive, `lint
 M6/migration/quarantine, candidate decisions, ranking/`orient`, public MCP/schema/storage/index
 behavior changes, deletion, cleanup, rollback, force-kill, old-binary reinstall, or user-owned-file
 edits.
+
+T178 matrix note:
+`docs/BRAIN_HARNESS_T178_T177_DOCUMENT_INDEX_RESULT_2026-06-03.md` records the exact-approved T177
+document-index execution. Codex indexed only the T176 result report and
+`docs/MEMORY_OS_IMPLEMENTATION_PLAN.md` through two exact file-path
+`docs(action="index", path=...)` calls. The T176 report indexed as one new source with eight
+chunks; the implementation plan reindexed with 336 chunks; both calls returned no warnings. Post-
+index stats were `source_count=89`, `chunk_count=4346`, `searchable_chunk_count=2334`,
+`orphan_chunk_count=2012`, and `embedding_dimension=384`. Validation fixed the T176 exact-title
+probe: `T176 T175 Document Index Result` returned the T176 report first. The exact T176 matrix-note
+probe remained noisy, but the approved `T175 document-index execution T172 T173 T174 37 searchable
+chunks` probe returned the T176 report first and the newly indexed implementation-plan T175/T176
+matrix chunk fifth. T178 is document visibility evidence only: it does not authorize or execute
+T172 native Claude validation, T174 read-only M6 scoping, candidate decisions, migration apply,
+lifecycle cleanup, harness writes, ranking/`orient`, public MCP, schema/storage/index behavior,
+document-index behavior, deletion, cleanup, rollback, force-kill, old-binary reinstall, or
+user-owned-file edits. The next product-moving gates remain exact T172 approval or exact T174
+approval; M6 migration write-apply remains separately gated by reviewed decisions, dry-run/rollback
+evidence, telemetry readiness, and explicit user approval.
