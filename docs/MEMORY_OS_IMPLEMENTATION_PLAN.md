@@ -5847,3 +5847,22 @@ archive, `lint apply_safe`, M6/migration/quarantine, candidate decisions, rankin
 MCP/schema/storage/index behavior changes, deletion, rollback, old-binary reinstall, or
 user-owned-file edits. T180 live-process recovery and T174 M6 read-only scoping remain separate
 exact approval gates.
+
+T182 matrix note:
+`docs/BRAIN_HARNESS_T182_T181_DIRECT_SEARCH_CURRENT_PLAN_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny packet for a narrow direct unified `search` current-plan ranking
+miss observed after T181. Fresh evidence is split: lean `orient` trace
+`019e8e57-7110-7491-b72e-f0377f5a4887` and simpler direct search trace
+`019e8e57-f73d-7c72-80c0-8b5973a8cd1e` both recovered active T181 current-plan memory
+`019e8e54-4595-7931-8b7d-061086f9ddb4` first, but exact observed direct-search trace
+`019e8e58-2498-7bc0-8520-032122b36920` for
+`current next action after T181 exact approval gate non-gated work Brain Harness T180 T174 document
+indexing` ranked older active rolling handoffs above the current plan. Source inspection suggests
+the narrow ambiguity is `next action` plus approval-gate-context wording: current-plan guidance
+recognizes `next step` but not `next action`, while `approval gate` remains contextual only when
+current-plan guidance is recognized. T182 does not change ranking, `orient`, public MCP,
+schema/storage/index/document-index behavior, document indexing, lifecycle state, M6/migration/
+quarantine, native Claude, Claude Bridge, harness files/settings/hooks/adapters, user-owned files,
+deletion, rollback, force-kill, or installed runtime configuration. It asks for exact future
+approval to add a focused fixture and the smallest prompt-class source adjustment, with explicit
+gate/action prompts preserved.
