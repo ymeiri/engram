@@ -5494,3 +5494,14 @@ writes because T135 was already executed and validated in T152. The full goal re
 native Claude behavior, effective Claude hook configuration, lifecycle cleanup, M6/migration
 completion or explicit deferral, and broader cross-harness behavioral validation are still missing
 or approval-gated. Generic continuation is not T154 approval.
+
+T156 matrix note:
+`docs/BRAIN_HARNESS_T156_T154_PREFLIGHT_REFRESH_2026-06-03.md` records a read-only/static refresh
+of the T154 preflight. It did not execute native Claude, Claude Bridge, Claude `/hooks`,
+prompt-bearing Claude, lifecycle hooks, harness install, settings edits, M6/migration/quarantine,
+lifecycle cleanup, ranking, `orient`, schema/storage/index, public MCP, document-index behavior,
+deletion, rollback, force-kill, or user-owned adoption. The monitored Claude settings and
+SessionEnd hook hashes still match T153, `/Users/yuval.meiri/.local/bin/claude` resolves to
+`2.1.160`, Claude Code status/doctor remain `ready=true`, and the same split-settings,
+legacy-permission, user-owned snippet, explicit durable-policy, and effective-hook caveats remain.
+T154 still requires exact approval before any native Claude process.

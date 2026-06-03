@@ -2150,6 +2150,12 @@ Proceed in this order from the current checkpoint:
      incomplete because native Claude behavior, effective Claude hooks, lifecycle cleanup,
      M6/migration completion, and broader cross-harness behavior are still unproven or
      approval-gated. Generic continuation is not T154 approval.
+156. Treat T156 as a read-only/static refresh of the T154 preflight, not T154 execution. It confirms
+     the monitored Claude settings and SessionEnd hook hashes still match T153, the Claude binary
+     target is `2.1.160` without executing it, and Claude Code harness status/doctor remain
+     `ready=true` with the same split-settings, legacy-permission, user-owned snippet, and
+     effective-`/hooks` caveats. The next product-moving step is still the exact T154 approval
+     phrase before any native Claude process or Claude Bridge run.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

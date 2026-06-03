@@ -1344,6 +1344,14 @@ Current next application:
   explicit implementation-prompt guard regression. It does not authorize lifecycle, M6, harness,
   schema/storage/index, document-index, public MCP/payload, PATH/profile/auth, rollback, deletion,
   or old-binary reinstall work.
+- T156 applies native-execution preflight-refresh discipline: static file hashes, JSON parsing,
+  harness status/doctor, hook declaration inventory, and binary metadata may be refreshed without
+  running native Claude, but this must not be treated as approval for `claude --version`,
+  `claude --help`, Claude Bridge, Claude `/hooks`, prompt-bearing Claude, lifecycle mutation,
+  M6/migration/quarantine work, settings edits, harness install, ranking/`orient`, public MCP,
+  schema/storage/index, document-index behavior, deletion, rollback, force-kill, or user-owned
+  adoption. If static hashes drift from the prior preflight, explain or refresh the approval packet
+  before any native process.
 - The next executable M6 step requires a separate reviewed-candidate and dry-run-apply approval
   gate. T121 explains the T68 count drift but does not authorize candidate decisions, apply,
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
