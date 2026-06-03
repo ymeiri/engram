@@ -2224,6 +2224,14 @@ Proceed in this order from the current checkpoint:
      or `orient`, change public MCP/schema/storage/index behavior, delete anything, or touch
      user-owned files. The next executable product-moving step remains the exact T163 approval
      phrase.
+165. Treat T165 as the completed execution result for the T163 exact-file document-visibility
+     packet. The approved seven files were indexed one by one, producing 7 new document sources and
+     72 new searchable chunks with no warnings and no orphan increase. Validation passed for T157,
+     T158, T159, T160, T161, T162, and for T154 by actual title plus exact approval phrase; the
+     synthetic T154 wording from T163 remained noisy and should not be treated as the authoritative
+     T154 title. T165 does not authorize native Claude, Claude Bridge, lifecycle archive,
+     `lint apply_safe`, M6/migration/quarantine, ranking/`orient`, public MCP, schema/storage/index
+     behavior changes, document-index behavior changes, deletion, or user-owned-file edits.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

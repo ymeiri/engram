@@ -5608,3 +5608,15 @@ action. T164 does not run document indexing, lifecycle archive, `lint apply_safe
 Claude Bridge, harness writes, M6/migration/quarantine, ranking/`orient`, public MCP,
 schema/storage/index, deletion, rollback, force-kill, old-binary reinstall, or user-owned-file
 edits. The next executable product-moving gate remains exact T163 approval.
+
+T165 matrix note:
+`docs/BRAIN_HARNESS_T165_T163_DOCUMENT_INDEX_RESULT_2026-06-03.md` records the completed T163
+exact-file document-visibility repair. The seven approved target files T154, T157, T158, T159,
+T160, T161, and T162 were indexed individually through `docs(action="index", path=...)`, producing
+7 new sources and 72 new searchable chunks with no warnings and no orphan increase. Validation
+passes for T157, T158, T159, T160, T161, T162, and T154 by actual title plus exact approval phrase.
+The synthetic T154 query from the T163 packet remains noisy because the document's actual title is
+`T154 Native Claude Non-Session Smoke Approval Packet`. T165 does not authorize native Claude,
+Claude Bridge, lifecycle archive, `lint apply_safe`, M6/migration/quarantine, ranking/`orient`,
+public MCP, schema/storage/index behavior changes, document-index behavior changes, deletion, or
+user-owned-file edits.

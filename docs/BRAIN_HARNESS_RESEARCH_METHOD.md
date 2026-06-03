@@ -1416,3 +1416,10 @@ Current next application:
   archive, `lint apply_safe`, native Claude, Claude Bridge, harness writes, M6/migration/
   quarantine, ranking/`orient`, public MCP, schema/storage/index, deletion, or user-owned-file
   changes.
+- T165 applies exact-file document-index execution discipline: after exact approval for a bounded
+  packet, index only the named files, validate with read-only searches and stats, and record any
+  semantic-search caveats instead of changing ranking or broadening document-index behavior. A
+  successful document-visibility repair does not authorize the underlying gates described by the
+  indexed docs, including native Claude execution, lifecycle archive, M6/migration/quarantine,
+  `lint apply_safe`, harness writes, schema/storage/index changes, public MCP changes, deletion, or
+  user-owned-file edits.
