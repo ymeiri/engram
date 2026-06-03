@@ -5505,3 +5505,17 @@ SessionEnd hook hashes still match T153, `/Users/yuval.meiri/.local/bin/claude` 
 `2.1.160`, Claude Code status/doctor remain `ready=true`, and the same split-settings,
 legacy-permission, user-owned snippet, explicit durable-policy, and effective-hook caveats remain.
 T154 still requires exact approval before any native Claude process.
+
+T157 matrix note:
+`docs/BRAIN_HARNESS_T157_STALE_CURRENT_PLAN_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md` refreshes the
+default-deny lifecycle request for stale current-plan MemoryItem
+`019e5e0a-86b4-73e3-aa9b-ca350e83e915`. It does not archive, supersede, reject, delete, or review
+any memory item and does not run `lint apply_safe`. Current evidence shows T156 current-plan memory
+`019e8d05-dce0-7a82-9b23-30ce1405b5bd` is active and first for the current continuation class,
+while the stale repository-scoped target still appears as active lower-rank guidance and read-only
+lint reports 198 stale-current-plan feedback records plus 23 wrong-scope feedback records, both
+with `safe_action=none`. T157 only asks for an exact future single-item archive after fresh matching
+get/orient-or-search/lint/graph/git/obligations evidence and no intervening writes. It does not
+authorize old handoff cleanup, broad lifecycle mutation, `lint apply_safe`, ranking, `orient`,
+native Claude, Claude Bridge, harness writes, M6/migration/quarantine, public MCP, schema/storage/
+index, document-index behavior, deletion, or user-owned-file changes.

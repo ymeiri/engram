@@ -1357,3 +1357,10 @@ Current next application:
   deletion, or lifecycle mutation. Until then, non-gated work should improve targeted validation,
   evidence quality, cross-harness replication, or another concrete capture/lifecycle gap surfaced
   by evidence.
+- T157 applies refreshed lifecycle-approval discipline to stale current-plan memory
+  `019e5e0a-86b4-73e3-aa9b-ca350e83e915`: a docs-only packet may update stale T139 evidence
+  against the active T156 plan and current lint counts, but the archive remains exact-gated and
+  target-local. Do not treat stale/wrong-scope feedback, old handoff search noise, or lint
+  safe-action findings as permission for `memory archive`, `lint apply_safe`, ranking, `orient`,
+  native Claude, harness, M6, schema/storage/index, document-index, deletion, or broad lifecycle
+  cleanup.

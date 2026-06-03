@@ -2156,6 +2156,14 @@ Proceed in this order from the current checkpoint:
      `ready=true` with the same split-settings, legacy-permission, user-owned snippet, and
      effective-`/hooks` caveats. The next product-moving step is still the exact T154 approval
      phrase before any native Claude process or Claude Bridge run.
+157. Treat T157 as a refreshed default-deny lifecycle approval packet for exactly one stale
+     repository-scoped current-plan item, `019e5e0a-86b4-73e3-aa9b-ca350e83e915`. T157 does not
+     archive anything. It updates the stale T139 packet shape against the active T156 project plan,
+     current lint feedback counts, current direct-search noise, and source archive semantics. It
+     keeps old handoff cleanup, `lint apply_safe`, ranking, `orient`, native Claude, harness, M6,
+     schema/storage/index, public MCP, document-index behavior, deletion, and user-owned files out
+     of scope unless the user gives the exact T157 approval phrase and fresh matching pre-write
+     evidence.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
