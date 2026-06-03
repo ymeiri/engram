@@ -5897,3 +5897,24 @@ and T183. It does not authorize T182 ranking/source/test changes, T181 indexing,
 Claude input or process recovery, T174 M6 scoping, lifecycle archive, `lint apply_safe`, candidate
 decisions, M6/migration/quarantine work, ranking/`orient`, public MCP/schema/storage/index
 behavior changes, deletion, rollback, old-binary reinstall, or user-owned-file edits.
+
+T185 matrix note:
+`docs/BRAIN_HARNESS_T185_T172_RECOVERY_OPTION_2_RERUN_RESULT_2026-06-03.md` records a bounded
+rerun of the user-approved T172 recovery option 2 wording after the prior T179 hard stop. Fresh
+preflight matched the T179/T180 state: PID `49349` was still live on `ttys000`, Claude Code remained
+`2.1.161`, the symlink target and monitored user/project Claude hashes matched, harness
+status/doctor were `ready=true` with the known warnings, obligations were clean, Memory OS had no
+new item or commit changes since the pre-recovery cursor, and git had no tracked diff. Codex sent
+exactly one Ctrl-C byte to `/dev/ttys000`; it did not use a process signal, send EOF, send another
+Ctrl-C, run `/hooks`, send natural-language input, launch Claude, run Claude Bridge, edit
+hooks/settings/adapters, run harness install, mutate lifecycle or migration state, change
+ranking/`orient`, public MCP/schema/storage/index/document-index behavior, delete, roll back,
+force-kill, reinstall binaries, or touch user-owned files. PID `49349` remained live after Ctrl-C.
+EOF was not sent because the approval was conditional on Claude returning to a prompt, and after
+context compaction Codex had no reliable transcript handle: `read_thread_terminal` had no attached
+app terminal and Computer Use could not inspect the Codex app. Postflight found no tracked git
+changes, no monitored hash drift, no Memory OS writes, no obligation changes, and unchanged harness
+readiness. T185 does not close the live-process cleanup gate or the T172 effective-hook visibility
+gate; the next cleanup step still needs explicit fresh approval that states whether EOF without
+visible prompt evidence, another Ctrl-C, a process-level signal, force-kill, or user/manual
+intervention is allowed.
