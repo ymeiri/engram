@@ -2164,6 +2164,13 @@ Proceed in this order from the current checkpoint:
      schema/storage/index, public MCP, document-index behavior, deletion, and user-owned files out
      of scope unless the user gives the exact T157 approval phrase and fresh matching pre-write
      evidence.
+158. Treat T158 as a docs-only/default-deny M6 approval packet for the remaining T125 quarantine
+     candidate inspection. T123/T124 already inspected review files 0001-0009 from the written T68
+     snapshot; T158 only asks for exact future approval to read quarantine files 0010-0011 and write
+     an inspection report. It does not inspect quarantine files, run status/prioritize/apply/rerun,
+     make candidate decisions, mutate lifecycle state, change ranking/`orient`, change public
+     MCP/schema/storage/index/document-index behavior, run native Claude or Claude Bridge, or write
+     harness files.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

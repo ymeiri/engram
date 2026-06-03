@@ -5519,3 +5519,13 @@ get/orient-or-search/lint/graph/git/obligations evidence and no intervening writ
 authorize old handoff cleanup, broad lifecycle mutation, `lint apply_safe`, ranking, `orient`,
 native Claude, Claude Bridge, harness writes, M6/migration/quarantine, public MCP, schema/storage/
 index, document-index behavior, deletion, or user-owned-file changes.
+
+T158 matrix note:
+`docs/BRAIN_HARNESS_T158_T125_QUARANTINE_INSPECTION_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny packet for the remaining T125 M6 read-only quarantine inspection
+gate. It does not read quarantine files, run migration status/prioritize/apply/rerun, make candidate
+decisions, mutate lifecycle state, change ranking or `orient`, change public MCP/schema/storage/
+index or document-index behavior, run native Claude or Claude Bridge, or write harness files.
+T123/T124 already inspected all nine review candidates from the written T68 snapshot. The next M6
+inspection step now requires the exact T125 approval phrase before reading only quarantine files
+0010-0011 and writing an inspection report.

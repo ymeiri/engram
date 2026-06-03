@@ -1364,3 +1364,9 @@ Current next application:
   safe-action findings as permission for `memory archive`, `lint apply_safe`, ranking, `orient`,
   native Claude, harness, M6, schema/storage/index, document-index, deletion, or broad lifecycle
   cleanup.
+- T158 applies M6 quarantine-inspection packet discipline: after all `review` candidates from a
+  written export snapshot have been inspected, a docs-only/default-deny packet may ask for exact
+  approval to read only the remaining quarantine files. Do not treat that packet as approval to
+  read the files, decide candidates, run status/prioritize/apply/rerun, mutate lifecycle state,
+  change ranking/`orient`, use Claude, change schema/storage/index/public MCP/document-index
+  behavior, or write harness files.
