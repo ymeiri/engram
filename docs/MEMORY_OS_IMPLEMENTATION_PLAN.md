@@ -5832,3 +5832,18 @@ Claude sessions, and fallback cleanup. T180 can resolve the live-process gate if
 but it cannot close the effective-hook visibility gate, prompt-bearing native Claude behavior,
 missing SessionEnd `write_policy` behavior, M6 migration readiness, lifecycle cleanup, or broad
 Brain Harness completion.
+
+T181 matrix note:
+`docs/BRAIN_HARNESS_T181_T179_T180_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny exact-file document-index visibility packet for the latest T179 result,
+T180 recovery approval packet, and updated implementation plan. Fresh document-only searches for
+the T180 exact title, T180 filename stem, and T179 hard-stop/PID wording returned older indexed
+documents rather than the new T179/T180 files, while direct unified search still recovered current
+T180 current-plan memory first. T181 does not run document indexing or change document-index
+behavior; it asks for exact future approval to index only T179, T180, and
+`docs/MEMORY_OS_IMPLEMENTATION_PLAN.md`. It does not authorize native Claude input, process
+signals, force-kill, Claude Bridge, `/hooks`, prompt-bearing Claude, harness writes, lifecycle
+archive, `lint apply_safe`, M6/migration/quarantine, candidate decisions, ranking/`orient`, public
+MCP/schema/storage/index behavior changes, deletion, rollback, old-binary reinstall, or
+user-owned-file edits. T180 live-process recovery and T174 M6 read-only scoping remain separate
+exact approval gates.
