@@ -145,8 +145,13 @@ T146 source validation closes the source-level no-prompt `plan_work` gap without
 request or response contract. For no/empty-prompt `plan_work` at a project/cwd task boundary, the
 source now promotes the latest current-plan decision into `active_decisions` and pins it first in
 Brain Loop. Focused fixtures guard explicit implementation prompts and no-boundary/no-current-plan
-cases. This is not installed-runtime evidence yet: live MCP traces still show old no-prompt
-behavior until the T147 runtime-refresh packet is explicitly approved and executed.
+cases. T147 installed-runtime validation then closed the live gap: after installing binary hash
+`0cbbbc82a70f08b52f218369e4c304828037d3615c4bac71c35303957b423f22` and restarting the daemon to
+PID `68053`, no-prompt trace `019e8bb8-ba85-7230-aede-84266c5721c6` and empty-prompt trace
+`019e8bb8-bb3e-7af2-a765-fcbd5bbc4c50` returned current-plan memory
+`019e8a01-0720-7903-814c-db9eb4eb4d6f` first in Brain Loop. Explicit implementation-prompt trace
+`019e8bb8-bbf7-7e21-9dac-fd1e72d91a41` did not force current-plan promotion. The public request and
+response shape stayed unchanged.
 
 Installed-runtime T39 validation then hardened the `prepare_handoff` approval-gate wording path.
 After installing binary hash

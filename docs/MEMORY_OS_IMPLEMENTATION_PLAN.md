@@ -5419,16 +5419,21 @@ the service-layer `orient_` sweep, `cargo fmt --all --check`, `cargo check -p en
 traces after the source commit still show stale runtime behavior.
 
 T147 matrix note:
-`docs/BRAIN_HARNESS_T147_T146_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` records a docs-only,
-default-deny runtime-refresh approval packet for the committed T146 source fix. Current source
-baseline is `d12b2ca17500d0979852fe9a35ff7dc6468aa091`, the installed
-`/Users/yuval.meiri/.local/bin/engram` hash remains
-`3d801be9dcae4b26bd03b27cadd0d4449cc32322e7d0cb3bcff0b0ac58b6686b`, and the daemon remains PID
-`10768` until an approved refresh is run. Startup trace `019e89f7-c60f-7713-8768-b3915d0ae124`
-still returned generic no-prompt `plan_work` Brain Loop items, while direct search trace
-`019e89f7-c81b-7042-9fda-4627a37240ae` returned T147 current-plan memory first. T147 asks for
-exact approval before installing the current binary, restarting the daemon, and running read-only
-live validation for no-prompt, empty-prompt, and explicit implementation-prompt `plan_work`
-orientation. It does not authorize harness writes, lifecycle mutation, M6/migration/quarantine,
+`docs/BRAIN_HARNESS_T147_T146_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-02.md` records the
+default-deny runtime-refresh packet for the committed T146 source fix, and
+`docs/BRAIN_HARNESS_T147_T146_RUNTIME_REFRESH_VALIDATION_RESULT_2026-06-03.md` records the approved
+execution. Required binary-source first checks were empty from baseline
+`d12b2ca17500d0979852fe9a35ff7dc6468aa091`, the installed
+`/Users/yuval.meiri/.local/bin/engram` hash changed from
+`3d801be9dcae4b26bd03b27cadd0d4449cc32322e7d0cb3bcff0b0ac58b6686b` to
+`0cbbbc82a70f08b52f218369e4c304828037d3615c4bac71c35303957b423f22`, and the daemon restarted
+from PID `10768` to PID `68053`. Direct search trace
+`019e8bb8-b9e1-7ff3-921f-f3a5589b5ed2` returned active current-plan memory
+`019e8a01-0720-7903-814c-db9eb4eb4d6f` first; no-prompt trace
+`019e8bb8-ba85-7230-aede-84266c5721c6` and empty-prompt trace
+`019e8bb8-bb3e-7af2-a765-fcbd5bbc4c50` returned the same item first in Brain Loop; explicit
+implementation-prompt trace `019e8bb8-bbf7-7e21-9dac-fd1e72d91a41` did not force current-plan
+promotion. T147 closes the installed-runtime gap for the T146 no-prompt `plan_work` `orient` path.
+It does not authorize harness writes, lifecycle mutation, M6/migration/quarantine,
 schema/storage/index changes, document-index changes, public MCP changes, payload changes,
 PATH/profile/auth configuration changes, rollback, force-kill, deletion, or old-binary reinstall.

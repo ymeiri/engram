@@ -2102,6 +2102,17 @@ Proceed in this order from the current checkpoint:
      quarantine, schema/storage/index changes, document-index behavior changes, public MCP/payload
      changes, PATH/profile/auth configuration, rollback, force-kill, deletion, or old-binary
      reinstall.
+151. Treat T147 execution as installed-runtime validation for the committed T146 no-prompt
+     `plan_work` `orient` repair, not broader ranking or harness readiness. After exact approval,
+     binary-source first checks were empty, `/Users/yuval.meiri/.local/bin/engram` changed from hash
+     `3d801be9...` to `0cbbbc82...`, and the daemon restarted from PID `10768` to PID `68053`. Live
+     no-prompt trace `019e8bb8-ba85-7230-aede-84266c5721c6` and empty-prompt trace
+     `019e8bb8-bb3e-7af2-a765-fcbd5bbc4c50` returned the active current-plan memory first in Brain
+     Loop; explicit implementation-prompt trace `019e8bb8-bbf7-7e21-9dac-fd1e72d91a41` did not
+     force current-plan promotion. This closes the installed-runtime gap for T146 only; harness
+     writes, lifecycle cleanup, M6/migration/quarantine, public MCP/payload changes,
+     schema/storage/index changes, document-index behavior changes, PATH/profile/auth configuration,
+     rollback, force-kill, deletion, and old-binary reinstall remain separately gated.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
