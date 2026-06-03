@@ -6135,3 +6135,27 @@ MCP/schema/storage/index/document-index behavior changes, deletion, rollback, ol
 or user-owned-file edits. T194/T192 document indexing, T193/T191/T187 lifecycle archives, T186
 native-Claude cleanup, T172 effective-hook visibility, M6/migration, external-session joinability,
 and broad Brain Harness completion remain separate incomplete or exact-gated work.
+
+T197 matrix note:
+`docs/BRAIN_HARNESS_T197_T172_RECOVERY_PROCESS_GROUP_SIGINT_RESULT_2026-06-03.md` records the
+user-approved T172 recovery-option cleanup after T179/T185/T190 left native Claude PID `49349`
+live. Fresh preflight showed PID `49349` was still `/Users/yuval.meiri/.local/bin/claude` on
+`ttys000`, with foreground process group `49349`, Claude Code `2.1.161`, monitored user/project
+Claude hashes matching T172/T179/T185/T186/T190, harness status/doctor `ready=true` with known
+warnings, obligations clean, and git clean except pre-existing untracked root `AGENTS.md`. Because
+the original PTY session handle was unavailable after context compaction, Codex sent one
+foreground-process-group interrupt, `kill -INT -49349`, as the Ctrl-C equivalent for that live PTY.
+The process group exited within the wait window, so EOF was not sent. Postflight found no remaining
+PID `49349`, no tracked git changes, no monitored Claude hash drift, no obligation changes, and
+unchanged harness readiness. Memory OS `changes_since` from the pre-recovery cursor returned one
+attributable SessionEnd lifecycle side effect: active handoff MemoryItem
+`019e8ea5-663e-7152-b346-9c5ab7ddc93b`, written by native Claude Code and superseding
+`019e8e9d-1e08-76d1-ab53-3c7f63ca0baa`. T197 resolves the live-process cleanup gate but does not
+archive the new handoff, run `lint apply_safe`, close T172 effective-hook visibility, prove
+prompt-bearing native Claude behavior or missing SessionEnd `write_policy` behavior, run
+document indexing, lifecycle archive, M6/migration/quarantine actions, native Claude or Claude
+Bridge probes, harness writes, ranking/`orient`/source/public MCP/schema/storage/index/
+document-index behavior changes, deletion, rollback, old-binary reinstall, or user-owned-file
+edits. T194/T192 document indexing, T193/T191/T187 lifecycle archives, T172 effective-hook
+visibility, M6/migration, external-session joinability, telemetry coverage stability, and broad
+Brain Harness completion remain separate incomplete or exact-gated work.
