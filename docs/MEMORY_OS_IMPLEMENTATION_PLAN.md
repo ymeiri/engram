@@ -5940,3 +5940,23 @@ gate if executed cleanly, but it cannot close the effective-hook visibility gate
 native Claude behavior, missing SessionEnd `write_policy` behavior, M6 migration readiness,
 lifecycle cleanup, ranking/`orient`, public MCP, schema/storage/index, document-index behavior, or
 broad Brain Harness completion.
+
+T187 matrix note:
+`docs/BRAIN_HARNESS_T187_STALE_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny lifecycle packet for three exact stale rolling handoff MemoryItems created
+or exposed during the T186 handoff-refresh maintenance:
+`019e8e6b-bb32-7832-9389-22dd04cbfcda`,
+`019e8e6a-dd68-79d3-8bcb-704bc9c52fca`, and
+`019e8bc0-59a2-7051-b667-e88a1a4861c0`. Fresh read-only evidence shows lean `orient` returns
+active current-plan memory `019e8e6b-fac4-72b2-b702-d7df6356908c` first, `handoff(get)` returns
+latest active handoff `019e8e6c-361a-73a0-933e-fcb12c599247`, direct search still surfaces stale
+active handoffs as top search noise after the current plan/latest handoff, and graph/memory get
+evidence shows the supersession chain `019e8e6c-361a...` -> `019e8e6b-bb32...` ->
+`019e8e6a-dd68...` -> `019e8bc0-59a...`. T187 does not archive anything or run `lint apply_safe`;
+it asks for exact future approval before these three archive writes. It intentionally excludes
+older T140-T145 handoff noise because that requires separate target-local evidence or broader
+explicit approval. T187 does not authorize handoff semantics changes, ranking, `orient`, public
+MCP/schema/storage/index/document-index behavior, M6/migration/quarantine, native Claude, Claude
+Bridge, process signals, harness installs/settings/hooks/adapters, lifecycle writes beyond the
+three exact targets if approved, deletion, rollback, force-kill, or user-owned-file edits. T186
+live-process cleanup remains the immediate product-moving gate.
