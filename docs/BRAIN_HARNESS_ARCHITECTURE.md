@@ -2179,6 +2179,14 @@ Proceed in this order from the current checkpoint:
      get/orient-or-search/T147-evidence/lint/graph/git/obligations checks. Lint did not flag this
      target, so any archive remains a human-approved manual lifecycle action, not `lint apply_safe`.
      Late duplicate T135 approval remains consumed by T152 and does not reopen harness writes.
+160. Treat T160 as a docs-only/default-deny lifecycle approval packet for wrong-scope active Claude
+     prompt capture `019e7f52-4fc2-7f61-93b4-9a741aba966e`. The target is a one-time Claude Code
+     telemetry evidence-loop critique prompt captured as an active `rule`, not durable project
+     guidance. Fresh evidence shows current T159 plan retrieval remains healthy, the target is still
+     active and exact-query visible, lint reports wrong-scope feedback with `safe_action=none`, and
+     graph depth 1 shows only prompt evidence plus project scope. T160 does not archive anything or
+     rerun T135 harness writes; it asks for exact future approval for this single archive after
+     fresh get/orient-or-search/target-visibility/lint/graph/git/obligations checks.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

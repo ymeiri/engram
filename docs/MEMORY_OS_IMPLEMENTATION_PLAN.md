@@ -5542,3 +5542,16 @@ archive`, `lint apply_safe`, ranking/`orient` changes, native Claude, Claude Bri
 M6/migration/quarantine, public MCP/schema/storage/index/document-index behavior changes, deletion,
 or user-owned-file edits. Late duplicate T135 approval does not reopen harness writes because T135
 was already executed and validated in T152.
+
+T160 matrix note:
+`docs/BRAIN_HARNESS_T160_WRONG_SCOPE_CLAUDE_PROMPT_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny lifecycle request for wrong-scope active Claude Code prompt
+capture MemoryItem `019e7f52-4fc2-7f61-93b4-9a741aba966e`. Fresh evidence shows T135 remains
+executed and all five harnesses still report `ready=true`, current T159 plan retrieval remains
+healthy, the target is a one-time telemetry evidence-loop critique prompt captured as an active
+`rule`, exact search still returns it first for that old prompt class, lint reports 4 wrong-scope
+feedback records with `safe_action=none`, and graph depth 1 shows only prompt evidence plus project
+scope. T160 does not archive the item, rerun harness writes, use Claude, run M6/migration/
+quarantine, change ranking/`orient`, run `lint apply_safe`, change public MCP/schema/storage/index
+or document-index behavior, delete anything, or touch user-owned files. Any future archive requires
+the exact T160 approval phrase and fresh matching pre-write evidence.

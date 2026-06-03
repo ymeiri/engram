@@ -1378,3 +1378,12 @@ Current next application:
   findings as permission for archive, `lint apply_safe`, ranking/`orient`, native Claude, Claude
   Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
   document-index, deletion, or user-owned-file changes.
+- T160 applies wrong-scope prompt-capture lifecycle discipline: if a one-time user prompt captured
+  by a harness hook becomes an active durable `rule`, a docs-only packet may ask for exact future
+  single-target archive approval only after proving the target is still active, exact-query visible
+  or lint-flagged, wrong-scope by recent feedback, and dependency-free in graph depth 1. If the
+  current broad `orient` path no longer surfaces the target, say so and do not overclaim a fresh
+  hot-path failure. Treat `safe_action=none` as a human-approval requirement, not automation
+  permission, and keep T135 duplicate approval, `lint apply_safe`, ranking/`orient`, native Claude,
+  Claude Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
+  document-index, deletion, and user-owned-file changes out of scope.
