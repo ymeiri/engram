@@ -6114,3 +6114,24 @@ exact-gated work. T195 does not run document indexing, lifecycle archive, `lint 
 Claude or Claude Bridge actions, process signals, harness writes, ranking/`orient`/source/public
 MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
 or user-owned-file edits.
+
+T196 matrix note:
+`docs/BRAIN_HARNESS_T196_DESIGN_PREFERENCE_RETRIEVAL_RECHECK_2026-06-03.md` records a
+docs-only/read-only recheck of the T195 design-preference retrieval caveat. The exact T195
+`follow_user_preference` query still reproduces the issue: fresh trace
+`019e8ea1-159d-7000-9671-ff10928f45fc` ranks reviewed preference
+`019e6924-256b-7093-b1c5-286ec4d02461` third behind stale handoffs
+`019e8475-3fa6-7080-9d80-ae81f24c9781` and
+`019e838b-6b25-7011-8b4b-b4cc61dc450f`, matching the T195 trace
+`019e8e9b-553c-7871-b03b-cb473c201dff`. Two close focused queries,
+`019e8e9d-ea6d-74c0-bfa7-1b0c0a493247` and
+`019e8ea0-533c-7882-8001-26317fef0e3f`, ranked the same reviewed preference first. T196 therefore
+keeps design-preference retrieval partially validated and prompt-sensitive, and it rejects broad
+ranking or `orient` churn from this evidence alone. Stale active handoff noise remains the safer
+explanation and is already covered by exact-gated lifecycle packets. T196 does not run lifecycle
+archive, `lint apply_safe`, document indexing, native Claude input or signals, Claude Bridge,
+harness writes, M6/migration/quarantine actions, ranking/`orient`/source/public
+MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
+or user-owned-file edits. T194/T192 document indexing, T193/T191/T187 lifecycle archives, T186
+native-Claude cleanup, T172 effective-hook visibility, M6/migration, external-session joinability,
+and broad Brain Harness completion remain separate incomplete or exact-gated work.
