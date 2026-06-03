@@ -5980,3 +5980,18 @@ Its proposed future approval allows indexing exactly
 then read-only document-search validation and a docs-only result. T186 live-process cleanup, T187
 lifecycle archive, M6/migration, and broad Brain Harness completion remain separate exact-gated
 work.
+
+T189 matrix note:
+`docs/BRAIN_HARNESS_T189_TELEMETRY_COMPLETION_GATE_FOLLOW_THROUGH_2026-06-03.md` records telemetry
+feedback and a docs-only completion-risk follow-through after T188. Four assessable traces from the
+current turn were scored: startup orient `019e8e78-99e4-7b62-b4a3-07aad94e85cd`, current-plan
+search `019e8e78-bcad-7b00-850f-b3976acc8cdb`, architecture/completion search
+`019e8e78-be6f-7ae1-8ad6-aca640a426ca`, and design-philosophy search
+`019e8e78-c039-7c92-9b50-b9fc590b2da1`. Feedback coverage in the current 50-trace real-session
+window improved from 9 traces / 18% to 13 traces / 26%, with `bad_memory_used_count=0`, but the
+confidence gate still fails because coverage is below 50% and feedback spans only one intent rather
+than three. T189 does not run T186, T188, T187, document indexing, lifecycle archive, `lint
+apply_safe`, M6/migration/quarantine, native Claude, Claude Bridge, process signals, harness writes,
+ranking/`orient`/source/public MCP/schema/storage/index/document-index behavior changes, deletion,
+rollback, old-binary reinstall, or user-owned-file edits. It records that telemetry remains a
+completion blocker, not completion proof.
