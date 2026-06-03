@@ -1378,6 +1378,12 @@ Current next application:
   findings as permission for archive, `lint apply_safe`, ranking/`orient`, native Claude, Claude
   Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
   document-index, deletion, or user-owned-file changes.
+- T167 applies manual-stale-limitation archive result discipline: after exact approval and the
+  single T159 archive write, record the result separately with post-archive `memory(get)`,
+  `orient`, targeted search, lint, `changes_since`, obligations, and git evidence. Treat the result
+  report as documentation only; it does not authorize another archive, `lint apply_safe`, ranking/
+  `orient`, native Claude, Claude Bridge, harness writes, M6/migration/quarantine,
+  schema/storage/index, public MCP, document-index, deletion, or user-owned-file changes.
 - T160 applies wrong-scope prompt-capture lifecycle discipline: if a one-time user prompt captured
   by a harness hook becomes an active durable `rule`, a docs-only packet may ask for exact future
   single-target archive approval only after proving the target is still active, exact-query visible

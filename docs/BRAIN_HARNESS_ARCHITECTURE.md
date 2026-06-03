@@ -2171,14 +2171,13 @@ Proceed in this order from the current checkpoint:
      make candidate decisions, mutate lifecycle state, change ranking/`orient`, change public
      MCP/schema/storage/index/document-index behavior, run native Claude or Claude Bridge, or write
      harness files.
-159. Treat T159 as a docs-only/default-deny lifecycle approval packet for the stale T146
-     runtime-refresh limitation `019e89f4-7dba-7ae1-a559-85d924af31a3`. T147 contradicted that
-     active limitation by validating the installed no/empty-prompt `plan_work` `orient` path, but
-     the item still surfaces as active guidance for targeted T146/T147 lifecycle prompts. T159 does
-     not archive anything; it asks for exact future approval to archive only that item after fresh
-     get/orient-or-search/T147-evidence/lint/graph/git/obligations checks. Lint did not flag this
-     target, so any archive remains a human-approved manual lifecycle action, not `lint apply_safe`.
-     Late duplicate T135 approval remains consumed by T152 and does not reopen harness writes.
+159. Treat T159 as the now-executed stale T146 runtime-refresh limitation lifecycle gate for
+     MemoryItem `019e89f4-7dba-7ae1-a559-85d924af31a3`. T147 contradicted that active limitation by
+     validating the installed no/empty-prompt `plan_work` `orient` path. After exact user approval,
+     fresh get/orient-or-search/T147-evidence/lint/graph/git/obligations checks, and no intervening
+     writes, T159 archived only that item with the approved payload. Lint did not flag the target,
+     so this was a human-approved manual lifecycle action, not `lint apply_safe`. Late duplicate
+     T135 approval remains consumed by T152 and does not reopen harness writes.
 160. Treat T160 as a docs-only/default-deny lifecycle approval packet for wrong-scope active Claude
      prompt capture `019e7f52-4fc2-7f61-93b4-9a741aba966e`. The target is a one-time Claude Code
      telemetry evidence-loop critique prompt captured as an active `rule`, not durable project
@@ -2232,6 +2231,20 @@ Proceed in this order from the current checkpoint:
      T154 title. T165 does not authorize native Claude, Claude Bridge, lifecycle archive,
      `lint apply_safe`, M6/migration/quarantine, ranking/`orient`, public MCP, schema/storage/index
      behavior changes, document-index behavior changes, deletion, or user-owned-file edits.
+166. Treat T166 as the completed execution result for the T157 stale current-plan lifecycle
+     archive. It archived exactly MemoryItem `019e5e0a-86b4-73e3-aa9b-ca350e83e915` after exact
+     approval and fresh matching evidence, and post-archive validation showed the target archived,
+     absent from lean `orient`, and absent from target-local lint findings. T166 does not authorize
+     `lint apply_safe`, other lifecycle mutation, native Claude, Claude Bridge, harness writes,
+     M6/migration/quarantine, ranking/`orient`, schema/storage/index, document-index behavior
+     changes, deletion, or user-owned-file edits.
+167. Treat T167 as the completed execution result for the T159 stale T146 limitation lifecycle
+     archive. It records that exact-approved T159 archived only MemoryItem
+     `019e89f4-7dba-7ae1-a559-85d924af31a3`; post-archive `memory(get)` shows `status=archived`,
+     lean `orient` still returns the active current plan first, targeted search omits the archived
+     target, and `changes_since` shows exactly that archive state change. Lifecycle cleanup remains
+     partial: T160 is still exact-gated, and broad lint/superseded-active cleanup remains out of
+     scope.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

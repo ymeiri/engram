@@ -5532,16 +5532,16 @@ inspection step now requires the exact T125 approval phrase before reading only 
 
 T159 matrix note:
 `docs/BRAIN_HARNESS_T159_STALE_T146_LIMITATION_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md`
-records a docs-only/default-deny lifecycle request for stale T146 runtime-refresh limitation
-MemoryItem `019e89f4-7dba-7ae1-a559-85d924af31a3`. The target remains active and was returned
-first by targeted T146/T147 stale-limitation search/orient checks, while T147 validation proves the
-runtime-refresh gap it describes is closed. Read-only lint did not flag this target, and graph depth
-1 showed only evidence, project scope, and writer-session edges, so the packet frames any future
-archive as a human-approved manual archive, not a lint safe action. It does not run `memory
-archive`, `lint apply_safe`, ranking/`orient` changes, native Claude, Claude Bridge, harness writes,
-M6/migration/quarantine, public MCP/schema/storage/index/document-index behavior changes, deletion,
-or user-owned-file edits. Late duplicate T135 approval does not reopen harness writes because T135
-was already executed and validated in T152.
+recorded a docs-only/default-deny lifecycle request for stale T146 runtime-refresh limitation
+MemoryItem `019e89f4-7dba-7ae1-a559-85d924af31a3`. After exact user approval, fresh matching
+read-only evidence, and no intervening writes, Codex archived exactly that item with the approved
+payload. T147 validation proves the runtime-refresh gap it described is closed, read-only lint did
+not flag the target, and graph depth 1 showed only evidence, project scope, and writer-session
+edges, so the execution remained a human-approved manual archive, not a lint safe action. It did not
+run `lint apply_safe`, archive any other item, change ranking/`orient`, run native Claude, Claude
+Bridge, harness writes, M6/migration/quarantine, public MCP/schema/storage/index/document-index
+behavior changes, deletion, or user-owned-file edits. Late duplicate T135 approval does not reopen
+harness writes because T135 was already executed and validated in T152.
 
 T160 matrix note:
 `docs/BRAIN_HARNESS_T160_WRONG_SCOPE_CLAUDE_PROMPT_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md`
@@ -5631,5 +5631,20 @@ no longer reports stale-current-plan or wrong-scope findings for that ID, and `c
 showed exactly that archive state change. T166 does not run `lint apply_safe`, archive any other
 memory, change handoff semantics, ranking/`orient`, public MCP/schema/storage/index/document-index
 behavior, native Claude, Claude Bridge, harness files, M6/migration/quarantine, deletion, or
-user-owned-file edits. Lifecycle cleanup remains partial: T159 and T160 still require separate
-exact approvals, and broad superseded-active handoff/memory cleanup remains out of scope.
+user-owned-file edits. Lifecycle cleanup remained partial at T166 time; T159 is now closed by T167,
+while T160 still requires separate exact approval and broad superseded-active handoff/memory cleanup
+remains out of scope.
+
+T167 matrix note:
+`docs/BRAIN_HARNESS_T167_T159_LIFECYCLE_ARCHIVE_RESULT_2026-06-03.md` records execution of the
+exact-approved T159 single-target lifecycle archive. After fresh matching read-only evidence and no
+intervening writes, Codex archived only stale T146 runtime-refresh limitation MemoryItem
+`019e89f4-7dba-7ae1-a559-85d924af31a3` with the approved T159 payload. Post-archive validation
+shows the target is `status=archived`, lean `orient` continues to return the active current plan
+first, targeted memory search no longer returns the archived target, `lint(run, write=false)` no
+longer reports any finding for that ID, and `changes_since` showed exactly that archive state
+change. T167 does not run `lint apply_safe`, archive any other memory, change handoff semantics,
+ranking/`orient`, public MCP/schema/storage/index/document-index behavior, native Claude, Claude
+Bridge, harness files, M6/migration/quarantine, deletion, or user-owned-file edits. Lifecycle
+cleanup remains partial: T160 still requires separate exact approval, and broad superseded-active
+handoff/memory cleanup remains out of scope.
