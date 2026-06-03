@@ -5761,3 +5761,17 @@ decisions, migration apply, lifecycle cleanup, harness writes, ranking/`orient`,
 schema/storage/index behavior, document-index behavior, deletion, cleanup, rollback, force-kill,
 old-binary reinstall, or user-owned-file edits. The next product-moving gates remain exact T172
 approval or exact T174 approval.
+
+T177 matrix note:
+`docs/BRAIN_HARNESS_T177_T176_MATRIX_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny exact-file document-index visibility packet for the T176 result report and
+the updated central implementation plan. Fresh document stats still match the T175 post-index
+state, and document search for the T176 title or T176 matrix-note wording does not surface the
+newest T176 report/matrix content in the top five. T177 does not run document indexing or change
+document-index behavior; it asks for exact future approval to index only
+`docs/BRAIN_HARNESS_T176_T175_DOCUMENT_INDEX_RESULT_2026-06-03.md` and
+`docs/MEMORY_OS_IMPLEMENTATION_PLAN.md`. It does not authorize native Claude, Claude Bridge,
+Claude `/hooks`, prompt-bearing Claude, harness writes, lifecycle archive, `lint apply_safe`,
+M6/migration/quarantine, candidate decisions, ranking/`orient`, public MCP/schema/storage/index
+behavior changes, deletion, cleanup, rollback, force-kill, old-binary reinstall, or user-owned-file
+edits.
