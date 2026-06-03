@@ -5620,3 +5620,16 @@ The synthetic T154 query from the T163 packet remains noisy because the document
 Claude Bridge, lifecycle archive, `lint apply_safe`, M6/migration/quarantine, ranking/`orient`,
 public MCP, schema/storage/index behavior changes, document-index behavior changes, deletion, or
 user-owned-file edits.
+
+T166 matrix note:
+`docs/BRAIN_HARNESS_T166_T157_LIFECYCLE_ARCHIVE_RESULT_2026-06-03.md` records execution of the
+exact-approved T157 single-target lifecycle archive. After fresh matching read-only evidence and no
+intervening writes, Codex archived only stale repository-scoped current-plan MemoryItem
+`019e5e0a-86b4-73e3-aa9b-ca350e83e915` with the approved T157 payload. Post-archive validation
+shows the target is `status=archived`, lean `orient` no longer returns it, `lint(run, write=false)`
+no longer reports stale-current-plan or wrong-scope findings for that ID, and `changes_since`
+showed exactly that archive state change. T166 does not run `lint apply_safe`, archive any other
+memory, change handoff semantics, ranking/`orient`, public MCP/schema/storage/index/document-index
+behavior, native Claude, Claude Bridge, harness files, M6/migration/quarantine, deletion, or
+user-owned-file edits. Lifecycle cleanup remains partial: T159 and T160 still require separate
+exact approvals, and broad superseded-active handoff/memory cleanup remains out of scope.
