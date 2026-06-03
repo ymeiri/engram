@@ -5529,3 +5529,16 @@ index or document-index behavior, run native Claude or Claude Bridge, or write h
 T123/T124 already inspected all nine review candidates from the written T68 snapshot. The next M6
 inspection step now requires the exact T125 approval phrase before reading only quarantine files
 0010-0011 and writing an inspection report.
+
+T159 matrix note:
+`docs/BRAIN_HARNESS_T159_STALE_T146_LIMITATION_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny lifecycle request for stale T146 runtime-refresh limitation
+MemoryItem `019e89f4-7dba-7ae1-a559-85d924af31a3`. The target remains active and was returned
+first by targeted T146/T147 stale-limitation search/orient checks, while T147 validation proves the
+runtime-refresh gap it describes is closed. Read-only lint did not flag this target, and graph depth
+1 showed only evidence, project scope, and writer-session edges, so the packet frames any future
+archive as a human-approved manual archive, not a lint safe action. It does not run `memory
+archive`, `lint apply_safe`, ranking/`orient` changes, native Claude, Claude Bridge, harness writes,
+M6/migration/quarantine, public MCP/schema/storage/index/document-index behavior changes, deletion,
+or user-owned-file edits. Late duplicate T135 approval does not reopen harness writes because T135
+was already executed and validated in T152.

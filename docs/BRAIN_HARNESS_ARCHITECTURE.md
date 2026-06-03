@@ -2171,6 +2171,14 @@ Proceed in this order from the current checkpoint:
      make candidate decisions, mutate lifecycle state, change ranking/`orient`, change public
      MCP/schema/storage/index/document-index behavior, run native Claude or Claude Bridge, or write
      harness files.
+159. Treat T159 as a docs-only/default-deny lifecycle approval packet for the stale T146
+     runtime-refresh limitation `019e89f4-7dba-7ae1-a559-85d924af31a3`. T147 contradicted that
+     active limitation by validating the installed no/empty-prompt `plan_work` `orient` path, but
+     the item still surfaces as active guidance for targeted T146/T147 lifecycle prompts. T159 does
+     not archive anything; it asks for exact future approval to archive only that item after fresh
+     get/orient-or-search/T147-evidence/lint/graph/git/obligations checks. Lint did not flag this
+     target, so any archive remains a human-approved manual lifecycle action, not `lint apply_safe`.
+     Late duplicate T135 approval remains consumed by T152 and does not reopen harness writes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

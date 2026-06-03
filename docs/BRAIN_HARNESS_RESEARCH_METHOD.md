@@ -1370,3 +1370,11 @@ Current next application:
   read the files, decide candidates, run status/prioritize/apply/rerun, mutate lifecycle state,
   change ranking/`orient`, use Claude, change schema/storage/index/public MCP/document-index
   behavior, or write harness files.
+- T159 applies manual-stale-limitation lifecycle discipline: when a MemoryItem is contradicted by
+  later validation but lint does not flag it, a docs-only packet may still ask for exact future
+  single-target archive approval if it preserves the fresh contradiction evidence, search/orient
+  visibility, lint non-finding, graph dependency check, concrete drift predicates, and default-deny
+  stop conditions. Do not treat manual stale assessment, late T135 approval, or unrelated lint
+  findings as permission for archive, `lint apply_safe`, ranking/`orient`, native Claude, Claude
+  Bridge, harness writes, M6/migration/quarantine, schema/storage/index, public MCP,
+  document-index, deletion, or user-owned-file changes.
