@@ -6075,3 +6075,23 @@ Bridge, Claude hooks, process signals, harness installs/settings/hooks/adapters,
 rollback, or user-owned files. T192 document indexing, T191/T187 lifecycle archives, T186
 live-process cleanup, T172 effective-hook visibility, M6/migration, and broad Brain Harness
 completion remain separate exact-gated work.
+
+T194 matrix note:
+`docs/BRAIN_HARNESS_T194_T193_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny exact-file document-index approval packet for the newest T193 lifecycle
+packet and this implementation plan. Fresh lean `orient` trace
+`019e8e98-107c-7830-b41e-d8e1586237ed` and direct current-plan search trace
+`019e8e98-2ac4-7992-b3a2-a9b21c5e4a9d` recover active current-plan memory
+`019e8e96-deb0-7bb2-918d-2f167c15430e` first, but exact document-layer probes for the T193 title,
+filename stem, target ID, matrix note, and commit probe return older indexed lifecycle,
+document-index, and implementation-plan artifacts rather than T193. T194 does not run
+`docs(action="index")`, change document-index behavior, archive memory, run `lint apply_safe`,
+signal PID `49349`, send native Claude input, launch Claude or Claude Bridge, run harness install,
+mutate lifecycle or migration state, inspect M6/quarantine candidates, change ranking or `orient`,
+change public MCP/schema/storage/index behavior, delete, roll back, reinstall binaries, or touch
+user-owned files. Its proposed future approval allows indexing exactly
+`docs/BRAIN_HARNESS_T193_STALE_T106_HANDOFF_LIFECYCLE_APPROVAL_PACKET_2026-06-03.md` and
+`docs/MEMORY_OS_IMPLEMENTATION_PLAN.md` after fresh git/path/document-search/obligations evidence,
+then read-only document-search validation and a docs-only result. T193/T191/T187 lifecycle
+archives, T192 document indexing, T186 live-process cleanup, T172 effective-hook visibility,
+M6/migration, and broad Brain Harness completion remain separate exact-gated work.
