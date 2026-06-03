@@ -5736,3 +5736,15 @@ files 0001-0011 plus `index.md`, at most one read-only M6 review status/readines
 safe before invocation, and writing a docs-only readiness/scoping result. T174 preserves that
 candidate decisions, dry-run apply, write apply, deletion, native Claude effective-hook validation,
 and broad lifecycle cleanup remain separate exact approval gates.
+
+T175 matrix note:
+`docs/BRAIN_HARNESS_T175_RECENT_GATE_DOC_INDEX_APPROVAL_PACKET_2026-06-03.md` records a
+docs-only/default-deny exact-file document-index visibility packet for the recent T172, T173, and
+T174 gate docs. Fresh document-only searches for the T172 title/approval phrase, T173 title, T174
+title/approval phrase, and T174 filename stem returned older indexed docs such as T154, T162, T158,
+T160, T159, T157, and T69 instead of the new target docs. T175 does not run document indexing or
+change document-index behavior; it asks for exact future approval to index only three named files.
+It does not authorize native Claude, Claude Bridge, Claude `/hooks`, prompt-bearing Claude,
+harness writes, lifecycle archive, `lint apply_safe`, M6/migration/quarantine, candidate
+decisions, ranking/`orient`, public MCP/schema/storage/index behavior changes, deletion, rollback,
+force-kill, old-binary reinstall, or user-owned-file edits.
