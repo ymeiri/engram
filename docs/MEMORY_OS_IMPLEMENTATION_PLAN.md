@@ -5722,3 +5722,17 @@ quarantine, candidate decisions, ranking/`orient`, public MCP/schema/storage/ind
 behavior changes, deletion, rollback, force-kill, old-binary reinstall, or user-owned-file edits.
 The next product-moving gate remains exact T172 approval; M6 candidate decisions and migration
 dry-run/apply planning remain separate approval gates.
+
+T174 matrix note:
+`docs/BRAIN_HARNESS_T174_M6_CANDIDATE_DECISION_DRY_RUN_SCOPING_APPROVAL_PACKET_2026-06-03.md`
+records a docs-only/default-deny approval packet for the next M6 candidate-decision readiness and
+dry-run scoping step after T123/T124/T169 completed inspection of the T68 review-export snapshot.
+It does not execute M6 status/prioritize/apply/rerun/review-export, make candidate decisions,
+mutate lifecycle state, change ranking/`orient`, change public MCP/schema/storage/index/
+document-index behavior, run native Claude or Claude Bridge, edit harness files, delete, rollback,
+force-kill, reinstall binaries, or touch user-owned files. The proposed future approval allows only
+reading committed inspection/telemetry reports, validating and reading exact existing snapshot
+files 0001-0011 plus `index.md`, at most one read-only M6 review status/readiness check if proven
+safe before invocation, and writing a docs-only readiness/scoping result. T174 preserves that
+candidate decisions, dry-run apply, write apply, deletion, native Claude effective-hook validation,
+and broad lifecycle cleanup remain separate exact approval gates.
