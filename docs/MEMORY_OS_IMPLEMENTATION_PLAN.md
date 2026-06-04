@@ -811,9 +811,10 @@ below. Current read-only `harness(action="doctor")` evidence reports `ready=true
 Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is validated, while
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
-T179, prompt-bearing native Claude behavior is unproved, external-session joinability depends on
-real caller/host labels, and stale active handoffs remain until a future non-dry-run handoff update
-or exact lifecycle cleanup.
+T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, installed runtime has not been refreshed
+for the MCP fallback, hosts still need to provide real external-session labels, and stale active
+handoffs remain until a future non-dry-run handoff update or exact lifecycle cleanup.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6482,3 +6483,13 @@ hosts still need to provide a real `ENGRAM_EXTERNAL_SESSION_ID`; Engram still do
 host labels. T217 does not change ranking/`orient` payloads, schema/storage/index/document-index
 behavior, lifecycle state, M6/migration/quarantine state, hooks/settings/adapters, native Claude
 state, deletion, rollback, or user-owned files.
+
+T218 matrix note:
+`docs/BRAIN_HARNESS_T218_EXTERNAL_SESSION_STARTUP_DOC_RECONCILIATION_2026-06-04.md` reconciles
+startup-facing docs after T217. The early architecture checkpoint and current completion-matrix
+reconciliation note now mention that direct CLI and source-level MCP `ENGRAM_EXTERNAL_SESSION_ID`
+fallback support exist, while preserving that installed runtime has not been refreshed for the MCP
+fallback and hosts still need to provide real labels. T218 is docs-only: it does not change source,
+refresh runtime, edit hooks/settings/adapters, mutate lifecycle or migration state, run native
+Claude, change ranking/`orient` payloads, change public MCP/schema/storage/index/document-index
+behavior, delete data, or touch user-owned files.
