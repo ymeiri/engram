@@ -818,15 +818,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 
 ## Current Completion Matrix
 
-Matrix reconciliation note, 2026-06-04 after T252: T214 supersedes older cross-harness readiness
+Matrix reconciliation note, 2026-06-04 after T253: T214 supersedes older cross-harness readiness
 wording below, T235 reconciles this startup-facing note after T233/T234, T237/T240 reconfirmed
 T233 freshness before execution, T241 clarifies M6 deferral state, T242 executes the T233 runtime
 refresh plus daemon pidfile hardening, T244 records the current passing rolling telemetry gate,
 T245/T246 keep lifecycle cleanup exact-target-review-gated, T247/T248 add two pending
 default-deny lifecycle packets, T249 reconciles the matrix after T248, T250 adds the M6 human
 disposition worksheet, T251 confirms pending T247/T248 lifecycle targets remain active/visible,
-and T252 preserves the exact lifecycle approval boundary despite the user's broad continue
-instruction. Current read-only
+T252 preserves the exact lifecycle approval boundary despite the user's broad continue instruction,
+and T253 reconciles the current telemetry intent-coverage catch-up. Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
@@ -836,24 +836,30 @@ installed final binary hash `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b42924
 repaired the cleanup pidfile race, left final daemon PID `14310` serving port `8765` with
 pidfile/status/process aligned, proved omitted telemetry labels are not sticky after cleanup, and
 live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
-Engram current-plan item without the previous out-of-scope `voice-layer` leak. T249's latest
-sampled `real_session_eval(project=engram, limit=120)` report passes with
-`feedback_coverage=0.6333333253860474`, `task_failure_count=0`, `bad_memory_used_count=0`,
-`wrong_scope_memory_count=0`, and `missing_context_count=0`; this is operational evidence, not
-proof of M6, lifecycle, or full harness completion. T210 remains the M6 source of truth: all 12
-generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
-approved.
+Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T253
+sampled `real_session_eval(project=engram, limit=20)` report passes with
+`feedback_coverage=0.8999999761581421`, `distinct_intent_count=4`, `task_failure_count=0`,
+`bad_memory_used_count=0`, `wrong_scope_memory_count=0`, and `missing_context_count=0`; this is
+operational evidence, not proof of M6, lifecycle, or full harness completion. T210 remains the M6
+source of truth: all 12 generated files are undecided, `ready_to_apply=false`, and explicit
+deferral is not currently approved.
 
-Current T252 matrix snapshot:
+Current T253 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current T248 plan is first in live lean `orient`; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; sampled telemetry passes at 63.33% coverage with clean outcome counters. | Validations are point-in-time and bounded to the approved/tested classes. |
+| Validated | Current T252 telemetry catch-up plan is first in live lean `orient`; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; sampled telemetry passes at 90% coverage across four intents with clean outcome counters. | Validations are point-in-time and bounded to the approved/tested classes. |
 | Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, full label adoption, and migration apply readiness remain unproved. |
 | Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup, and full native Claude/harness behavioral proof. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
 | Risky | Telemetry is agent-assessed and sampled; harness lifecycle compliance is soft; pending/default-deny lifecycle packets can be mistaken for executed cleanup; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
 | Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
+
+T253 addendum: the T252 telemetry intent-coverage catch-up is the current rolling telemetry
+evidence. It improves the operational confidence signal but does not change M6, lifecycle,
+harness/native-Claude, or branch-synchronization gates. T241 still rejects standalone M6 deferral
+without user-provided rationale/evidence, and T252 still preserves exact approval boundaries for
+T234/T247/T248 lifecycle archives.
 
 T252 addendum: the user's latest broad instruction to continue without stopping for approval for
 Engram project-scope changes is treated as workflow permission for ordinary repo/docs/code work.
@@ -7051,3 +7057,16 @@ provided after fresh pre-write checks. T252 does not archive memory, run `lint a
 M6/migration/quarantine, change ranking/`orient`, public MCP/schema/storage/index/document-index
 behavior, harness/runtime/native-Claude state, deletion, rollback, force-kill, legacy
 simplification, or user-owned files.
+
+T253 post-T252 telemetry matrix reconciliation note:
+`docs/BRAIN_HARNESS_T253_POST_T252_TELEMETRY_MATRIX_RECONCILIATION_2026-06-04.md` records a
+docs-only matrix reconciliation after the T252 telemetry intent-coverage catch-up. Fresh
+`orient` and direct search returned current-plan MemoryItem
+`019e9296-8aa2-74b2-a962-762e6a637349` first, obligations doctor was clean, and rolling
+telemetry at `2026-06-04T12:23:40.149207Z` passed with 90% feedback coverage, four intents,
+zero task failures, zero bad-memory-used, zero wrong-scope memory, and zero missing context.
+T253 does not create an M6 deferral packet because T241 keeps deferral dependent on
+user-provided rationale/evidence. It does not archive memory, run `lint apply_safe`, run
+M6/migration/quarantine, change ranking/`orient`, public MCP/schema/storage/index/document-index
+behavior, harness/runtime/native-Claude state, deletion, rollback, force-kill, branch
+reconciliation, legacy simplification, or user-owned files.

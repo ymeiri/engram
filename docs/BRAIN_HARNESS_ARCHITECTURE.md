@@ -171,6 +171,13 @@ Harness and migration checkpoint, current through 2026-06-04:
   permission applies to ordinary Engram repo/docs/code work, not exact MemoryItem archive writes.
   T234/T247/T248 therefore remain pending until their exact packet wording is provided after fresh
   pre-write checks; no lifecycle archive or `lint apply_safe` ran.
+- T253 reconciles the matrix after the T252 telemetry intent-coverage catch-up. The latest
+  20-trace rolling eval reports `feedback_coverage=0.8999999761581421`,
+  `distinct_intent_count=4`, `task_failure_count=0`, `bad_memory_used_count=0`,
+  `wrong_scope_memory_count=0`, `missing_context_count=0`, and
+  `confidence_gate.passed=true`. This strengthens current operational confidence, but remains
+  sampled agent-assessed telemetry; it does not complete M6, lifecycle cleanup, full native-Claude
+  behavior, or branch synchronization.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
