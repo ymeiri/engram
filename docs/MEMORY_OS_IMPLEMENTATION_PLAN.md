@@ -807,16 +807,19 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 ## Current Completion Matrix
 
 Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
-below. Current read-only `harness(action="doctor")` evidence reports `ready=true` for generic,
-Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is validated, while
-behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
-extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
-T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T230 supersedes T228 as the exact
-runtime-refresh approval gate after the T229 binary-relevant MCP telemetry `record_trace` fixture,
-installed runtime has not been refreshed for the T217/T221/T223 source changes or the
-T225/T227/T229 fixtures, hosts still need to provide real external-session labels, and stale active
-handoffs remain until a future non-dry-run handoff update or exact lifecycle cleanup.
+below, and T235 reconciles this startup-facing note after T233/T234. Current read-only
+`harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
+CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
+lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
+`/hooks` effective-hook visibility did not produce a usable report in T179, prompt-bearing native
+Claude behavior is unproved, direct CLI and source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback
+support now exist, T233 supersedes T230 as the exact runtime-refresh approval gate after the T232
+binary-relevant combined MCP `memory(action=list)` fixture, installed runtime has not been
+refreshed for the T217/T221/T223 source changes or the T225/T227/T229/T232 fixtures, hosts still
+need to provide real external-session labels, stale active handoffs remain until a future non-dry-run
+handoff update or exact lifecycle cleanup, and T234 is a separate docs-only/default-deny lifecycle
+packet for stale migration-completion MemoryItem `019dd3fe-ec94-7122-af04-1f35b839387f` rather than
+archive approval.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
