@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-06-01
+Last Updated: 2026-06-04
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -6203,3 +6203,22 @@ schema/storage/index/document-index behavior, delete, roll back, reinstall binar
 user-owned files. External-session joinability and telemetry confidence remain incomplete; the next
 implementation requires an exact-approved host/caller label contract or a separate exact-approved
 M6/read-only scoping gate.
+
+T200 matrix note:
+`docs/BRAIN_HARNESS_T200_CLI_EXTERNAL_SESSION_LABEL_CONTRACT_2026-06-04.md` implements the first
+narrow caller-label contract identified by T199. Direct CLI `engram orient` and
+`engram memory changes-since` now accept `--external-session-id` and fall back to
+`ENGRAM_EXTERNAL_SESSION_ID` when the flag is omitted. Empty or whitespace-only values normalize to
+unset, and an explicit flag takes precedence over the environment. Focused CLI tests cover
+flag/env precedence, whitespace normalization, and command parsing; existing telemetry tests
+confirm supplied labels reach `orient` and `changes_since` traces. Validation passed with
+`cargo test -p engram-cli external_session_id`,
+`cargo test -p engram-tests --test telemetry_tests orient_with_intent_emits_trace_for_agent_feedback -- --exact`,
+`cargo test -p engram-tests --test telemetry_tests changes_since_with_intent_emits_trace_for_agent_feedback -- --exact`,
+`cargo check -p engram-cli`, and `cargo fmt --all --check`. T200 does not change MCP request or
+response shape, synthesize host transcript IDs, inject MCP transport `mcp-session-id`, refresh the
+installed runtime, change ranking/`orient`/schema/storage/index/document-index behavior, edit
+hooks/settings/adapters/user-owned files, run lifecycle archive, M6/migration/quarantine actions,
+native Claude, Claude Bridge write actions, deletion, rollback, or old-binary reinstall. Codex
+Desktop live traces and ordinary MCP callers still need host/caller adoption of the existing label
+field.

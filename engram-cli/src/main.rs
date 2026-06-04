@@ -57,6 +57,8 @@ use time::OffsetDateTime;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+
 /// engram - Personal Knowledge Augmentation System for AI coding agents
 #[derive(Parser)]
 #[command(name = "engram")]
@@ -504,6 +506,10 @@ enum Commands {
         /// Agent or harness name
         #[arg(long)]
         agent: Option<String>,
+
+        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID
+        #[arg(long)]
+        external_session_id: Option<String>,
 
         /// Include recent knowledge commits in the orientation packet
         #[arg(long)]
@@ -1683,6 +1689,10 @@ enum MemoryCommands {
         /// Prompt/query for relevance scoring
         #[arg(long)]
         query: Option<String>,
+
+        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID
+        #[arg(long)]
+        external_session_id: Option<String>,
 
         /// Print changes as JSON
         #[arg(long)]
@@ -2894,6 +2904,30 @@ fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
         .map(Ok)
         .unwrap_or_else(std::env::current_dir)
         .map_err(Into::into)
+}
+
+fn external_session_id_from_cli(cli_value: Option<String>) -> Option<String> {
+    resolve_external_session_id(cli_value, std::env::var(EXTERNAL_SESSION_ID_ENV).ok())
+}
+
+fn resolve_external_session_id(
+    cli_value: Option<String>,
+    env_value: Option<String>,
+) -> Option<String> {
+    match cli_value {
+        Some(value) => normalize_external_session_id(Some(value)),
+        None => normalize_external_session_id(env_value),
+    }
+}
+
+fn normalize_external_session_id(value: Option<String>) -> Option<String> {
+    let value = value?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
@@ -7666,6 +7700,7 @@ async fn main() -> Result<()> {
             cwd,
             prompt,
             agent,
+            external_session_id,
             include_recent_commits,
             limit,
             store_project,
@@ -7684,7 +7719,7 @@ async fn main() -> Result<()> {
                     prompt,
                     project,
                     agent,
-                    external_session_id: None,
+                    external_session_id: external_session_id_from_cli(external_session_id),
                     intent: None,
                     scenario_id: None,
                     arm: None,
@@ -8291,6 +8326,7 @@ async fn main() -> Result<()> {
                     relevance_project,
                     cwd,
                     query,
+                    external_session_id,
                     json,
                 } => {
                     let timestamp = parse_rfc3339_timestamp(&timestamp)?;
@@ -8320,7 +8356,9 @@ async fn main() -> Result<()> {
                                 cwd,
                                 query,
                                 intent: None,
-                                external_session_id: None,
+                                external_session_id: external_session_id_from_cli(
+                                    external_session_id,
+                                ),
                             },
                         )
                         .await?;
@@ -9079,5 +9117,87 @@ mod tests {
         assert!(error.contains("Invalid RFC3339 timestamp"));
         assert!(error.contains("memory_cursor.timestamp"));
         assert!(error.contains("engram memory cursor"));
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_flag_before_env() {
+        assert_eq!(
+            resolve_external_session_id(
+                Some(" codex://threads/cli ".to_string()),
+                Some("codex://threads/env".to_string()),
+            )
+            .as_deref(),
+            Some("codex://threads/cli")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_env_when_flag_omitted() {
+        assert_eq!(
+            resolve_external_session_id(None, Some(" codex://threads/env ".to_string())).as_deref(),
+            Some("codex://threads/env")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_treats_whitespace_as_unset() {
+        assert_eq!(
+            resolve_external_session_id(Some("   ".to_string()), Some("env".to_string())),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id(None, Some("   ".to_string())),
+            None
+        );
+    }
+
+    #[test]
+    fn orient_parses_external_session_id_flag() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "orient",
+            "--external-session-id",
+            "codex://threads/orient-cli",
+        ])
+        .expect("orient command should parse");
+
+        match cli.command {
+            Commands::Orient {
+                external_session_id,
+                ..
+            } => assert_eq!(
+                external_session_id.as_deref(),
+                Some("codex://threads/orient-cli")
+            ),
+            _ => panic!("expected orient command"),
+        }
+    }
+
+    #[test]
+    fn memory_changes_since_parses_external_session_id_flag() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "memory",
+            "changes-since",
+            "--timestamp",
+            "2026-06-04T05:00:00Z",
+            "--external-session-id",
+            "codex://threads/changes-cli",
+        ])
+        .expect("memory changes-since command should parse");
+
+        match cli.command {
+            Commands::Memory { command, .. } => match command {
+                MemoryCommands::ChangesSince {
+                    external_session_id,
+                    ..
+                } => assert_eq!(
+                    external_session_id.as_deref(),
+                    Some("codex://threads/changes-cli")
+                ),
+                _ => panic!("expected changes-since command"),
+            },
+            _ => panic!("expected memory command"),
+        }
     }
 }
