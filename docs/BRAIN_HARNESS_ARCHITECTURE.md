@@ -114,6 +114,15 @@ Harness and migration checkpoint, current through 2026-06-04:
   behavior, host external-session labeling, lifecycle cleanup, M6 completion, or broad
   cross-harness behavioral parity. Stale active handoffs remain until a future non-dry-run handoff
   update or explicit lifecycle cleanup.
+- T245 read-only lifecycle scoping clarifies the current lifecycle gate without mutating memory:
+  the exact T157/T159/T160 Engram archive targets are now `status=archived` and recorded by
+  T166/T167/T168, but lifecycle cleanup remains incomplete. Fresh sampled
+  `lint(action="run", write=false, limit=20)` still reports wrong-scope and superseded-active
+  pressure; the leading representative findings are `dd-source` session-insight items with
+  `safe_action=none` and an `ide-mcp-eval` superseded handoff, not those exact Engram targets.
+  Because this lint sample is not a full inventory, do not infer that all Engram-scoped lifecycle
+  debt is gone. The remaining lifecycle gate is broader exact-target review; no archive or
+  `lint apply_safe` action was run.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
@@ -2292,6 +2301,14 @@ Proceed in this order from the current checkpoint:
      target, lint no longer reports wrong-scope feedback for that ID, and `changes_since` shows
      exactly that archive state change. Lifecycle cleanup remains partial: broad lint/
      superseded-active cleanup remains out of scope.
+169. Treat T245 as a docs-only lifecycle scope recheck, not lifecycle cleanup. T245 verifies that
+     T157, T159, and T160 exact target IDs are archived, and that the leading fresh sampled lint
+     findings are mixed-scope/global (`dd-source` session-insight items and an `ide-mcp-eval`
+     superseded handoff). This does not prove no Engram-scoped lifecycle debt remains deeper in
+     the lint queue. It only reframes the remaining lifecycle gate as broader exact-target review,
+     with no archive, `lint apply_safe`, ranking/`orient`, M6, harness, schema/storage/index,
+     document-index behavior, public MCP, deletion, rollback, force-kill, legacy simplification,
+     or user-owned-file action.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important

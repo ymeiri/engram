@@ -6926,3 +6926,19 @@ telemetry coverage gate only as a point-in-time operational signal; it does not 
 apply/deletion, lifecycle archive or `lint apply_safe`, harness writes, native Claude changes,
 ranking/`orient` changes, public MCP/schema/storage/index/document-index behavior changes,
 legacy simplification, rollback, force-kill, or user-owned-file edits.
+
+T245 lifecycle scope note:
+`docs/BRAIN_HARNESS_T245_LIFECYCLE_SCOPE_RECHECK_2026-06-04.md` records a docs-only read-only
+recheck of the lifecycle cleanup gate. Fresh `memory(get)` checks showed the exact T157, T159,
+and T160 lifecycle targets are already `status=archived`, matching result reports T166, T167, and
+T168. Fresh sampled `lint(action="run", write=false, limit=20)` still reported lifecycle pressure,
+but the leading representative wrong-scope findings were `dd-source` session-insight items with
+`safe_action=none`, and the first superseded-active finding was an `ide-mcp-eval` rolling handoff
+superseded inside that same non-Engram project scope. AI Council and Claude Bridge critique warned
+that a 20-item lint sample is not a full inventory and must not be used to claim all Engram-scoped
+lifecycle debt is gone. T245 therefore closes only the already executed T157/T159/T160 exact
+target gate in the matrix; broad lifecycle cleanup remains incomplete and requires future scoped
+exact-target review before any archive or `lint apply_safe`. T245 does not mutate lifecycle state,
+run M6/migration/quarantine actions, change ranking/`orient`, public MCP/schema/storage/index/
+document-index behavior, harness files/settings/hooks/adapters, native Claude state, deletion,
+rollback, force-kill, legacy simplification, or user-owned files.
