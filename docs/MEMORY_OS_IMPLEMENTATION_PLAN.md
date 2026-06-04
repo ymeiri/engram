@@ -800,6 +800,18 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
       changes, harness repair, lifecycle mutation, document indexing, candidate inspection,
       ranking, `orient`, public MCP/schema/storage/index behavior changes, document-index behavior
       changes, or M6 status/prioritize/apply/rerun.
+- [x] T242 installed-runtime refresh and daemon pid hardening: executed the T233 runtime refresh,
+      validated T217/T229 external-session fallback, T221/T223/T225/T227/T232 memory-list scope,
+      tag, and limit behavior, fixed the daemon start pidfile race exposed during cleanup, and
+      installed final binary hash
+      `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`. Final daemon status,
+      pidfile, and process line agree on PID `14310`, port `8765`, with parent-shell
+      `ENGRAM_EXTERNAL_SESSION_ID` unset. Live
+      `memory(action=list, project_name=engram, status_filter=active, tags=[current-plan],
+      limit=5)` now returns only the Engram current-plan item and no out-of-scope `voice-layer`
+      item. T242 does not authorize M6/migration/quarantine actions, lifecycle mutation, harness
+      writes, ranking/`orient`, public MCP/schema/storage/index/document-index behavior changes,
+      deletion, rollback, or user-owned-file edits.
 - [ ] Migration completion run: explicit read-only inventory scope approval, inventory,
       review export, prioritize/dedupe, human review, dry-run apply, explicit write-apply approval,
       knowledge commit, vault compile, lint run.
@@ -807,36 +819,29 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 ## Current Completion Matrix
 
 Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
-below, T235 reconciles this startup-facing note after T233/T234, T237 reconfirms that
-T233 remains fresh after the T234/T235/T236 docs-only commits, T238 records telemetry
-follow-through after T237, T239 records the post-closeout telemetry gate state, and T240
-reconfirms T233 freshness after T238/T239. Current
-read-only
-`harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
-CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
-lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
-`/hooks` effective-hook visibility did not produce a usable report in T179, prompt-bearing native
-Claude behavior is unproved, direct CLI and source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback
-support now exist, T233 supersedes T230 as the exact runtime-refresh approval gate after the T232
-binary-relevant combined MCP `memory(action=list)` fixture, installed runtime has not been
-refreshed for the T217/T221/T223 source changes or the T225/T227/T229/T232 fixtures, hosts still
-need to provide real external-session labels, stale active handoffs remain until a future non-dry-run
-handoff update or exact lifecycle cleanup, and T234 is a separate docs-only/default-deny lifecycle
-packet for stale migration-completion MemoryItem `019dd3fe-ec94-7122-af04-1f35b839387f` rather than
-archive approval. T238 leaves the rolling telemetry confidence gate false at 48% feedback coverage
-after scoring the material current-turn retrieval traces; the sampled task-outcome signal remains
-healthy, but telemetry is still weak rolling evidence rather than completion proof. T239 updates
-the current rolling telemetry state after T238 closeout feedback: the latest
+below, T235 reconciles this startup-facing note after T233/T234, T237/T240 reconfirmed T233
+freshness before execution, T239 records the post-closeout telemetry gate state, T241 clarifies M6
+deferral state, and T242 executes the T233 runtime refresh plus daemon pidfile hardening. Current
+read-only `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code,
+Codex, Gemini CLI, and Cursor. Generated local adapter readiness is validated, while behavioral
+caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain extra
+legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in T179,
+prompt-bearing native Claude behavior is unproved, hosts still need to provide real
+external-session labels, stale active handoffs remain until a future non-dry-run handoff update or
+exact lifecycle cleanup, and T234 is a separate docs-only/default-deny lifecycle packet for stale
+migration-completion MemoryItem `019dd3fe-ec94-7122-af04-1f35b839387f` rather than archive
+approval. T239 updates the current rolling telemetry state after T238 closeout feedback: the latest
 `real_session_eval(project=engram, limit=50)` report passes exactly at the 50% feedback-coverage
 threshold with four feedback intents and no task failures, bad-memory-used records, missing-context
-reports, or wrong-scope memory judgments. T240's read-only post-T239 audit shows no
-binary-relevant drift from T233 baseline to HEAD, local runtime still at old hash
-`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon still PID `21398`,
-and live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` still leaking the
-out-of-scope `voice-layer` current-plan item, so T233 remains pending and product-moving. T241
-clarifies that M6 deferral is not currently approved: T210 remains the human-disposition recording
-gate, and explicit deferral would still require user-approved rationale/evidence rather than an
-agent-authored deferral packet.
+reports, or wrong-scope memory judgments. T242 installed final binary hash
+`1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, repaired the cleanup pidfile
+race, left final daemon PID `14310` serving port `8765` with pidfile/status/process aligned, proved
+omitted telemetry labels are not sticky after cleanup, and live
+`memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
+Engram current-plan item without the previous out-of-scope `voice-layer` leak. T241 clarifies that
+M6 deferral is not currently approved: T210 remains the human-disposition recording gate, and
+explicit deferral would still require user-approved rationale/evidence rather than an agent-authored
+deferral packet.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6854,3 +6859,37 @@ candidate decisions, edit the T68 review workspace, run `migration_review_status
 refresh, lifecycle archive, `lint apply_safe`, harness writes, ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
 or user-owned-file edits.
+
+T242 matrix note:
+`docs/BRAIN_HARNESS_T242_T233_RUNTIME_REFRESH_EXECUTION_REPORT_2026-06-04.md` records execution of
+the T233 runtime refresh plus the narrow daemon pidfile hardening needed after cleanup validation
+exposed a race. T233 first checks passed: binary-relevant diffs from baseline
+`cd59424f9cb4ae9ec90aa5af7328774c0f7784a8` were empty, `git status --short` showed only
+user-owned untracked root `AGENTS.md`, the pre-install local binary hash was the old expected
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon PID `21398` served
+port `8765`, and parent-shell `ENGRAM_EXTERNAL_SESSION_ID` was unset. The temporary-env validation
+installed hash `31170ebe5227ab144f02cb38e821a09e05c3433dcd5ff054821890462eacb0e6` and proved
+omitted, empty, and whitespace telemetry labels use daemon env
+`t233-runtime-env-20260604-31170ebe`, explicit labels win, 256-character labels pass, and
+257-character labels fail validation. Search, orient, telemetry feedback, and changes_since traces
+also carried the temporary label during the validation window. Live memory-list validation proved
+the combined project-name/current-plan-tag/limit path now returns only Engram current-plan memory
+`019e920b-949b-7ac3-bea9-ab3f05cd290c`, removing the previous out-of-scope `voice-layer` leak.
+Cleanup without the env proved the temporary label was not sticky, but exposed a stale pidfile:
+status reported defunct PID `71174` while PID `71020` actually served port `8765`, and daemon logs
+showed a failed child hit the SurrealDB lock while another daemon was already healthy. Commit
+`e2da668` fixes the source race by keeping the spawned child handle, checking it remains alive
+before and after a short post-health delay, and writing pid/port files only after validation.
+Validation passed focused daemon unit tests, `cargo fmt --all --check`, `git diff --check`,
+`cargo check -p engram-cli`, `cargo clippy -p engram-cli --all-targets -- -D warnings`, and two
+focused daemon health integration tests outside the macOS sandbox after the sandboxed dynamic-store
+panic. Final runtime repair installed hash
+`1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, sent clean SIGTERM to stale
+actual daemon PID `71020`, cleaned stale daemon files through `engram daemon stop`, and restarted
+without `ENGRAM_EXTERNAL_SESSION_ID`. Final status, pidfile, and `ps` all agree on PID `14310`,
+port `8765`; final omitted-label telemetry trace has `external_session_id=null`; final
+current-plan list still returns only the Engram item; obligations doctor is clean. T242 does not
+run M6/migration/quarantine actions, mutate lifecycle state, run `lint apply_safe`, change harness
+hooks/settings/adapters, change ranking/`orient`, change public MCP/schema/storage/index/
+document-index behavior, delete data, rollback, force-kill, simplify legacy layers, or edit
+user-owned files.
