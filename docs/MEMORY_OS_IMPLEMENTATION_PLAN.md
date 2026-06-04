@@ -7005,3 +7005,15 @@ unproved, and host external-session labels still require caller adoption. T249 d
 lifecycle state, run `lint apply_safe`, run M6/migration/quarantine, change ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior, harness/runtime/native-Claude state, deletion,
 rollback, force-kill, legacy simplification, or user-owned files.
+
+T250 M6 human-disposition worksheet note:
+`docs/BRAIN_HARNESS_T250_M6_HUMAN_DISPOSITION_WORKSHEET_2026-06-04.md` records a docs-only
+worksheet compiled only from committed reports T209, T210, T123, T124, T169, and T121. It lists
+generated files 0001-0012 with report-derived generated labels, source/proposed-kind metadata,
+per-row provenance, report coverage notes, and explicit pending human-input fields. It preserves
+T210 as authoritative: all generated files remain undecided, `ready_to_apply=false`, and candidate
+0012 still needs explicit handling before any future execution. T250 does not inspect or edit the
+generated review workspace, run `migration_review_status`, run prioritize/apply/export/rerun, make
+candidate choices, mutate Memory OS lifecycle, imply migration readiness, change ranking/`orient`,
+public MCP/schema/storage/index/document-index behavior, harness/runtime/native-Claude state,
+deletion, rollback, force-kill, legacy simplification, or user-owned files.

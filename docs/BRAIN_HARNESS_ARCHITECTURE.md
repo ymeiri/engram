@@ -154,6 +154,12 @@ Harness and migration checkpoint, current through 2026-06-04:
   native Claude/harness behavior remain incomplete or blocked. T249 is docs-only and does not
   mutate lifecycle state, M6, ranking, `orient`, runtime, harness, schema/storage/index,
   document-index behavior, or user-owned files.
+- T250 adds a docs-only M6 human-disposition worksheet compiled from existing committed reports
+  T209/T210/T123/T124/T169/T121. It lists candidates 0001-0012 with report-derived labels,
+  provenance, caveats, and explicit pending human-input fields, while preserving T210 as the
+  authoritative gate: all generated files remain undecided, `ready_to_apply=false`, and 0012 needs
+  explicit handling. T250 does not inspect or edit the generated review workspace, run M6 commands,
+  make candidate choices, or imply migration readiness.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
