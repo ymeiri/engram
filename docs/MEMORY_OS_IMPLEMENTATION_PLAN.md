@@ -812,12 +812,11 @@ Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
 T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T229 adds binary-relevant MCP tool-level
-fixture coverage for `telemetry(action="record_trace")` runtime env fallback and makes T228 stale
-for exact runtime-refresh execution, installed runtime has not been refreshed for the T217/T221/T223
-source changes or the T225/T227/T229 fixtures, hosts still need to provide real external-session
-labels, and stale active handoffs remain until a future non-dry-run handoff update or exact
-lifecycle cleanup.
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T230 supersedes T228 as the exact
+runtime-refresh approval gate after the T229 binary-relevant MCP telemetry `record_trace` fixture,
+installed runtime has not been refreshed for the T217/T221/T223 source changes or the
+T225/T227/T229 fixtures, hosts still need to provide real external-session labels, and stale active
+handoffs remain until a future non-dry-run handoff update or exact lifecycle cleanup.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6643,3 +6642,21 @@ the new exact fixture, full `tools::tests`, full telemetry integration target, `
 `engram-mcp/src/tools.rs` after T228, so T228 is now stale for exact runtime-refresh execution and
 must be superseded by a refreshed runtime approval packet before any install/restart/live
 validation.
+
+T230 matrix note:
+`docs/BRAIN_HARNESS_T230_T217_T221_T223_T225_T227_T229_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-04.md`
+supersedes T228 as the exact runtime-refresh approval packet. T228's baseline became stale after
+T229 intentionally changed binary-relevant `engram-mcp/src/tools.rs` to harden the
+`telemetry(action="record_trace")` runtime env fallback path. T230 anchors future execution to
+source baseline `d953d16d857d0457d3d1d951eccbc630d33a28b1` and combines live validation for the
+T217/T229 MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback with read-only live validation for T227
+`memory(action="list", project_name="engram", tags=["current-plan"])` scope inference before tag
+filtering, T221/T225 `memory(action="list", project_name="engram", limit=1)` scope inference plus
+limit preservation, and T223 explicit scoped post-filter `limit` handling. Fresh read-only
+pre-state still shows `/Users/yuval.meiri/.local/bin/engram` at old hash
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon PID `21398` on port
+8765, no parent-shell `ENGRAM_EXTERNAL_SESSION_ID`, and only user-owned untracked root `AGENTS.md`.
+T230 is docs-only and has not executed install/restart/temp-env validation. It does not change
+source, public MCP params or payloads, ranking/`orient`, schema/storage/index/document-index
+behavior, lifecycle state, M6/migration/quarantine state, harness files/settings/hooks/adapters,
+native Claude state, deletion, rollback, or user-owned files.
