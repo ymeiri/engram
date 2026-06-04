@@ -807,8 +807,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 ## Current Completion Matrix
 
 Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
-below, T235 reconciles this startup-facing note after T233/T234, and T237 reconfirms that
-T233 remains fresh after the T234/T235/T236 docs-only commits. Current read-only
+below, T235 reconciles this startup-facing note after T233/T234, T237 reconfirms that
+T233 remains fresh after the T234/T235/T236 docs-only commits, and T238 records telemetry
+follow-through after T237. Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
@@ -820,7 +821,9 @@ refreshed for the T217/T221/T223 source changes or the T225/T227/T229/T232 fixtu
 need to provide real external-session labels, stale active handoffs remain until a future non-dry-run
 handoff update or exact lifecycle cleanup, and T234 is a separate docs-only/default-deny lifecycle
 packet for stale migration-completion MemoryItem `019dd3fe-ec94-7122-af04-1f35b839387f` rather than
-archive approval.
+archive approval. T238 leaves the rolling telemetry confidence gate false at 48% feedback coverage
+after scoring the material current-turn retrieval traces; the sampled task-outcome signal remains
+healthy, but telemetry is still weak rolling evidence rather than completion proof.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6774,3 +6777,19 @@ pressure with zero safe actions applied. T237 does not execute runtime refresh, 
 `lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
 or user-owned-file edits.
+
+T238 matrix note:
+`docs/BRAIN_HARNESS_T238_TELEMETRY_INTENT_COVERAGE_FOLLOW_THROUGH_2026-06-04.md` records docs-only
+telemetry follow-through after T237. Submitting feedback for a real `verify_decision` trace moved
+the sampled window past the previous two-intent blocker, but the first report still failed at 34%
+feedback coverage. After also scoring the material startup/resume retrieval traces used by the
+turn, `telemetry(action=real_session_eval, project=engram, limit=50)` generated at
+`2026-06-04T09:34:52.915401Z` returned `feedback_count=24`,
+`feedback_coverage=0.47999998927116394`, `distinct_intent_count=5`, `task_failure_count=0`,
+`bad_memory_used_count=0`, `wrong_scope_memory_count=0`, and `missing_context_count=0`;
+`confidence_gate.passed=false` because coverage was still below 50%. Fresh lint still reported
+wrong-scope active-memory feedback plus superseded-active lifecycle pressure with zero safe actions
+applied, while obligations doctor stayed clean. T238 does not execute runtime refresh, lifecycle
+archive, `lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`,
+public MCP/schema/storage/index/document-index behavior changes, deletion, rollback,
+old-binary reinstall, or user-owned-file edits.
