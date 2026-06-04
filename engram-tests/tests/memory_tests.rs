@@ -263,6 +263,54 @@ async fn test_mcp_memory_list_filters_by_scope_before_limit() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_list_project_name_implies_project_scope_before_limit() {
+    let state = setup_tool_state().await;
+
+    let mut matching = with_writer(request("add"));
+    matching.kind = Some("decision".to_string());
+    matching.title = Some("Engram project-only current plan".to_string());
+    matching.content = Some("This project-scoped item should be returned.".to_string());
+    matching.origin = Some("tool_result".to_string());
+    matching.scope_type = Some("project".to_string());
+    matching.project_name = Some("engram".to_string());
+    matching.evidence = manual_review_evidence("Reviewed project-name-only list fixture.");
+    tools::memory_new(&state, matching)
+        .await
+        .expect("matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("DD source project-only current plan".to_string());
+    wrong_scope.content = Some("This newer wrong-project item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("dd-source".to_string());
+    wrong_scope.evidence =
+        manual_review_evidence("Reviewed project-name-only wrong-project fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(
+        list_json["items"][0]["title"],
+        "Engram project-only current plan"
+    );
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
 async fn test_mcp_memory_add_requires_writer_provenance() {
     let state = setup_tool_state().await;
 

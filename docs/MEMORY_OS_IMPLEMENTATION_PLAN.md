@@ -6519,3 +6519,15 @@ validation and real host labels. T220 is docs-only: it does not change source, i
 restart the daemon, set temporary daemon environment variables, edit hooks/settings/adapters,
 mutate lifecycle or migration state, run native Claude, change ranking/`orient`, change public
 MCP/schema/storage/index/document-index behavior, delete data, or touch user-owned files.
+
+T221 matrix note:
+`docs/BRAIN_HARNESS_T221_MEMORY_LIST_PROJECT_SCOPE_INFERENCE_2026-06-04.md` fixes a narrow MCP
+`memory(action="list")` contract pitfall found during post-T220 evidence checks. The list branch now
+infers `scope_type="project"` when `project_name` is supplied without `scope_type`, matching the
+existing `capture_current_plan` inference and preventing project-name-only list calls from surfacing
+wrong-project active MemoryItems before limit application. Focused regression coverage and the
+existing explicit-scope list test passed, followed by full `memory_tests`, `cargo fmt --all
+--check`, and `cargo check -p engram-cli`. T221 is source-level only: it does not change public MCP
+params or response shape, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle
+state, M6/migration/quarantine state, harness files/settings/hooks/adapters, installed runtime,
+native Claude state, deletion, rollback, or user-owned files.

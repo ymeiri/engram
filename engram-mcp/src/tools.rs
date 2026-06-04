@@ -8962,8 +8962,12 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .as_deref()
                 .map(parse_memory_status)
                 .transpose()?;
-            let scope_filter = if request.scope_type.is_some() {
-                Some(parse_memory_scope(&request)?)
+            let mut scope_request = request.clone();
+            if scope_request.scope_type.is_none() && scope_request.project_name.is_some() {
+                scope_request.scope_type = Some("project".to_string());
+            }
+            let scope_filter = if scope_request.scope_type.is_some() {
+                Some(parse_memory_scope(&scope_request)?)
             } else {
                 None
             };
