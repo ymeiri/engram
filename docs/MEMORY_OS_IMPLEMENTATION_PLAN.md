@@ -809,7 +809,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
 below, T235 reconciles this startup-facing note after T233/T234, T237 reconfirms that
 T233 remains fresh after the T234/T235/T236 docs-only commits, T238 records telemetry
-follow-through after T237, and T239 records the post-closeout telemetry gate state. Current
+follow-through after T237, T239 records the post-closeout telemetry gate state, and T240
+reconfirms T233 freshness after T238/T239. Current
 read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -828,7 +829,11 @@ healthy, but telemetry is still weak rolling evidence rather than completion pro
 the current rolling telemetry state after T238 closeout feedback: the latest
 `real_session_eval(project=engram, limit=50)` report passes exactly at the 50% feedback-coverage
 threshold with four feedback intents and no task failures, bad-memory-used records, missing-context
-reports, or wrong-scope memory judgments.
+reports, or wrong-scope memory judgments. T240's read-only post-T239 audit shows no
+binary-relevant drift from T233 baseline to HEAD, local runtime still at old hash
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon still PID `21398`,
+and live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` still leaking the
+out-of-scope `voice-layer` current-plan item, so T233 remains pending and product-moving.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6814,3 +6819,21 @@ evidence rather than completion proof. T239 does not execute runtime refresh, li
 `lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
 or user-owned-file edits.
+
+T240 matrix note:
+`docs/BRAIN_HARNESS_T240_T233_POST_T239_FRESHNESS_AUDIT_2026-06-04.md` records a read-only
+freshness audit for the pending exact T233 runtime-refresh packet after T238/T239 docs-only
+commits. Fresh diff checks from T233 baseline
+`cd59424f9cb4ae9ec90aa5af7328774c0f7784a8` to HEAD returned empty output for `Cargo.toml`,
+`Cargo.lock`, `engram-core`, `engram-store`, `engram-embed`, `engram-index`, `engram-mcp`,
+`engram-cli`, `engram-tests`, `scripts`, and `.cargo`; staged and unstaged binary-relevant diffs
+also returned empty output. Git status still showed only known user-owned untracked root
+`AGENTS.md`, `/Users/yuval.meiri/.local/bin/engram` remained hash
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon PID `21398` still
+served port `8765`, parent-shell `ENGRAM_EXTERNAL_SESSION_ID` was unset, and read-only live
+`memory(action=list, project_name=engram, status_filter=active, tags=[current-plan], limit=5)`
+still returned the active Engram T239 current plan plus the out-of-scope `voice-layer` current-plan
+item. T233 therefore remains fresh and still product-moving, but unexecuted. T240 does not execute
+runtime refresh, lifecycle archive, `lint apply_safe`, M6/migration/quarantine actions, harness
+writes, ranking/`orient`, public MCP/schema/storage/index/document-index behavior changes,
+deletion, rollback, old-binary reinstall, or user-owned-file edits.
