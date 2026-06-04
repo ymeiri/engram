@@ -6315,3 +6315,19 @@ lifecycle, schema/storage definitions, document indexing/chunking/embedding beha
 migration/quarantine state, harness files/settings/hooks/adapters, runtime configuration,
 deletion, rollback, native Claude, or user-owned files. The installed daemon still needs a
 separate runtime refresh/live validation before T206 can be claimed live.
+
+T207 matrix note:
+`docs/BRAIN_HARNESS_T207_T206_RUNTIME_REFRESH_VALIDATION_2026-06-04.md` closes the immediate
+installed-runtime gap for T206. Codex installed the current `engram-cli` to
+`/Users/yuval.meiri/.local/bin/engram`, producing binary hash
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, then cleanly stopped the old
+daemon on port `8765`/PID `91929` and started the refreshed daemon on port `8765`/PID `21398`.
+Before refresh, live `docs(search)` still missed T202 for exact title and filename-stem queries
+while content search returned T202 first. After refresh, exact title and filename-stem document
+queries both returned T202 first with score `1.0`; unified `search(layers=["document"])` for exact
+title also returned T202 first with score `1.0`; generic `Validation` did not promote T202 into
+the top five; and the distinctive content query still returned T202 first at semantic score
+`0.6488516`. T207 does not change source code after T206, public MCP shape, `orient`, memory
+ranking or lifecycle state, schema/storage definitions, document indexing/chunking/embedding
+behavior, M6/migration/quarantine state, hooks, settings, adapters, deletion, rollback, native
+Claude, or user-owned files.
