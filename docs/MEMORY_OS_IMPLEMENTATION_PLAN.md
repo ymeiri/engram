@@ -6601,3 +6601,16 @@ docs-only and has not executed install/restart/temp-env validation. It does not 
 public MCP params or payloads, ranking/`orient`, schema/storage/index/document-index behavior,
 lifecycle state, M6/migration/quarantine state, harness files/settings/hooks/adapters, native
 Claude state, deletion, rollback, or user-owned files.
+
+T227 matrix note:
+`docs/BRAIN_HARNESS_T227_MEMORY_LIST_PROJECT_NAME_TAG_FIXTURE_2026-06-04.md` adds focused
+test-only coverage for the startup-style current-plan sampling path:
+`memory(action="list", status_filter="active", project_name="engram", tags=["current-plan"])`
+with `scope_type` omitted. The fixture adds a tagged Engram current-plan item, an untagged Engram
+item, and a newer tagged `voice-layer` current-plan item, then asserts only the Engram tagged item
+is returned. This was prompted by live stale-runtime evidence: the installed daemon still returned
+an out-of-scope current-plan item for that call shape before the pending runtime refresh. Validation
+passed the new exact fixture, adjacent project-name/tag/limit fixtures, full `memory_tests`,
+`cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`. Because T227
+changed binary-relevant `engram-tests` after T226, T226 is now stale for exact execution and must be
+superseded by a refreshed runtime approval packet before any install/restart/live validation.
