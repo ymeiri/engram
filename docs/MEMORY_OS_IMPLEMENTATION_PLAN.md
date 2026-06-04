@@ -6967,3 +6967,19 @@ run `lint apply_safe`, create replacement memory, mutate lifecycle state, rank a
 lifecycle debt, or authorize M6/migration/quarantine, harness/native-Claude, ranking/`orient`,
 public MCP/schema/storage/index/document-index behavior, rollback, force-kill, legacy
 simplification, or user-owned-file edits.
+
+T248 lifecycle approval packet note:
+`docs/BRAIN_HARNESS_T248_RESUME_PROBE_STALE_LIFECYCLE_APPROVAL_PACKET_2026-06-04.md`
+records a docs-only/default-deny packet for exactly one future lifecycle write on active
+project-scoped decision `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` (`Resume continuity probe uses
+active MemoryItems before ranking changes`). The target was valid probe guidance on 2026-05-07:
+after document indexing alone failed to fix resume-continuity orientation, adding active
+MemoryItems helped the Stage 2 dogfood rerun pass. Later current-plan retrieval work, including
+the mission-class PlanWork fix and current T247 active plan, makes that next-action guidance
+historical rather than current. Fresh sampled lint reported three recent stale-feedback records
+with `safe_action=none`; graph depth 1 showed no direct supersedes or dependent MemoryItem edge.
+T248 excludes already-packeted T234/T247 stale targets, does not archive memory, run
+`lint apply_safe`, create replacement memory, mutate lifecycle state, rank all Engram lifecycle
+debt, or authorize M6/migration/quarantine, harness/native-Claude, ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior, rollback, force-kill, legacy simplification, or
+user-owned-file edits.

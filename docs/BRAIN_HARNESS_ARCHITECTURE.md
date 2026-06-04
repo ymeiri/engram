@@ -140,6 +140,14 @@ Harness and migration checkpoint, current through 2026-06-04:
   and must not be treated as target proof. `lint apply_safe` remains out of scope; any future write
   must be direct exact `memory.archive` after fresh get/search-orient/graph/telemetry/git/
   obligations evidence and exact user approval.
+- T248 applies the same default-deny lifecycle discipline to the next unpacketized non-M6
+  stale-feedback candidate in the bounded sample:
+  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` (`Resume continuity probe uses active MemoryItems
+  before ranking changes`). The item was valid probe guidance on 2026-05-07 and helped the
+  Stage 2 dogfood rerun pass, but later current-plan retrieval fixes and current T247 plan state
+  make it historical rather than current next-action guidance. T248 does not archive it, run
+  `lint apply_safe`, or claim exhaustive lifecycle inventory; T234 and T247 already cover their
+  exact stale targets and are not duplicated.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
