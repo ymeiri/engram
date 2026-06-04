@@ -6451,3 +6451,18 @@ external-session caller labels, stale active handoffs, and M6 dispositions/defer
 edit hooks, settings, adapters, runtime configuration, user-owned files, ranking/`orient`, public
 MCP, schema/storage/index/document-index behavior, lifecycle state, native Claude state,
 M6/migration/quarantine state, or review workspace files.
+
+T216 matrix note:
+`docs/BRAIN_HARNESS_T216_M6_ARCHITECTURE_SECTION_RECONCILIATION_2026-06-04.md` reconciles the
+architecture RFC's dedicated M6 section after T209-T213. The section no longer says read-only
+inventory/review-export is the next operational option; it now records that the current-data M6
+path has already reached inventory, review export, candidate inspection, and read-only status
+validation, with generated files 0001-0011 inspected, 0012 still count-drift provenance, all 12
+generated files undecided, and `ready_to_apply=false`. The next M6 progress remains
+human-provided dispositions under T210A/T210B or explicit deferral; apply, KnowledgeCommit, vault
+compile, direct legacy deprecation, lifecycle cleanup, and deletion remain gated by reviewed
+dispositions, dry-run apply evidence, rollback planning, and explicit write-path approval. T216
+does not edit the review workspace, run M6 commands, infer candidate decisions, write active
+MemoryItems, mutate lifecycle state, change ranking/`orient`, public MCP/schema/storage/index/
+document-index behavior, harness files, runtime configuration, native Claude state, or user-owned
+files.

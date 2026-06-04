@@ -1200,22 +1200,29 @@ observations out of the orientation hot path while preserving the source observa
 - Apply accepted candidates through KnowledgeCommits.
 - Start deprecating direct agent-facing use of migrated legacy paths.
 
-Status: initial migration viability gate exists. The executable test covers one legacy project
-observation moving through inventory, generated review batch, accepted candidate apply,
-KnowledgeCommit creation, active reviewed `MemoryItem` retrieval through `orient`, memory-layer
-unified search visibility, and duplicate-safe re-apply behavior. This proves the first legacy
-observation path but does not yet justify broad legacy deletion, automatic MemoryItem dominance, or
-broad migration write-apply.
+Status: the initial migration viability gate exists, and the current-data read-only evidence path
+has advanced through inventory, review export, candidate inspection, and status validation. The
+executable test still proves the first legacy project-observation path through generated review
+batch, accepted candidate apply, KnowledgeCommit creation, active reviewed `MemoryItem` retrieval
+through `orient`, memory-layer unified search visibility, and duplicate-safe re-apply behavior. It
+does not justify broad legacy deletion, automatic MemoryItem dominance, or broad migration
+write-apply.
 
-The next M6 operational step is intentionally gated. Two defensible paths remain:
+Current-data M6 state, current through 2026-06-04:
 
-1. strengthen M3 with real-session telemetry/eval evidence before any M6 work against current data,
-   or
-2. run a strictly read-only inventory and review-export against current data as provisional evidence
-   gathering.
+- T58 inventory found 11 candidates.
+- T68 review export wrote the generated review workspace and surfaced 12 generated files because
+  `0012-skip-plan.md` appeared as count-drift provenance.
+- T123, T124, and T169 inspected generated candidate files 0001-0011 without decisions.
+- T209 validated the snapshot and read-only status path; all 12 generated files remain undecided
+  and `ready_to_apply=false`.
+- T210 defines the next gate as human-provided candidate dispositions under T210A/T210B, or an
+  explicit deferral. Generic continuation or approval without explicit dispositions is not enough.
 
-No migration apply, KnowledgeCommit, vault compile, direct legacy deprecation, or deletion should
-run until the confidence gate is explicit and the user approves that write path.
+No migration apply, KnowledgeCommit, vault compile, direct legacy deprecation, lifecycle cleanup,
+or deletion should run until reviewed dispositions, dry-run apply evidence, a rollback plan, and
+explicit write-path approval exist. If the user defers M6 instead, the deferral must be recorded as
+evidence and the completion matrix must keep migration open.
 
 ### M7: Tool Tiering
 
