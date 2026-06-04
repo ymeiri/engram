@@ -58,11 +58,15 @@ use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+const CLAUDE_CODE_SESSION_ID_ENV: &str = "CLAUDE_CODE_SESSION_ID";
+const CLAUDE_CODE_MARKER_ENV: &str = "CLAUDECODE";
 const CODEX_THREAD_ID_ENV: &str = "CODEX_THREAD_ID";
 const CODEX_SHELL_ENV: &str = "CODEX_SHELL";
 const CODEX_ORIGINATOR_ENV: &str = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
 const CODEX_BUNDLE_ID_ENV: &str = "__CFBundleIdentifier";
+const CLAUDE_CODE_EXTERNAL_SESSION_PREFIX: &str = "claude-code://sessions/";
 const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
+const MAX_CLAUDE_CODE_SESSION_ID_LEN: usize = 128;
 const MAX_CODEX_THREAD_ID_LEN: usize = 128;
 
 /// engram - Personal Knowledge Augmentation System for AI coding agents
@@ -2918,6 +2922,8 @@ fn external_session_id_from_cli(cli_value: Option<String>) -> Option<String> {
     resolve_external_session_id_with_envs(
         cli_value,
         std::env::var(EXTERNAL_SESSION_ID_ENV).ok(),
+        std::env::var(CLAUDE_CODE_SESSION_ID_ENV).ok(),
+        claude_code_host_marker_from_env(),
         std::env::var(CODEX_THREAD_ID_ENV).ok(),
         codex_host_marker_from_env(),
     )
@@ -2928,18 +2934,26 @@ fn resolve_external_session_id(
     cli_value: Option<String>,
     env_value: Option<String>,
 ) -> Option<String> {
-    resolve_external_session_id_with_envs(cli_value, env_value, None, false)
+    resolve_external_session_id_with_envs(cli_value, env_value, None, false, None, false)
 }
 
 fn resolve_external_session_id_with_envs(
     cli_value: Option<String>,
     env_value: Option<String>,
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
     codex_thread_id: Option<String>,
     codex_host_detected: bool,
 ) -> Option<String> {
     match cli_value {
         Some(value) => normalize_external_session_id(Some(value)),
         None => normalize_external_session_id(env_value)
+            .or_else(|| {
+                claude_code_session_external_session_id(
+                    claude_code_session_id,
+                    claude_code_host_detected,
+                )
+            })
             .or_else(|| codex_thread_external_session_id(codex_thread_id, codex_host_detected)),
     }
 }
@@ -2952,6 +2966,16 @@ fn normalize_external_session_id(value: Option<String>) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn claude_code_host_marker_from_env() -> bool {
+    claude_code_host_marker_present(std::env::var(CLAUDE_CODE_MARKER_ENV).ok())
+}
+
+fn claude_code_host_marker_present(claudecode_marker: Option<String>) -> bool {
+    normalize_external_session_id(claudecode_marker)
+        .map(|value| value == "1")
+        .unwrap_or(false)
 }
 
 fn codex_host_marker_from_env() -> bool {
@@ -2985,16 +3009,37 @@ fn codex_thread_external_session_id(
         return None;
     }
 
-    let thread_id = normalize_external_session_id(codex_thread_id)?;
-    if thread_id.len() > MAX_CODEX_THREAD_ID_LEN
-        || !thread_id
+    let thread_id = safe_host_session_token(codex_thread_id, MAX_CODEX_THREAD_ID_LEN)?;
+
+    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
+}
+
+fn claude_code_session_external_session_id(
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
+) -> Option<String> {
+    // Claude Code exposes its session ID to MCP/Bash subprocesses; require its subprocess marker.
+    if !claude_code_host_detected {
+        return None;
+    }
+
+    let session_id =
+        safe_host_session_token(claude_code_session_id, MAX_CLAUDE_CODE_SESSION_ID_LEN)?;
+
+    Some(format!("{CLAUDE_CODE_EXTERNAL_SESSION_PREFIX}{session_id}"))
+}
+
+fn safe_host_session_token(value: Option<String>, max_len: usize) -> Option<String> {
+    let token = normalize_external_session_id(value)?;
+    if token.len() > max_len
+        || !token
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         return None;
     }
 
-    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
+    Some(token)
 }
 
 fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
@@ -9212,6 +9257,8 @@ mod tests {
             resolve_external_session_id_with_envs(
                 Some(" codex://threads/cli ".to_string()),
                 None,
+                Some("claude-session".to_string()),
+                true,
                 Some("codex-thread".to_string()),
                 true,
             )
@@ -9226,6 +9273,8 @@ mod tests {
             resolve_external_session_id_with_envs(
                 None,
                 Some(" codex://threads/env ".to_string()),
+                Some("claude-session".to_string()),
+                true,
                 Some("codex-thread".to_string()),
                 true,
             )
@@ -9235,11 +9284,113 @@ mod tests {
     }
 
     #[test]
+    fn external_session_id_resolution_uses_claude_code_session_id_when_guarded() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" claude-session_123 ".to_string()),
+                true,
+                None,
+                false,
+            )
+            .as_deref(),
+            Some("claude-code://sessions/claude-session_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unguarded_claude_code_session_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("claude-session".to_string()),
+                false,
+                None,
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unsafe_claude_code_session_ids() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" \t\n ".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("session/one".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("x".repeat(MAX_CLAUDE_CODE_SESSION_ID_LEN + 1)),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_claude_code_session_id_before_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("claude-session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("claude-code://sessions/claude-session")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_codex_thread_id_when_claude_code_id_is_invalid() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("claude/session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/codex-thread")
+        );
+    }
+
+    #[test]
     fn external_session_id_resolution_uses_codex_thread_id_when_guarded() {
         assert_eq!(
             resolve_external_session_id_with_envs(
                 None,
                 None,
+                None,
+                false,
                 Some(" codex-thread_123 ".to_string()),
                 true,
             )
@@ -9254,6 +9405,8 @@ mod tests {
             resolve_external_session_id_with_envs(
                 None,
                 None,
+                None,
+                false,
                 Some("codex-thread".to_string()),
                 false,
             ),
@@ -9264,17 +9417,33 @@ mod tests {
     #[test]
     fn external_session_id_resolution_rejects_unsafe_codex_thread_ids() {
         assert_eq!(
-            resolve_external_session_id_with_envs(None, None, Some(" \t\n ".to_string()), true),
-            None
-        );
-        assert_eq!(
-            resolve_external_session_id_with_envs(None, None, Some("thread/one".to_string()), true),
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some(" \t\n ".to_string()),
+                true,
+            ),
             None
         );
         assert_eq!(
             resolve_external_session_id_with_envs(
                 None,
                 None,
+                None,
+                false,
+                Some("thread/one".to_string()),
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
                 Some("x".repeat(MAX_CODEX_THREAD_ID_LEN + 1)),
                 true,
             ),
@@ -9288,6 +9457,8 @@ mod tests {
             resolve_external_session_id_with_envs(
                 Some("   ".to_string()),
                 None,
+                Some("claude-session".to_string()),
+                true,
                 Some("codex-thread".to_string()),
                 true,
             ),
@@ -9313,6 +9484,14 @@ mod tests {
             Some("other host".to_string()),
             Some("com.example.other".to_string()),
         ));
+    }
+
+    #[test]
+    fn external_session_id_resolution_detects_claude_code_host_marker() {
+        assert!(claude_code_host_marker_present(Some("1".to_string())));
+        assert!(!claude_code_host_marker_present(Some("true".to_string())));
+        assert!(!claude_code_host_marker_present(Some("0".to_string())));
+        assert!(!claude_code_host_marker_present(None));
     }
 
     #[test]

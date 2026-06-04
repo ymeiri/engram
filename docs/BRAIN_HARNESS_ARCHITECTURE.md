@@ -104,10 +104,11 @@ Harness and migration checkpoint, current through 2026-06-04:
   permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
   effective-configuration output; prompt-bearing native Claude behavior remains unproved; and
   external-session joinability remains only partially validated even though direct CLI and
-  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist and T262 adds a guarded
-  source-level Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing paths. T262
-  does not refresh the installed runtime and does not prove Claude Code, Gemini, or host-wide label
-  adoption. T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
+  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T262/T263 add and
+  live-validate a guarded Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing
+  paths, and T264 adds a guarded source-level Claude Code `CLAUDE_CODE_SESSION_ID` fallback. T264
+  has not refreshed the installed runtime and does not prove live Claude Code, Gemini, or host-wide
+  label adoption. T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
   PID `14310` on port `8765`, and the live project-scoped current-plan list no longer leaked the
@@ -256,6 +257,14 @@ Harness and migration checkpoint, current through 2026-06-04:
   clean outcomes, and no wrong-scope or missing-context counts. T263 does not prove Claude/Gemini
   labels, native Claude behavior, effective hooks, lifecycle cleanup, M6, remote publication,
   deletion, rollback, or user-owned-file changes.
+- T264 adds a guarded source-level Claude Code host-label fallback. Existing explicit labels and
+  `ENGRAM_EXTERNAL_SESSION_ID` still win, then `CLAUDE_CODE_SESSION_ID` is used as
+  `claude-code://sessions/{id}` only when `CLAUDECODE=1` and the ID is a short safe token, and
+  then the guarded Codex fallback runs. This ordering prevents Claude-spawned MCP/CLI work from
+  being mislabeled by inherited Codex env. Focused MCP/CLI resolver tests pass. T264 does not
+  refresh runtime, run native Claude, prove Gemini labels, edit hooks/settings/adapters, change
+  public MCP/schema/storage/index/document-index behavior, mutate lifecycle/M6, push, delete,
+  rollback, or touch user-owned files.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

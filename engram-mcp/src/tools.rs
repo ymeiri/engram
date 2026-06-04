@@ -49,11 +49,15 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+const CLAUDE_CODE_SESSION_ID_ENV: &str = "CLAUDE_CODE_SESSION_ID";
+const CLAUDE_CODE_MARKER_ENV: &str = "CLAUDECODE";
 const CODEX_THREAD_ID_ENV: &str = "CODEX_THREAD_ID";
 const CODEX_SHELL_ENV: &str = "CODEX_SHELL";
 const CODEX_ORIGINATOR_ENV: &str = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
 const CODEX_BUNDLE_ID_ENV: &str = "__CFBundleIdentifier";
+const CLAUDE_CODE_EXTERNAL_SESSION_PREFIX: &str = "claude-code://sessions/";
 const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
+const MAX_CLAUDE_CODE_SESSION_ID_LEN: usize = 128;
 const MAX_CODEX_THREAD_ID_LEN: usize = 128;
 
 /// Shared state for MCP tools.
@@ -105,6 +109,8 @@ fn resolve_external_session_id(request_value: Option<String>) -> Option<String> 
     resolve_external_session_id_with_envs(
         request_value,
         env::var(EXTERNAL_SESSION_ID_ENV).ok(),
+        env::var(CLAUDE_CODE_SESSION_ID_ENV).ok(),
+        claude_code_host_marker_from_env(),
         env::var(CODEX_THREAD_ID_ENV).ok(),
         codex_host_marker_from_env(),
     )
@@ -115,18 +121,36 @@ fn resolve_external_session_id_with_env(
     request_value: Option<String>,
     env_value: Option<String>,
 ) -> Option<String> {
-    resolve_external_session_id_with_envs(request_value, env_value, None, false)
+    resolve_external_session_id_with_envs(request_value, env_value, None, false, None, false)
 }
 
 fn resolve_external_session_id_with_envs(
     request_value: Option<String>,
     env_value: Option<String>,
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
     codex_thread_id: Option<String>,
     codex_host_detected: bool,
 ) -> Option<String> {
     normalize_external_session_id(request_value)
         .or_else(|| normalize_external_session_id(env_value))
+        .or_else(|| {
+            claude_code_session_external_session_id(
+                claude_code_session_id,
+                claude_code_host_detected,
+            )
+        })
         .or_else(|| codex_thread_external_session_id(codex_thread_id, codex_host_detected))
+}
+
+fn claude_code_host_marker_from_env() -> bool {
+    claude_code_host_marker_present(env::var(CLAUDE_CODE_MARKER_ENV).ok())
+}
+
+fn claude_code_host_marker_present(claudecode_marker: Option<String>) -> bool {
+    normalize_external_session_id(claudecode_marker)
+        .map(|value| value == "1")
+        .unwrap_or(false)
 }
 
 fn codex_host_marker_from_env() -> bool {
@@ -160,16 +184,37 @@ fn codex_thread_external_session_id(
         return None;
     }
 
-    let thread_id = normalize_external_session_id(codex_thread_id)?;
-    if thread_id.len() > MAX_CODEX_THREAD_ID_LEN
-        || !thread_id
+    let thread_id = safe_host_session_token(codex_thread_id, MAX_CODEX_THREAD_ID_LEN)?;
+
+    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
+}
+
+fn claude_code_session_external_session_id(
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
+) -> Option<String> {
+    // Claude Code exposes its session ID to MCP subprocesses; require its subprocess marker.
+    if !claude_code_host_detected {
+        return None;
+    }
+
+    let session_id =
+        safe_host_session_token(claude_code_session_id, MAX_CLAUDE_CODE_SESSION_ID_LEN)?;
+
+    Some(format!("{CLAUDE_CODE_EXTERNAL_SESSION_PREFIX}{session_id}"))
+}
+
+fn safe_host_session_token(value: Option<String>, max_len: usize) -> Option<String> {
+    let token = normalize_external_session_id(value)?;
+    if token.len() > max_len
+        || !token
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         return None;
     }
 
-    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
+    Some(token)
 }
 
 impl ToolState {
@@ -11117,6 +11162,8 @@ mod tests {
         let resolved = resolve_external_session_id_with_envs(
             Some(" codex://threads/request ".to_string()),
             Some("codex://threads/env".to_string()),
+            Some("claude-session".to_string()),
+            true,
             Some("codex-thread".to_string()),
             true,
         );
@@ -11129,6 +11176,8 @@ mod tests {
         let resolved = resolve_external_session_id_with_envs(
             None,
             Some(" codex://threads/env ".to_string()),
+            Some("claude-session".to_string()),
+            true,
             Some("codex-thread".to_string()),
             true,
         );
@@ -11137,10 +11186,111 @@ mod tests {
     }
 
     #[test]
+    fn external_session_id_claude_code_session_id_applies_with_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some(" claude-session_123 ".into()),
+            true,
+            None,
+            false,
+        );
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("claude-code://sessions/claude-session_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_requires_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("claude-session".to_string()),
+            false,
+            None,
+            false,
+        );
+
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_rejects_unsafe_values() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" \t\n ".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("session/one".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("x".repeat(MAX_CLAUDE_CODE_SESSION_ID_LEN + 1)),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_wins_over_codex_thread_id() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("claude-session".to_string()),
+            true,
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("claude-code://sessions/claude-session")
+        );
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_applies_when_claude_code_id_is_invalid() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("claude/session".to_string()),
+            true,
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/codex-thread"));
+    }
+
+    #[test]
     fn external_session_id_codex_thread_id_applies_with_host_marker() {
         let resolved = resolve_external_session_id_with_envs(
             None,
             None,
+            None,
+            false,
             Some(" codex-thread_123 ".into()),
             true,
         );
@@ -11156,6 +11306,8 @@ mod tests {
         let resolved = resolve_external_session_id_with_envs(
             None,
             None,
+            None,
+            false,
             Some("codex-thread".to_string()),
             false,
         );
@@ -11166,17 +11318,33 @@ mod tests {
     #[test]
     fn external_session_id_codex_thread_id_rejects_unsafe_values() {
         assert_eq!(
-            resolve_external_session_id_with_envs(None, None, Some(" \t\n ".to_string()), true),
-            None
-        );
-        assert_eq!(
-            resolve_external_session_id_with_envs(None, None, Some("thread/one".to_string()), true),
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some(" \t\n ".to_string()),
+                true,
+            ),
             None
         );
         assert_eq!(
             resolve_external_session_id_with_envs(
                 None,
                 None,
+                None,
+                false,
+                Some("thread/one".to_string()),
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
                 Some("x".repeat(MAX_CODEX_THREAD_ID_LEN + 1)),
                 true,
             ),
@@ -11204,6 +11372,14 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn external_session_id_claude_code_host_marker_requires_documented_value() {
+        assert!(claude_code_host_marker_present(Some("1".to_string())));
+        assert!(!claude_code_host_marker_present(Some("true".to_string())));
+        assert!(!claude_code_host_marker_present(Some("0".to_string())));
+        assert!(!claude_code_host_marker_present(None));
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn external_session_id_runtime_env_fallback_applies_when_request_is_absent() {
         let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
@@ -11211,6 +11387,10 @@ mod tests {
             EXTERNAL_SESSION_ID_ENV,
             Some(" codex://threads/runtime-env "),
         );
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, None);
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, None);
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, None);
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, None);
 
         let resolved = resolve_external_session_id(None);
 
@@ -11218,9 +11398,28 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn external_session_id_runtime_claude_code_session_id_applies_when_guarded() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
+        let _engram_env = EnvGuard::set(EXTERNAL_SESSION_ID_ENV, None);
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, Some(" claude-123 "));
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, Some("1"));
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, Some("codex-thread"));
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, Some("1"));
+
+        let resolved = resolve_external_session_id(None);
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("claude-code://sessions/claude-123")
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn external_session_id_runtime_codex_thread_id_applies_when_guarded() {
         let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
         let _engram_env = EnvGuard::set(EXTERNAL_SESSION_ID_ENV, None);
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, None);
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, None);
         let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, Some(" codex-thread_123 "));
         let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, Some("1"));
 
@@ -11251,6 +11450,10 @@ mod tests {
             EXTERNAL_SESSION_ID_ENV,
             Some(" codex://threads/tool-runtime-env "),
         );
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, None);
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, None);
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, None);
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, None);
 
         let response = telemetry_new(
             &state,
