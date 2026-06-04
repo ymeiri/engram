@@ -6344,3 +6344,20 @@ only. T208 does not create active MemoryItems, mutate lifecycle state, run `lint
 inspect or run M6/migration/quarantine actions, change ranking/`orient`, public MCP shape,
 schema/storage/index/document-index behavior, hooks, settings, adapters, runtime configuration,
 native Claude, deletion, rollback, force-kill, or user-owned files.
+
+T209 matrix note:
+`docs/BRAIN_HARNESS_T209_M6_READ_ONLY_SCOPING_STATUS_2026-06-04.md` records a read-only M6
+scoping/status validation against the existing T68 review-export snapshot. Codex re-read the
+committed T58/T68/T123/T124/T169/T173 reports, validated the snapshot index and files as the
+expected generated `index.md` plus 12 regular candidate files with no symlinks, inspected source to
+confirm `memory(action="migration_review_status")` delegates to dry-run apply with
+`create_commit=false`, and ran exactly one status check. Status scanned 12 files, reported all 12
+as `files_with_no_decision`, no skipped/conflict/not-in-index/missing files, accepted/planned/
+written counts of 0, `ready_to_apply=false`, and no warnings. Candidate 0012 is accounted for as
+count-drift provenance from T68, not decided or admitted to migration apply. The recommended next
+gate is a docs-only candidate-disposition approval packet for 0001-0011 plus explicit separate
+handling of 0012, or an exact all-snapshot 0001-0012 gate if the user intentionally expands scope.
+T209 does not make candidate decisions, edit review files, run apply/prioritize/export/rerun,
+mutate lifecycle state, archive memory, delete data, change ranking/`orient`, public MCP,
+schema/storage/index/document-index behavior, harness files, native Claude state, runtime
+configuration, or user-owned files.
