@@ -6361,3 +6361,16 @@ T209 does not make candidate decisions, edit review files, run apply/prioritize/
 mutate lifecycle state, archive memory, delete data, change ranking/`orient`, public MCP,
 schema/storage/index/document-index behavior, harness files, native Claude state, runtime
 configuration, or user-owned files.
+
+T210 matrix note:
+`docs/BRAIN_HARNESS_T210_M6_CANDIDATE_DISPOSITION_AUTHORIZATION_PACKET_2026-06-04.md` defines the
+next M6 gate without executing it. The packet recommends a conservative future T210A gate that
+records only explicit human-provided dispositions for candidates 0001-0011 and requires a separate
+explicit 0012 count-drift/provenance instruction, plus an alternate T210B all-snapshot gate that
+must explicitly name 0001-0012 as an intentional scope expansion beyond T58. Future execution may
+edit only generated review pages with human-provided choices/notes, then run exactly one read-only
+`memory(action="migration_review_status")` check and write a result report. T210 does not infer
+candidate decisions, edit the review workspace, run status/apply/prioritize/export/rerun, write
+active MemoryItems, mutate lifecycle state, archive memory, delete data, change ranking/`orient`,
+public MCP/schema/storage/index/document-index behavior, harness files, native Claude state,
+runtime configuration, or user-owned files.
