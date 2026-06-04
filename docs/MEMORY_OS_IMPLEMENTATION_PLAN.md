@@ -812,9 +812,9 @@ Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
 T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T222 supersedes T219 as the exact
-runtime-refresh approval gate after the T221 binary-relevant memory-list scope fix, installed
-runtime has not been refreshed for either source change, hosts still need to provide real
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T224 supersedes T222 as the exact
+runtime-refresh approval gate after the T223 binary-relevant scoped-limit fix, installed runtime
+has not been refreshed for the T217/T221/T223 source changes, hosts still need to provide real
 external-session labels, and stale active handoffs remain until a future non-dry-run handoff update
 or exact lifecycle cleanup.
 
@@ -6560,3 +6560,16 @@ harness files/settings/hooks/adapters, installed runtime, native Claude state, d
 or user-owned files. Because T223 changed binary-relevant `engram-mcp` and `engram-tests` files
 after T222, T222 is now stale for execution and must be superseded by a refreshed runtime approval
 packet before any install/restart/live validation.
+
+T224 matrix note:
+`docs/BRAIN_HARNESS_T224_T217_T221_T223_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-04.md` supersedes
+T222 as the exact runtime-refresh approval packet. T222's baseline became stale after T223
+intentionally changed binary-relevant `engram-mcp` and `engram-tests` files. T224 anchors future
+execution to source baseline `19707e60b9126b2fcdfabbe5fe9c0562a44c7f03` and combines live
+validation for the T217 MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback with read-only live validation
+for T221 `memory(action="list", project_name="engram")` scope inference and T223 scoped
+post-filter `limit` handling. T224 is docs-only and has not executed install/restart/temp-env
+validation. It does not change source, public MCP params or payloads, ranking/`orient`,
+schema/storage/index/document-index behavior, lifecycle state, M6/migration/quarantine state,
+harness files/settings/hooks/adapters, native Claude state, deletion, rollback, or user-owned
+files.

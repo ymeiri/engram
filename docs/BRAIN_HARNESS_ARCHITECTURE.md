@@ -104,10 +104,10 @@ Harness and migration checkpoint, current through 2026-06-04:
   permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
   effective-configuration output; prompt-bearing native Claude behavior remains unproved; and
   external-session joinability still depends on real caller/host labels even though direct CLI and
-  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist; T222 supersedes T219 as
-  the exact runtime-refresh approval gate after the T221 binary-relevant memory-list scope fix, and
-  the installed runtime has not been refreshed for either source change; stale active handoffs
-  remain until a future non-dry-run handoff update or explicit lifecycle cleanup.
+  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist; T224 supersedes T222 as
+  the exact runtime-refresh approval gate after the T223 binary-relevant scoped-limit fix, and the
+  installed runtime has not been refreshed for the T217/T221/T223 source changes; stale active
+  handoffs remain until a future non-dry-run handoff update or explicit lifecycle cleanup.
 - M6 migration remains review-gated. Candidate inspection is complete for generated files
   0001-0011, candidate 0012 is count-drift provenance requiring explicit scope handling, and the
   next M6 progress requires human-provided dispositions under T210A/T210B or explicit deferral.
