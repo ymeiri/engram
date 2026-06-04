@@ -808,8 +808,9 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 
 Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
 below, T235 reconciles this startup-facing note after T233/T234, T237 reconfirms that
-T233 remains fresh after the T234/T235/T236 docs-only commits, and T238 records telemetry
-follow-through after T237. Current read-only
+T233 remains fresh after the T234/T235/T236 docs-only commits, T238 records telemetry
+follow-through after T237, and T239 records the post-closeout telemetry gate state. Current
+read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
@@ -823,7 +824,11 @@ handoff update or exact lifecycle cleanup, and T234 is a separate docs-only/defa
 packet for stale migration-completion MemoryItem `019dd3fe-ec94-7122-af04-1f35b839387f` rather than
 archive approval. T238 leaves the rolling telemetry confidence gate false at 48% feedback coverage
 after scoring the material current-turn retrieval traces; the sampled task-outcome signal remains
-healthy, but telemetry is still weak rolling evidence rather than completion proof.
+healthy, but telemetry is still weak rolling evidence rather than completion proof. T239 updates
+the current rolling telemetry state after T238 closeout feedback: the latest
+`real_session_eval(project=engram, limit=50)` report passes exactly at the 50% feedback-coverage
+threshold with four feedback intents and no task failures, bad-memory-used records, missing-context
+reports, or wrong-scope memory judgments.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6793,3 +6798,19 @@ applied, while obligations doctor stayed clean. T238 does not execute runtime re
 archive, `lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`,
 public MCP/schema/storage/index/document-index behavior changes, deletion, rollback,
 old-binary reinstall, or user-owned-file edits.
+
+T239 matrix note:
+`docs/BRAIN_HARNESS_T239_TELEMETRY_CONFIDENCE_GATE_CLOSEOUT_2026-06-04.md` records docs-only
+telemetry closeout after T238 commit, indexing, current-plan capture, and closeout feedback. A
+post-closeout report generated at `2026-06-04T09:39:09.473084Z` passed with
+`feedback_coverage=0.5199999809265137`, `feedback_count=26`, and five feedback intents. A fresh
+recheck after the post-compaction startup `orient` trace entered the rolling window generated at
+`2026-06-04T09:40:20.573429Z` still passed exactly at the threshold with `feedback_count=25`,
+`feedback_coverage=0.5`, four feedback intents, `task_failure_count=0`,
+`bad_memory_used_count=0`, `wrong_scope_memory_count=0`, and `missing_context_count=0`. This
+updates the current telemetry matrix from T238's historical 48% false state to a current threshold
+pass, while preserving the caveat that telemetry is rolling, agent-assessed, and weak operational
+evidence rather than completion proof. T239 does not execute runtime refresh, lifecycle archive,
+`lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
+or user-owned-file edits.
