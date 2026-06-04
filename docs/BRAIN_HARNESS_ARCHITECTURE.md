@@ -148,6 +148,12 @@ Harness and migration checkpoint, current through 2026-06-04:
   make it historical rather than current next-action guidance. T248 does not archive it, run
   `lint apply_safe`, or claim exhaustive lifecycle inventory; T234 and T247 already cover their
   exact stale targets and are not duplicated.
+- T249 reconciles the completion matrix after T248. It records that current-plan `orient`,
+  obligations, installed-runtime baseline, doctor-level adapter readiness, and sampled telemetry
+  are currently healthy within their bounded evidence, while M6, broad lifecycle cleanup, and full
+  native Claude/harness behavior remain incomplete or blocked. T249 is docs-only and does not
+  mutate lifecycle state, M6, ranking, `orient`, runtime, harness, schema/storage/index,
+  document-index behavior, or user-owned files.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

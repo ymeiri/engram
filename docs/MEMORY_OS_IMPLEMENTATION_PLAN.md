@@ -818,30 +818,39 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 
 ## Current Completion Matrix
 
-Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
-below, T235 reconciles this startup-facing note after T233/T234, T237/T240 reconfirmed T233
-freshness before execution, T239 records the post-closeout telemetry gate state, T241 clarifies M6
-deferral state, and T242 executes the T233 runtime refresh plus daemon pidfile hardening. Current
-read-only `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code,
-Codex, Gemini CLI, and Cursor. Generated local adapter readiness is validated, while behavioral
-caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain extra
-legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in T179,
-prompt-bearing native Claude behavior is unproved, hosts still need to provide real
-external-session labels, stale active handoffs remain until a future non-dry-run handoff update or
-exact lifecycle cleanup, and T234 is a separate docs-only/default-deny lifecycle packet for stale
-migration-completion MemoryItem `019dd3fe-ec94-7122-af04-1f35b839387f` rather than archive
-approval. T239 updates the current rolling telemetry state after T238 closeout feedback: the latest
-`real_session_eval(project=engram, limit=50)` report passes exactly at the 50% feedback-coverage
-threshold with four feedback intents and no task failures, bad-memory-used records, missing-context
-reports, or wrong-scope memory judgments. T242 installed final binary hash
-`1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, repaired the cleanup pidfile
-race, left final daemon PID `14310` serving port `8765` with pidfile/status/process aligned, proved
-omitted telemetry labels are not sticky after cleanup, and live
-`memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
-Engram current-plan item without the previous out-of-scope `voice-layer` leak. T241 clarifies that
-M6 deferral is not currently approved: T210 remains the human-disposition recording gate, and
-explicit deferral would still require user-approved rationale/evidence rather than an agent-authored
-deferral packet.
+Matrix reconciliation note, 2026-06-04 after T249: T214 supersedes older cross-harness readiness
+wording below, T235 reconciles this startup-facing note after T233/T234, T237/T240 reconfirmed
+T233 freshness before execution, T241 clarifies M6 deferral state, T242 executes the T233 runtime
+refresh plus daemon pidfile hardening, T244 records the current passing rolling telemetry gate,
+T245/T246 keep lifecycle cleanup exact-target-review-gated, T247/T248 add two pending
+default-deny lifecycle packets, and T249 reconciles the matrix after T248. Current read-only
+`harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
+CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
+lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
+`/hooks` effective-hook visibility did not produce a usable report in T179, prompt-bearing native
+Claude behavior is unproved, and hosts still need to provide real external-session labels. T242
+installed final binary hash `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`,
+repaired the cleanup pidfile race, left final daemon PID `14310` serving port `8765` with
+pidfile/status/process aligned, proved omitted telemetry labels are not sticky after cleanup, and
+live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
+Engram current-plan item without the previous out-of-scope `voice-layer` leak. T249's latest
+sampled `real_session_eval(project=engram, limit=120)` report passes with
+`feedback_coverage=0.6333333253860474`, `task_failure_count=0`, `bad_memory_used_count=0`,
+`wrong_scope_memory_count=0`, and `missing_context_count=0`; this is operational evidence, not
+proof of M6, lifecycle, or full harness completion. T210 remains the M6 source of truth: all 12
+generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
+approved.
+
+Current T249 matrix snapshot:
+
+| Category | Evidence-backed state | Remaining gate |
+| --- | --- | --- |
+| Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
+| Validated | Current T248 plan is first in live lean `orient`; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; sampled telemetry passes at 63.33% coverage with clean outcome counters. | Validations are point-in-time and bounded to the approved/tested classes. |
+| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, full label adoption, and migration apply readiness remain unproved. |
+| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup, and full native Claude/harness behavioral proof. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
+| Risky | Telemetry is agent-assessed and sampled; harness lifecycle compliance is soft; pending/default-deny lifecycle packets can be mistaken for executed cleanup; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6983,3 +6992,16 @@ T248 excludes already-packeted T234/T247 stale targets, does not archive memory,
 debt, or authorize M6/migration/quarantine, harness/native-Claude, ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior, rollback, force-kill, legacy simplification, or
 user-owned-file edits.
+
+T249 completion matrix reconciliation note:
+`docs/BRAIN_HARNESS_T249_POST_T248_COMPLETION_MATRIX_RECONCILIATION_2026-06-04.md` records a
+docs-only reconciliation after T248. It marks current-plan `orient`, clean obligations,
+T242 installed-runtime baseline, doctor-level generated adapter readiness, and sampled telemetry as
+currently healthy within bounded evidence. It keeps M6 blocked on T210 human dispositions or
+explicit deferral; keeps lifecycle cleanup incomplete with T157/T159/T160 exact archives plus
+pending/default-deny T234/T247/T248 packets; and keeps full harness/native-Claude behavior partial
+because lifecycle compliance is soft, effective hooks and prompt-bearing native Claude remain
+unproved, and host external-session labels still require caller adoption. T249 does not mutate
+lifecycle state, run `lint apply_safe`, run M6/migration/quarantine, change ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior, harness/runtime/native-Claude state, deletion,
+rollback, force-kill, legacy simplification, or user-owned files.
