@@ -11057,6 +11057,70 @@ mod tests {
         assert_eq!(resolved.as_deref(), Some("codex://threads/runtime-env"));
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn mcp_telemetry_record_trace_uses_runtime_env_when_request_is_absent() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config)
+            .await
+            .expect("failed to connect to in-memory store");
+        let telemetry = TelemetryService::new(db);
+        telemetry
+            .init_schema()
+            .await
+            .expect("failed to initialize telemetry schema");
+        let state = ToolState::new();
+        state.init_telemetry(telemetry).await;
+
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::set(Some(" codex://threads/tool-runtime-env "));
+
+        let response = telemetry_new(
+            &state,
+            TelemetryRequest {
+                action: "record_trace".to_string(),
+                trace_id: None,
+                operation: Some("search".to_string()),
+                intent: Some("answer_question".to_string()),
+                scenario_id: None,
+                arm: None,
+                query: Some("runtime env fallback".to_string()),
+                project: Some("engram".to_string()),
+                agent: Some("codex".to_string()),
+                session_id: None,
+                external_session_id: None,
+                returned_memory_ids: Vec::new(),
+                returned_result_ids: Vec::new(),
+                latency_ms: None,
+                warnings: Vec::new(),
+                used_memory_ids: Vec::new(),
+                rejected_memory_ids: Vec::new(),
+                used_result_ids: Vec::new(),
+                rejected_result_ids: Vec::new(),
+                stale_memory_ids: Vec::new(),
+                wrong_scope_memory_ids: Vec::new(),
+                missing_context: None,
+                usefulness_score: None,
+                correctness_score: None,
+                noise_score: None,
+                task_success: None,
+                preference_adhered: None,
+                repeated_context_questions: None,
+                bad_memory_used: None,
+                suggested_memory_changes: None,
+                note: None,
+                limit: None,
+            },
+        )
+        .await
+        .expect("record_trace should work");
+        let json: Value = serde_json::from_str(&response).expect("response should be valid JSON");
+
+        assert_eq!(
+            json["trace"]["external_session_id"],
+            "codex://threads/tool-runtime-env"
+        );
+    }
+
     #[test]
     fn external_session_id_whitespace_request_falls_back_to_env() {
         let resolved = resolve_external_session_id_with_env(

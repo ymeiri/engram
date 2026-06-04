@@ -812,11 +812,12 @@ Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
 T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T228 supersedes T226 as the exact
-runtime-refresh approval gate after the T227 binary-relevant startup-style tag fixture, installed
-runtime has not been refreshed for the T217/T221/T223 source changes or the T225/T227 fixtures,
-hosts still need to provide real external-session labels, and stale active handoffs remain until a
-future non-dry-run handoff update or exact lifecycle cleanup.
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T229 adds binary-relevant MCP tool-level
+fixture coverage for `telemetry(action="record_trace")` runtime env fallback and makes T228 stale
+for exact runtime-refresh execution, installed runtime has not been refreshed for the T217/T221/T223
+source changes or the T225/T227/T229 fixtures, hosts still need to provide real external-session
+labels, and stale active handoffs remain until a future non-dry-run handoff update or exact
+lifecycle cleanup.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6629,3 +6630,16 @@ has not executed install/restart/temp-env validation. It does not change source,
 or payloads, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle state,
 M6/migration/quarantine state, harness files/settings/hooks/adapters, native Claude state,
 deletion, rollback, or user-owned files.
+
+T229 matrix note:
+`docs/BRAIN_HARNESS_T229_TELEMETRY_RECORD_TRACE_ENV_FALLBACK_FIXTURE_2026-06-04.md` adds focused
+test-only coverage for the T217 MCP telemetry live-validation path:
+`telemetry(action="record_trace")` with omitted `external_session_id` and a runtime
+`ENGRAM_EXTERNAL_SESSION_ID` value. The fixture initializes in-memory telemetry, sets a
+whitespace-padded runtime env label under the existing env lock, records a trace through
+`telemetry_new`, and asserts the returned trace persisted the trimmed env label. Validation passed
+the new exact fixture, full `tools::tests`, full telemetry integration target, `cargo fmt --all
+--check`, `cargo check -p engram-cli`, and `git diff --check`. T229 changes binary-relevant
+`engram-mcp/src/tools.rs` after T228, so T228 is now stale for exact runtime-refresh execution and
+must be superseded by a refreshed runtime approval packet before any install/restart/live
+validation.
