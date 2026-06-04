@@ -831,7 +831,8 @@ native-Claude/harness parity gate, T255 prepares but does not execute a prompt-b
 Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, T257 corrects
 post-T256 telemetry-window wording, T258 records read-only branch synchronization strategy, and
 T259 runs the remote-freshness recheck without reconciling, and T260 records the branch
-reconciliation plan.
+reconciliation plan, and T261 completes the local `origin/main` merge reconciliation without
+remote publication.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -854,15 +855,15 @@ native-Claude, or branch completion. T210 remains the M6 source of truth: all 12
 generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
 approved.
 
-Current T260 matrix snapshot:
+Current T261 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; the latest 50-trace telemetry window passes at 94% feedback coverage with clean outcome counters. | Validations are point-in-time and bounded to the approved/tested classes. |
+| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; the latest 50-trace telemetry window passes at 94% feedback coverage with clean outcome counters; T261 locally reconciles `origin/main` into the branch and passes format, telemetry integration tests, full `engram-tests`, workspace check, focused MCP env-fallback tests, full clippy, and `git diff --check`. | Validations are point-in-time and bounded to the approved/tested classes. |
 | Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, full host-label adoption, and migration apply readiness remain unproved. |
 | Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules. | T255 has not run native Claude and does not prove prompt-bearing behavior. |
-| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, host-label adoption, and branch synchronization. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
+| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
 | Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest 20-trace window has 95% coverage and clean outcomes but fails intent-feedback diversity. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
 | Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
 
@@ -875,7 +876,7 @@ Gate-level T257 status:
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
 | Host external-session labels | Core support exists; real caller adoption remains incomplete. | Validate with real Codex/Claude/Gemini host labels. |
-| Branch synchronization | T260 source inspection shows current HEAD already subsumes upstream `711c736` applied-filter behavior with repo-scoped filtering, feedback-by-sampled-trace selection, MCP project passthrough, and broader telemetry tests. T259 still shows branch divergence `2 372` and predicted telemetry conflicts. | Implementation slice: regular merge of `origin/main` into this branch, preserve current telemetry semantics where they subsume upstream, inspect auto-merged core/MCP semantics, then run telemetry tests and workspace checks before any push, upstream setup, PR publication, or backup-push policy. |
+| Branch synchronization | T261 completes the local regular merge of `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423` into `yuval.meiri/memory-os-phase0`. Conflicts were limited to telemetry service/tests and resolved by preserving the richer branch implementation; validation passed format, telemetry integration tests, full `engram-tests`, workspace check, focused MCP env-fallback tests, full clippy, conflict-marker check, and `git diff --check`. | Remote push, upstream configuration, backup branch policy, and PR publication remain separate external-publication decisions. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
 T257 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
@@ -7188,3 +7189,18 @@ engram-tests`, `cargo check --workspace`, clippy if no pre-existing lint backlog
 rebase, merge, set upstream, publish a PR, edit code, edit harness files, mutate lifecycle/M6/
 runtime/native-Claude/host-label/ranking/`orient`/public MCP/schema/storage/index/document-index
 behavior, delete, rollback, force-kill, simplify legacy, or change user-owned files.
+
+T261 branch merge result note:
+`docs/BRAIN_HARNESS_T261_BRANCH_MERGE_RESULT_2026-06-04.md` records the local merge
+reconciliation. `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423` was merged into
+`yuval.meiri/memory-os-phase0` with a regular no-ff merge. Conflicts were limited to
+`engram-index/src/telemetry.rs` and `engram-tests/tests/telemetry_tests.rs`; resolution preserved
+the branch's richer telemetry implementation where it subsumed upstream `711c736`. Validation
+passed `cargo fmt --all --check`, telemetry integration tests, full `engram-tests`, `cargo check
+--workspace`, focused MCP env-fallback tests, `cargo clippy --all-targets -- -D warnings`, an
+anchored conflict-marker check, and `git diff --check`. The only source edit beyond merge
+resolution was a test-only synchronization fix in `engram-mcp/src/tools.rs`, replacing a standard
+mutex held across an awaited telemetry test call with a Tokio mutex. T261 does not push, set
+upstream, publish a PR, edit harness files, mutate lifecycle/M6/runtime/native-Claude/host-label/
+ranking/`orient`/public MCP/schema/storage/index/document-index behavior, delete, rollback,
+force-kill, simplify legacy, or change user-owned files.

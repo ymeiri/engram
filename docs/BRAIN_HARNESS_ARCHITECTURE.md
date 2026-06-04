@@ -222,6 +222,17 @@ Harness and migration checkpoint, current through 2026-06-04:
   `origin/main` into this branch, not a 372-commit rebase or broad `-s ours`, preserve current
   telemetry semantics where they subsume upstream, inspect auto-merged core/MCP field-chain
   semantics, and validate with telemetry tests plus workspace checks before any push/upstream/PR.
+- T261 executes that local branch reconciliation. `origin/main` at
+  `e6697eee18530bc64f64ae94b6fd6006c24c7423` was merged into
+  `yuval.meiri/memory-os-phase0` with a regular no-ff merge; conflicts were limited to
+  `engram-index/src/telemetry.rs` and `engram-tests/tests/telemetry_tests.rs` and were resolved by
+  preserving the branch's richer telemetry implementation where it subsumed upstream `711c736`.
+  Validation passed: format, telemetry integration tests, full `engram-tests`, workspace check,
+  focused MCP env-fallback tests, full clippy, conflict-marker check, and `git diff --check`.
+  The only source edit beyond merge resolution was a test-only switch from a standard mutex to a
+  Tokio mutex for runtime-env fallback tests. T261 does not push, set upstream, publish a PR, or
+  change harness, lifecycle, M6, native-Claude, ranking/`orient`, public MCP, schema/storage/index,
+  document-index, runtime, deletion, rollback, force-kill, legacy, or user-owned-file state.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

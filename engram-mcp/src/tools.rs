@@ -11001,9 +11001,9 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
 mod tests {
     use super::*;
     use std::ffi::OsString;
-    use std::sync::Mutex;
+    use tokio::sync::Mutex;
 
-    static EXTERNAL_SESSION_ID_ENV_LOCK: Mutex<()> = Mutex::new(());
+    static EXTERNAL_SESSION_ID_ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
     struct EnvGuard {
         previous: Option<OsString>,
@@ -11047,9 +11047,9 @@ mod tests {
         assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
     }
 
-    #[test]
-    fn external_session_id_runtime_env_fallback_applies_when_request_is_absent() {
-        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().unwrap();
+    #[tokio::test(flavor = "current_thread")]
+    async fn external_session_id_runtime_env_fallback_applies_when_request_is_absent() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
         let _env = EnvGuard::set(Some(" codex://threads/runtime-env "));
 
         let resolved = resolve_external_session_id(None);
@@ -11071,7 +11071,7 @@ mod tests {
         let state = ToolState::new();
         state.init_telemetry(telemetry).await;
 
-        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().unwrap();
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
         let _env = EnvGuard::set(Some(" codex://threads/tool-runtime-env "));
 
         let response = telemetry_new(
