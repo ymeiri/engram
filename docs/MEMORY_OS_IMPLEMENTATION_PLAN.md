@@ -6660,3 +6660,18 @@ T230 is docs-only and has not executed install/restart/temp-env validation. It d
 source, public MCP params or payloads, ranking/`orient`, schema/storage/index/document-index
 behavior, lifecycle state, M6/migration/quarantine state, harness files/settings/hooks/adapters,
 native Claude state, deletion, rollback, or user-owned files.
+
+T231 matrix note:
+`docs/BRAIN_HARNESS_T231_POST_T230_COMPLETION_GATE_AUDIT_2026-06-04.md` records a read-only
+completion audit after T230. Fresh `orient` still surfaces the active T230 current-plan memory
+first, and fresh harness doctor checks report `ready=true` for generic, Claude Code, Codex, Gemini
+CLI, and Cursor. The audit also confirms that the installed daemon is still stale: the local binary
+hash remains `1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon PID
+`21398` is still on port 8765, and live
+`memory(action="list", project_name="engram", status_filter="active", tags=["current-plan"],
+limit=5)` still returned an out-of-scope `voice-layer` current-plan item. Therefore T230 remains
+the next product-moving gate. M6 remains gated by human-provided dispositions or explicit deferral,
+and lifecycle cleanup remains gated by explicit lifecycle approval. T231 does not execute runtime
+refresh, M6/migration/quarantine actions, lifecycle mutation, harness writes, native Claude,
+ranking/`orient`, schema/storage/index/document-index behavior changes, deletion, rollback, or
+user-owned-file edits.
