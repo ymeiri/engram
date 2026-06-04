@@ -6238,3 +6238,18 @@ shape, change search ranking/`orient`, schema/storage/index/document-index behav
 settings, adapters, installed runtime, M6/migration/quarantine, native Claude, deletion, rollback,
 or user-owned files. Pre-T201 stale handoffs remain visible until separately approved lifecycle
 cleanup or future exact scoped work addresses them.
+
+T202 matrix note:
+`docs/BRAIN_HARNESS_T202_HANDOFF_SUPERSESSION_MCP_BOUNDARY_VALIDATION_2026-06-04.md` adds
+test-only MCP boundary coverage for T201. The new integration test drives
+`tools::handoff_new` with two non-dry-run `handoff(action="update")` requests in one project and
+then verifies the public response plus stored previous handoff status: the second update names the
+first handoff as `previous_id`, keeps the new handoff active, records the first handoff in
+`supersedes`, and stores the first handoff as `superseded`. Validation passed with the focused MCP
+test, full `cargo test -p engram-tests --test harness_tests`, `cargo fmt --all --check`,
+`cargo check -p engram-cli`, and `git diff --check`. The initial focused test attempt failed only
+because the test used `str::parse` instead of `Id::parse`; that test-code issue was corrected
+before final validation. T202 does not change production behavior, installed runtime, lifecycle
+state, ranking/`orient`, public MCP shape, schema/storage/index/document-index behavior, hooks,
+settings, adapters, M6/migration/quarantine, native Claude, deletion, rollback, or user-owned
+files.
