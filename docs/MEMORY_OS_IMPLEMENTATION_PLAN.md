@@ -6493,3 +6493,17 @@ fallback and hosts still need to provide real labels. T218 is docs-only: it does
 refresh runtime, edit hooks/settings/adapters, mutate lifecycle or migration state, run native
 Claude, change ranking/`orient` payloads, change public MCP/schema/storage/index/document-index
 behavior, delete data, or touch user-owned files.
+
+T219 matrix note:
+`docs/BRAIN_HARNESS_T219_T217_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-04.md` prepares the exact
+approval gate for refreshing the installed runtime after T217. The packet anchors execution to
+binary-relevant invariance from T217 source baseline
+`78eba3c643e3921fb1c19311aef2d1e0cd95b2d0`, records the current installed binary hash
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058` and daemon PID `21398`,
+and defines a telemetry-only live validation plan: install current `engram-cli`, restart the
+daemon once with a unique temporary `ENGRAM_EXTERNAL_SESSION_ID`, prove omitted/empty/whitespace
+fallback, explicit request precedence, 256/257 boundary behavior, and T217 call-site coverage, then
+restart without the temporary env and prove the label is not sticky. T219 is docs-only and has not
+executed the runtime refresh. It does not change source, public MCP params or payloads, ranking/
+`orient`, schema/storage/index/document-index behavior, lifecycle state, M6/migration/quarantine
+state, hooks/settings/adapters, native Claude state, deletion, rollback, or user-owned files.
