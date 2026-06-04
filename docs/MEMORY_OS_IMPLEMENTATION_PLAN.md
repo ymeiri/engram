@@ -6689,3 +6689,23 @@ Validation passed the new exact fixture, adjacent memory-list fixtures, full `me
 `cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`. Because T232
 changes binary-relevant `engram-tests` after T230, T230 is now stale for exact execution and must be
 superseded by a refreshed runtime approval packet before any install/restart/live validation.
+
+T233 matrix note:
+`docs/BRAIN_HARNESS_T233_T217_T221_T223_T225_T227_T229_T232_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-04.md`
+supersedes T230 as the exact runtime-refresh approval packet. T230's baseline became stale after
+T232 intentionally changed binary-relevant `engram-tests` to harden the combined
+project-name-only-plus-current-plan-tag-plus-limit fixture. T233 anchors future execution to source
+baseline `cd59424f9cb4ae9ec90aa5af7328774c0f7784a8` and combines live validation for the
+T217/T229 MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback with read-only live validation for T227/T232
+`memory(action="list", project_name="engram", tags=["current-plan"], limit=5)` scope inference
+before tag filtering and limit enforcement, T221/T225 `memory(action="list", project_name="engram",
+limit=1)` scope inference plus limit preservation, and T223 explicit scoped post-filter `limit`
+handling. Fresh read-only pre-state still shows `/Users/yuval.meiri/.local/bin/engram` at old hash
+`1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon PID `21398` on port
+8765, no parent-shell `ENGRAM_EXTERNAL_SESSION_ID`, only user-owned untracked root `AGENTS.md`, and
+live `memory(action=list, project_name=engram, status_filter=active, tags=[current-plan], limit=5)`
+still leaking the out-of-scope `voice-layer` current-plan item. T233 is docs-only and has not
+executed install/restart/temp-env validation. It does not change source, public MCP params or
+payloads, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle state,
+M6/migration/quarantine state, harness files/settings/hooks/adapters, native Claude state,
+deletion, rollback, or user-owned files.
