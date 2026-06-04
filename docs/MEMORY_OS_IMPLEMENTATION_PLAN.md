@@ -812,9 +812,9 @@ Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
 T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T226 supersedes T224 as the exact
-runtime-refresh approval gate after the T225 binary-relevant fixture hardening, installed runtime
-has not been refreshed for the T217/T221/T223 source changes or the T225 combined-path fixture,
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T228 supersedes T226 as the exact
+runtime-refresh approval gate after the T227 binary-relevant startup-style tag fixture, installed
+runtime has not been refreshed for the T217/T221/T223 source changes or the T225/T227 fixtures,
 hosts still need to provide real external-session labels, and stale active handoffs remain until a
 future non-dry-run handoff update or exact lifecycle cleanup.
 
@@ -6614,3 +6614,18 @@ passed the new exact fixture, adjacent project-name/tag/limit fixtures, full `me
 `cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`. Because T227
 changed binary-relevant `engram-tests` after T226, T226 is now stale for exact execution and must be
 superseded by a refreshed runtime approval packet before any install/restart/live validation.
+
+T228 matrix note:
+`docs/BRAIN_HARNESS_T228_T217_T221_T223_T225_T227_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-04.md`
+supersedes T226 as the exact runtime-refresh approval packet. T226's baseline became stale after
+T227 intentionally changed binary-relevant `engram-tests` to harden the startup-style
+project-name-only-plus-current-plan-tag fixture. T228 anchors future execution to source baseline
+`993e3c991e70247abc74477c0879a633410858ec` and combines live validation for the T217 MCP
+`ENGRAM_EXTERNAL_SESSION_ID` fallback with read-only live validation for T227
+`memory(action="list", project_name="engram", tags=["current-plan"])` scope inference before tag
+filtering, T221/T225 `memory(action="list", project_name="engram", limit=1)` scope inference plus
+limit preservation, and T223 explicit scoped post-filter `limit` handling. T228 is docs-only and
+has not executed install/restart/temp-env validation. It does not change source, public MCP params
+or payloads, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle state,
+M6/migration/quarantine state, harness files/settings/hooks/adapters, native Claude state,
+deletion, rollback, or user-owned files.
