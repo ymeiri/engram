@@ -6253,3 +6253,19 @@ before final validation. T202 does not change production behavior, installed run
 state, ranking/`orient`, public MCP shape, schema/storage/index/document-index behavior, hooks,
 settings, adapters, M6/migration/quarantine, native Claude, deletion, rollback, or user-owned
 files.
+
+T203 matrix note:
+`docs/BRAIN_HARNESS_T203_HANDOFF_SUPERSESSION_CONVERGENCE_2026-06-04.md` tightens the T201 write
+semantics so a future non-dry-run rolling handoff update converges all active same-scope handoff
+predecessors, not only the newest previous item. The new handoff still saves first, preserves
+`previous_id` as the newest predecessor for response compatibility, records every active matching
+predecessor ID in `supersedes`, and then marks each previous matching handoff `superseded` with
+tool-call evidence. Dry-run remains read-only and returns only the planned supersession links.
+Validation passed with `cargo test -p engram-index handoff`,
+`cargo test -p engram-tests --test harness_tests`, `cargo fmt --all --check`,
+`cargo check -p engram-cli`, and `git diff --check`. T203 does not mutate existing live
+MemoryItems, run `lint apply_safe`, refresh installed runtime, change search ranking/`orient`,
+public MCP shape, schema/storage/index/document-index behavior, hooks, settings, adapters,
+M6/migration/quarantine, native Claude, deletion, rollback, or user-owned files. Pre-T203 stale
+live handoffs remain visible until a refreshed runtime performs a future handoff write or separate
+lifecycle cleanup is explicitly run.
