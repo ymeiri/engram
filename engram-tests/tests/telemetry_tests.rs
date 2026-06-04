@@ -1039,6 +1039,34 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
 }
 
 #[tokio::test]
+async fn mcp_telemetry_tool_rejects_too_long_external_session_id() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("search".to_string());
+    trace_request.query = Some("validate external session length".to_string());
+    trace_request.external_session_id = Some("x".repeat(257));
+
+    let err = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect_err("too-long external_session_id should be rejected");
+    assert!(
+        err.contains("external_session_id must be 256 characters or fewer"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
 async fn mcp_telemetry_filters_traces_feedback_and_eval_by_scenario_and_arm() {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)

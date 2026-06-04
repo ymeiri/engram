@@ -6466,3 +6466,19 @@ does not edit the review workspace, run M6 commands, infer candidate decisions, 
 MemoryItems, mutate lifecycle state, change ranking/`orient`, public MCP/schema/storage/index/
 document-index behavior, harness files, runtime configuration, native Claude state, or user-owned
 files.
+
+T217 matrix note:
+`docs/BRAIN_HARNESS_T217_MCP_EXTERNAL_SESSION_ENV_FALLBACK_2026-06-04.md` implements a narrow
+source-level external-session joinability repair for MCP callers. `engram-mcp/src/tools.rs` now
+falls back to `ENGRAM_EXTERNAL_SESSION_ID` when the existing request `external_session_id` is
+absent or whitespace, and only at telemetry call sites: unified `search`, `orient`,
+`telemetry(record_trace)`, `telemetry(submit_feedback)`, and `memory(changes_since)`. Explicit
+request values still win, whitespace normalizes to unset, no public MCP parameters or response
+fields changed, and downstream telemetry validation still rejects overlong labels. Validation
+passed with MCP resolver unit tests, the focused overlong-label MCP telemetry test, the full
+telemetry integration target, `cargo fmt --all --check`, `cargo check -p engram-cli`, and
+`git diff --check`. This is source-level only: the installed daemon/runtime was not refreshed, and
+hosts still need to provide a real `ENGRAM_EXTERNAL_SESSION_ID`; Engram still does not synthesize
+host labels. T217 does not change ranking/`orient` payloads, schema/storage/index/document-index
+behavior, lifecycle state, M6/migration/quarantine state, hooks/settings/adapters, native Claude
+state, deletion, rollback, or user-owned files.

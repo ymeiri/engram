@@ -42,10 +42,13 @@ use engram_index::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
+
+const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
 
 /// Shared state for MCP tools.
 pub struct ToolState {
@@ -79,6 +82,29 @@ pub struct ToolState {
     pub search_service: Arc<RwLock<Option<SearchService>>>,
     /// The brain harness telemetry service.
     pub telemetry_service: Arc<RwLock<Option<TelemetryService>>>,
+}
+
+fn normalize_external_session_id(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
+
+fn resolve_external_session_id(request_value: Option<String>) -> Option<String> {
+    resolve_external_session_id_with_env(request_value, env::var(EXTERNAL_SESSION_ID_ENV).ok())
+}
+
+fn resolve_external_session_id_with_env(
+    request_value: Option<String>,
+    env_value: Option<String>,
+) -> Option<String> {
+    normalize_external_session_id(request_value)
+        .or_else(|| normalize_external_session_id(env_value))
 }
 
 impl ToolState {
@@ -3296,6 +3322,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
         .filter(|result| result.source == SearchResultSource::Memory)
         .filter_map(|result| Id::parse(&result.id).ok())
         .collect();
+    let external_session_id = resolve_external_session_id(request.external_session_id.clone());
     let trace_id = record_optional_trace(
         state,
         BrainHarnessTrace::new(BrainHarnessOperation::Search)
@@ -3306,7 +3333,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
                     .map(|id| parse_id(id, "session ID"))
                     .transpose()?,
             )
-            .with_external_session_id(request.external_session_id.clone())
+            .with_external_session_id(external_session_id)
             .with_agent(request.agent.clone())
             .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
             .with_scenario_id(request.scenario_id.clone())
@@ -3465,9 +3492,10 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 .as_deref()
                 .map(BrainHarnessOperation::parse)
                 .ok_or("operation required for record_trace")?;
+            let external_session_id = resolve_external_session_id(request.external_session_id.clone());
             let mut trace = BrainHarnessTrace::new(operation)
                 .with_session(parse_optional_id(&request.session_id, "session ID")?)
-                .with_external_session_id(request.external_session_id.clone())
+                .with_external_session_id(external_session_id)
                 .with_agent(request.agent)
                 .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
                 .with_scenario_id(request.scenario_id)
@@ -3529,7 +3557,8 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             )?;
             let mut feedback = AgentFeedback::new(trace_id);
             feedback.session_id = parse_optional_id(&request.session_id, "session ID")?;
-            feedback.external_session_id = request.external_session_id;
+            feedback.external_session_id =
+                resolve_external_session_id(request.external_session_id.clone());
             feedback.agent = request.agent;
             feedback.used_memory_ids = parse_id_vec(&request.used_memory_ids, "used memory ID")?;
             feedback.rejected_memory_ids =
@@ -7422,6 +7451,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
     let response_shape = request.response_shape.unwrap_or_default();
     let cwd = request.cwd;
     let project = request.project;
+    let external_session_id = resolve_external_session_id(request.external_session_id.clone());
     let mut packet = {
         let service_guard = state.memory_service.read().await;
         let service = service_guard
@@ -7434,7 +7464,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
                 prompt: request.prompt,
                 project: project.clone(),
                 agent: request.agent,
-                external_session_id: request.external_session_id,
+                external_session_id,
                 intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
                 scenario_id: request.scenario_id,
                 arm: request.arm,
@@ -9267,7 +9297,9 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                         cwd: request.cwd.clone(),
                         query: request.query.clone(),
                         intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
-                        external_session_id: request.external_session_id.clone(),
+                        external_session_id: resolve_external_session_id(
+                            request.external_session_id.clone(),
+                        ),
                     },
                 )
                 .await
@@ -10956,5 +10988,83 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
             "Unknown action: '{}'. Valid actions: log, recommend, stats, list, search",
             request.action
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::sync::Mutex;
+
+    static EXTERNAL_SESSION_ID_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvGuard {
+        previous: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(value: Option<&str>) -> Self {
+            let previous = env::var_os(EXTERNAL_SESSION_ID_ENV);
+            match value {
+                Some(value) => env::set_var(EXTERNAL_SESSION_ID_ENV, value),
+                None => env::remove_var(EXTERNAL_SESSION_ID_ENV),
+            }
+            Self { previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => env::set_var(EXTERNAL_SESSION_ID_ENV, value),
+                None => env::remove_var(EXTERNAL_SESSION_ID_ENV),
+            }
+        }
+    }
+
+    #[test]
+    fn external_session_id_request_value_wins_over_env() {
+        let resolved = resolve_external_session_id_with_env(
+            Some(" codex://threads/request ".to_string()),
+            Some("codex://threads/env".to_string()),
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/request"));
+    }
+
+    #[test]
+    fn external_session_id_env_applies_when_request_is_absent() {
+        let resolved =
+            resolve_external_session_id_with_env(None, Some(" codex://threads/env ".to_string()));
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
+    }
+
+    #[test]
+    fn external_session_id_runtime_env_fallback_applies_when_request_is_absent() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::set(Some(" codex://threads/runtime-env "));
+
+        let resolved = resolve_external_session_id(None);
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/runtime-env"));
+    }
+
+    #[test]
+    fn external_session_id_whitespace_request_falls_back_to_env() {
+        let resolved = resolve_external_session_id_with_env(
+            Some(" \t\n ".to_string()),
+            Some("codex://threads/env".to_string()),
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
+    }
+
+    #[test]
+    fn external_session_id_whitespace_env_normalizes_to_none() {
+        let resolved = resolve_external_session_id_with_env(None, Some(" \t\n ".to_string()));
+
+        assert_eq!(resolved, None);
     }
 }
