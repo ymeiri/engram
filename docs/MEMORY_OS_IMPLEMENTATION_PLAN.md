@@ -6374,3 +6374,16 @@ candidate decisions, edit the review workspace, run status/apply/prioritize/expo
 active MemoryItems, mutate lifecycle state, archive memory, delete data, change ranking/`orient`,
 public MCP/schema/storage/index/document-index behavior, harness files, native Claude state,
 runtime configuration, or user-owned files.
+
+T211 matrix note:
+`docs/BRAIN_HARNESS_T211_T209_T210_DOC_INDEX_RESULT_2026-06-04.md` records exact-file document
+indexing for the T209 M6 read-only scoping/status report and the T210 candidate-disposition
+authorization packet. Pre-index document searches missed both new docs in the top five. Indexing
+created 14 chunks for T209 and 13 chunks for T210 with no warnings. Post-index exact title searches
+returned T209 and T210 first with score `1.0`; a content query for the T210A human-disposition gate
+also returned T210 first. Document stats became `source_count=97`, `chunk_count=4408`,
+`searchable_chunk_count=2396`, `orphan_chunk_count=2012`, and `embedding_dimension=384`, so orphan
+count did not increase. T211 does not make candidate decisions, run M6 status/apply/prioritize/
+export/rerun, mutate lifecycle state, archive memory, delete data, change ranking/`orient`, public
+MCP/schema/storage/index behavior, document-index behavior, harness files, native Claude state,
+runtime configuration, or user-owned files.
