@@ -58,6 +58,12 @@ use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+const CODEX_THREAD_ID_ENV: &str = "CODEX_THREAD_ID";
+const CODEX_SHELL_ENV: &str = "CODEX_SHELL";
+const CODEX_ORIGINATOR_ENV: &str = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
+const CODEX_BUNDLE_ID_ENV: &str = "__CFBundleIdentifier";
+const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
+const MAX_CODEX_THREAD_ID_LEN: usize = 128;
 
 /// engram - Personal Knowledge Augmentation System for AI coding agents
 #[derive(Parser)]
@@ -507,7 +513,8 @@ enum Commands {
         #[arg(long)]
         agent: Option<String>,
 
-        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID
+        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID,
+        /// then guarded CODEX_THREAD_ID
         #[arg(long)]
         external_session_id: Option<String>,
 
@@ -1690,7 +1697,8 @@ enum MemoryCommands {
         #[arg(long)]
         query: Option<String>,
 
-        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID
+        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID,
+        /// then guarded CODEX_THREAD_ID
         #[arg(long)]
         external_session_id: Option<String>,
 
@@ -2907,16 +2915,32 @@ fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
 }
 
 fn external_session_id_from_cli(cli_value: Option<String>) -> Option<String> {
-    resolve_external_session_id(cli_value, std::env::var(EXTERNAL_SESSION_ID_ENV).ok())
+    resolve_external_session_id_with_envs(
+        cli_value,
+        std::env::var(EXTERNAL_SESSION_ID_ENV).ok(),
+        std::env::var(CODEX_THREAD_ID_ENV).ok(),
+        codex_host_marker_from_env(),
+    )
 }
 
+#[cfg(test)]
 fn resolve_external_session_id(
     cli_value: Option<String>,
     env_value: Option<String>,
 ) -> Option<String> {
+    resolve_external_session_id_with_envs(cli_value, env_value, None, false)
+}
+
+fn resolve_external_session_id_with_envs(
+    cli_value: Option<String>,
+    env_value: Option<String>,
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
     match cli_value {
         Some(value) => normalize_external_session_id(Some(value)),
-        None => normalize_external_session_id(env_value),
+        None => normalize_external_session_id(env_value)
+            .or_else(|| codex_thread_external_session_id(codex_thread_id, codex_host_detected)),
     }
 }
 
@@ -2928,6 +2952,49 @@ fn normalize_external_session_id(value: Option<String>) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
+}
+
+fn codex_host_marker_from_env() -> bool {
+    codex_host_marker_present(
+        std::env::var(CODEX_SHELL_ENV).ok(),
+        std::env::var(CODEX_ORIGINATOR_ENV).ok(),
+        std::env::var(CODEX_BUNDLE_ID_ENV).ok(),
+    )
+}
+
+fn codex_host_marker_present(
+    codex_shell: Option<String>,
+    codex_originator: Option<String>,
+    bundle_id: Option<String>,
+) -> bool {
+    normalize_external_session_id(codex_shell).is_some()
+        || normalize_external_session_id(codex_originator)
+            .map(|value| value.to_ascii_lowercase().contains("codex"))
+            .unwrap_or(false)
+        || normalize_external_session_id(bundle_id)
+            .map(|value| value == "com.openai.codex")
+            .unwrap_or(false)
+}
+
+fn codex_thread_external_session_id(
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
+    // Codex Desktop exposes a host thread ID; require a Codex marker to avoid generic env leakage.
+    if !codex_host_detected {
+        return None;
+    }
+
+    let thread_id = normalize_external_session_id(codex_thread_id)?;
+    if thread_id.len() > MAX_CODEX_THREAD_ID_LEN
+        || !thread_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return None;
+    }
+
+    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
 }
 
 fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
@@ -9137,6 +9204,115 @@ mod tests {
             resolve_external_session_id(None, Some(" codex://threads/env ".to_string())).as_deref(),
             Some("codex://threads/env")
         );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_flag_before_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                Some(" codex://threads/cli ".to_string()),
+                None,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/cli")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_env_before_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                Some(" codex://threads/env ".to_string()),
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/env")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_codex_thread_id_when_guarded() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" codex-thread_123 ".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/codex-thread_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unguarded_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("codex-thread".to_string()),
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unsafe_codex_thread_ids() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(None, None, Some(" \t\n ".to_string()), true),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(None, None, Some("thread/one".to_string()), true),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("x".repeat(MAX_CODEX_THREAD_ID_LEN + 1)),
+                true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_whitespace_flag_does_not_use_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                Some("   ".to_string()),
+                None,
+                Some("codex-thread".to_string()),
+                true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_detects_codex_host_markers() {
+        assert!(codex_host_marker_present(Some("1".to_string()), None, None));
+        assert!(codex_host_marker_present(
+            None,
+            Some("Codex Desktop".to_string()),
+            None,
+        ));
+        assert!(codex_host_marker_present(
+            None,
+            None,
+            Some("com.openai.codex".to_string()),
+        ));
+        assert!(!codex_host_marker_present(
+            None,
+            Some("other host".to_string()),
+            Some("com.example.other".to_string()),
+        ));
     }
 
     #[test]

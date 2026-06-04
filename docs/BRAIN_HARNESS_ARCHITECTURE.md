@@ -103,9 +103,12 @@ Harness and migration checkpoint, current through 2026-06-04:
   settings remain split across settings files with a user-owned snippet and extra legacy Engram
   permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
   effective-configuration output; prompt-bearing native Claude behavior remains unproved; and
-  external-session joinability still depends on real caller/host labels even though direct CLI and
-  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist. T242 executed the T233
-  runtime-refresh gate on 2026-06-04: the observed installed binary hash was
+  external-session joinability remains only partially validated even though direct CLI and
+  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist and T262 adds a guarded
+  source-level Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing paths. T262
+  does not refresh the installed runtime and does not prove Claude Code, Gemini, or host-wide label
+  adoption. T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
+  binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
   PID `14310` on port `8765`, and the live project-scoped current-plan list no longer leaked the
   out-of-scope `voice-layer` item. This supersedes the older statement that the installed runtime
@@ -233,6 +236,16 @@ Harness and migration checkpoint, current through 2026-06-04:
   Tokio mutex for runtime-env fallback tests. T261 does not push, set upstream, publish a PR, or
   change harness, lifecycle, M6, native-Claude, ranking/`orient`, public MCP, schema/storage/index,
   document-index, runtime, deletion, rollback, force-kill, legacy, or user-owned-file state.
+- T262 adds a guarded source-level Codex Desktop host-label fallback. Existing explicit
+  `external_session_id` values still win, `ENGRAM_EXTERNAL_SESSION_ID` remains second, and
+  `CODEX_THREAD_ID` is used only when a Codex host marker is present and the thread ID is a short
+  safe token, producing `codex://threads/{id}`. Validation caught and fixed a feedback-inheritance
+  regression: `telemetry(submit_feedback)` now uses only an explicit feedback label and otherwise
+  lets `TelemetryService` inherit the trace label. T262 passes focused CLI/MCP resolver tests, full
+  telemetry integration, format, `cargo check -p engram-cli`, clippy, and `git diff --check`. It
+  does not refresh runtime, edit hooks/settings/adapters, change public MCP/schema/storage/index/
+  document-index behavior, mutate lifecycle/M6, run native Claude, push, set upstream, delete,
+  rollback, or touch user-owned files.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

@@ -49,6 +49,12 @@ use tokio::sync::RwLock;
 use tracing::debug;
 
 const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+const CODEX_THREAD_ID_ENV: &str = "CODEX_THREAD_ID";
+const CODEX_SHELL_ENV: &str = "CODEX_SHELL";
+const CODEX_ORIGINATOR_ENV: &str = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
+const CODEX_BUNDLE_ID_ENV: &str = "__CFBundleIdentifier";
+const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
+const MAX_CODEX_THREAD_ID_LEN: usize = 128;
 
 /// Shared state for MCP tools.
 pub struct ToolState {
@@ -96,15 +102,74 @@ fn normalize_external_session_id(value: Option<String>) -> Option<String> {
 }
 
 fn resolve_external_session_id(request_value: Option<String>) -> Option<String> {
-    resolve_external_session_id_with_env(request_value, env::var(EXTERNAL_SESSION_ID_ENV).ok())
+    resolve_external_session_id_with_envs(
+        request_value,
+        env::var(EXTERNAL_SESSION_ID_ENV).ok(),
+        env::var(CODEX_THREAD_ID_ENV).ok(),
+        codex_host_marker_from_env(),
+    )
 }
 
+#[cfg(test)]
 fn resolve_external_session_id_with_env(
     request_value: Option<String>,
     env_value: Option<String>,
 ) -> Option<String> {
+    resolve_external_session_id_with_envs(request_value, env_value, None, false)
+}
+
+fn resolve_external_session_id_with_envs(
+    request_value: Option<String>,
+    env_value: Option<String>,
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
     normalize_external_session_id(request_value)
         .or_else(|| normalize_external_session_id(env_value))
+        .or_else(|| codex_thread_external_session_id(codex_thread_id, codex_host_detected))
+}
+
+fn codex_host_marker_from_env() -> bool {
+    codex_host_marker_present(
+        env::var(CODEX_SHELL_ENV).ok(),
+        env::var(CODEX_ORIGINATOR_ENV).ok(),
+        env::var(CODEX_BUNDLE_ID_ENV).ok(),
+    )
+}
+
+fn codex_host_marker_present(
+    codex_shell: Option<String>,
+    codex_originator: Option<String>,
+    bundle_id: Option<String>,
+) -> bool {
+    normalize_external_session_id(codex_shell).is_some()
+        || normalize_external_session_id(codex_originator)
+            .map(|value| value.to_ascii_lowercase().contains("codex"))
+            .unwrap_or(false)
+        || normalize_external_session_id(bundle_id)
+            .map(|value| value == "com.openai.codex")
+            .unwrap_or(false)
+}
+
+fn codex_thread_external_session_id(
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
+    // Codex Desktop exposes a host thread ID; require a Codex marker to avoid generic env leakage.
+    if !codex_host_detected {
+        return None;
+    }
+
+    let thread_id = normalize_external_session_id(codex_thread_id)?;
+    if thread_id.len() > MAX_CODEX_THREAD_ID_LEN
+        || !thread_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return None;
+    }
+
+    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
 }
 
 impl ToolState {
@@ -3557,8 +3622,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             )?;
             let mut feedback = AgentFeedback::new(trace_id);
             feedback.session_id = parse_optional_id(&request.session_id, "session ID")?;
-            feedback.external_session_id =
-                resolve_external_session_id(request.external_session_id.clone());
+            feedback.external_session_id = normalize_external_session_id(request.external_session_id.clone());
             feedback.agent = request.agent;
             feedback.used_memory_ids = parse_id_vec(&request.used_memory_ids, "used memory ID")?;
             feedback.rejected_memory_ids =
@@ -11006,25 +11070,26 @@ mod tests {
     static EXTERNAL_SESSION_ID_ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
     struct EnvGuard {
+        key: &'static str,
         previous: Option<OsString>,
     }
 
     impl EnvGuard {
-        fn set(value: Option<&str>) -> Self {
-            let previous = env::var_os(EXTERNAL_SESSION_ID_ENV);
+        fn set(key: &'static str, value: Option<&str>) -> Self {
+            let previous = env::var_os(key);
             match value {
-                Some(value) => env::set_var(EXTERNAL_SESSION_ID_ENV, value),
-                None => env::remove_var(EXTERNAL_SESSION_ID_ENV),
+                Some(value) => env::set_var(key, value),
+                None => env::remove_var(key),
             }
-            Self { previous }
+            Self { key, previous }
         }
     }
 
     impl Drop for EnvGuard {
         fn drop(&mut self) {
             match &self.previous {
-                Some(value) => env::set_var(EXTERNAL_SESSION_ID_ENV, value),
-                None => env::remove_var(EXTERNAL_SESSION_ID_ENV),
+                Some(value) => env::set_var(self.key, value),
+                None => env::remove_var(self.key),
             }
         }
     }
@@ -11047,14 +11112,124 @@ mod tests {
         assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
     }
 
+    #[test]
+    fn external_session_id_request_wins_over_codex_thread_id() {
+        let resolved = resolve_external_session_id_with_envs(
+            Some(" codex://threads/request ".to_string()),
+            Some("codex://threads/env".to_string()),
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/request"));
+    }
+
+    #[test]
+    fn external_session_id_env_wins_over_codex_thread_id() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            Some(" codex://threads/env ".to_string()),
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_applies_with_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some(" codex-thread_123 ".into()),
+            true,
+        );
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("codex://threads/codex-thread_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_requires_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("codex-thread".to_string()),
+            false,
+        );
+
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_rejects_unsafe_values() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(None, None, Some(" \t\n ".to_string()), true),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(None, None, Some("thread/one".to_string()), true),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("x".repeat(MAX_CODEX_THREAD_ID_LEN + 1)),
+                true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_codex_host_markers_detect_codex_only() {
+        assert!(codex_host_marker_present(Some("1".to_string()), None, None));
+        assert!(codex_host_marker_present(
+            None,
+            Some("Codex Desktop".to_string()),
+            None,
+        ));
+        assert!(codex_host_marker_present(
+            None,
+            None,
+            Some("com.openai.codex".to_string()),
+        ));
+        assert!(!codex_host_marker_present(
+            None,
+            Some("other host".to_string()),
+            Some("com.example.other".to_string()),
+        ));
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn external_session_id_runtime_env_fallback_applies_when_request_is_absent() {
         let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
-        let _env = EnvGuard::set(Some(" codex://threads/runtime-env "));
+        let _env = EnvGuard::set(
+            EXTERNAL_SESSION_ID_ENV,
+            Some(" codex://threads/runtime-env "),
+        );
 
         let resolved = resolve_external_session_id(None);
 
         assert_eq!(resolved.as_deref(), Some("codex://threads/runtime-env"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn external_session_id_runtime_codex_thread_id_applies_when_guarded() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
+        let _engram_env = EnvGuard::set(EXTERNAL_SESSION_ID_ENV, None);
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, Some(" codex-thread_123 "));
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, Some("1"));
+
+        let resolved = resolve_external_session_id(None);
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("codex://threads/codex-thread_123")
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -11072,7 +11247,10 @@ mod tests {
         state.init_telemetry(telemetry).await;
 
         let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
-        let _env = EnvGuard::set(Some(" codex://threads/tool-runtime-env "));
+        let _env = EnvGuard::set(
+            EXTERNAL_SESSION_ID_ENV,
+            Some(" codex://threads/tool-runtime-env "),
+        );
 
         let response = telemetry_new(
             &state,
