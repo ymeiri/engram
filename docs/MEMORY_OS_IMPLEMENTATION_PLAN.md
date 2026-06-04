@@ -7086,3 +7086,14 @@ lifecycle state, run M6/migration/quarantine, change ranking/`orient`, public MC
 index/document-index behavior, reconcile branches, delete, rollback, force-kill, refresh runtime,
 legacy simplification, or user-owned files. Any next live native-Claude packet must be exact,
 default-deny, and include pre-authorized cleanup if EOF hangs.
+
+T255 native-Claude prompt-bearing parity approval packet note:
+`docs/BRAIN_HARNESS_T255_NATIVE_CLAUDE_PROMPT_BEARING_PARITY_APPROVAL_PACKET_2026-06-04.md`
+prepares a future exact/default-deny native Claude validation for one prompt-bearing MCP-`orient`
+run. It has not been executed. The packet tests only whether a native prompt-bearing Claude session
+can receive startup guidance, use live Engram `orient`, answer with the trace/top item, and exit or
+be cleaned up under one pre-authorized process-group SIGINT if EOF hangs. T255 does not authorize
+`/hooks`, hook/settings/adapters edits, harness install, lifecycle cleanup, Memory OS archive,
+`lint apply_safe`, M6/migration/quarantine, ranking/`orient`, public MCP/schema/storage/index/
+document-index behavior, branch reconciliation, deletion, rollback, force-kill beyond the packet,
+runtime refresh, legacy simplification, or user-owned-file changes.

@@ -186,6 +186,11 @@ Harness and migration checkpoint, current through 2026-06-04:
   hook visibility, prompt-bearing native Claude behavior, host-label adoption, lifecycle cleanup,
   M6, and branch synchronization are still open. Any next live native-Claude packet must be exact
   and default-deny, including pre-authorized cleanup if EOF hangs.
+- T255 prepares that next default-deny live packet for one prompt-bearing native Claude
+  MCP-`orient` validation. It has not been executed. The packet authorizes no `/hooks` command,
+  hook/settings edit, harness install, lifecycle cleanup, M6 action, branch reconciliation, or
+  fallback retry; it exists only so a future exact approval can run one bounded native prompt with
+  preflight/postflight snapshots and pre-authorized process-group SIGINT cleanup if EOF hangs.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
