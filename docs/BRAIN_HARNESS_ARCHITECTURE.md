@@ -202,6 +202,12 @@ Harness and migration checkpoint, current through 2026-06-04:
   the confidence gate because only two intents have feedback; the 50-trace window still passes at
   94% coverage across four intents. Treat telemetry as sampled and window-sensitive, not exhaustive
   completion proof.
+- T258 records read-only branch synchronization evidence. The current branch has no upstream
+  configured; local `main` and local `origin/main` are both the merge-base
+  `1d944f0af45e27661050586c9aa8e9189772ecc9`; local ahead/behind checks show `0 476`
+  against both refs; and `git log HEAD..main` is empty. T258 does not fetch, push, pull, rebase,
+  merge, or set upstream. The next branch-sync step is explicit branch-sync approval for
+  remote-freshness fetch and recheck before any publication or reconciliation.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

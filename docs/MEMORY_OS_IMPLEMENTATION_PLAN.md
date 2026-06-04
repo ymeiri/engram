@@ -828,8 +828,9 @@ disposition worksheet, T251 confirms pending T247/T248 lifecycle targets remain 
 T252 preserves the exact lifecycle approval boundary despite the user's broad continue instruction,
 T253 reconciles the telemetry intent-coverage catch-up, T254 scopes the remaining
 native-Claude/harness parity gate, T255 prepares but does not execute a prompt-bearing native
-Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, and T257 corrects
-post-T256 telemetry-window wording. Current read-only
+Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, T257 corrects
+post-T256 telemetry-window wording, and T258 records read-only branch synchronization strategy.
+Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
@@ -872,7 +873,7 @@ Gate-level T257 status:
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
 | Host external-session labels | Core support exists; real caller adoption remains incomplete. | Validate with real Codex/Claude/Gemini host labels. |
-| Branch synchronization | Unresolved divergent-branch state remains outside docs-only slices. | Explicit branch reconciliation strategy before pull/rebase/merge. |
+| Branch synchronization | Read-only T258 evidence shows no upstream configured, local `main`/`origin/main` as merge-base `1d944f0af45e27661050586c9aa8e9189772ecc9`, and `0 476` ahead/behind against local refs. Remote freshness is unverified because T258 did not fetch. | Explicit branch-sync approval for fetch/recheck before any push, pull, rebase, merge, upstream setup, or PR publication. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
 T257 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
@@ -7145,3 +7146,14 @@ coverage across four intents with clean outcome counters. T257 is docs-only and 
 M6, lifecycle, native-Claude, host-label, branch, runtime, harness, ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior, deletion, rollback, force-kill, legacy, or
 user-owned-file state.
+
+T258 branch synchronization read-only strategy note:
+`docs/BRAIN_HARNESS_T258_BRANCH_SYNC_READ_ONLY_STRATEGY_2026-06-04.md` records local branch state
+without fetching or reconciling. The current branch `yuval.meiri/memory-os-phase0` has no upstream
+configured. Local `main` and local `origin/main` are both merge-base
+`1d944f0af45e27661050586c9aa8e9189772ecc9`, ahead/behind checks show `0 476` against both local
+refs, and `git log HEAD..main` is empty. Because no fetch ran, remote freshness remains unverified.
+The next branch-sync move is explicit approval to fetch and recheck before any push, pull, rebase,
+merge, upstream setup, or PR publication. T258 does not mutate branch, remote, lifecycle, M6,
+native-Claude, host-label, runtime, harness, ranking/`orient`, public MCP/schema/storage/index/
+document-index, deletion, rollback, force-kill, legacy, or user-owned-file state.
