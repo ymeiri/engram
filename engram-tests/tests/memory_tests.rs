@@ -369,6 +369,65 @@ async fn test_mcp_memory_list_project_name_implies_project_scope_before_limit() 
 }
 
 #[tokio::test]
+async fn test_mcp_memory_list_project_name_scope_inference_preserves_limit() {
+    let state = setup_tool_state().await;
+
+    let mut older_matching = with_writer(request("add"));
+    older_matching.kind = Some("decision".to_string());
+    older_matching.title = Some("Older Engram project-only item".to_string());
+    older_matching.content =
+        Some("This older matching item should be eligible after inferred scope.".to_string());
+    older_matching.origin = Some("tool_result".to_string());
+    older_matching.scope_type = Some("project".to_string());
+    older_matching.project_name = Some("engram".to_string());
+    older_matching.evidence = manual_review_evidence("Reviewed older project-only limit fixture.");
+    tools::memory_new(&state, older_matching)
+        .await
+        .expect("older matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut newer_matching = with_writer(request("add"));
+    newer_matching.kind = Some("decision".to_string());
+    newer_matching.title = Some("Newer Engram project-only item".to_string());
+    newer_matching.content =
+        Some("This newer matching item should be eligible after inferred scope.".to_string());
+    newer_matching.origin = Some("tool_result".to_string());
+    newer_matching.scope_type = Some("project".to_string());
+    newer_matching.project_name = Some("engram".to_string());
+    newer_matching.evidence = manual_review_evidence("Reviewed newer project-only limit fixture.");
+    tools::memory_new(&state, newer_matching)
+        .await
+        .expect("newer matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("DD source project-only item".to_string());
+    wrong_scope.content = Some("This newer wrong-project item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("dd-source".to_string());
+    wrong_scope.evidence = manual_review_evidence("Reviewed wrong-scope project-only fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
 async fn test_mcp_memory_add_requires_writer_provenance() {
     let state = setup_tool_state().await;
 

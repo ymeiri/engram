@@ -6573,3 +6573,15 @@ validation. It does not change source, public MCP params or payloads, ranking/`o
 schema/storage/index/document-index behavior, lifecycle state, M6/migration/quarantine state,
 harness files/settings/hooks/adapters, native Claude state, deletion, rollback, or user-owned
 files.
+
+T225 matrix note:
+`docs/BRAIN_HARNESS_T225_MEMORY_LIST_PROJECT_NAME_LIMIT_FIXTURE_2026-06-04.md` adds focused
+test-only coverage for the exact combined path planned in runtime validation:
+`memory(action="list", status_filter="active", project_name="engram", limit=1)` with
+`scope_type` omitted. The fixture adds two Engram project-scoped rows plus a newer wrong-project
+row, then asserts the result count is `1` and remains Engram-scoped. This hardens the combined T221
+scope-inference plus T223 post-filter-limit behavior without changing production source. Validation
+passed the new exact fixture, adjacent T221/T223 fixtures, full `memory_tests`, `cargo fmt --all
+--check`, `cargo check -p engram-cli`, and `git diff --check`. Because T225 changed
+binary-relevant `engram-tests` after T224, T224 is now stale for exact execution and must be
+superseded by a refreshed runtime approval packet before any install/restart/live validation.
