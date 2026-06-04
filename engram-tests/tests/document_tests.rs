@@ -401,6 +401,111 @@ async fn test_search_empty_database() {
 }
 
 #[tokio::test]
+async fn test_source_metadata_search_exact_title_returns_first() {
+    let repo = setup_repo().await;
+
+    let target = DocSource::local_file(
+        "/docs/BRAIN_HARNESS_T202_HANDOFF_SUPERSESSION_MCP_BOUNDARY_VALIDATION_2026-06-04.md",
+    )
+    .with_title("T202 Handoff Supersession MCP Boundary Validation");
+    let decoy =
+        DocSource::local_file("/docs/other-validation.md").with_title("Other Validation Notes");
+
+    repo.save_source(&target).await.unwrap();
+    repo.save_source(&decoy).await.unwrap();
+    repo.save_chunks(
+        &target.id,
+        vec![(
+            DocChunk::new(target.id, "# T202", 1, "MCP boundary test result"),
+            vec![0.1, 0.2, 0.3],
+        )],
+    )
+    .await
+    .unwrap();
+    repo.save_chunks(
+        &decoy.id,
+        vec![(
+            DocChunk::new(decoy.id, "# Other", 1, "Validation content"),
+            vec![0.3, 0.2, 0.1],
+        )],
+    )
+    .await
+    .unwrap();
+
+    let results = repo
+        .search_source_metadata("T202 Handoff Supersession MCP Boundary Validation", 5)
+        .await
+        .expect("source metadata search failed");
+
+    assert_eq!(results[0].source.id, target.id);
+    assert_eq!(results[0].score, 1.0);
+}
+
+#[tokio::test]
+async fn test_source_metadata_search_exact_filename_stem_returns_first() {
+    let repo = setup_repo().await;
+
+    let target = DocSource::local_file(
+        "/docs/BRAIN_HARNESS_T202_HANDOFF_SUPERSESSION_MCP_BOUNDARY_VALIDATION_2026-06-04.md",
+    )
+    .with_title("T202 Handoff Supersession MCP Boundary Validation");
+    repo.save_source(&target).await.unwrap();
+    repo.save_chunks(
+        &target.id,
+        vec![(
+            DocChunk::new(target.id, "# T202", 1, "MCP boundary test result"),
+            vec![0.1, 0.2, 0.3],
+        )],
+    )
+    .await
+    .unwrap();
+
+    let results = repo
+        .search_source_metadata(
+            "BRAIN_HARNESS_T202_HANDOFF_SUPERSESSION_MCP_BOUNDARY_VALIDATION_2026-06-04",
+            5,
+        )
+        .await
+        .expect("source metadata search failed");
+
+    assert_eq!(results[0].source.id, target.id);
+    assert_eq!(results[0].score, 1.0);
+}
+
+#[tokio::test]
+async fn test_source_metadata_search_allows_specific_substring_but_rejects_generic_term() {
+    let repo = setup_repo().await;
+
+    let target = DocSource::local_file(
+        "/docs/BRAIN_HARNESS_T202_HANDOFF_SUPERSESSION_MCP_BOUNDARY_VALIDATION_2026-06-04.md",
+    )
+    .with_title("T202 Handoff Supersession MCP Boundary Validation");
+    repo.save_source(&target).await.unwrap();
+    repo.save_chunks(
+        &target.id,
+        vec![(
+            DocChunk::new(target.id, "# T202", 1, "MCP boundary test result"),
+            vec![0.1, 0.2, 0.3],
+        )],
+    )
+    .await
+    .unwrap();
+
+    let specific = repo
+        .search_source_metadata("Handoff Supersession MCP Boundary", 5)
+        .await
+        .expect("source metadata search failed");
+    assert_eq!(specific[0].source.id, target.id);
+    assert!(specific[0].score < 1.0);
+
+    let generic = repo
+        .search_source_metadata("Validation", 5)
+        .await
+        .expect("source metadata search failed");
+    assert!(generic.is_empty());
+}
+
+#[tokio::test]
 async fn test_search_ignores_orphan_chunks_before_limit() {
     let repo = setup_repo().await;
 

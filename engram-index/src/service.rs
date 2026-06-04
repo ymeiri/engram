@@ -4,6 +4,7 @@
 //! combining the ingestion pipeline with the storage repository.
 
 use crate::digest::{DigestService, DigestSourceIndexDocument, DigestSourceIndexOptions};
+use crate::document_search::merge_document_results;
 use crate::error::{IndexError, IndexResult};
 use crate::pipeline::{DocumentIngestionPlan, IndexedDocument, Pipeline, PipelineConfig};
 use engram_core::document::{DocChunk, DocSearchResult, DocSource};
@@ -228,8 +229,10 @@ impl DocumentService {
         // Generate embedding for the query
         let query_embedding = self.embedder.embed(query)?;
 
-        // Search in database
-        let results = self.repo.search_similar(&query_embedding, limit).await?;
+        // Search chunks semantically and source metadata lexically for known-item lookups.
+        let semantic_results = self.repo.search_similar(&query_embedding, limit).await?;
+        let lexical_results = self.repo.search_source_metadata(query, limit).await?;
+        let results = merge_document_results(semantic_results, lexical_results, limit);
 
         info!("Found {} results for query", results.len());
         Ok(results)

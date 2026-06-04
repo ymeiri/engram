@@ -6299,3 +6299,19 @@ does not create active MemoryItems, mutate lifecycle state, run `lint apply_safe
 M6/migration/quarantine actions, change search ranking/`orient`, public MCP shape,
 schema/storage/index/document-index behavior, hooks, settings, adapters, runtime configuration,
 native Claude, deletion, rollback, force-kill, or user-owned files.
+
+T206 matrix note:
+`docs/BRAIN_HARNESS_T206_DOCUMENT_SOURCE_METADATA_SEARCH_2026-06-04.md` implements a narrow
+document-search known-item repair for the T205 T202 visibility caveat. Direct document search and
+unified-search document results now merge existing semantic chunk hits with metadata-only
+`DocSource` title/path/basename/filename-stem matches. Exact normalized source metadata matches
+score `1.0`; specific long substring matches score `0.84`; short generic terms such as
+`Validation` do not trigger metadata promotion. Lexical and semantic hits for the same source are
+deduplicated by promoting the existing semantic hit, and the original result limit is preserved.
+Validation passed with focused source-metadata and merge tests, full document tests, full unified
+search tests, `cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`.
+T206 does not change public MCP request/response shape, `orient`, memory ranking, memory
+lifecycle, schema/storage definitions, document indexing/chunking/embedding behavior, M6/
+migration/quarantine state, harness files/settings/hooks/adapters, runtime configuration,
+deletion, rollback, native Claude, or user-owned files. The installed daemon still needs a
+separate runtime refresh/live validation before T206 can be claimed live.

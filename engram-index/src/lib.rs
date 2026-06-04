@@ -29,6 +29,7 @@
 pub mod chunker;
 pub mod coordination;
 pub mod digest;
+pub(crate) mod document_search;
 pub mod entity;
 pub mod error;
 pub mod graph;

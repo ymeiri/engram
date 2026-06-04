@@ -9,9 +9,14 @@ use engram_core::document::{DocChunk, DocSearchResult, DocSource, SourceType};
 use engram_core::id::Id;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::Path;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use tracing::{debug, info};
+
+const EXACT_SOURCE_METADATA_SCORE: f32 = 1.0;
+const STRONG_SOURCE_METADATA_SCORE: f32 = 0.84;
+const MIN_STRONG_METADATA_QUERY_LEN: usize = 12;
 
 /// SurrealDB datetime representation (handles both string and native formats).
 #[derive(Debug, Clone, Deserialize)]
@@ -481,6 +486,89 @@ impl DocumentRepo {
         Ok(results)
     }
 
+    /// Search source title/path metadata for known-item document queries.
+    ///
+    /// This complements vector chunk search for exact document title, path, basename, and
+    /// filename-stem lookups. It returns one representative chunk per matching source.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if source or chunk queries fail.
+    pub async fn search_source_metadata(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> StoreResult<Vec<DocSearchResult>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let normalized_query = normalize_source_metadata(query);
+        if normalized_query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut source_result = self
+            .db
+            .query(
+                r#"
+                SELECT meta::id(id) as id, source_type, path_or_url, title, space_key, last_indexed, ttl_days
+                FROM doc_source
+                "#,
+            )
+            .await?;
+
+        let mut matched_sources: Vec<(DocSource, f32)> = source_result
+            .take::<Vec<DocSourceRecord>>(0)?
+            .into_iter()
+            .map(|record| record.into_doc_source())
+            .filter_map(|source| {
+                source_metadata_score(&normalized_query, &source).map(|score| (source, score))
+            })
+            .collect();
+
+        if matched_sources.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        matched_sources.sort_by(|(left_source, left_score), (right_source, right_score)| {
+            right_score
+                .partial_cmp(left_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left_source.path_or_url.cmp(&right_source.path_or_url))
+        });
+
+        let source_ids: Vec<String> = matched_sources
+            .iter()
+            .map(|(source, _)| source.id.to_string())
+            .collect();
+        let first_chunks = self.first_chunks_for_sources(&source_ids).await?;
+
+        let mut results = Vec::new();
+        for (source, score) in matched_sources {
+            let source_id = source.id.to_string();
+            let Some(chunk) = first_chunks.get(&source_id).cloned() else {
+                debug!(
+                    "Source metadata match has no chunks, skipping {}",
+                    source.path_or_url
+                );
+                continue;
+            };
+
+            results.push(DocSearchResult {
+                chunk,
+                source,
+                score,
+            });
+
+            if results.len() == limit {
+                break;
+            }
+        }
+
+        Ok(results)
+    }
+
     /// Search with a minimum score threshold.
     ///
     /// # Errors
@@ -513,6 +601,35 @@ impl DocumentRepo {
 
         let records: Vec<DocChunkRecord> = result.take(0)?;
         Ok(records.into_iter().map(|r| r.into_doc_chunk()).collect())
+    }
+
+    async fn first_chunks_for_sources(
+        &self,
+        source_ids: &[String],
+    ) -> StoreResult<HashMap<String, DocChunk>> {
+        if source_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let mut result = self
+            .db
+            .query(
+                r#"
+                SELECT meta::id(id) as id, source_id, heading_path, heading_level, content, start_line, end_line, parent_id
+                FROM doc_chunk
+                WHERE source_id IN $source_ids
+                ORDER BY source_id, start_line, end_line
+                "#,
+            )
+            .bind(("source_ids", source_ids.to_vec()))
+            .await?;
+
+        let records: Vec<DocChunkRecord> = result.take(0)?;
+        let mut chunks = HashMap::new();
+        for chunk in records.into_iter().map(|record| record.into_doc_chunk()) {
+            chunks.entry(chunk.source_id.to_string()).or_insert(chunk);
+        }
+        Ok(chunks)
     }
 
     /// Delete chunks for missing source IDs only when those IDs are still orphaned.
@@ -899,6 +1016,90 @@ fn classify_recovery_group(
     } else {
         DocumentRecoveryClass::SafeToQuarantine
     }
+}
+
+fn source_metadata_score(normalized_query: &str, source: &DocSource) -> Option<f32> {
+    let exact_candidates = source_metadata_exact_candidates(source);
+    if exact_candidates
+        .iter()
+        .any(|candidate| candidate == normalized_query)
+    {
+        return Some(EXACT_SOURCE_METADATA_SCORE);
+    }
+
+    if normalized_query.len() < MIN_STRONG_METADATA_QUERY_LEN {
+        return None;
+    }
+
+    source_metadata_strong_candidates(source)
+        .into_iter()
+        .filter(|candidate| candidate.len() >= MIN_STRONG_METADATA_QUERY_LEN)
+        .any(|candidate| {
+            candidate.contains(normalized_query) || normalized_query.contains(&candidate)
+        })
+        .then_some(STRONG_SOURCE_METADATA_SCORE)
+}
+
+fn source_metadata_exact_candidates(source: &DocSource) -> Vec<String> {
+    let mut candidates = source_metadata_strong_candidates(source);
+    push_normalized_candidate(&mut candidates, &source.path_or_url);
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+fn source_metadata_strong_candidates(source: &DocSource) -> Vec<String> {
+    let mut candidates = Vec::new();
+    if let Some(title) = &source.title {
+        push_normalized_candidate(&mut candidates, title);
+    }
+    if let Some(file_name) = source_file_name(&source.path_or_url) {
+        push_normalized_candidate(&mut candidates, &file_name);
+    }
+    if let Some(file_stem) = source_file_stem(&source.path_or_url) {
+        push_normalized_candidate(&mut candidates, &file_stem);
+    }
+    candidates.sort();
+    candidates.dedup();
+    candidates
+}
+
+fn push_normalized_candidate(candidates: &mut Vec<String>, value: &str) {
+    let normalized = normalize_source_metadata(value);
+    if !normalized.is_empty() {
+        candidates.push(normalized);
+    }
+}
+
+fn source_file_name(path_or_url: &str) -> Option<String> {
+    let stripped = strip_url_suffixes(path_or_url);
+    Path::new(stripped)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn source_file_stem(path_or_url: &str) -> Option<String> {
+    let stripped = strip_url_suffixes(path_or_url);
+    Path::new(stripped)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn strip_url_suffixes(value: &str) -> &str {
+    let suffix_start = [value.find('?'), value.find('#')]
+        .into_iter()
+        .flatten()
+        .min()
+        .unwrap_or(value.len());
+    &value[..suffix_start]
+}
+
+fn normalize_source_metadata(content: &str) -> String {
+    normalize_for_fingerprint(content)
 }
 
 /// Normalize text for deterministic content fingerprinting and substring matching.
