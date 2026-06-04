@@ -123,6 +123,15 @@ Harness and migration checkpoint, current through 2026-06-04:
   Because this lint sample is not a full inventory, do not infer that all Engram-scoped lifecycle
   debt is gone. The remaining lifecycle gate is broader exact-target review; no archive or
   `lint apply_safe` action was run.
+- T246 read-only lifecycle inventory scoping clarifies that current `lint` is global, priority
+  sorted, and limit-truncated, so it cannot prove an exhaustive Engram-scoped lifecycle inventory.
+  Project-scoped telemetry-memory listing plus exact search/get/graph identified one unranked
+  active candidate for future exact-target review: `019e8291-40aa-71a0-b16b-9ba7b6446cc6`
+  (`Post-T76 rolling telemetry gate remains false`). Later T244 telemetry evidence shows the
+  rolling gate passed at `2026-06-04T11:14:07.108605Z`, and recent feedback marks the T76 item as
+  stale. T246 did not mutate lifecycle state, did not rank all Engram lifecycle debt, and does not
+  authorize archive or `lint apply_safe`; any future packet must rerun fresh get/graph/telemetry
+  evidence and stay exact-target/default-deny.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

@@ -6942,3 +6942,15 @@ exact-target review before any archive or `lint apply_safe`. T245 does not mutat
 run M6/migration/quarantine actions, change ranking/`orient`, public MCP/schema/storage/index/
 document-index behavior, harness files/settings/hooks/adapters, native Claude state, deletion,
 rollback, force-kill, legacy simplification, or user-owned files.
+
+T246 lifecycle inventory scoping note:
+`docs/BRAIN_HARNESS_T246_LIFECYCLE_INVENTORY_SCOPING_2026-06-04.md` records a docs-only read-only
+follow-up to T245. Source reading showed `lint(action="run")` loads all MemoryItems globally,
+priority-sorts findings, and truncates by limit, so sampled lint is lifecycle pressure rather than
+an exhaustive Engram-scoped inventory. Fresh project-scoped telemetry memory listing plus exact
+search/get/graph identified one unranked active candidate for future exact-target review:
+`019e8291-40aa-71a0-b16b-9ba7b6446cc6` (`Post-T76 rolling telemetry gate remains false`). T244
+later recorded a point-in-time passing rolling telemetry gate at `2026-06-04T11:14:07.108605Z`,
+and recent feedback marks the T76 item as stale. T246 does not mutate lifecycle state, rank all
+Engram lifecycle debt, or authorize archive/`lint apply_safe`; any future packet must rerun fresh
+get/graph/telemetry evidence and remain exact-target/default-deny.
