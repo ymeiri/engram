@@ -215,6 +215,13 @@ Harness and migration checkpoint, current through 2026-06-04:
   telemetry conflicts in `engram-index/src/telemetry.rs` and
   `engram-tests/tests/telemetry_tests.rs`. T259 does not publish, push, pull, rebase, merge, or
   set upstream. The next branch-sync step is a dedicated reconciliation plan.
+- T260 records that dedicated branch reconciliation plan. Source inspection shows current HEAD
+  already contains the upstream applied-filter concept as a deeper implementation: repo-scoped
+  trace queries, feedback-by-sampled-trace selection, applied filters in reports, MCP project
+  passthrough, and broader telemetry tests. The next implementation should use a regular merge of
+  `origin/main` into this branch, not a 372-commit rebase or broad `-s ours`, preserve current
+  telemetry semantics where they subsume upstream, inspect auto-merged core/MCP field-chain
+  semantics, and validate with telemetry tests plus workspace checks before any push/upstream/PR.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

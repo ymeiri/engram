@@ -830,7 +830,8 @@ T253 reconciles the telemetry intent-coverage catch-up, T254 scopes the remainin
 native-Claude/harness parity gate, T255 prepares but does not execute a prompt-bearing native
 Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, T257 corrects
 post-T256 telemetry-window wording, T258 records read-only branch synchronization strategy, and
-T259 runs the remote-freshness recheck without reconciling.
+T259 runs the remote-freshness recheck without reconciling, and T260 records the branch
+reconciliation plan.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -853,7 +854,7 @@ native-Claude, or branch completion. T210 remains the M6 source of truth: all 12
 generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
 approved.
 
-Current T259 matrix snapshot:
+Current T260 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
@@ -874,7 +875,7 @@ Gate-level T257 status:
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
 | Host external-session labels | Core support exists; real caller adoption remains incomplete. | Validate with real Codex/Claude/Gemini host labels. |
-| Branch synchronization | T259 fetched `origin` and verified fresh `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423`. The branch still has no upstream, `origin/main...HEAD` is `2 372`, merge-base is `50de8e0eb7aed64b943322e8331d993e8ed39e53`, and read-only `git merge-tree` predicts telemetry conflicts in `engram-index/src/telemetry.rs` and `engram-tests/tests/telemetry_tests.rs`. | Dedicated reconciliation plan before any push, pull, rebase, merge, upstream setup, PR publication, or backup-push policy. |
+| Branch synchronization | T260 source inspection shows current HEAD already subsumes upstream `711c736` applied-filter behavior with repo-scoped filtering, feedback-by-sampled-trace selection, MCP project passthrough, and broader telemetry tests. T259 still shows branch divergence `2 372` and predicted telemetry conflicts. | Implementation slice: regular merge of `origin/main` into this branch, preserve current telemetry semantics where they subsume upstream, inspect auto-merged core/MCP semantics, then run telemetry tests and workspace checks before any push, upstream setup, PR publication, or backup-push policy. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
 T257 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
@@ -7172,3 +7173,18 @@ root `AGENTS.md`. T259 does not push, pull, rebase, merge, set upstream, publish
 harness files, mutate lifecycle/M6/runtime/native-Claude/host-label/ranking/`orient`/public
 MCP/schema/storage/index/document-index behavior, delete, rollback, force-kill, simplify legacy,
 or change user-owned files.
+
+T260 branch reconciliation plan note:
+`docs/BRAIN_HARNESS_T260_BRANCH_RECONCILIATION_PLAN_2026-06-04.md` records a read-only
+implementation plan for the next branch-sync slice. Current HEAD already contains
+`RealSessionEvalAppliedFilters`, repo-scoped project/scenario/arm filtering, feedback selection
+from sampled trace IDs, MCP project passthrough, store-level project indexes, and broader telemetry
+tests than upstream `711c736`. The recommended next implementation is a regular merge of
+`origin/main` into `yuval.meiri/memory-os-phase0`, not a 372-commit rebase or broad `-s ours`;
+preserve current telemetry semantics where they subsume upstream, inspect auto-merged core/MCP
+field-chain semantics, validate with `cargo fmt --all --check`, telemetry tests, `cargo test -p
+engram-tests`, `cargo check --workspace`, clippy if no pre-existing lint backlog blocks it, and
+`git diff --check`; then capture obligations/current-plan/telemetry. T260 does not push, pull,
+rebase, merge, set upstream, publish a PR, edit code, edit harness files, mutate lifecycle/M6/
+runtime/native-Claude/host-label/ranking/`orient`/public MCP/schema/storage/index/document-index
+behavior, delete, rollback, force-kill, simplify legacy, or change user-owned files.
