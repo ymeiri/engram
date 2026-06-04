@@ -828,7 +828,8 @@ disposition worksheet, T251 confirms pending T247/T248 lifecycle targets remain 
 T252 preserves the exact lifecycle approval boundary despite the user's broad continue instruction,
 T253 reconciles the telemetry intent-coverage catch-up, T254 scopes the remaining
 native-Claude/harness parity gate, T255 prepares but does not execute a prompt-bearing native
-Claude MCP-`orient` validation packet, and T256 reconciles the matrix after T255. Current read-only
+Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, and T257 corrects
+post-T256 telemetry-window wording. Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
@@ -838,34 +839,33 @@ installed final binary hash `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b42924
 repaired the cleanup pidfile race, left final daemon PID `14310` serving port `8765` with
 pidfile/status/process aligned, proved omitted telemetry labels are not sticky after cleanup, and
 live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
-Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T256
-sampled telemetry windows pass: `real_session_eval(project=engram, limit=20)` reports
-`feedback_coverage=0.949999988079071`, `distinct_intent_count=3`, `task_failure_count=0`,
-`bad_memory_used_count=0`, `wrong_scope_memory_count=0`, `missing_context_count=0`, and
-`confidence_gate.passed=true`; `limit=50` reports `feedback_coverage=0.9399999976158142`,
-`distinct_intent_count=4`, clean outcome counters, and `confidence_gate.passed=true`. These
-windows exceed the current confidence-gate minimum of 20 traces, 10 feedback records, 50%
-feedback coverage, at least three intents with feedback, and at least one outcome feedback record,
-but they remain sampled agent-assessed operational evidence, not exhaustive proof of M6,
-lifecycle, native-Claude, or branch completion. T210 remains the M6 source of truth: all 12
+Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T257
+sampled telemetry windows are mixed: `real_session_eval(project=engram, limit=20)` generated at
+`2026-06-04T12:51:26.859552Z` reports `feedback_coverage=0.949999988079071`, clean outcome
+counters, and no missing context, but `confidence_gate.passed=false` because only two intents have
+feedback in that 20-trace window. The `limit=50` report generated at
+`2026-06-04T12:51:26.931086Z` reports `feedback_coverage=0.9399999976158142`, four intents,
+clean outcome counters, and `confidence_gate.passed=true`. Telemetry therefore remains sampled,
+agent-assessed, and window-sensitive operational evidence, not exhaustive proof of M6, lifecycle,
+native-Claude, or branch completion. T210 remains the M6 source of truth: all 12
 generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
 approved.
 
-Current T256 matrix snapshot:
+Current T257 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current T255 plan is first in live lean `orient`; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; sampled telemetry passes at 95% coverage for the 20-trace window and 94% coverage for the 50-trace window with clean outcome counters. | Validations are point-in-time and bounded to the approved/tested classes. |
+| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; the latest 50-trace telemetry window passes at 94% feedback coverage with clean outcome counters. | Validations are point-in-time and bounded to the approved/tested classes. |
 | Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, full host-label adoption, and migration apply readiness remain unproved. |
 | Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules. | T255 has not run native Claude and does not prove prompt-bearing behavior. |
 | Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, host-label adoption, and branch synchronization. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
-| Risky | Telemetry is agent-assessed and sampled; harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest 20-trace window has 95% coverage and clean outcomes but fails intent-feedback diversity. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
 | Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
 
-Gate-level T256 status:
+Gate-level T257 status:
 
-| Gate | T256 state | Next closure condition |
+| Gate | T257 state | Next closure condition |
 | --- | --- | --- |
 | M6 human dispositions or deferral | Blocked on human choices or user-provided deferral rationale/evidence; `ready_to_apply=false`. | T210A/T210B disposition record or explicit deferral evidence; no apply/delete without separate approval. |
 | Lifecycle archive or deferral | Incomplete; T234/T247/T248 remain default-deny exact packets. | Exact packet execution after fresh checks, or explicit lifecycle deferral. |
@@ -875,9 +875,10 @@ Gate-level T256 status:
 | Branch synchronization | Unresolved divergent-branch state remains outside docs-only slices. | Explicit branch reconciliation strategy before pull/rebase/merge. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
-T256 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
-rolling telemetry evidence improves the operational confidence signal and exceeds the current
-confidence-gate threshold, but it does not change M6, lifecycle, native-Claude, host-label, or
+T257 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
+rolling telemetry evidence is mixed rather than uniformly passing: the 50-trace confidence window
+passes, while the 20-trace window has high coverage and clean outcomes but fails because only two
+intents have feedback. This does not change M6, lifecycle, native-Claude, host-label, or
 branch-synchronization gates. T241 still rejects standalone M6 deferral without user-provided
 rationale/evidence, T252 still preserves exact approval boundaries for T234/T247/T248 lifecycle
 archives, and T255 says shorter or broader approval must not be treated as authorization to execute
@@ -7134,3 +7135,13 @@ mutate lifecycle or M6 state, run `lint apply_safe`, change ranking/`orient`, pu
 MCP/schema/storage/index/document-index behavior, edit harness files/settings/hooks/adapters,
 reconcile branches, delete, rollback, force-kill, refresh runtime, simplify legacy layers, or
 change user-owned files.
+
+T257 post-T256 telemetry window correction note:
+`docs/BRAIN_HARNESS_T257_POST_T256_TELEMETRY_WINDOW_CORRECTION_2026-06-04.md` corrects the
+startup-facing telemetry wording after post-T256 feedback shifted the rolling window. The latest
+20-trace report has 95% feedback coverage and clean outcome counters but fails the confidence gate
+because only two intents have feedback; the latest 50-trace report still passes at 94% feedback
+coverage across four intents with clean outcome counters. T257 is docs-only and does not change
+M6, lifecycle, native-Claude, host-label, branch, runtime, harness, ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior, deletion, rollback, force-kill, legacy, or
+user-owned-file state.

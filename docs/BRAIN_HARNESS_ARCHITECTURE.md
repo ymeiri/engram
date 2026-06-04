@@ -197,6 +197,11 @@ Harness and migration checkpoint, current through 2026-06-04:
   prompt-bearing native Claude, effective-hook, host-label, branch-sync, and worktree-state gates.
   T256 is docs-only; it does not execute native Claude, mutate lifecycle or M6 state, reconcile
   branches, edit harness files, or change retrieval/runtime behavior.
+- T257 corrects the telemetry wording after post-T256 feedback shifted the rolling 20-trace
+  window. The latest 20-trace window has 95% feedback coverage and clean outcome counters but fails
+  the confidence gate because only two intents have feedback; the 50-trace window still passes at
+  94% coverage across four intents. Treat telemetry as sampled and window-sensitive, not exhaustive
+  completion proof.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
