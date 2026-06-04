@@ -208,6 +208,13 @@ Harness and migration checkpoint, current through 2026-06-04:
   against both refs; and `git log HEAD..main` is empty. T258 does not fetch, push, pull, rebase,
   merge, or set upstream. The next branch-sync step is explicit branch-sync approval for
   remote-freshness fetch and recheck before any publication or reconciliation.
+- T259 executes that remote-freshness recheck only. `git fetch origin` moves `origin/main` to
+  `e6697eee18530bc64f64ae94b6fd6006c24c7423`; the branch still has no upstream;
+  `origin/main...HEAD` is now `2 372`; merge-base is
+  `50de8e0eb7aed64b943322e8331d993e8ed39e53`; and read-only `git merge-tree` predicts
+  telemetry conflicts in `engram-index/src/telemetry.rs` and
+  `engram-tests/tests/telemetry_tests.rs`. T259 does not publish, push, pull, rebase, merge, or
+  set upstream. The next branch-sync step is a dedicated reconciliation plan.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

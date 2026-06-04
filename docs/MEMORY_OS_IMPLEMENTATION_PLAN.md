@@ -829,7 +829,8 @@ T252 preserves the exact lifecycle approval boundary despite the user's broad co
 T253 reconciles the telemetry intent-coverage catch-up, T254 scopes the remaining
 native-Claude/harness parity gate, T255 prepares but does not execute a prompt-bearing native
 Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, T257 corrects
-post-T256 telemetry-window wording, and T258 records read-only branch synchronization strategy.
+post-T256 telemetry-window wording, T258 records read-only branch synchronization strategy, and
+T259 runs the remote-freshness recheck without reconciling.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -852,7 +853,7 @@ native-Claude, or branch completion. T210 remains the M6 source of truth: all 12
 generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
 approved.
 
-Current T257 matrix snapshot:
+Current T259 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
@@ -873,7 +874,7 @@ Gate-level T257 status:
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
 | Host external-session labels | Core support exists; real caller adoption remains incomplete. | Validate with real Codex/Claude/Gemini host labels. |
-| Branch synchronization | Read-only T258 evidence shows no upstream configured, local `main`/`origin/main` as merge-base `1d944f0af45e27661050586c9aa8e9189772ecc9`, and `0 476` ahead/behind against local refs. Remote freshness is unverified because T258 did not fetch. | Explicit branch-sync approval for fetch/recheck before any push, pull, rebase, merge, upstream setup, or PR publication. |
+| Branch synchronization | T259 fetched `origin` and verified fresh `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423`. The branch still has no upstream, `origin/main...HEAD` is `2 372`, merge-base is `50de8e0eb7aed64b943322e8331d993e8ed39e53`, and read-only `git merge-tree` predicts telemetry conflicts in `engram-index/src/telemetry.rs` and `engram-tests/tests/telemetry_tests.rs`. | Dedicated reconciliation plan before any push, pull, rebase, merge, upstream setup, PR publication, or backup-push policy. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
 T257 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
@@ -7157,3 +7158,17 @@ The next branch-sync move is explicit approval to fetch and recheck before any p
 merge, upstream setup, or PR publication. T258 does not mutate branch, remote, lifecycle, M6,
 native-Claude, host-label, runtime, harness, ranking/`orient`, public MCP/schema/storage/index/
 document-index, deletion, rollback, force-kill, legacy, or user-owned-file state.
+
+T259 branch remote-freshness recheck note:
+`docs/BRAIN_HARNESS_T259_BRANCH_REMOTE_FRESHNESS_RECHECK_2026-06-04.md` records the fetch/recheck
+result. `git fetch origin` moved `origin/main` to
+`e6697eee18530bc64f64ae94b6fd6006c24c7423`; the current branch still has no upstream;
+`origin/main...HEAD` is `2 372`; merge-base is
+`50de8e0eb7aed64b943322e8331d993e8ed39e53`; and read-only `git merge-tree` predicts telemetry
+conflicts in `engram-index/src/telemetry.rs` and `engram-tests/tests/telemetry_tests.rs`.
+AI Council and Claude Bridge agreed the safe T259 decision is document-and-stop, with blind spots
+for semantic conflicts, merge direction, rebase attrition, no remote backup/upstream, and untracked
+root `AGENTS.md`. T259 does not push, pull, rebase, merge, set upstream, publish a PR, edit
+harness files, mutate lifecycle/M6/runtime/native-Claude/host-label/ranking/`orient`/public
+MCP/schema/storage/index/document-index behavior, delete, rollback, force-kill, simplify legacy,
+or change user-owned files.
