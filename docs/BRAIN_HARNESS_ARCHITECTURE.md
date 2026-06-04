@@ -160,6 +160,12 @@ Harness and migration checkpoint, current through 2026-06-04:
   authoritative gate: all generated files remain undecided, `ready_to_apply=false`, and 0012 needs
   explicit handling. T250 does not inspect or edit the generated review workspace, run M6 commands,
   make candidate choices, or imply migration readiness.
+- T251 records fresh post-T250 lifecycle visibility evidence: the pending T247 target
+  `019e8291-40aa-71a0-b16b-9ba7b6446cc6` and T248 target
+  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are both still active and visible, and fresh sampled
+  lint reports feedback-stale findings for both with `safe_action=none`. T251 does not archive
+  either item, run `lint apply_safe`, create a new packet, or change ranking/`orient`; it keeps
+  lifecycle cleanup incomplete until exact packet approvals are executed or explicitly deferred.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

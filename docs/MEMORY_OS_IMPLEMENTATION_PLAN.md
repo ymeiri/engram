@@ -7017,3 +7017,16 @@ generated review workspace, run `migration_review_status`, run prioritize/apply/
 candidate choices, mutate Memory OS lifecycle, imply migration readiness, change ranking/`orient`,
 public MCP/schema/storage/index/document-index behavior, harness/runtime/native-Claude state,
 deletion, rollback, force-kill, legacy simplification, or user-owned files.
+
+T251 pending lifecycle target visibility note:
+`docs/BRAIN_HARNESS_T251_PENDING_LIFECYCLE_TARGET_VISIBILITY_2026-06-04.md` records a docs-only
+post-T250 lifecycle visibility follow-through. Fresh read-only evidence showed the pending T247
+target `019e8291-40aa-71a0-b16b-9ba7b6446cc6` and T248 target
+`019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are both still active and visible; `019e01f2...` can still
+appear in lean `orient` top items, and direct search returned both targets behind the current
+T250 plan. Fresh sampled lint reports feedback-stale findings for both targets with
+`safe_action=none` (`019e01f2...` by four recent feedback records and `019e8291...` by nine).
+T251 does not archive either item, run `lint apply_safe`, create a new packet, mutate lifecycle
+state, run M6/migration/quarantine, change ranking/`orient`, public MCP/schema/storage/index/
+document-index behavior, harness/runtime/native-Claude state, deletion, rollback,
+force-kill, legacy simplification, or user-owned files.
