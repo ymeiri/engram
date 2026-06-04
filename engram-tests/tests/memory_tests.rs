@@ -433,6 +433,83 @@ async fn test_mcp_memory_list_project_name_scope_inference_filters_current_plan_
 }
 
 #[tokio::test]
+async fn test_mcp_memory_list_project_name_current_plan_tags_preserves_limit() {
+    let state = setup_tool_state().await;
+
+    for index in 0..6 {
+        let mut matching = with_writer(request("add"));
+        matching.kind = Some("decision".to_string());
+        matching.title = Some(format!("Engram tagged current plan {index}"));
+        matching.content =
+            Some("This Engram current-plan item should remain eligible.".to_string());
+        matching.origin = Some("tool_result".to_string());
+        matching.scope_type = Some("project".to_string());
+        matching.project_name = Some("engram".to_string());
+        matching.tags = vec!["current-plan".to_string()];
+        matching.evidence =
+            manual_review_evidence("Reviewed project-name tag limit matching fixture.");
+        tools::memory_new(&state, matching)
+            .await
+            .expect("matching add should work");
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("Voice layer tagged current plan".to_string());
+    wrong_scope.content =
+        Some("This newer wrong-project tagged item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("voice-layer".to_string());
+    wrong_scope.tags = vec!["current-plan".to_string()];
+    wrong_scope.evidence =
+        manual_review_evidence("Reviewed project-name tag limit wrong-project fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut untagged = with_writer(request("add"));
+    untagged.kind = Some("project_fact".to_string());
+    untagged.title = Some("Engram untagged project fact".to_string());
+    untagged.content =
+        Some("This same-project item should not satisfy the tag filter.".to_string());
+    untagged.origin = Some("tool_result".to_string());
+    untagged.scope_type = Some("project".to_string());
+    untagged.project_name = Some("engram".to_string());
+    untagged.evidence = manual_review_evidence("Reviewed project-name tag limit untagged fixture.");
+    tools::memory_new(&state, untagged)
+        .await
+        .expect("untagged add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.tags = vec!["current-plan".to_string()];
+    list.limit = Some(5);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 5);
+    for item in list_json["items"]
+        .as_array()
+        .expect("items should be an array")
+    {
+        assert_eq!(item["scope"]["project_name"], "engram");
+        assert!(item["tags"]
+            .as_array()
+            .expect("tags should be an array")
+            .iter()
+            .any(|tag| tag == "current-plan"));
+    }
+}
+
+#[tokio::test]
 async fn test_mcp_memory_list_project_name_scope_inference_preserves_limit() {
     let state = setup_tool_state().await;
 

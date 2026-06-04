@@ -6675,3 +6675,17 @@ and lifecycle cleanup remains gated by explicit lifecycle approval. T231 does no
 refresh, M6/migration/quarantine actions, lifecycle mutation, harness writes, native Claude,
 ranking/`orient`, schema/storage/index/document-index behavior changes, deletion, rollback, or
 user-owned-file edits.
+
+T232 matrix note:
+`docs/BRAIN_HARNESS_T232_MEMORY_LIST_PROJECT_NAME_TAG_LIMIT_FIXTURE_2026-06-04.md` adds focused
+test-only coverage for the exact stale live request reproduced by T231:
+`memory(action="list", status_filter="active", project_name="engram", tags=["current-plan"],
+limit=5)` with `scope_type` omitted. The fixture adds six matching Engram current-plan rows, a
+newer wrong-project tagged current-plan row, and a newer same-project untagged row, then asserts
+that the result count is exactly `5`, every returned row is Engram-scoped, and every returned row is
+tagged `current-plan`. This hardens combined T221 project-name scope inference, T227 current-plan
+tag filtering, and T223/T225 post-filter limit preservation without changing production source.
+Validation passed the new exact fixture, adjacent memory-list fixtures, full `memory_tests`,
+`cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`. Because T232
+changes binary-relevant `engram-tests` after T230, T230 is now stale for exact execution and must be
+superseded by a refreshed runtime approval packet before any install/restart/live validation.
