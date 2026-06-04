@@ -806,6 +806,15 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 
 ## Current Completion Matrix
 
+Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
+below. Current read-only `harness(action="doctor")` evidence reports `ready=true` for generic,
+Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is validated, while
+behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
+extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
+T179, prompt-bearing native Claude behavior is unproved, external-session joinability depends on
+real caller/host labels, and stale active handoffs remain until a future non-dry-run handoff update
+or exact lifecycle cleanup.
+
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
 mixed current-plan/M6 direct-search prompt class is now validated in Codex and Claude Code, while
@@ -6414,3 +6423,19 @@ M6 status/apply/prioritize/export/rerun, infer candidate decisions, mutate lifec
 memory, delete data, change ranking/`orient`, public MCP/schema/storage/index behavior,
 document-index behavior, harness files, native Claude state, runtime configuration, or user-owned
 files.
+
+T214 matrix note:
+`docs/BRAIN_HARNESS_T214_HARNESS_MATRIX_RECONCILIATION_2026-06-04.md` reconciles stale
+cross-harness matrix wording after T152/T170/T179/T198/T200/T204 and fresh read-only
+`harness(action="doctor")` checks. The current local generated-adapter readiness state is
+`ready=true` for generic, Claude Code, Codex, Gemini CLI, and Cursor. This supersedes older
+completion-matrix wording that said all supported harnesses were still `ready=false` or had
+required generated-adapter drift. The remaining cross-harness risks are narrower: lifecycle
+compliance is still soft, Claude Code settings remain split with a user-owned snippet and extra
+legacy permissions, native Claude startup guidance was observed but `/hooks` effective-hook
+visibility remains unresolved, prompt-bearing native Claude behavior is not proved, external-session
+joinability still depends on real caller/host labels, and stale active handoffs remain until a
+future non-dry-run handoff update or explicit lifecycle cleanup. T214 does not edit hooks, settings,
+adapters, runtime configuration, user-owned files, ranking/`orient`, public MCP, schema/storage/
+index/document-index behavior, lifecycle state, native Claude state, M6/migration/quarantine state,
+or review workspace files.
