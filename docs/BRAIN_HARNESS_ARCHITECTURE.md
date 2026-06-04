@@ -114,13 +114,14 @@ Harness and migration checkpoint, current through 2026-06-04:
   behavior, host external-session labeling, lifecycle cleanup, M6 completion, or broad
   cross-harness behavioral parity. Stale active handoffs remain until a future non-dry-run handoff
   update or explicit lifecycle cleanup.
-- Current rolling telemetry is not green in the T243 resumed-session audit: an initial
-  `telemetry(action="real_session_eval", project="engram", limit=50)` check returned 26%
-  feedback coverage after this resumed turn created many unscored orientation/search traces; after
-  scoring material T243 traces, the final T243 recheck improved to 46% coverage but still failed
-  the 50% gate. The sampled task outcome and bad-memory counters were clean, but the confidence
-  gate remains a rolling operational signal and should not be used to bypass M6, lifecycle,
-  harness, runtime, or hot-path gates.
+- Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
+  feedback coverage, then 46% after scoring material retrieval traces, which was still below the
+  50% gate. T244 scored two additional assessable traces and
+  `telemetry(action="real_session_eval", project="engram", limit=50)` generated at
+  `2026-06-04T11:14:07.108605Z` reported 52% feedback coverage with
+  `confidence_gate.passed=true`, `task_failure_count=0`, `bad_memory_used_count=0`,
+  `wrong_scope_memory_count=0`, and `missing_context_count=0`. This is a rolling operational
+  signal, not proof of M6, lifecycle, harness, runtime, or hot-path completion.
 - M6 migration remains review-gated. Candidate inspection is complete for generated files
   0001-0011, candidate 0012 is count-drift provenance requiring explicit scope handling, and the
   next M6 progress requires human-provided dispositions under T210A/T210B or explicit deferral.

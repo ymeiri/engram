@@ -6913,3 +6913,16 @@ runtime refresh, lifecycle archive,
 `lint apply_safe`, M6/migration/quarantine actions, harness writes, native Claude, ranking/
 `orient`, public MCP/schema/storage/index/document-index behavior changes, deletion, rollback,
 force-kill, legacy simplification, or user-owned-file edits.
+
+T244 telemetry note:
+`docs/BRAIN_HARNESS_T244_TELEMETRY_COVERAGE_CATCHUP_2026-06-04.md` records the post-T243
+telemetry catch-up. Two additional material traces were scored: the user-design-philosophy lookup
+and the lifecycle-gate lookup. A fresh `telemetry(action="real_session_eval", project="engram",
+limit=50)` report generated at `2026-06-04T11:14:07.108605Z` returned
+`feedback_coverage=0.5199999809265137`, `feedback_count=26`, and
+`confidence_gate.passed=true`, with `task_failure_count=0`, `bad_memory_used_count=0`,
+`wrong_scope_memory_count=0`, and `missing_context_count=0`. This closes the current rolling
+telemetry coverage gate only as a point-in-time operational signal; it does not authorize M6
+apply/deletion, lifecycle archive or `lint apply_safe`, harness writes, native Claude changes,
+ranking/`orient` changes, public MCP/schema/storage/index/document-index behavior changes,
+legacy simplification, rollback, force-kill, or user-owned-file edits.
