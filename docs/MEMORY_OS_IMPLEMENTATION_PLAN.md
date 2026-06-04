@@ -6331,3 +6331,16 @@ the top five; and the distinctive content query still returned T202 first at sem
 ranking or lifecycle state, schema/storage definitions, document indexing/chunking/embedding
 behavior, M6/migration/quarantine state, hooks, settings, adapters, deletion, rollback, native
 Claude, or user-owned files.
+
+T208 matrix note:
+`docs/BRAIN_HARNESS_T208_T206_T207_DOC_INDEX_RESULT_2026-06-04.md` records exact-file document
+indexing for the T206 source-change report and T207 runtime-refresh report. Indexing created 9
+chunks for T206 and 1 chunk for T207 with no warnings. Document stats became `source_count=95`,
+`chunk_count=4381`, `searchable_chunk_count=2369`, `orphan_chunk_count=2012`, and
+`embedding_dimension=384`, so the two new sources did not increase orphan chunks. Targeted title
+searches returned T206 first with score `1.0` and T207 first with score `1.0`; the raw binary-hash
+query remained noisy and did not return T207 top five. This is document visibility maintenance
+only. T208 does not create active MemoryItems, mutate lifecycle state, run `lint apply_safe`,
+inspect or run M6/migration/quarantine actions, change ranking/`orient`, public MCP shape,
+schema/storage/index/document-index behavior, hooks, settings, adapters, runtime configuration,
+native Claude, deletion, rollback, force-kill, or user-owned files.
