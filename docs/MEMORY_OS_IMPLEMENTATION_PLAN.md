@@ -7070,3 +7070,19 @@ user-provided rationale/evidence. It does not archive memory, run `lint apply_sa
 M6/migration/quarantine, change ranking/`orient`, public MCP/schema/storage/index/document-index
 behavior, harness/runtime/native-Claude state, deletion, rollback, force-kill, branch
 reconciliation, legacy simplification, or user-owned files.
+
+T254 native-Claude/harness parity gate note:
+`docs/BRAIN_HARNESS_T254_NATIVE_CLAUDE_HARNESS_PARITY_GATE_2026-06-04.md` records a
+docs-only/static scoping step for the remaining harness parity gap after T253. Fresh read-only
+`harness(action="doctor")` checks still report `ready=true` for generic, Claude Code, Codex,
+Gemini CLI, and Cursor, while preserving the Claude Code warnings around user-owned snippets,
+split settings, extra legacy permissions, and soft lifecycle compliance. Static source inspection
+confirmed that Engram can validate generated adapter/settings presence and the SessionEnd
+`write_policy // "nudge"` source/test behavior, but cannot prove Claude Code runtime `/hooks`
+effective-hook visibility or prompt-bearing native behavior. The T197 SessionEnd side-effect
+handoff is now `status=superseded`, yet remains evidence that native exit can write Memory OS
+state. T254 does not run native Claude, edit hooks/settings/adapters, run harness install, mutate
+lifecycle state, run M6/migration/quarantine, change ranking/`orient`, public MCP/schema/storage/
+index/document-index behavior, reconcile branches, delete, rollback, force-kill, refresh runtime,
+legacy simplification, or user-owned files. Any next live native-Claude packet must be exact,
+default-deny, and include pre-authorized cleanup if EOF hangs.

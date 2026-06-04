@@ -178,6 +178,14 @@ Harness and migration checkpoint, current through 2026-06-04:
   `confidence_gate.passed=true`. This strengthens current operational confidence, but remains
   sampled agent-assessed telemetry; it does not complete M6, lifecycle cleanup, full native-Claude
   behavior, or branch synchronization.
+- T254 scopes the native-Claude/harness parity gap without running native Claude or editing
+  hooks/settings. Fresh read-only doctor checks still report `ready=true` for all five supported
+  harnesses, but source inspection confirms that readiness checks installed/generated adapter and
+  settings presence rather than Claude Code runtime `/hooks` behavior. T170 metadata/help,
+  T179 startup guidance, and T197 cleanup/SessionEnd side-effect evidence remain bounded: effective
+  hook visibility, prompt-bearing native Claude behavior, host-label adoption, lifecycle cleanup,
+  M6, and branch synchronization are still open. Any next live native-Claude packet must be exact
+  and default-deny, including pre-authorized cleanup if EOF hangs.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
