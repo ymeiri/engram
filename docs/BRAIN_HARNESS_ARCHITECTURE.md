@@ -132,6 +132,14 @@ Harness and migration checkpoint, current through 2026-06-04:
   stale. T246 did not mutate lifecycle state, did not rank all Engram lifecycle debt, and does not
   authorize archive or `lint apply_safe`; any future packet must rerun fresh get/graph/telemetry
   evidence and stay exact-target/default-deny.
+- T247 prepares that default-deny exact packet for `019e8291-40aa-71a0-b16b-9ba7b6446cc6`
+  without mutating memory. The target is an active project-scoped custom observation, not a
+  current-plan item and not graph-superseded. The proposed archive rationale is content staleness:
+  it accurately recorded a T76 point-in-time failing telemetry gate on 2026-06-01, while later T244
+  evidence recorded a passing gate on 2026-06-04. Sampled global lint did not surface the target
+  and must not be treated as target proof. `lint apply_safe` remains out of scope; any future write
+  must be direct exact `memory.archive` after fresh get/search-orient/graph/telemetry/git/
+  obligations evidence and exact user approval.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and

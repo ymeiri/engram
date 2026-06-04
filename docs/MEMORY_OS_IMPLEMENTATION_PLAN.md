@@ -6954,3 +6954,16 @@ later recorded a point-in-time passing rolling telemetry gate at `2026-06-04T11:
 and recent feedback marks the T76 item as stale. T246 does not mutate lifecycle state, rank all
 Engram lifecycle debt, or authorize archive/`lint apply_safe`; any future packet must rerun fresh
 get/graph/telemetry evidence and remain exact-target/default-deny.
+
+T247 lifecycle approval packet note:
+`docs/BRAIN_HARNESS_T247_T76_TELEMETRY_STALE_OBSERVATION_LIFECYCLE_APPROVAL_PACKET_2026-06-04.md`
+records a docs-only/default-deny packet for exactly one future lifecycle write on active
+project-scoped custom observation `019e8291-40aa-71a0-b16b-9ba7b6446cc6` (`Post-T76 rolling
+telemetry gate remains false`). The target is not technically superseded and sampled global lint
+did not show it. The proposed rationale is content staleness: it accurately recorded a T76
+point-in-time failing telemetry gate on 2026-06-01, but T244 later recorded a point-in-time passing
+gate on 2026-06-04 and repeated feedback marks this exact item stale. T247 does not archive memory,
+run `lint apply_safe`, create replacement memory, mutate lifecycle state, rank all Engram
+lifecycle debt, or authorize M6/migration/quarantine, harness/native-Claude, ranking/`orient`,
+public MCP/schema/storage/index/document-index behavior, rollback, force-kill, legacy
+simplification, or user-owned-file edits.
