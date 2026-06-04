@@ -6544,3 +6544,19 @@ executed install/restart/temp-env validation. It does not change source, public 
 payloads, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle state,
 M6/migration/quarantine state, harness files/settings/hooks/adapters, native Claude state,
 deletion, rollback, or user-owned files.
+
+T223 matrix note:
+`docs/BRAIN_HARNESS_T223_MEMORY_LIST_SCOPE_LIMIT_2026-06-04.md` fixes the adjacent
+`memory(action="list")` scoped-limit pitfall found after T221. Source inspection showed the list
+branch correctly fetched without a repository-level limit when tags or scope filters required
+in-memory filtering, but only tag-filtered requests reapplied `limit` after filtering. A new
+regression with two matching Engram-scoped rows plus a newer wrong-project row failed before the
+fix (`count` was `2` for `limit=1`) and passed after moving post-filter truncation to all
+in-memory-filter paths. Validation passed focused scope/tag regressions, full `memory_tests`,
+`cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`. T223 is
+source-level only: it does not change public MCP params or response shape, ranking/`orient`,
+schema/storage/index/document-index behavior, lifecycle state, M6/migration/quarantine state,
+harness files/settings/hooks/adapters, installed runtime, native Claude state, deletion, rollback,
+or user-owned files. Because T223 changed binary-relevant `engram-mcp` and `engram-tests` files
+after T222, T222 is now stale for execution and must be superseded by a refreshed runtime approval
+packet before any install/restart/live validation.

@@ -9083,6 +9083,8 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                     tags.iter()
                         .all(|tag| item.tags.iter().any(|item_tag| item_tag == tag))
                 });
+            }
+            if fetch_limit.is_none() {
                 if let Some(limit) = request.limit {
                     items.truncate(limit);
                 }
