@@ -812,10 +812,11 @@ Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
 T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T219 has prepared the exact runtime-refresh
-approval gate, but installed runtime has not been refreshed for the MCP fallback, hosts still need to
-provide real external-session labels, and stale active handoffs remain until a future non-dry-run
-handoff update or exact lifecycle cleanup.
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T222 supersedes T219 as the exact
+runtime-refresh approval gate after the T221 binary-relevant memory-list scope fix, installed
+runtime has not been refreshed for either source change, hosts still need to provide real
+external-session labels, and stale active handoffs remain until a future non-dry-run handoff update
+or exact lifecycle cleanup.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6531,3 +6532,15 @@ existing explicit-scope list test passed, followed by full `memory_tests`, `carg
 params or response shape, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle
 state, M6/migration/quarantine state, harness files/settings/hooks/adapters, installed runtime,
 native Claude state, deletion, rollback, or user-owned files.
+
+T222 matrix note:
+`docs/BRAIN_HARNESS_T222_T217_T221_RUNTIME_REFRESH_APPROVAL_PACKET_2026-06-04.md` supersedes T219
+as the exact runtime-refresh approval packet. T219's baseline became stale after T221 intentionally
+changed binary-relevant `engram-mcp` and `engram-tests` files. T222 anchors future execution to
+source baseline `e8b1cc732a4108b827fb8dea6b2be43d095dfe66` and combines live validation for the
+T217 MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback with read-only live validation for T221
+`memory(action="list", project_name="engram")` scope inference. T222 is docs-only and has not
+executed install/restart/temp-env validation. It does not change source, public MCP params or
+payloads, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle state,
+M6/migration/quarantine state, harness files/settings/hooks/adapters, native Claude state,
+deletion, rollback, or user-owned files.
