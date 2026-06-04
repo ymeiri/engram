@@ -6439,3 +6439,15 @@ future non-dry-run handoff update or explicit lifecycle cleanup. T214 does not e
 adapters, runtime configuration, user-owned files, ranking/`orient`, public MCP, schema/storage/
 index/document-index behavior, lifecycle state, native Claude state, M6/migration/quarantine state,
 or review workspace files.
+
+T215 matrix note:
+`docs/BRAIN_HARNESS_T215_ARCHITECTURE_HARNESS_CHECKPOINT_RECONCILIATION_2026-06-04.md` updates
+the architecture RFC with a current 2026-06-04 harness and migration checkpoint before older
+historical readiness notes. The new checkpoint records that generated local adapter readiness is
+`ready=true` for generic, Claude Code, Codex, Gemini CLI, and Cursor, while preserving bounded
+behavioral caveats around soft lifecycle compliance, split Claude settings, unresolved `/hooks`
+effective-configuration visibility, unproved prompt-bearing native Claude behavior,
+external-session caller labels, stale active handoffs, and M6 dispositions/deferral. T215 does not
+edit hooks, settings, adapters, runtime configuration, user-owned files, ranking/`orient`, public
+MCP, schema/storage/index/document-index behavior, lifecycle state, native Claude state,
+M6/migration/quarantine state, or review workspace files.

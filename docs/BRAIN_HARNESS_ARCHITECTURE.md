@@ -91,6 +91,24 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
+Harness and migration checkpoint, current through 2026-06-04:
+
+- Generated local harness adapter readiness is currently validated by read-only
+  `harness(action="doctor")` checks for generic, Claude Code, Codex, Gemini CLI, and Cursor:
+  all five report `ready=true`.
+- This supersedes older harness-readiness checkpoints below that recorded `ready=false`, missing
+  Claude hook registrations, generic policy absence, or generated-adapter drift before the T135
+  repair.
+- The harness claim remains bounded. Lifecycle compliance is still a soft contract; Claude Code
+  settings remain split across settings files with a user-owned snippet and extra legacy Engram
+  permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
+  effective-configuration output; prompt-bearing native Claude behavior remains unproved; and
+  external-session joinability still depends on real caller/host labels; stale active handoffs
+  remain until a future non-dry-run handoff update or explicit lifecycle cleanup.
+- M6 migration remains review-gated. Candidate inspection is complete for generated files
+  0001-0011, candidate 0012 is count-drift provenance requiring explicit scope handling, and the
+  next M6 progress requires human-provided dispositions under T210A/T210B or explicit deferral.
+
 Research checkpoint, current through 2026-05-27:
 
 - The first matched same-harness dogfood batch is recorded in
