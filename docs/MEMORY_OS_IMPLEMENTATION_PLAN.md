@@ -6269,3 +6269,19 @@ public MCP shape, schema/storage/index/document-index behavior, hooks, settings,
 M6/migration/quarantine, native Claude, deletion, rollback, or user-owned files. Pre-T203 stale
 live handoffs remain visible until a refreshed runtime performs a future handoff write or separate
 lifecycle cleanup is explicitly run.
+
+T204 matrix note:
+`docs/BRAIN_HARNESS_T204_T203_RUNTIME_REFRESH_VALIDATION_2026-06-04.md` closes the immediate
+runtime-drift caveat for T203. Codex installed the current `engram-cli` to
+`/Users/yuval.meiri/.local/bin/engram`, producing binary hash
+`39ee3b6491dca33267019376be07dd43a51b3772ffc24829cb3cf5f07385cd0c`, then cleanly stopped the old
+daemon on port `8765`/PID `6516` and started the refreshed daemon on port `8765`/PID `91929`.
+Before refresh, the live MCP `handoff(action="update", dry_run=true)` validation planned a
+single predecessor in `item.supersedes`; after refresh, the same read-only dry-run returned the
+same newest `previous_id` plus a long `supersedes` vector containing many active project-scoped
+rolling handoff predecessors, and still reported `written=false`. This validates installed T203
+planning behavior without mutating live handoff memory. Existing stale active handoffs remain
+active until a future non-dry-run handoff update converges them or separate lifecycle cleanup is
+explicitly run. T204 does not change search ranking/`orient`, public MCP shape,
+schema/storage/index/document-index behavior, hooks, settings, adapters, M6/migration/quarantine,
+native Claude, deletion, rollback, force-kill, or user-owned files.
