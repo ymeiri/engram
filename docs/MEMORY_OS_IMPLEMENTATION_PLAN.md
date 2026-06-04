@@ -6709,3 +6709,20 @@ executed install/restart/temp-env validation. It does not change source, public 
 payloads, ranking/`orient`, schema/storage/index/document-index behavior, lifecycle state,
 M6/migration/quarantine state, harness files/settings/hooks/adapters, native Claude state,
 deletion, rollback, or user-owned files.
+
+T234 matrix note:
+`docs/BRAIN_HARNESS_T234_STALE_MIGRATION_COMPLETION_LIFECYCLE_APPROVAL_PACKET_2026-06-04.md`
+records a docs-only/default-deny lifecycle approval packet for active MemoryItem
+`019dd3fe-ec94-7122-af04-1f35b839387f`, titled `Memory OS migration completion run finished`.
+Fresh `memory(get)` confirmed the target remains active, project-scoped to `engram`, and tagged
+`memory-os`, `migration`, `review-gated`, and `completion`; direct memory search still returned it
+as active migration-completion guidance for an M6/migration query; graph depth 1 showed only
+evidence/project/commit edges and no dependent MemoryItem. Current M6 docs contradict the target:
+T209/T213 show all 12 generated T68 snapshot files remain undecided with `ready_to_apply=false`,
+and T210 defines the next M6 progress as human-disposition recording or explicit deferral rather
+than completed migration. Historical feedback docs marked this target stale with `safe_action=none`,
+while fresh `lint(run, limit=120)` did not return it, so any future archive must be a human-approved
+manual lifecycle write, not `lint apply_safe`. T234 does not archive the item, run `lint apply_safe`,
+run M6/migration/quarantine actions, mutate lifecycle state, change ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior, harness files/settings/hooks/adapters, native
+Claude state, runtime configuration, deletion, rollback, old-binary reinstall, or user-owned files.
