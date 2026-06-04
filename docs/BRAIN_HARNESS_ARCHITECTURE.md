@@ -104,11 +104,23 @@ Harness and migration checkpoint, current through 2026-06-04:
   permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
   effective-configuration output; prompt-bearing native Claude behavior remains unproved; and
   external-session joinability still depends on real caller/host labels even though direct CLI and
-  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist; T233 supersedes T230 as
-  the exact runtime-refresh approval gate after the T232 binary-relevant combined MCP
-  `memory(action=list)` fixture, and the installed runtime has not been refreshed for the
-  T217/T221/T223 source changes or the T225/T227/T229/T232 fixtures; stale active handoffs remain
-  until a future non-dry-run handoff update or explicit lifecycle cleanup.
+  source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist. T242 executed the T233
+  runtime-refresh gate on 2026-06-04: the observed installed binary hash was
+  `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
+  PID `14310` on port `8765`, and the live project-scoped current-plan list no longer leaked the
+  out-of-scope `voice-layer` item. This supersedes the older statement that the installed runtime
+  had not been refreshed for the T217/T221/T223 source changes or T225/T227/T229/T232 fixtures,
+  but it is point-in-time installed-runtime evidence only. It does not prove native Claude prompt
+  behavior, host external-session labeling, lifecycle cleanup, M6 completion, or broad
+  cross-harness behavioral parity. Stale active handoffs remain until a future non-dry-run handoff
+  update or explicit lifecycle cleanup.
+- Current rolling telemetry is not green in the T243 resumed-session audit: an initial
+  `telemetry(action="real_session_eval", project="engram", limit=50)` check returned 26%
+  feedback coverage after this resumed turn created many unscored orientation/search traces; after
+  scoring material T243 traces, the final T243 recheck improved to 46% coverage but still failed
+  the 50% gate. The sampled task outcome and bad-memory counters were clean, but the confidence
+  gate remains a rolling operational signal and should not be used to bypass M6, lifecycle,
+  harness, runtime, or hot-path gates.
 - M6 migration remains review-gated. Candidate inspection is complete for generated files
   0001-0011, candidate 0012 is count-drift provenance requiring explicit scope handling, and the
   next M6 progress requires human-provided dispositions under T210A/T210B or explicit deferral.

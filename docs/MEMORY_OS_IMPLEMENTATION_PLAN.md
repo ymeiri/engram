@@ -6893,3 +6893,23 @@ run M6/migration/quarantine actions, mutate lifecycle state, run `lint apply_saf
 hooks/settings/adapters, change ranking/`orient`, change public MCP/schema/storage/index/
 document-index behavior, delete data, rollback, force-kill, simplify legacy layers, or edit
 user-owned files.
+
+T243 matrix note:
+`docs/BRAIN_HARNESS_T243_POST_T242_COMPLETION_MATRIX_RECONCILIATION_2026-06-04.md` records a
+docs-only completion-matrix reconciliation after T242. It updates
+`docs/BRAIN_HARNESS_ARCHITECTURE.md` so the current harness/runtime checkpoint no longer says the
+installed runtime has not been refreshed for the T217/T221/T223 source changes or the
+T225/T227/T229/T232 fixtures. Fresh evidence showed installed hash
+`1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon PID `14310` on port
+`8765`, one Engram current-plan item and no `voice-layer` leak for the project-scoped
+current-plan list, `ready=true` for generic/Claude Code/Codex/Gemini CLI/Cursor harness doctor
+checks, clean obligations doctor, and unchanged lint lifecycle pressure. The fresh rolling
+telemetry gate was false at 26% feedback coverage before T243 feedback catch-up; after scoring
+material T243 retrieval traces it remained false at 46% coverage, while sampled task-failure,
+bad-memory, wrong-scope, and missing-context counters stayed clean. The remaining Brain Harness
+gates are M6 human dispositions or explicit deferral, lifecycle cleanup with exact approval,
+telemetry feedback catch-up, and bounded cross-harness behavior caveats. T243 does not execute
+runtime refresh, lifecycle archive,
+`lint apply_safe`, M6/migration/quarantine actions, harness writes, native Claude, ranking/
+`orient`, public MCP/schema/storage/index/document-index behavior changes, deletion, rollback,
+force-kill, legacy simplification, or user-owned-file edits.
