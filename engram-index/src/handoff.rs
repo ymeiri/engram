@@ -108,13 +108,30 @@ impl HandoffService {
             item = item.with_superseded_item(previous.id);
         }
 
+        let previous_id = previous.as_ref().map(|item| item.id);
+
         if !dry_run {
             self.memory_repo.save_memory_item(&item).await?;
+            if let Some(previous) = previous {
+                let superseded = previous
+                    .with_status(MemoryStatus::Superseded)
+                    .with_evidence(
+                        EvidenceRef::new(
+                            EvidenceKind::ToolCall,
+                            format!("handoff(action=update):{}", item.id),
+                        )
+                        .with_summary(format!(
+                            "Superseded by newer rolling handoff {} for the same scope.",
+                            item.id
+                        )),
+                    );
+                self.memory_repo.save_memory_item(&superseded).await?;
+            }
         }
 
         Ok(HandoffUpdate {
             dry_run,
-            previous_id: previous.map(|item| item.id),
+            previous_id,
             item,
             written: !dry_run,
         })
@@ -315,6 +332,138 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_dry_run_does_not_supersede_previous_handoff() {
+        let service = service().await;
+        let previous = service
+            .update(
+                Some("engram".to_string()),
+                None,
+                "# Previous Handoff".to_string(),
+                vec!["Continue from the previous handoff".to_string()],
+                writer(),
+                false,
+            )
+            .await
+            .unwrap()
+            .item;
+
+        let update = service
+            .update(
+                Some("engram".to_string()),
+                None,
+                "# Planned Handoff".to_string(),
+                vec!["Continue from the planned handoff".to_string()],
+                writer(),
+                true,
+            )
+            .await
+            .unwrap();
+        let stored_previous = service
+            .memory_repo
+            .get_memory_item(&previous.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let active_items = service
+            .memory_repo
+            .list_memory_items(Some(MemoryStatus::Active), None)
+            .await
+            .unwrap();
+
+        assert!(!update.written);
+        assert_eq!(update.previous_id, Some(previous.id));
+        assert!(update.item.supersedes.contains(&previous.id));
+        assert_eq!(stored_previous.status, MemoryStatus::Active);
+        assert_eq!(active_items.len(), 1);
+        assert_eq!(active_items[0].id, previous.id);
+    }
+
+    #[tokio::test]
+    async fn update_write_supersedes_previous_project_handoff() {
+        let service = service().await;
+        let previous = service
+            .update(
+                Some("engram".to_string()),
+                None,
+                "# Previous Handoff".to_string(),
+                vec!["Continue from the previous handoff".to_string()],
+                writer(),
+                false,
+            )
+            .await
+            .unwrap()
+            .item;
+
+        let update = service
+            .update(
+                Some("engram".to_string()),
+                None,
+                "# New Handoff".to_string(),
+                vec!["Continue from the new handoff".to_string()],
+                writer(),
+                false,
+            )
+            .await
+            .unwrap();
+        let stored_previous = service
+            .memory_repo
+            .get_memory_item(&previous.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let latest = service.get(Some("engram"), None).await.unwrap();
+
+        assert!(update.written);
+        assert_eq!(update.previous_id, Some(previous.id));
+        assert!(update.item.supersedes.contains(&previous.id));
+        assert_eq!(stored_previous.status, MemoryStatus::Superseded);
+        assert!(stored_previous
+            .evidence
+            .iter()
+            .any(|evidence| evidence.target.contains(&update.item.id.to_string())));
+        assert_eq!(latest.item.unwrap().id, update.item.id);
+    }
+
+    #[tokio::test]
+    async fn update_write_leaves_other_project_handoff_active() {
+        let service = service().await;
+        let other_project = service
+            .update(
+                Some("other-project".to_string()),
+                None,
+                "# Other Project Handoff".to_string(),
+                vec!["Continue other project".to_string()],
+                writer(),
+                false,
+            )
+            .await
+            .unwrap()
+            .item;
+
+        let update = service
+            .update(
+                Some("engram".to_string()),
+                None,
+                "# Engram Handoff".to_string(),
+                vec!["Continue Engram".to_string()],
+                writer(),
+                false,
+            )
+            .await
+            .unwrap();
+        let stored_other = service
+            .memory_repo
+            .get_memory_item(&other_project.id)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(update.previous_id, None);
+        assert!(update.item.supersedes.is_empty());
+        assert_eq!(stored_other.status, MemoryStatus::Active);
+    }
+
+    #[tokio::test]
     async fn compile_uses_session_events() {
         let service = service().await;
         let session = Session::new().with_project("engram");
@@ -338,5 +487,52 @@ mod tests {
         assert!(compiled.content.contains("Use a soft harness contract."));
         assert!(compiled.content.contains("Next Actions"));
         assert!(compiled.update.is_none());
+    }
+
+    #[tokio::test]
+    async fn compile_write_supersedes_previous_session_handoff() {
+        let service = service().await;
+        let session = Session::new().with_project("engram");
+        service.session_repo.save_session(&session).await.unwrap();
+        service
+            .session_repo
+            .add_event(&Event::new(
+                session.id,
+                EventType::HandoffUpdate,
+                "agent",
+                "Continue from compiled session context.",
+            ))
+            .await
+            .unwrap();
+        let previous = service
+            .update(
+                None,
+                Some(session.id),
+                "# Previous Session Handoff".to_string(),
+                vec!["Continue from previous session handoff".to_string()],
+                writer(),
+                false,
+            )
+            .await
+            .unwrap()
+            .item;
+
+        let compiled = service
+            .compile(session.id, Some("engram".to_string()), writer(), false)
+            .await
+            .unwrap();
+        let update = compiled.update.unwrap();
+        let stored_previous = service
+            .memory_repo
+            .get_memory_item(&previous.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let latest = service.get(None, Some(session.id)).await.unwrap();
+
+        assert_eq!(update.previous_id, Some(previous.id));
+        assert!(update.item.supersedes.contains(&previous.id));
+        assert_eq!(stored_previous.status, MemoryStatus::Superseded);
+        assert_eq!(latest.item.unwrap().id, update.item.id);
     }
 }

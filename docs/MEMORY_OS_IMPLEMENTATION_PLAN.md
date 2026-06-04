@@ -6222,3 +6222,19 @@ hooks/settings/adapters/user-owned files, run lifecycle archive, M6/migration/qu
 native Claude, Claude Bridge write actions, deletion, rollback, or old-binary reinstall. Codex
 Desktop live traces and ordinary MCP callers still need host/caller adoption of the existing label
 field.
+
+T201 matrix note:
+`docs/BRAIN_HARNESS_T201_HANDOFF_SUPERSESSION_SEMANTICS_2026-06-04.md` implements a narrow
+source-level prevention for future stale rolling handoff accumulation. `HandoffService::update`
+still creates the new handoff with a `supersedes` edge to the previous matching handoff, but in
+non-dry-run mode it now saves the new active handoff first and then marks that previous matching
+handoff `superseded` with tool-call evidence. Dry-run remains zero-write and only returns the
+planned supersedes edge. Focused validation passed with `cargo test -p engram-index handoff`,
+`cargo test -p engram-tests --test harness_tests`, `cargo test -p engram-tests --test lint_tests`,
+`cargo test -p engram-tests --test memory_tests test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates -- --exact`,
+`cargo fmt --all --check`, `cargo check -p engram-cli`, and `git diff --check`. T201 does not
+archive existing stale active handoffs, run `lint apply_safe`, change handoff public request
+shape, change search ranking/`orient`, schema/storage/index/document-index behavior, hooks,
+settings, adapters, installed runtime, M6/migration/quarantine, native Claude, deletion, rollback,
+or user-owned files. Pre-T201 stale handoffs remain visible until separately approved lifecycle
+cleanup or future exact scoped work addresses them.
