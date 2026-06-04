@@ -812,9 +812,10 @@ Claude Code, Codex, Gemini CLI, and Cursor. Generated local adapter readiness is
 behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and retain
 extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report in
 T179, prompt-bearing native Claude behavior is unproved, direct CLI and source-level MCP
-`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, installed runtime has not been refreshed
-for the MCP fallback, hosts still need to provide real external-session labels, and stale active
-handoffs remain until a future non-dry-run handoff update or exact lifecycle cleanup.
+`ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T219 has prepared the exact runtime-refresh
+approval gate, but installed runtime has not been refreshed for the MCP fallback, hosts still need to
+provide real external-session labels, and stale active handoffs remain until a future non-dry-run
+handoff update or exact lifecycle cleanup.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6507,3 +6508,14 @@ restart without the temporary env and prove the label is not sticky. T219 is doc
 executed the runtime refresh. It does not change source, public MCP params or payloads, ranking/
 `orient`, schema/storage/index/document-index behavior, lifecycle state, M6/migration/quarantine
 state, hooks/settings/adapters, native Claude state, deletion, rollback, or user-owned files.
+
+T220 matrix note:
+`docs/BRAIN_HARNESS_T220_T219_GATE_CHECKPOINT_RECONCILIATION_2026-06-04.md` reconciles the early
+architecture checkpoint and early completion-matrix reconciliation note after T219. Those
+startup-facing chunks now state that T219 has prepared the exact runtime-refresh approval gate for
+the T217 MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback, while preserving that the runtime refresh has
+not been executed and live external-session joinability remains incomplete until installed runtime
+validation and real host labels. T220 is docs-only: it does not change source, install a binary,
+restart the daemon, set temporary daemon environment variables, edit hooks/settings/adapters,
+mutate lifecycle or migration state, run native Claude, change ranking/`orient`, change public
+MCP/schema/storage/index/document-index behavior, delete data, or touch user-owned files.
