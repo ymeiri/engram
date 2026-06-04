@@ -832,61 +832,63 @@ Claude MCP-`orient` validation packet, T256 reconciles the matrix after T255, T2
 post-T256 telemetry-window wording, T258 records read-only branch synchronization strategy, and
 T259 runs the remote-freshness recheck without reconciling, and T260 records the branch
 reconciliation plan, T261 completes the local `origin/main` merge reconciliation without remote
-publication, and T262 adds a guarded source-level Codex Desktop host-label fallback.
+publication, T262 adds a guarded source-level Codex Desktop host-label fallback, and T263 refreshes
+the installed runtime for T262 with live Codex validation.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
 `/hooks` effective-hook visibility did not produce a usable report in T179, prompt-bearing native
-Claude behavior is unproved, and host labels remain only partially adopted. T262 now adds a
-guarded source-level Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing paths,
-but installed runtime has not been refreshed for T262 and Claude/Gemini host labels remain
-unproved. T242 installed final binary hash
+Claude behavior is unproved, and host labels remain only partially adopted. T262 adds a guarded
+source-level Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing paths, and T263
+installed and live-validated that source in Codex Desktop. Claude/Gemini host labels remain
+unproved. T263 installed binary hash
+`186feb4ab1e962733772773af3e1e9ca400cf52c6ebe7f92188e4eb2e17a0339`,
+daemon PID `70816` on port `8765`, and live trace
+`019e9316-093a-7242-b910-753f672a04b5` proved Codex label
+`codex://threads/019e683b-1560-7361-b535-53b012e04aa5`. Earlier T242 installed final binary hash
 `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`,
 repaired the cleanup pidfile race, left final daemon PID `14310` serving port `8765` with
 pidfile/status/process aligned, proved omitted telemetry labels are not sticky after cleanup, and
 live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
-Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T257
-sampled telemetry windows are mixed: `real_session_eval(project=engram, limit=20)` generated at
-`2026-06-04T12:51:26.859552Z` reports `feedback_coverage=0.949999988079071`, clean outcome
-counters, and no missing context, but `confidence_gate.passed=false` because only two intents have
-feedback in that 20-trace window. The `limit=50` report generated at
-`2026-06-04T12:51:26.931086Z` reports `feedback_coverage=0.9399999976158142`, four intents,
-clean outcome counters, and `confidence_gate.passed=true`. Telemetry therefore remains sampled,
-agent-assessed, and window-sensitive operational evidence, not exhaustive proof of M6, lifecycle,
-native-Claude, or branch completion. T210 remains the M6 source of truth: all 12
+Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T263
+sampled 20-trace telemetry window generated at `2026-06-04T14:42:52.425434Z` reports
+`feedback_coverage=0.75`, `distinct_intent_count=3`, `confidence_gate.passed=true`, one externally
+labeled trace/feedback, clean outcome counters, no missing context, no wrong-scope memory, and no
+bad-memory-used records. Telemetry remains sampled, agent-assessed, and window-sensitive
+operational evidence, not exhaustive proof of M6, lifecycle, native-Claude, Claude/Gemini host
+labels, or remote publication. T210 remains the M6 source of truth: all 12
 generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
 approved.
 
-Current T262 matrix snapshot:
+Current T263 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; T242 installed runtime is current for prior source fixes; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`. | Validations are point-in-time and bounded to the approved/tested classes. |
-| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. T262 narrows Codex Desktop source-level labels by using guarded `CODEX_THREAD_ID` fallback and preserving feedback trace inheritance. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, installed-runtime T262 validation, Claude/Gemini host-label adoption, and migration apply readiness remain unproved. |
+| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance. | Validations are point-in-time and bounded to the approved/tested classes. |
+| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, Claude/Gemini host-label adoption, and migration apply readiness remain unproved. |
 | Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules. | T255 has not run native Claude and does not prove prompt-bearing behavior. |
-| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, installed-runtime T262 validation, Claude/Gemini host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
-| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest 20-trace window has 95% coverage and clean outcomes but fails intent-feedback diversity. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, Claude/Gemini host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
+| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest T263 20-trace window passes with 75% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
 | Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
 
-Gate-level T257 status:
+Gate-level T263 status:
 
-| Gate | T257 state | Next closure condition |
+| Gate | T263 state | Next closure condition |
 | --- | --- | --- |
 | M6 human dispositions or deferral | Blocked on human choices or user-provided deferral rationale/evidence; `ready_to_apply=false`. | T210A/T210B disposition record or explicit deferral evidence; no apply/delete without separate approval. |
 | Lifecycle archive or deferral | Incomplete; T234/T247/T248 remain default-deny exact packets. | Exact packet execution after fresh checks, or explicit lifecycle deferral. |
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
-| Host external-session labels | T262 adds guarded source-level Codex Desktop fallback: explicit labels win, `ENGRAM_EXTERNAL_SESSION_ID` is second, and `CODEX_THREAD_ID` is used as `codex://threads/{id}` only with a Codex host marker and safe token. Telemetry integration caught and fixed feedback inheritance so omitted feedback labels inherit the trace label. | Refresh/validate installed runtime for T262 and validate real Claude/Gemini host labels; do not infer full host adoption from source tests. |
+| Host external-session labels | T263 installs and live-validates T262 in Codex Desktop: daemon PID `70816` records live `orient` trace `019e9316-093a-7242-b910-753f672a04b5` with `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`, and feedback `019e9316-30b1-7941-a119-77a326d532ab` inherits that trace label when submitted without an explicit label. | Validate real Claude/Gemini host labels; do not infer full host adoption from Codex-only runtime evidence. |
 | Branch synchronization | T261 completes the local regular merge of `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423` into `yuval.meiri/memory-os-phase0`. Conflicts were limited to telemetry service/tests and resolved by preserving the richer branch implementation; validation passed format, telemetry integration tests, full `engram-tests`, workspace check, focused MCP env-fallback tests, full clippy, conflict-marker check, and `git diff --check`. | Remote push, upstream configuration, backup branch policy, and PR publication remain separate external-publication decisions. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
-T257 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
-rolling telemetry evidence is mixed rather than uniformly passing: the 50-trace confidence window
-passes, while the 20-trace window has high coverage and clean outcomes but fails because only two
-intents have feedback. This does not change M6, lifecycle, native-Claude, host-label, or
-branch-synchronization gates. T241 still rejects standalone M6 deferral without user-provided
+T263 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
+20-trace telemetry window passes after T263 live Codex validation, including one externally labeled
+trace/feedback, but this does not change M6, lifecycle, native-Claude, Claude/Gemini host-label, or
+remote publication gates. T241 still rejects standalone M6 deferral without user-provided
 rationale/evidence, T252 still preserves exact approval boundaries for T234/T247/T248 lifecycle
 archives, and T255 says shorter or broader approval must not be treated as authorization to execute
 the native-Claude packet.
@@ -7233,3 +7235,20 @@ orientation smoke against a temp data dir completed and produced trace
 because the live daemon already held the SurrealDB lock. The packet does not expose
 `external_session_id`, so stored-label evidence comes from focused resolver/runtime tests and full
 telemetry integration. T262 does not refresh the installed daemon/runtime.
+
+T263 T262 runtime refresh note:
+`docs/BRAIN_HARNESS_T263_T262_RUNTIME_REFRESH_2026-06-04.md` records the installed-runtime
+validation for T262. `cargo install --path engram-cli --root /Users/yuval.meiri/.local` installed
+binary hash `186feb4ab1e962733772773af3e1e9ca400cf52c6ebe7f92188e4eb2e17a0339`, replacing the
+previous `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`. The daemon was
+stopped and restarted from the Codex-labeled environment; final status reports port `8765`, PID
+`70816`, and `ps` confirms `/Users/yuval.meiri/.local/bin/engram serve --http --port 8765`. Live
+lean `orient` trace `019e9316-093a-7242-b910-753f672a04b5` recorded
+`external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`. Feedback
+`019e9316-30b1-7941-a119-77a326d532ab`, submitted without an explicit `external_session_id`,
+inherited the same trace label. The subsequent 20-trace eval passed with `feedback_coverage=0.75`,
+`distinct_intent_count=3`, `task_failure_count=0`, `bad_memory_used_count=0`,
+`missing_context_count=0`, `wrong_scope_memory_count=0`, `external_session_trace_count=1`, and
+`external_session_feedback_count=1`. T263 does not prove Claude/Gemini labels, native Claude,
+effective hooks, lifecycle cleanup, M6 completion, remote publication, deletion, rollback, or
+user-owned-file changes.

@@ -246,6 +246,16 @@ Harness and migration checkpoint, current through 2026-06-04:
   does not refresh runtime, edit hooks/settings/adapters, change public MCP/schema/storage/index/
   document-index behavior, mutate lifecycle/M6, run native Claude, push, set upstream, delete,
   rollback, or touch user-owned files.
+- T263 refreshes the installed runtime for T262 and validates it live in Codex Desktop. The
+  installed binary hash is `186feb4ab1e962733772773af3e1e9ca400cf52c6ebe7f92188e4eb2e17a0339`;
+  the daemon restarted on port `8765` as PID `70816`; live `orient` trace
+  `019e9316-093a-7242-b910-753f672a04b5` recorded
+  `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`; and feedback
+  `019e9316-30b1-7941-a119-77a326d532ab`, submitted without an explicit label, inherited the same
+  trace label. The 20-trace rolling eval then passed with one externally labeled trace/feedback,
+  clean outcomes, and no wrong-scope or missing-context counts. T263 does not prove Claude/Gemini
+  labels, native Claude behavior, effective hooks, lifecycle cleanup, M6, remote publication,
+  deletion, rollback, or user-owned-file changes.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
