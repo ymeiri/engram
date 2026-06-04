@@ -6285,3 +6285,17 @@ active until a future non-dry-run handoff update converges them or separate life
 explicitly run. T204 does not change search ranking/`orient`, public MCP shape,
 schema/storage/index/document-index behavior, hooks, settings, adapters, M6/migration/quarantine,
 native Claude, deletion, rollback, force-kill, or user-owned files.
+
+T205 matrix note:
+`docs/BRAIN_HARNESS_T205_HANDOFF_DOC_INDEX_RESULT_2026-06-04.md` records exact-file document
+indexing for the T201, T202, T203, and T204 handoff reports. Indexing created 9, 1, 9, and 6
+chunks respectively with no warnings. Targeted searches returned T203 first for its title, T204
+first for its runtime-refresh query, T201 first for its title, and T202 first for the distinctive
+`test_mcp_handoff_update_supersedes_previous_handoff` content query. T202 remains noisy for exact
+title and filename-stem document search: `T202 Handoff Supersession MCP Boundary Validation` did
+not return T202 in the top five, and the filename-stem query did not return it in the top ten.
+This is an indexed-document visibility caveat, not a ranking or indexing-behavior change. T205
+does not create active MemoryItems, mutate lifecycle state, run `lint apply_safe`, inspect or run
+M6/migration/quarantine actions, change search ranking/`orient`, public MCP shape,
+schema/storage/index/document-index behavior, hooks, settings, adapters, runtime configuration,
+native Claude, deletion, rollback, force-kill, or user-owned files.
