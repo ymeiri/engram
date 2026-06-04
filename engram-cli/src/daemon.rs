@@ -8,7 +8,7 @@ use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
@@ -17,6 +17,10 @@ pub const DEFAULT_DAEMON_PORT: u16 = 8765;
 
 /// Port range to search for available ports.
 const PORT_RANGE: std::ops::Range<u16> = 8765..8775;
+
+/// Extra time after a successful health check to catch children that exit
+/// immediately while another daemon instance is satisfying the probe.
+const DAEMON_SPAWN_STABILITY_DELAY: Duration = Duration::from_millis(250);
 
 /// Configuration for daemon management.
 #[derive(Debug, Clone, Default)]
@@ -105,14 +109,15 @@ pub async fn ensure_daemon_running(config: &DaemonConfig) -> Result<u16> {
     let port = config.port.unwrap_or_else(find_available_port);
     info!("Starting daemon on port {}", port);
 
-    // Spawn the daemon
-    spawn_daemon(config, port)?;
+    // Spawn the daemon and make sure the spawned child is the process that stays alive.
+    let mut child = spawn_daemon(config, port)?;
+    let pid = child.id();
 
     // Wait for daemon to be ready
-    wait_for_daemon(port, Duration::from_secs(30)).await?;
+    wait_for_spawned_daemon(port, &mut child, Duration::from_secs(30)).await?;
 
     // Save daemon info
-    save_daemon_info(config, port)?;
+    save_daemon_info(config, port, pid)?;
 
     Ok(port)
 }
@@ -142,14 +147,18 @@ pub async fn check_daemon_health(port: u16) -> Result<()> {
     }
 }
 
-/// Wait for daemon to become ready.
-async fn wait_for_daemon(port: u16, timeout: Duration) -> Result<()> {
+/// Wait for the daemon health endpoint while also requiring the spawned child to stay alive.
+async fn wait_for_spawned_daemon(port: u16, child: &mut Child, timeout: Duration) -> Result<()> {
     let start = std::time::Instant::now();
     let mut interval = tokio::time::interval(Duration::from_millis(100));
 
     while start.elapsed() < timeout {
         interval.tick().await;
+        ensure_spawned_child_still_running(child)?;
+
         if check_daemon_health(port).await.is_ok() {
+            tokio::time::sleep(DAEMON_SPAWN_STABILITY_DELAY).await;
+            ensure_spawned_child_still_running(child)?;
             info!("Daemon is ready on port {}", port);
             return Ok(());
         }
@@ -159,6 +168,20 @@ async fn wait_for_daemon(port: u16, timeout: Duration) -> Result<()> {
         "Daemon failed to start within {} seconds",
         timeout.as_secs()
     )
+}
+
+fn ensure_spawned_child_still_running(child: &mut Child) -> Result<()> {
+    if let Some(status) = child
+        .try_wait()
+        .context("Failed to inspect spawned daemon process")?
+    {
+        bail!(
+            "Spawned daemon process {} exited before daemon readiness was confirmed: {}",
+            child.id(),
+            status
+        );
+    }
+    Ok(())
 }
 
 /// Find an available port in the configured range.
@@ -176,7 +199,7 @@ fn find_available_port() -> u16 {
 }
 
 /// Spawn a daemon process.
-fn spawn_daemon(config: &DaemonConfig, port: u16) -> Result<u32> {
+fn spawn_daemon(config: &DaemonConfig, port: u16) -> Result<Child> {
     let exe = std::env::current_exe().context("Failed to get current executable path")?;
 
     // Ensure daemon directory exists
@@ -235,11 +258,7 @@ fn spawn_daemon(config: &DaemonConfig, port: u16) -> Result<u32> {
     let pid = child.id();
     info!("Spawned daemon with PID {}", pid);
 
-    // Save PID immediately
-    let mut pid_file = fs::File::create(config.pid_file())?;
-    writeln!(pid_file, "{}", pid)?;
-
-    Ok(pid)
+    Ok(child)
 }
 
 /// Stop a running daemon.
@@ -292,7 +311,10 @@ fn read_daemon_pid(config: &DaemonConfig) -> Result<u32> {
 }
 
 /// Save daemon info to files.
-fn save_daemon_info(config: &DaemonConfig, port: u16) -> Result<()> {
+fn save_daemon_info(config: &DaemonConfig, port: u16, pid: u32) -> Result<()> {
+    let mut pid_file = fs::File::create(config.pid_file())?;
+    writeln!(pid_file, "{}", pid)?;
+
     let mut port_file = fs::File::create(config.port_file())?;
     writeln!(port_file, "{}", port)?;
     Ok(())
@@ -319,4 +341,46 @@ pub async fn is_daemon_running(config: &DaemonConfig) -> bool {
 #[allow(dead_code)]
 pub fn daemon_mcp_url(port: u16) -> String {
     format!("http://127.0.0.1:{}/mcp", port)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn spawned_child_liveness_accepts_running_child() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "sleep 5"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep child");
+
+        assert!(ensure_spawned_child_still_running(&mut child).is_ok());
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn spawned_child_liveness_rejects_exited_child() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 7"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn exiting child");
+
+        let _ = child.wait();
+
+        let error = ensure_spawned_child_still_running(&mut child)
+            .expect_err("exited child should fail liveness check");
+        assert!(error
+            .to_string()
+            .contains("exited before daemon readiness was confirmed"));
+    }
 }
