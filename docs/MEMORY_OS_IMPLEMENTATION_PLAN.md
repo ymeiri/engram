@@ -833,7 +833,10 @@ reports, or wrong-scope memory judgments. T240's read-only post-T239 audit shows
 binary-relevant drift from T233 baseline to HEAD, local runtime still at old hash
 `1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, daemon still PID `21398`,
 and live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` still leaking the
-out-of-scope `voice-layer` current-plan item, so T233 remains pending and product-moving.
+out-of-scope `voice-layer` current-plan item, so T233 remains pending and product-moving. T241
+clarifies that M6 deferral is not currently approved: T210 remains the human-disposition recording
+gate, and explicit deferral would still require user-approved rationale/evidence rather than an
+agent-authored deferral packet.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -6837,3 +6840,17 @@ item. T233 therefore remains fresh and still product-moving, but unexecuted. T24
 runtime refresh, lifecycle archive, `lint apply_safe`, M6/migration/quarantine actions, harness
 writes, ranking/`orient`, public MCP/schema/storage/index/document-index behavior changes,
 deletion, rollback, old-binary reinstall, or user-owned-file edits.
+
+T241 matrix note:
+After T240, the remaining M6 definition-of-done ambiguity was whether to prepare a standalone
+deferral packet while T233 runtime refresh is still pending. AI Council recall found no prior
+matching decision; Claude Bridge and an AI Council broadcast agreed that a standalone M6 deferral
+authorization packet would risk over-normalizing non-action or implying a migration decision without
+user-provided deferral rationale. The accepted repo-scoped slice is this concise implementation-plan
+clarification only: M6 deferral is not approved, T210 remains the active human-disposition recording
+gate, and any explicit deferral still requires user-approved rationale/evidence. T241 does not make
+candidate decisions, edit the T68 review workspace, run `migration_review_status`,
+`migration_review_prioritize`, `migration_review_apply`, `migration_review_export`, runtime
+refresh, lifecycle archive, `lint apply_safe`, harness writes, ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
+or user-owned-file edits.
