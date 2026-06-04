@@ -6387,3 +6387,15 @@ count did not increase. T211 does not make candidate decisions, run M6 status/ap
 export/rerun, mutate lifecycle state, archive memory, delete data, change ranking/`orient`, public
 MCP/schema/storage/index behavior, document-index behavior, harness files, native Claude state,
 runtime configuration, or user-owned files.
+
+T212 matrix note:
+`docs/BRAIN_HARNESS_T212_T211_DOC_INDEX_RESULT_2026-06-04.md` records exact-file document indexing
+for the T211 T209/T210 document-index result. Pre-index exact title search missed T211 in the top
+five. Indexing created 1 chunk with no warnings. Post-index exact title search returned T211 first
+with score `1.0`; a stats/content query returned T211 in the top five behind older similar
+index-result reports. Document stats became `source_count=98`, `chunk_count=4409`,
+`searchable_chunk_count=2397`, `orphan_chunk_count=2012`, and `embedding_dimension=384`, so orphan
+count did not increase. T212 does not make candidate decisions, run M6 status/apply/prioritize/
+export/rerun, mutate lifecycle state, archive memory, delete data, change ranking/`orient`, public
+MCP/schema/storage/index behavior, document-index behavior, harness files, native Claude state,
+runtime configuration, or user-owned files.
