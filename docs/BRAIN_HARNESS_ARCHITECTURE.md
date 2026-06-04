@@ -166,6 +166,11 @@ Harness and migration checkpoint, current through 2026-06-04:
   lint reports feedback-stale findings for both with `safe_action=none`. T251 does not archive
   either item, run `lint apply_safe`, create a new packet, or change ranking/`orient`; it keeps
   lifecycle cleanup incomplete until exact packet approvals are executed or explicitly deferred.
+- T252 reconciles the user's broad "continue without stopping for approval" instruction with the
+  pending default-deny lifecycle packets. AI Council and Claude Bridge agreed that broad workflow
+  permission applies to ordinary Engram repo/docs/code work, not exact MemoryItem archive writes.
+  T234/T247/T248 therefore remain pending until their exact packet wording is provided after fresh
+  pre-write checks; no lifecycle archive or `lint apply_safe` ran.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
