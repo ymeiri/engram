@@ -6729,3 +6729,27 @@ manual lifecycle write, not `lint apply_safe`. T234 does not archive the item, r
 run M6/migration/quarantine actions, mutate lifecycle state, change ranking/`orient`, public
 MCP/schema/storage/index/document-index behavior, harness files/settings/hooks/adapters, native
 Claude state, runtime configuration, deletion, rollback, old-binary reinstall, or user-owned files.
+
+T235 matrix note:
+`docs/BRAIN_HARNESS_T235_COMPLETION_MATRIX_HEAD_RECONCILIATION_2026-06-04.md` reconciles the first
+`Current Completion Matrix` paragraph after T233/T234. The head note no longer names stale T230 as
+the runtime-refresh gate; it now says T233 supersedes T230 after T232, installed runtime remains
+stale for T217/T221/T223 and T225/T227/T229/T232, and T234 is a separate docs-only/default-deny
+lifecycle packet rather than archive approval. T235 does not execute runtime refresh, lifecycle
+archive, `lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`,
+public MCP/schema/storage/index/document-index behavior changes, deletion, rollback,
+old-binary reinstall, or user-owned-file edits.
+
+T236 matrix note:
+`docs/BRAIN_HARNESS_T236_ROLLING_TELEMETRY_GATE_AUDIT_2026-06-04.md` records a read-only rolling
+telemetry audit after T235. Current `telemetry(action=real_session_eval, project=engram, limit=50)`
+generated at `2026-06-04T09:20:10.384236Z` returned `trace_count=50`,
+`feedback_trace_count=33`, `feedback_coverage=0.6600000262260437`,
+`memory_judgment_coverage=1.0`, `task_failure_count=0`, `bad_memory_used_count=0`,
+`missing_context_count=0`, `wrong_scope_memory_count=0`, `external_session_trace_count=4`, and
+`confidence_gate.passed=false` because feedback covers only two intents while the gate requires at
+least three. Fresh `lint(run, limit=30)` still reported wrong-scope active-memory and
+superseded-active lifecycle pressure with zero safe actions applied. This is useful operational
+evidence, not completion proof or approval for M6 apply, lifecycle cleanup, runtime refresh,
+ranking/`orient`, public MCP/schema/storage/index/document-index changes, harness writes, deletion,
+rollback, old-binary reinstall, or user-owned-file edits.
