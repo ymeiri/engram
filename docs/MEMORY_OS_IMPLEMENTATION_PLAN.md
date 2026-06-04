@@ -807,7 +807,8 @@ Scope: Whether to extend Engram or build a new system; full design for a local-f
 ## Current Completion Matrix
 
 Matrix reconciliation note, 2026-06-04: T214 supersedes older cross-harness readiness wording
-below, and T235 reconciles this startup-facing note after T233/T234. Current read-only
+below, T235 reconciles this startup-facing note after T233/T234, and T237 reconfirms that
+T233 remains fresh after the T234/T235/T236 docs-only commits. Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
 lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
@@ -6753,3 +6754,23 @@ superseded-active lifecycle pressure with zero safe actions applied. This is use
 evidence, not completion proof or approval for M6 apply, lifecycle cleanup, runtime refresh,
 ranking/`orient`, public MCP/schema/storage/index/document-index changes, harness writes, deletion,
 rollback, old-binary reinstall, or user-owned-file edits.
+
+T237 matrix note:
+`docs/BRAIN_HARNESS_T237_T233_RUNTIME_GATE_FRESHNESS_AUDIT_2026-06-04.md` records a read-only
+freshness audit for the pending exact T233 runtime-refresh packet after the T234/T235/T236
+docs-only commits. Fresh binary-relevant diff checks from T233 source baseline
+`cd59424f9cb4ae9ec90aa5af7328774c0f7784a8` to HEAD returned empty output for `Cargo.toml`,
+`Cargo.lock`, `engram-core`, `engram-store`, `engram-embed`, `engram-index`, `engram-mcp`,
+`engram-cli`, `engram-tests`, `scripts`, and `.cargo`; staged and unstaged binary-relevant diffs
+also returned empty output. Full baseline-to-HEAD diff contained only docs paths, `git status
+--short` still showed only the known user-owned untracked root `AGENTS.md`, the installed local
+binary hash remained `1475cd391ed1f2134eac59cc10226ffa6ad7c72c8049230dd19ec18a024e8058`, the
+global daemon remained PID `21398` on port `8765`, and parent-shell `ENGRAM_EXTERNAL_SESSION_ID`
+was unset. T233 therefore remains the current exact runtime-refresh gate, but it has not been
+executed and must repeat its first checks immediately after exact approval. Fresh rolling telemetry
+still failed the confidence gate at `feedback_coverage=0.4399999976158142` and two feedback
+intents, while lint still reported wrong-scope active-memory and superseded-active lifecycle
+pressure with zero safe actions applied. T237 does not execute runtime refresh, lifecycle archive,
+`lint apply_safe`, M6/migration/quarantine actions, harness writes, ranking/`orient`, public
+MCP/schema/storage/index/document-index behavior changes, deletion, rollback, old-binary reinstall,
+or user-owned-file edits.
