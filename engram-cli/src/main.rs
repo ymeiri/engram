@@ -518,7 +518,7 @@ enum Commands {
         agent: Option<String>,
 
         /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID,
-        /// then guarded CODEX_THREAD_ID
+        /// guarded CLAUDE_CODE_SESSION_ID, then guarded CODEX_THREAD_ID
         #[arg(long)]
         external_session_id: Option<String>,
 
@@ -1702,7 +1702,7 @@ enum MemoryCommands {
         query: Option<String>,
 
         /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID,
-        /// then guarded CODEX_THREAD_ID
+        /// guarded CLAUDE_CODE_SESSION_ID, then guarded CODEX_THREAD_ID
         #[arg(long)]
         external_session_id: Option<String>,
 
