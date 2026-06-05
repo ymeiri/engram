@@ -361,6 +361,13 @@ Harness and migration checkpoint, current through 2026-06-05:
   two-phase snapshot-and-lock protocol: future execution must present live Snapshot A, obtain exact
   approval for that snapshot, re-read matching Snapshot B immediately before writes, and hard-stop
   on any drift or path ambiguity. It does not initialize or compile the vault.
+- T276 refreshes the recurring pull-hint branch evidence after T275 without executing any branch
+  mutation. After `git fetch origin`, `origin/main` is still the merge-base and an ancestor of
+  `HEAD`, `HEAD...origin/main` is `390 0`, no same-named fetched remote branch exists, the current
+  branch has no upstream, and no pull policy is configured. The pull hint still does not justify
+  `git pull`, merge, rebase, pull-policy configuration, push, upstream setup, or PR creation. The
+  remaining branch gate is still exact T271A-style remote publication/upstream, with PR creation as
+  a separate gate.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
@@ -2576,6 +2583,11 @@ Proceed in this order from the current checkpoint:
      preflight, exact Snapshot A user approval, matching Snapshot B immediately before the first
      vault write, absent-or-empty/non-symlink canonical path checks, and report-only handling for
      partial failure. T275 does not write `/Users/yuval.meiri/.engram/vault`.
+174. Treat T276 as a read-only pull-hint freshness report, not branch reconciliation or
+     publication. It confirms the post-T275 branch is still locally reconciled with fetched
+     `origin/main` (`HEAD...origin/main` = `390 0`) and that the same recurring pull hint remains a
+     policy/upstream-publication issue, not evidence to run `git pull`, merge, rebase, set pull
+     policy, push, set upstream, or open a PR without the branch gate.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
