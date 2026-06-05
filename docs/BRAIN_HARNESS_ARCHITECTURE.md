@@ -336,6 +336,12 @@ Harness and migration checkpoint, current through 2026-06-05:
   is not an executable packet under current counts; future canonical vault execution needs a fresh
   exact successor packet or approval that explicitly supersedes T267 and captures live counts
   immediately before execution.
+- T273 refreshes the branch-publication and `git pull` hint evidence after T272 without mutating
+  Git state. After a fresh fetch, `HEAD` is `534796d9f5a7e59d364e4075cfb7b45df5811a4c`,
+  `origin/main` is still the merge-base and an ancestor of `HEAD`, `HEAD...origin/main` is
+  `387 0`, no same-named remote branch exists, no upstream is configured, and no pull policy is
+  configured. The repeated pull hint remains a signal to avoid bare `git pull`, not a reason to
+  merge or rebase. The branch gate is still optional remote publication/upstream policy.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
@@ -2533,6 +2539,12 @@ Proceed in this order from the current checkpoint:
      execution. T272 does not initialize or compile the vault, run M6/lifecycle/native-Claude/
      branch-publication work, edit harness files, change ranking/`orient` or public MCP/schema/
      storage/index/document-index behavior, delete, roll back, or touch user-owned files.
+171. Treat T273 as a branch-publication freshness recheck, not a remote publication step. T273
+     re-runs the T268/T271 branch evidence after T272 and confirms `origin/main` remains an
+     ancestor of `HEAD`, with `HEAD...origin/main` at `387 0`, no upstream, no same-named remote
+     branch, and no pull policy. Do not respond to the recurring pull-reconcile hint by setting
+     Git config, pulling, merging, rebasing, pushing, opening a PR, or setting upstream. Future
+     publication still requires fresh preflight and an exact branch-publication decision.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
