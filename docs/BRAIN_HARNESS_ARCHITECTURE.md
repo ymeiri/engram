@@ -107,9 +107,11 @@ Harness and migration checkpoint, current through 2026-06-05:
   source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T262/T263 add and
   live-validate a guarded Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing
   paths, T264 adds a guarded source-level Claude Code `CLAUDE_CODE_SESSION_ID` fallback, and T265
-  refreshes installed runtime for that source. T265 does not prove live native Claude Code, Gemini,
-  or host-wide label adoption. T266 validates current-data vault compilation only in isolated temp
-  output; canonical `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T267
+  refreshes installed runtime for that source. T270 prepares a default-deny host-label gate: live
+  native Claude Code labeling still needs exact trace evidence, while Gemini host labeling is
+  deferred because current evidence has no documented MCP-subprocess session-id contract. T266
+  validates current-data vault compilation only in isolated temp output; canonical
+  `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T267
   prepares, but does not execute, the exact future canonical vault init/compile gate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -311,6 +313,13 @@ Harness and migration checkpoint, current through 2026-06-05:
   the T197 process-group `SIGINT` cleanup path is pre-authorized if EOF or the session hangs. T269
   does not run native Claude, T255 prompt-bearing validation, M6, lifecycle archive/apply_safe,
   canonical vault writes, branch publication, hook/settings edits, or ranking/`orient` changes.
+- T270 prepares, but does not execute, the remaining host external-session label gate. It defines
+  future exact live native Claude Code proof criteria for stored
+  `claude-code://sessions/{id}` trace labels and feedback inheritance, and records Gemini CLI host
+  labeling as deferred/default-deny until a documented MCP-subprocess session-id contract exists.
+  T270 does not run native Claude or Gemini, combine with T255/T269 without exact dual-scope
+  approval, implement guessed Gemini env labels, edit harness files, mutate lifecycle/M6/vault
+  state, publish branches, or change ranking/`orient`.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
