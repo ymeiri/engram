@@ -838,7 +838,8 @@ Claude Code session fallback, T265 refreshes installed runtime for T264, and T26
 current-data vault compilation in isolated temp output. T267 prepares the future canonical-vault
 init/compile approval gate without executing it. T268 confirms that the branch is locally current
 with `origin/main` after fetch and that the remaining branch gate is remote publication policy, not
-a local merge/rebase.
+a local merge/rebase. T269 prepares the effective-hook visibility revalidation approval packet
+without executing native Claude or touching hook/runtime state.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -876,26 +877,26 @@ expected count from 1,585 MemoryItems, 536 KnowledgeCommits, 9 repositories, 32 
 79 projects. Canonical `/Users/yuval.meiri/.engram/vault` remained `exists=false` and
 `initialized=false`.
 
-Current T268 matrix snapshot:
+Current T269 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
 | Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence; T265 installs that source and proves live Codex labeling still works; T266 proves current data compiles into the generated vault projection in isolated temp output with exact expected file counts. | Validations are point-in-time and bounded to the approved/tested classes. |
 | Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, vault compileability, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264/T265 narrow Claude Code source/runtime labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env and installed-CLI simulated-Claude smoke; T266 narrows the vault gate to canonical durable initialization/update policy rather than compileability. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, live Claude/Gemini host-label adoption, canonical vault initialization, and migration apply readiness remain unproved. |
-| Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules; T267 commits an exact/default-deny canonical vault init/compile packet. | T255 has not run native Claude and does not prove prompt-bearing behavior; T267 has not initialized or compiled the canonical vault. |
-| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, canonical durable vault initialization/compile, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, live Claude/Gemini host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. T268 confirms no local merge/rebase is currently needed before repo-local work. |
-| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest T265 20-trace window passes with 55% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules; T267 commits an exact/default-deny canonical vault init/compile packet; T269 commits an exact/default-deny effective-hook visibility revalidation packet with a falsifiable `/hooks` observation contract and T197-style process-group cleanup path. | T255 has not run native Claude and does not prove prompt-bearing behavior; T267 has not initialized or compiled the canonical vault; T269 has not run native Claude and does not prove effective-hook visibility. |
+| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, canonical durable vault initialization/compile, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook execution result, live Claude/Gemini host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. T268 confirms no local merge/rebase is currently needed before repo-local work. |
+| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest T265 20-trace window passes with 55% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets, T255, T267, and T269 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
 | Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
 
-Gate-level T268 status:
+Gate-level T269 status:
 
 | Gate | T268 state | Next closure condition |
 | --- | --- | --- |
 | M6 human dispositions or deferral | Blocked on human choices or user-provided deferral rationale/evidence; `ready_to_apply=false`. | T210A/T210B disposition record or explicit deferral evidence; no apply/delete without separate approval. |
 | Lifecycle archive or deferral | Incomplete; T234/T247/T248 remain default-deny exact packets. | Exact packet execution after fresh checks, or explicit lifecycle deferral. |
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
-| Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
+| Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`; T269 now prepares a stricter default-deny revalidation packet with transcript-based pass/fail criteria and pre-authorized process-group cleanup if EOF/session exit hangs. | Exact T269 approval and one bounded live run, or equivalent official/runtime evidence. |
 | Host external-session labels | T265 installs T264 and live-validates Codex after refresh: daemon PID `25189` records live `orient` trace `019e964a-1aca-7a63-8549-04c39c491fc0` with `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`, and feedback `019e964a-3cfb-7de3-9b0d-c1671ebd489b` inherits that trace label when submitted without an explicit label. Installed CLI help now advertises explicit labels, `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID`, then guarded Codex, and a simulated Claude+inherited-Codex temp-data CLI smoke returned trace `019e964a-9283-7c32-b6db-84d02633a2a7`. | Validate live native Claude/Gemini host labels; do not infer live host adoption from installed CLI/source tests. |
 | KnowledgeCommit/vault compile | T266 initializes and compiles only `/private/tmp/engram-t266-vault-smoke-20260605`; generated count is exactly 2,245, all files are generated, marker/frontmatter scans pass, sampled pages are readable, and canonical `/Users/yuval.meiri/.engram/vault` remains absent. T267 prepares the exact future canonical init+compile approval packet but does not execute it. | Exact T267 approval, preflight path/count checks, canonical init+compile, postflight validation, result report, and current-plan capture before claiming user-facing vault completion. |
 | Branch synchronization | T261 completes the local regular merge of `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423` into `yuval.meiri/memory-os-phase0`. T268 rechecks after fresh fetch: `origin/main` is the merge-base and an ancestor of `HEAD`; `HEAD...origin/main` is `382 0`; the current branch has no upstream and no same-named remote branch. | Remote push, upstream configuration, backup branch policy, and PR publication remain separate external-publication decisions; do not treat a generic `git pull` reconciliation hint as proof that this branch needs local merge/rebase. |
@@ -933,6 +934,19 @@ same-named remote branch, while local `main` is simply behind `origin/main` by 1
 also an ancestor of `HEAD`. The `git pull` reconciliation hint is not evidence that the current
 branch needs a local merge or rebase. Do not set pull config, push, set upstream, or publish a PR
 without a separate remote-publication decision.
+
+T269 addendum: the effective-hook visibility gate is now packetized but not executed.
+`docs/BRAIN_HARNESS_T269_EFFECTIVE_HOOK_VISIBILITY_APPROVAL_PACKET_2026-06-05.md` carries forward
+T172/T179/T197/T254 evidence: native startup guidance appeared, `/hooks` did not produce visible
+effective-hook configuration, T197 process-group `SIGINT` resolved the leftover native Claude
+process and observed a SessionEnd handoff side effect, and static harness readiness still cannot
+prove effective native behavior. The future T269 run may pass only if a captured native Claude PTY
+transcript after one `/hooks` command visibly shows effective configuration for the required Engram
+hook classes; missing or menu-only output is a failed/inconclusive measurement. T269 forbids
+natural-language prompts, T255 execution, hook/settings/adapters edits, harness install,
+M6/migration/quarantine, lifecycle archive/apply_safe, canonical vault writes, ranking/`orient`
+changes, public MCP/schema/storage/index/document-index changes, branch publication, deletion,
+rollback, and user-owned-file edits.
 
 T252 addendum: the user's latest broad instruction to continue without stopping for approval for
 Engram project-scope changes is treated as workflow permission for ordinary repo/docs/code work.

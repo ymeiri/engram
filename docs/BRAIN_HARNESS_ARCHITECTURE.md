@@ -303,6 +303,14 @@ Harness and migration checkpoint, current through 2026-06-05:
   same-named remote branch; local `main` is behind `origin/main` by 107 commits but is also an
   ancestor of `HEAD`. Therefore no local merge/rebase is needed for repo-local Brain Harness work;
   the remaining branch gate is remote publication/upstream/PR policy.
+- T269 prepares, but does not execute, the effective-hook visibility revalidation gate. It converts
+  the T172/T179/T197/T254 lessons into a stricter future packet: the only future hook-visibility
+  observation channel is the captured native Claude PTY transcript after one `/hooks` command,
+  passing output must visibly show the effective hook configuration for the required Engram hook
+  classes, inconclusive output is a failed measurement rather than permission for more input, and
+  the T197 process-group `SIGINT` cleanup path is pre-authorized if EOF or the session hangs. T269
+  does not run native Claude, T255 prompt-bearing validation, M6, lifecycle archive/apply_safe,
+  canonical vault writes, branch publication, hook/settings edits, or ranking/`orient` changes.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
