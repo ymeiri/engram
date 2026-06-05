@@ -833,8 +833,8 @@ post-T256 telemetry-window wording, T258 records read-only branch synchronizatio
 T259 runs the remote-freshness recheck without reconciling, and T260 records the branch
 reconciliation plan, T261 completes the local `origin/main` merge reconciliation without remote
 publication, T262 adds a guarded source-level Codex Desktop host-label fallback, T263 refreshes
-the installed runtime for T262 with live Codex validation, and T264 adds a guarded source-level
-Claude Code session fallback.
+the installed runtime for T262 with live Codex validation, T264 adds a guarded source-level
+Claude Code session fallback, and T265 refreshes installed runtime for T264.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -844,55 +844,59 @@ Claude behavior is unproved, and host labels remain only partially adopted. T262
 source-level Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing paths, and T263
 installed and live-validated that source in Codex Desktop. T264 adds a source-level Claude Code
 `CLAUDE_CODE_SESSION_ID` fallback after explicit and `ENGRAM_EXTERNAL_SESSION_ID` labels and before
-Codex fallback, guarded by `CLAUDECODE=1`; installed runtime and live native Claude validation have
-not been refreshed for T264, and Gemini host labels remain unproved. T263 installed binary hash
-`186feb4ab1e962733772773af3e1e9ca400cf52c6ebe7f92188e4eb2e17a0339`,
-daemon PID `70816` on port `8765`, and live trace
+Codex fallback, guarded by `CLAUDECODE=1`; T265 installed that source and verified live Codex
+labeling still works, but live native Claude and Gemini host labels remain unproved. T265 installed
+binary hash `cb814e3f1a3c55b33d47ce15d4058e054cb7864c2303b94e06e98183f6584ea4`, daemon PID
+`25189` on port `8765`, and live trace `019e964a-1aca-7a63-8549-04c39c491fc0` proved Codex label
+`codex://threads/019e683b-1560-7361-b535-53b012e04aa5`. Earlier T263 installed binary hash
+`186feb4ab1e962733772773af3e1e9ca400cf52c6ebe7f92188e4eb2e17a0339`, daemon PID `70816`,
+and live trace
 `019e9316-093a-7242-b910-753f672a04b5` proved Codex label
 `codex://threads/019e683b-1560-7361-b535-53b012e04aa5`. Earlier T242 installed final binary hash
 `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`,
 repaired the cleanup pidfile race, left final daemon PID `14310` serving port `8765` with
 pidfile/status/process aligned, proved omitted telemetry labels are not sticky after cleanup, and
 live `memory(action=list, project_name=engram, tags=[current-plan], limit=5)` now returns only the
-Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T263
-sampled 20-trace telemetry window generated at `2026-06-04T14:42:52.425434Z` reports
-`feedback_coverage=0.75`, `distinct_intent_count=3`, `confidence_gate.passed=true`, one externally
-labeled trace/feedback, clean outcome counters, no missing context, no wrong-scope memory, and no
-bad-memory-used records. Telemetry remains sampled, agent-assessed, and window-sensitive
-operational evidence, not exhaustive proof of M6, lifecycle, native-Claude, Gemini host labels, the
-T264 installed runtime, or remote publication. T210 remains the M6 source of truth: all 12
+Engram current-plan item without the previous out-of-scope `voice-layer` leak. The latest T265
+sampled 20-trace telemetry window generated at `2026-06-05T05:39:00.083284Z` reports
+`feedback_coverage=0.55`, `distinct_intent_count=4`, `confidence_gate.passed=true`, seven
+externally labeled traces, three externally labeled feedback records, clean outcome counters, no
+missing context, no wrong-scope memory, and no bad-memory-used records. Telemetry remains sampled,
+agent-assessed, and window-sensitive operational evidence, not exhaustive proof of M6, lifecycle,
+native-Claude, Gemini host labels, live Claude Code labels, or remote publication. T210 remains the
+M6 source of truth: all 12
 generated files are undecided, `ready_to_apply=false`, and explicit deferral is not currently
 approved.
 
-Current T264 matrix snapshot:
+Current T265 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence. | Validations are point-in-time and bounded to the approved/tested classes. |
-| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264 narrows Claude Code source-level labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, installed-runtime T264 validation, live Claude/Gemini host-label adoption, and migration apply readiness remain unproved. |
+| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence; T265 installs that source and proves live Codex labeling still works. | Validations are point-in-time and bounded to the approved/tested classes. |
+| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264/T265 narrow Claude Code source/runtime labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env and installed-CLI simulated-Claude smoke. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, live Claude/Gemini host-label adoption, and migration apply readiness remain unproved. |
 | Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules. | T255 has not run native Claude and does not prove prompt-bearing behavior. |
-| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, installed-runtime T264 validation, live Claude/Gemini host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
-| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest T263 20-trace window passes with 75% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Missing | M6 candidate dispositions, explicit 0012 handling or deferral, dry-run apply evidence, rollback plan, write-apply approval, KnowledgeCommit/vault compile for current data, broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook visibility, live Claude/Gemini host-label adoption, and remote publication/upstream policy if the user wants it. | Requires separate approved slices and, for M6, human dispositions or explicit deferral. |
+| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest T265 20-trace window passes with 55% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets and T255 can be mistaken for executed cleanup/validation; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
 | Blocked | M6 completion is blocked on T210 human dispositions or explicit deferral. Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. | Do not infer approvals from broad continuation instructions. |
 
-Gate-level T264 status:
+Gate-level T265 status:
 
-| Gate | T264 state | Next closure condition |
+| Gate | T265 state | Next closure condition |
 | --- | --- | --- |
 | M6 human dispositions or deferral | Blocked on human choices or user-provided deferral rationale/evidence; `ready_to_apply=false`. | T210A/T210B disposition record or explicit deferral evidence; no apply/delete without separate approval. |
 | Lifecycle archive or deferral | Incomplete; T234/T247/T248 remain default-deny exact packets. | Exact packet execution after fresh checks, or explicit lifecycle deferral. |
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`. | Separate default-deny packet or official/runtime evidence. |
-| Host external-session labels | T263 installs and live-validates T262 in Codex Desktop: daemon PID `70816` records live `orient` trace `019e9316-093a-7242-b910-753f672a04b5` with `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`, and feedback `019e9316-30b1-7941-a119-77a326d532ab` inherits that trace label when submitted without an explicit label. T264 source now resolves explicit labels, `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID` as `claude-code://sessions/{id}`, then guarded Codex, preventing inherited Codex env from winning inside Claude-spawned subprocesses. | Refresh/validate installed runtime for T264 and validate live Claude/Gemini host labels; do not infer live host adoption from source tests. |
+| Host external-session labels | T265 installs T264 and live-validates Codex after refresh: daemon PID `25189` records live `orient` trace `019e964a-1aca-7a63-8549-04c39c491fc0` with `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`, and feedback `019e964a-3cfb-7de3-9b0d-c1671ebd489b` inherits that trace label when submitted without an explicit label. Installed CLI help now advertises explicit labels, `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID`, then guarded Codex, and a simulated Claude+inherited-Codex temp-data CLI smoke returned trace `019e964a-9283-7c32-b6db-84d02633a2a7`. | Validate live native Claude/Gemini host labels; do not infer live host adoption from installed CLI/source tests. |
 | Branch synchronization | T261 completes the local regular merge of `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423` into `yuval.meiri/memory-os-phase0`. Conflicts were limited to telemetry service/tests and resolved by preserving the richer branch implementation; validation passed format, telemetry integration tests, full `engram-tests`, workspace check, focused MCP env-fallback tests, full clippy, conflict-marker check, and `git diff --check`. | Remote push, upstream configuration, backup branch policy, and PR publication remain separate external-publication decisions. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
-T264 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
-20-trace telemetry window passes after T263 live Codex validation, including one externally labeled
-trace/feedback, but T264 is still source-level and does not change M6, lifecycle, native-Claude,
-Gemini host-label, installed-runtime T264, or remote publication gates. T241 still rejects
-standalone M6 deferral without user-provided
+T265 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
+20-trace telemetry window passes after T265 live Codex validation, including seven externally
+labeled traces and three externally labeled feedback records, but this still does not change M6,
+lifecycle, native-Claude, live Claude/Gemini host-label, or remote publication gates. T241 still
+rejects standalone M6 deferral without user-provided
 rationale/evidence, T252 still preserves exact approval boundaries for T234/T247/T248 lifecycle
 archives, and T255 says shorter or broader approval must not be treated as authorization to execute
 the native-Claude packet.
@@ -7279,3 +7283,26 @@ Claude Bridge timed out twice and is recorded as a consultation confound. Focuse
 T264 does not refresh installed runtime, run native Claude, prove Gemini labels, edit
 hooks/settings/adapters, mutate lifecycle/M6, change public MCP/schema/storage/index/document-index
 behavior, change ranking/`orient`, push, delete, rollback, or touch user-owned files.
+
+T265 T264 runtime refresh note:
+`docs/BRAIN_HARNESS_T265_T264_RUNTIME_REFRESH_2026-06-05.md` records installed-runtime refresh for
+T264. `cargo install --path engram-cli --root /Users/yuval.meiri/.local` installed binary hash
+`cb814e3f1a3c55b33d47ce15d4058e054cb7864c2303b94e06e98183f6584ea4`, replacing
+`186feb4ab1e962733772773af3e1e9ca400cf52c6ebe7f92188e4eb2e17a0339`. The daemon was stopped and
+restarted from the Codex-labeled environment; final status reports port `8765`, PID `25189`, and
+targeted `ps` confirms `/Users/yuval.meiri/.local/bin/engram serve --http --port 8765`. Installed
+CLI help now advertises `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID`, then
+guarded `CODEX_THREAD_ID`. Live lean `orient` trace `019e964a-1aca-7a63-8549-04c39c491fc0`
+recorded `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`; feedback
+`019e964a-3cfb-7de3-9b0d-c1671ebd489b`, submitted without an explicit label, inherited the same
+label. A simulated Claude+inherited-Codex installed-CLI smoke against temp data dir
+`/private/tmp/engram-t265-claude-runtime` completed with trace
+`019e964a-9283-7c32-b6db-84d02633a2a7`, but the CLI orientation packet does not expose the stored
+external-session label and there is no installed CLI telemetry read subcommand, so it is not live
+Claude label proof. The subsequent 20-trace eval passed with `feedback_coverage=0.55`,
+`distinct_intent_count=4`, `task_failure_count=0`, `bad_memory_used_count=0`,
+`missing_context_count=0`, `wrong_scope_memory_count=0`, `external_session_trace_count=7`, and
+`external_session_feedback_count=3`. T265 does not run native Claude, prove live Claude/Gemini
+labels, edit hooks/settings/adapters, mutate lifecycle/M6, change public MCP/schema/storage/index/
+document-index behavior, change ranking/`orient`, push, delete, rollback, or touch user-owned
+files.

@@ -106,9 +106,9 @@ Harness and migration checkpoint, current through 2026-06-04:
   external-session joinability remains only partially validated even though direct CLI and
   source-level MCP `ENGRAM_EXTERNAL_SESSION_ID` fallback support now exist, T262/T263 add and
   live-validate a guarded Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing
-  paths, and T264 adds a guarded source-level Claude Code `CLAUDE_CODE_SESSION_ID` fallback. T264
-  has not refreshed the installed runtime and does not prove live Claude Code, Gemini, or host-wide
-  label adoption. T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
+  paths, T264 adds a guarded source-level Claude Code `CLAUDE_CODE_SESSION_ID` fallback, and T265
+  refreshes installed runtime for that source. T265 does not prove live native Claude Code, Gemini,
+  or host-wide label adoption. T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
   PID `14310` on port `8765`, and the live project-scoped current-plan list no longer leaked the
@@ -265,6 +265,17 @@ Harness and migration checkpoint, current through 2026-06-04:
   refresh runtime, run native Claude, prove Gemini labels, edit hooks/settings/adapters, change
   public MCP/schema/storage/index/document-index behavior, mutate lifecycle/M6, push, delete,
   rollback, or touch user-owned files.
+- T265 refreshes the installed runtime for T264. The installed binary hash is
+  `cb814e3f1a3c55b33d47ce15d4058e054cb7864c2303b94e06e98183f6584ea4`; the daemon restarted on
+  port `8765` as PID `25189`; installed CLI help now advertises
+  `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID`, then guarded `CODEX_THREAD_ID`;
+  live `orient` trace `019e964a-1aca-7a63-8549-04c39c491fc0` recorded the expected Codex label;
+  feedback `019e964a-3cfb-7de3-9b0d-c1671ebd489b` inherited that label; and a simulated
+  Claude+inherited-Codex installed-CLI smoke completed on a temp data dir with trace
+  `019e964a-9283-7c32-b6db-84d02633a2a7`. The simulated CLI packet does not expose the stored
+  external-session label, so T265 still does not prove live native Claude Code or Gemini labels,
+  native Claude behavior, effective hooks, lifecycle cleanup, M6, remote publication, deletion,
+  rollback, or user-owned-file changes.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
