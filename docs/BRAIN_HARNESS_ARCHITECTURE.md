@@ -320,6 +320,11 @@ Harness and migration checkpoint, current through 2026-06-05:
   T270 does not run native Claude or Gemini, combine with T255/T269 without exact dual-scope
   approval, implement guessed Gemini env labels, edit harness files, mutate lifecycle/M6/vault
   state, publish branches, or change ranking/`orient`.
+- T271 prepares, but does not execute, branch publication/upstream policy. Fresh post-T270 branch
+  evidence shows `origin/main` is still the merge-base and an ancestor of `HEAD`, `HEAD...origin/main`
+  is `385 0`, no same-named remote branch exists, and the local branch still has no upstream. The
+  future default operation is only `git push --set-upstream origin HEAD:refs/heads/yuval.meiri/memory-os-phase0`;
+  PR creation remains a separate exact approval.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
