@@ -342,6 +342,17 @@ Harness and migration checkpoint, current through 2026-06-05:
   `387 0`, no same-named remote branch exists, no upstream is configured, and no pull policy is
   configured. The repeated pull hint remains a signal to avoid bare `git pull`, not a reason to
   merge or rebase. The branch gate is still optional remote publication/upstream policy.
+- T274 refreshes lifecycle target visibility after T273 without mutating Memory OS state. Fresh
+  `memory(get)` confirms the T234 migration-completion target
+  `019dd3fe-ec94-7122-af04-1f35b839387f`, T247 telemetry target
+  `019e8291-40aa-71a0-b16b-9ba7b6446cc6`, and T248 resume-probe target
+  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are still `status=active`. Direct lifecycle search
+  returned T273 current-plan guidance first and the M6 gate second, but all three stale targets
+  still appeared in the top memory results. Fresh global lint was dominated by unrelated
+  superseded-active safe-action and open-obligation findings, so broad `lint apply_safe` remains
+  the wrong operation. Lifecycle cleanup remains incomplete until exact T234/T247/T248 execution
+  or explicit deferral; T252's boundary still prevents treating broad continue instructions as
+  archive approval.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
@@ -2545,6 +2556,12 @@ Proceed in this order from the current checkpoint:
      branch, and no pull policy. Do not respond to the recurring pull-reconcile hint by setting
      Git config, pulling, merging, rebasing, pushing, opening a PR, or setting upstream. Future
      publication still requires fresh preflight and an exact branch-publication decision.
+172. Treat T274 as a lifecycle target visibility recheck, not lifecycle cleanup. T274 confirms
+     T234/T247/T248 targets remain active and visible after T273, while current-plan/M6 gate
+     memory still outranks them for the tested lifecycle query. It does not archive, supersede,
+     reject, review, or delete any MemoryItem, and it does not run `lint apply_safe`. Broad
+     lifecycle cleanup remains incomplete and exact-target-gated; use T234/T247/T248 exact packet
+     execution or explicit deferral, not broad lint cleanup or ranking/`orient` changes.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
