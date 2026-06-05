@@ -353,6 +353,14 @@ Harness and migration checkpoint, current through 2026-06-05:
   the wrong operation. Lifecycle cleanup remains incomplete until exact T234/T247/T248 execution
   or explicit deferral; T252's boundary still prevents treating broad continue instructions as
   archive approval.
+- T275 prepares a successor canonical-vault approval packet without executing it. T267 remains
+  historical but non-executable under current counts after T272/T275 drift. Fresh T275 read-only
+  canonical status still shows `/Users/yuval.meiri/.engram/vault` absent and uninitialized, with
+  live counts now at `1599` MemoryItems, `546` KnowledgeCommits, `9` repositories, `32` entities,
+  `79` projects, and `2269` expected generated files. T275 replaces fixed future counts with a
+  two-phase snapshot-and-lock protocol: future execution must present live Snapshot A, obtain exact
+  approval for that snapshot, re-read matching Snapshot B immediately before writes, and hard-stop
+  on any drift or path ambiguity. It does not initialize or compile the vault.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
@@ -2562,6 +2570,12 @@ Proceed in this order from the current checkpoint:
      reject, review, or delete any MemoryItem, and it does not run `lint apply_safe`. Broad
      lifecycle cleanup remains incomplete and exact-target-gated; use T234/T247/T248 exact packet
      execution or explicit deferral, not broad lint cleanup or ranking/`orient` changes.
+173. Treat T275 as a canonical-vault successor approval packet, not vault execution. It supersedes
+     T267's fixed-count packet shape because normal Memory OS writes made fixed counts stale, but
+     it preserves default-deny durable-write gating. Future execution requires Phase A read-only
+     preflight, exact Snapshot A user approval, matching Snapshot B immediately before the first
+     vault write, absent-or-empty/non-symlink canonical path checks, and report-only handling for
+     partial failure. T275 does not write `/Users/yuval.meiri/.engram/vault`.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
