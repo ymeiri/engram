@@ -108,7 +108,9 @@ Harness and migration checkpoint, current through 2026-06-04:
   live-validate a guarded Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing
   paths, T264 adds a guarded source-level Claude Code `CLAUDE_CODE_SESSION_ID` fallback, and T265
   refreshes installed runtime for that source. T265 does not prove live native Claude Code, Gemini,
-  or host-wide label adoption. T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
+  or host-wide label adoption. T266 validates current-data vault compilation only in isolated temp
+  output; canonical `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T242
+  executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
   PID `14310` on port `8765`, and the live project-scoped current-plan list no longer leaked the
@@ -276,6 +278,15 @@ Harness and migration checkpoint, current through 2026-06-04:
   external-session label, so T265 still does not prove live native Claude Code or Gemini labels,
   native Claude behavior, effective hooks, lifecycle cleanup, M6, remote publication, deletion,
   rollback, or user-owned-file changes.
+- T266 validates the generated Markdown vault compile path for current Memory OS data in isolated
+  temp output only. `/Users/yuval.meiri/.engram/vault` status before and after remained
+  `exists=false`, `initialized=false`, `total_file_count=0`, while
+  `/private/tmp/engram-t266-vault-smoke-20260605` initialized and compiled 2,245 generated files
+  from 1,585 MemoryItems, 536 KnowledgeCommits, 9 repositories, 32 entities, and 79 projects.
+  Sampled vault index, current-plan item, and `engram` project pages had frontmatter and the Engram
+  generated marker; direct scans found no generated file missing the marker or frontmatter. This is
+  compileability evidence, not canonical vault initialization, M6 migration completion, lifecycle
+  cleanup, durable user-facing vault readiness, deletion, or remote publication.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
