@@ -91,7 +91,7 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
-Harness and migration checkpoint, current through 2026-06-04:
+Harness and migration checkpoint, current through 2026-06-05:
 
 - Generated local harness adapter readiness is currently validated by read-only
   `harness(action="doctor")` checks for generic, Claude Code, Codex, Gemini CLI, and Cursor:
@@ -109,7 +109,8 @@ Harness and migration checkpoint, current through 2026-06-04:
   paths, T264 adds a guarded source-level Claude Code `CLAUDE_CODE_SESSION_ID` fallback, and T265
   refreshes installed runtime for that source. T265 does not prove live native Claude Code, Gemini,
   or host-wide label adoption. T266 validates current-data vault compilation only in isolated temp
-  output; canonical `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T242
+  output; canonical `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T267
+  prepares, but does not execute, the exact future canonical vault init/compile gate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -287,6 +288,15 @@ Harness and migration checkpoint, current through 2026-06-04:
   generated marker; direct scans found no generated file missing the marker or frontmatter. This is
   compileability evidence, not canonical vault initialization, M6 migration completion, lifecycle
   cleanup, durable user-facing vault readiness, deletion, or remote publication.
+- T267 prepares the canonical vault approval gate without executing it. The future exact approval
+  is scoped to a one-time init+compile of `/Users/yuval.meiri/.engram/vault` only after preflight
+  confirms the target path is absent or an empty non-symlink directory, source counts match the
+  T266 baseline, expected generated output remains 2,245 files, no elevated privileges are needed,
+  and tracked git status is clean except known user-owned `AGENTS.md`. It forbids M6, lifecycle,
+  deletion/cleanup/rollback, schema/storage/index/document-index/public MCP/ranking/`orient`
+  changes, native Claude, Claude Bridge writes, harness install/settings/hooks/adapters, remote
+  publication, and user-owned-file edits. T267 is docs-only and does not initialize the canonical
+  vault.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
