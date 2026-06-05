@@ -297,6 +297,12 @@ Harness and migration checkpoint, current through 2026-06-05:
   changes, native Claude, Claude Bridge writes, harness install/settings/hooks/adapters, remote
   publication, and user-owned-file edits. T267 is docs-only and does not initialize the canonical
   vault.
+- T268 diagnoses the `git pull` reconciliation hint without running pull/merge/rebase/push or
+  setting Git config. After a fresh `git fetch origin`, `origin/main` is the merge-base and an
+  ancestor of `HEAD`; `HEAD...origin/main` is `382 0`; the current branch has no upstream and no
+  same-named remote branch; local `main` is behind `origin/main` by 107 commits but is also an
+  ancestor of `HEAD`. Therefore no local merge/rebase is needed for repo-local Brain Harness work;
+  the remaining branch gate is remote publication/upstream/PR policy.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
