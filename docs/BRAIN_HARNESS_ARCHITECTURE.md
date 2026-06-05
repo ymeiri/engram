@@ -112,7 +112,10 @@ Harness and migration checkpoint, current through 2026-06-05:
   deferred because current evidence has no documented MCP-subprocess session-id contract. T266
   validates current-data vault compilation only in isolated temp output; canonical
   `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T267
-  prepares, but does not execute, the exact future canonical vault init/compile gate. T242
+  prepares, but does not execute, the exact future canonical vault init/compile gate. T272 then
+  records that live source counts drifted through normal current-plan captures, so T267 is
+  historical/non-executable under current counts and a fresh successor packet is needed before
+  canonical vault execution. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -325,6 +328,14 @@ Harness and migration checkpoint, current through 2026-06-05:
   is `385 0`, no same-named remote branch exists, and the local branch still has no upstream. The
   future default operation is only `git push --set-upstream origin HEAD:refs/heads/yuval.meiri/memory-os-phase0`;
   PR creation remains a separate exact approval.
+- T272 records canonical-vault count drift without execution. Fresh read-only status still shows
+  `/Users/yuval.meiri/.engram/vault` absent and uninitialized, but live source counts are now
+  1,591 MemoryItems, 542 KnowledgeCommits, and 2,257 expected generated files, compared with
+  T267's fixed T266 baseline of 1,585, 536, and 2,245. The drift is explained by normal
+  current-plan captures from T266 through T271. T267 remains immutable historical evidence, but it
+  is not an executable packet under current counts; future canonical vault execution needs a fresh
+  exact successor packet or approval that explicitly supersedes T267 and captures live counts
+  immediately before execution.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
@@ -2511,6 +2522,17 @@ Proceed in this order from the current checkpoint:
      with no archive, `lint apply_safe`, ranking/`orient`, M6, harness, schema/storage/index,
      document-index behavior, public MCP, deletion, rollback, force-kill, legacy simplification,
      or user-owned-file action.
+170. Treat T272 as a canonical-vault count-drift report, not a vault execution packet. Fresh
+     read-only vault status shows `/Users/yuval.meiri/.engram/vault` is still absent and
+     uninitialized, but live source counts have drifted from T267's T266 baseline of `1585`
+     MemoryItems / `536` KnowledgeCommits / `2245` expected files to `1591` / `542` / `2257`.
+     The memory commit log explains this through normal current-plan captures from T266 through
+     T271. T267 remains immutable historical evidence, but is stale and non-executable under
+     current counts; future canonical vault execution needs a fresh exact successor packet or
+     approval that explicitly supersedes T267 and captures live counts immediately before
+     execution. T272 does not initialize or compile the vault, run M6/lifecycle/native-Claude/
+     branch-publication work, edit harness files, change ranking/`orient` or public MCP/schema/
+     storage/index/document-index behavior, delete, roll back, or touch user-owned files.
 
 Do not begin large deletion, broad legacy simplification, or migration write-apply until the
 confidence experiment shows MemoryItems improve agent behavior and migration preserves important
