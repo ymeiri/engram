@@ -24,7 +24,7 @@ Workflow run `27059846266` ran against branch head
 The Test job completed in `42m54s`. Its main cargo step started at
 `2026-06-06T10:29:16Z` and completed at `2026-06-06T11:11:22Z`.
 
-## Branch And PR State
+## Branch And PR State At Recheck Time
 
 After the remote recheck:
 
@@ -37,7 +37,8 @@ After the remote recheck:
 
 ## Non-Claims
 
-T286 closes the remote CI recheck for the T285 fix at the recorded head. It does not claim future
-pushes are green before their own runs complete, does not mark PR #2 ready for review, and does not
-close native Claude prompt-bearing behavior, effective-hook visibility, live Claude host-label
-proof, broad lifecycle cleanup, or direct legacy deprecation/deletion.
+T286 closes the remote CI recheck for the T285 fix at the recorded head
+`54c12eb20eefe1f69f162d9151b66868c120a70d`. It does not claim later pushes are green before their
+own runs complete, does not mark PR #2 ready for review, and does not close native Claude
+prompt-bearing behavior, effective-hook visibility, live Claude host-label proof, broad lifecycle
+cleanup, or direct legacy deprecation/deletion.

@@ -130,7 +130,7 @@ Harness and migration checkpoint, current through 2026-06-06:
   `sessionend` match warning, serializing the CI Test job's build/link work, and adding Test-job
   disk-headroom mitigations after remote run `27058785227` still failed with only 87 MB free disk.
   T286 records the fresh remote CI recheck: run `27059846266` passed Check, Format, Docs, Clippy,
-  and Test on branch head `54c12eb20eefe1f69f162d9151b66868c120a70d`.
+  and Test on the T285 fix head `54c12eb20eefe1f69f162d9151b66868c120a70d`.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -447,7 +447,7 @@ Harness and migration checkpoint, current through 2026-06-06:
   disk. The fix uses `sort_by_key`, a match guard, CI Test as
   `cargo test --all-targets --jobs 1`, and Test-job disk/debug/cache-target reductions, with local
   Clippy and serialized test validation passing before the CI-specific disk follow-up.
-- T286 closes that remote CI recheck for the current PR head. Run `27059846266` completed
+- T286 closes that remote CI recheck for the T285 fix head. Run `27059846266` completed
   successfully on `54c12eb20eefe1f69f162d9151b66868c120a70d`; Check, Format, Docs, Clippy, and
   Test all passed. PR readiness/review follow-up remains separate.
 
@@ -2707,7 +2707,7 @@ Proceed in this order from the current checkpoint:
 182. Treat T285 as a PR CI fix, not PR readiness or Brain Harness completion. It fixes the observed
      Clippy warnings, including one Rust 1.96-only warning, and mitigates observed linker pressure
      with serialization plus Test-job disk/debug/cache-target reductions.
-183. Treat T286 as remote CI closure for the current PR head, not PR readiness. Run `27059846266`
+183. Treat T286 as remote CI closure for the T285 fix head, not PR readiness. Run `27059846266`
      passed Check, Format, Docs, Clippy, and Test on
      `54c12eb20eefe1f69f162d9151b66868c120a70d`; future pushes need their own CI and PR review
      follow-up remains separate.

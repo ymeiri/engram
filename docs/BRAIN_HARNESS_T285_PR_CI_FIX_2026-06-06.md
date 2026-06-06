@@ -66,5 +66,5 @@ Clippy, and Test all passed. The Test job completed in `42m54s`.
 ## Non-Claims
 
 T285 does not prove full PR readiness. It fixes the observed CI failures and provides local
-validation for the updated commands. T286 closes the remote CI recheck for the current head, but PR
-readiness/review follow-up remains separate.
+validation for the updated commands. T286 closes the remote CI recheck for the T285 fix head, but
+PR readiness/review follow-up remains separate.
