@@ -195,6 +195,16 @@ Harness and migration checkpoint, current through 2026-06-06:
   the feature branch and upstream were `0 0` apart, `origin/main...HEAD` was `0 409`, and
   `origin/main` was an ancestor of `HEAD`; no pull, merge, rebase, or pull-policy change ran.
   KnowledgeCommit `019e9e19-a913-7111-954d-e95c9a6a9e07` records the batch.
+  T294 archives the next five exact superseded rolling handoffs after the same review boundary:
+  `019dfc5d-b88d-7ba1-8b8f-29369f66ebe3`,
+  `019dfc63-e051-71c2-8bd0-407debdc2cd3`,
+  `019dfc66-146b-7480-b28d-6a7f960a5c66`,
+  `019dfc87-9317-7fb3-975c-94f5b1647072`, and
+  `019dfc87-c510-7c80-9159-9fee36315f0d`. All five targets are `project:dd-source` handoffs,
+  and post-archive lint advanced to `019dfc97-4f9b-7301-b401-38179a03aeec`. A fresh fetch also
+  showed the feature branch and upstream were `0 0` apart, `origin/main...HEAD` was `0 410`, and
+  `origin/main` was an ancestor of `HEAD`; no pull, merge, rebase, or pull-policy change ran.
+  KnowledgeCommit `019e9e4a-57ad-7b51-a787-6b4859421cfa` records the batch.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -592,6 +602,19 @@ Harness and migration checkpoint, current through 2026-06-06:
   `HEAD...origin/yuval.meiri/memory-os-phase0` at `0 0` and `origin/main...HEAD` at `0 409`
   after fetch, with no pull/rebase/merge/config change. KnowledgeCommit
   `019e9e19-a913-7111-954d-e95c9a6a9e07` records the batch. This is exact lifecycle maintenance
+  and pull-hint evidence only.
+- T294 archives the next five exact superseded rolling handoffs after the same per-target
+  `memory(get)`, direct successor, and `graph(around)` review:
+  `019dfc5d-b88d-7ba1-8b8f-29369f66ebe3`,
+  `019dfc63-e051-71c2-8bd0-407debdc2cd3`,
+  `019dfc66-146b-7480-b28d-6a7f960a5c66`,
+  `019dfc87-9317-7fb3-975c-94f5b1647072`, and
+  `019dfc87-c510-7c80-9159-9fee36315f0d`. The fifth target's direct successor is
+  `019e019c-43a3-7a30-af48-dec8bbfe432f`, and the sampled lint queue advanced to
+  `019dfc97-4f9b-7301-b401-38179a03aeec`. A fresh branch audit showed
+  `HEAD...origin/yuval.meiri/memory-os-phase0` at `0 0` and `origin/main...HEAD` at `0 410`
+  after fetch, with no pull/rebase/merge/config change. KnowledgeCommit
+  `019e9e4a-57ad-7b51-a787-6b4859421cfa` records the batch. This is exact lifecycle maintenance
   and pull-hint evidence only.
 
 Research checkpoint, current through 2026-05-27:
