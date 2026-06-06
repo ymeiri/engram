@@ -206,13 +206,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   `origin/main` was an ancestor of `HEAD`; no pull, merge, rebase, or pull-policy change ran.
   KnowledgeCommit `019e9e4a-57ad-7b51-a787-6b4859421cfa` records the batch.
   T295 records the beta release cut after PR CI run `27071097151` passed all five jobs on head
-  `688f8fe75f03a62e1712185258010edb22ae4574`: initial beta readiness is bounded to green CI,
-  the validated Codex/local Brain Loop path, canonical vault init/compile, lean `orient` with
-  current-plan/used-memory/obligation summary, M6 inspection/status/export paths, supported-path
-  doctors, explicit beta limitations, and preserved approval boundaries. Native Claude
-  prompt-bearing proof, effective-hook visibility, live Claude host-label proof, direct legacy
-  deprecation/deletion, exhaustive lifecycle cleanup beyond T294, broad `lint apply_safe`, and
-  full host parity are deferred known limitations, not beta blockers.
+  `688f8fe75f03a62e1712185258010edb22ae4574`; the T295 documentation head
+  `ac75ec7f487a939ace9f7db7b6251e809de917aa` then passed PR CI run `27072115918`.
+  Those runs are exact-head historical evidence, not blanket proof for later commits. Initial
+  beta readiness is bounded to fresh green CI on the head intended for review, the validated
+  Codex/local Brain Loop path, canonical vault init/compile, lean `orient` with
+  current-plan/used-memory/obligation summary, M6 inspection/status/export paths,
+  supported-path doctors, explicit beta limitations, and preserved approval boundaries.
+  Native Claude prompt-bearing proof, effective-hook visibility, live Claude host-label proof,
+  direct legacy deprecation/deletion, exhaustive lifecycle cleanup beyond T294, broad
+  `lint apply_safe`, and full host parity are deferred known limitations, not beta blockers.
+  T296 records the evidence-alignment correction in
+  `docs/BRAIN_HARNESS_T296_BETA_CI_EVIDENCE_ALIGNMENT_2026-06-06.md`.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was

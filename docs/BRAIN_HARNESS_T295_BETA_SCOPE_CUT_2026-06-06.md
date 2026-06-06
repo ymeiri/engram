@@ -16,9 +16,14 @@ closing production-complete harness parity gates?
 
 ## Evidence
 
-- PR #2 head `688f8fe75f03a62e1712185258010edb22ae4574` passed CI run
-  `27071097151`: Check, Format, Docs, Clippy, and Test all passed; Test completed
-  in `40m17s`.
+- The beta-scope decision was cut after PR #2 head
+  `688f8fe75f03a62e1712185258010edb22ae4574` passed CI run `27071097151`:
+  Check, Format, Docs, Clippy, and Test all passed; Test completed in `40m17s`.
+- The T295 documentation head `ac75ec7f487a939ace9f7db7b6251e809de917aa` later
+  passed CI run `27072115918`: Check, Format, Docs, Clippy, and Test all passed;
+  Test completed in `43m24s`.
+- Historical CI runs prove only the exact heads they ran on. Any later commit intended for
+  beta review still needs fresh PR checks on that exact head.
 - T294 recorded the latest exact lifecycle archive batch and refreshed the canonical vault.
 - AI Council beta-scope review reached consensus that the beta should not wait for production
   parity gates.
@@ -66,4 +71,5 @@ PR #2 remains draft until the user explicitly asks to mark it ready.
 
 T295 does not mark PR #2 ready, merge the PR, tag a release, run native Claude, prove effective
 hooks, prove live Claude host labels, delete legacy data, archive additional lifecycle targets,
-run `lint apply_safe`, or change schema/storage/index behavior.
+run `lint apply_safe`, change schema/storage/index behavior, or prove CI for commits made after
+the T295 documentation head.
