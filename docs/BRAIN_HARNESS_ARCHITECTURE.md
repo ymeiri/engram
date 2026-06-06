@@ -110,12 +110,12 @@ Harness and migration checkpoint, current through 2026-06-05:
   refreshes installed runtime for that source. T270 prepares a default-deny host-label gate: live
   native Claude Code labeling still needs exact trace evidence, while Gemini host labeling is
   deferred because current evidence has no documented MCP-subprocess session-id contract. T266
-  validates current-data vault compilation only in isolated temp output; canonical
-  `/Users/yuval.meiri/.engram/vault` remains absent and uninitialized. T267
-  prepares, but does not execute, the exact future canonical vault init/compile gate. T272 then
-  records that live source counts drifted through normal current-plan captures, so T267 is
-  historical/non-executable under current counts and a fresh successor packet is needed before
-  canonical vault execution. T242
+  validates current-data vault compilation only in isolated temp output. T267 prepared a fixed-count
+  canonical vault gate, T272 marked it historical/non-executable after normal source-count drift,
+  T275 prepared a Snapshot A/B successor protocol, and T277 executed that protocol under the
+  2026-06-06 standing authorization. Canonical `/Users/yuval.meiri/.engram/vault` is now
+  initialized and compiled with 2,278 generated files, zero user files, and clean marker/frontmatter
+  scans. Future vault update policy remains separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -368,6 +368,13 @@ Harness and migration checkpoint, current through 2026-06-05:
   `git pull`, merge, rebase, pull-policy configuration, push, upstream setup, or PR creation. The
   remaining branch gate is still exact T271A-style remote publication/upstream, with PR creation as
   a separate gate.
+- T277 executes the T275 canonical-vault Snapshot A/B protocol under the 2026-06-06 standing
+  authorization. Snapshot A and B matched at 1,605 MemoryItems, 549 KnowledgeCommits, 9
+  repositories, 32 entities, 79 projects, and 2,278 expected generated files. Canonical
+  `/Users/yuval.meiri/.engram/vault` was absent/non-symlink before execution, then `vault init`
+  created the expected skeleton and `vault compile` produced 2,278 generated files with zero skipped
+  files and zero user files. Marker/frontmatter scans passed. This closes only the initial
+  canonical generated-vault init/compile gate; future vault update policy remains separate.
 - Rolling telemetry recovered after the T243 resumed-session audit. T243 initially observed 26%
   feedback coverage, then 46% after scoring material retrieval traces, which was still below the
   50% gate. T244 scored two additional assessable traces and
