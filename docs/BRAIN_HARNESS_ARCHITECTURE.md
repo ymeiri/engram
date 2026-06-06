@@ -155,6 +155,24 @@ Harness and migration checkpoint, current through 2026-06-06:
   showed the feature branch and upstream were `0 0` apart, `origin/main...HEAD` was `0 405`, and
   `origin/main` was an ancestor of `HEAD`; no pull, merge, rebase, or pull-policy change ran.
   KnowledgeCommit `019e9d5c-9c39-7c63-89a2-a8d2741c03e0` records the batch.
+  T290 archives the next five exact superseded rolling handoffs after the same review boundary:
+  `019dd944-8d69-7b81-8659-b0ef8e23c75f`,
+  `019dd946-c602-7ab0-a62d-519944dbd756`,
+  `019dd947-5d00-71d2-a42a-b6f126a14201`,
+  `019dd9b2-0be7-75a2-ac5d-036c0502ee3d`, and
+  `019ddd45-11c3-7760-a5e9-6434434689ba`. Post-archive lint advanced to
+  `019ddd46-3320-7bf3-8048-63f09a726c10`; KnowledgeCommit
+  `019e9d8b-649b-7083-9029-78916c813ac1` records the batch.
+  T291 archives the next five exact superseded rolling handoffs after the same review boundary:
+  `019ddd46-3320-7bf3-8048-63f09a726c10`,
+  `019dde55-6c94-79c1-8594-035b9ec2e1b3`,
+  `019dde55-f3f1-7ad1-b9cb-7a6f68b9c416`,
+  `019dde56-36c9-7bf2-ad38-4914eec2bbdf`, and
+  `019dde56-7aa2-75a0-b843-a520e39b5935`. Post-archive lint advanced to
+  `019dde56-b3f5-70d3-87b6-ef6ff06751bc`. A fresh fetch also showed the feature branch and
+  upstream were `0 0` apart, `origin/main...HEAD` was `0 407`, and `origin/main` was an ancestor
+  of `HEAD`; no pull, merge, rebase, or pull-policy change ran. KnowledgeCommit
+  `019e9dba-a27e-7db2-8631-d8a76ec2a571` records the batch.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -513,6 +531,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   `HEAD...origin/yuval.meiri/memory-os-phase0` at `0 0` and `origin/main...HEAD` at `0 406`
   after fetch, with no pull/rebase/merge/config change. KnowledgeCommit
   `019e9d8b-649b-7083-9029-78916c813ac1` records the batch. This is exact lifecycle maintenance
+  and pull-hint evidence only.
+- T291 archives the next five exact superseded rolling handoffs after the same per-target
+  `memory(get)`, direct successor, and `graph(around)` review:
+  `019ddd46-3320-7bf3-8048-63f09a726c10`,
+  `019dde55-6c94-79c1-8594-035b9ec2e1b3`,
+  `019dde55-f3f1-7ad1-b9cb-7a6f68b9c416`,
+  `019dde56-36c9-7bf2-ad38-4914eec2bbdf`, and
+  `019dde56-7aa2-75a0-b843-a520e39b5935`. A post-archive lint sample no longer returned those
+  IDs and advanced to `019dde56-b3f5-70d3-87b6-ef6ff06751bc`. A fresh branch audit showed
+  `HEAD...origin/yuval.meiri/memory-os-phase0` at `0 0` and `origin/main...HEAD` at `0 407`
+  after fetch, with no pull/rebase/merge/config change. KnowledgeCommit
+  `019e9dba-a27e-7db2-8631-d8a76ec2a571` records the batch. This is exact lifecycle maintenance
   and pull-hint evidence only.
 
 Research checkpoint, current through 2026-05-27:
