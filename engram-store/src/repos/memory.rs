@@ -257,7 +257,7 @@ impl MemoryRepo {
             .into_iter()
             .filter(|item| item.updated_at > timestamp)
             .collect();
-        items.sort_by(|left, right| left.updated_at.cmp(&right.updated_at));
+        items.sort_by_key(|item| item.updated_at);
         if let Some(limit) = limit {
             items.truncate(limit);
         }
@@ -275,7 +275,7 @@ impl MemoryRepo {
             .into_iter()
             .filter(|item| item.needs_review_at(now))
             .collect();
-        filtered.sort_by(|left, right| left.updated_at.cmp(&right.updated_at));
+        filtered.sort_by_key(|item| item.updated_at);
         if let Some(limit) = limit {
             filtered.truncate(limit);
         }
@@ -365,7 +365,7 @@ impl MemoryRepo {
             .into_iter()
             .filter(|commit| commit.created_at > timestamp)
             .collect();
-        commits.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+        commits.sort_by_key(|commit| commit.created_at);
         if let Some(limit) = limit {
             commits.truncate(limit);
         }
