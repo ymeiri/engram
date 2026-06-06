@@ -218,6 +218,13 @@ Harness and migration checkpoint, current through 2026-06-06:
   `lint apply_safe`, and full host parity are deferred known limitations, not beta blockers.
   T296 records the evidence-alignment correction in
   `docs/BRAIN_HARNESS_T296_BETA_CI_EVIDENCE_ALIGNMENT_2026-06-06.md`.
+  T297 records a fresh beta go/no-go validation: the canonical generated vault refresh now
+  matches `2369` expected/generated files with zero user files, the vault index is readable,
+  lean `orient` trace `019e9ed6-784b-7513-be7f-ba7bb209e352` surfaced the T296 current plan
+  with used-memory candidates and no open obligations, a temporary M6 review export/status path
+  completed without warnings or writes, Codex/generic doctors are `ready=true`, and PR CI was
+  green on `f03fb4b714d7b20a561d3a2316c7444878af93fe`. Because this report changes the head,
+  fresh PR CI is still required on the T297 commit before beta review.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
