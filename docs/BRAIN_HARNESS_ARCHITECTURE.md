@@ -124,8 +124,9 @@ Harness and migration checkpoint, current through 2026-06-06:
   current Claude target/version is `2.1.163`, not the packet baseline `2.1.161`. T282 prepares a
   docs-only successor packet for Claude `2.1.163` and does not launch native Claude. T283 runs
   that successor preflight and hard-stops before launch because ambient native Claude processes
-  make attribution ambiguous. Future vault update policy and direct legacy deprecation remain
-  separate. T242
+  make attribution ambiguous. T284 records a read-only deferral of broad residual lifecycle cleanup
+  and direct legacy deprecation/deletion after a limit-truncated lint sample. Future exact-target
+  lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -430,6 +431,9 @@ Harness and migration checkpoint, current through 2026-06-06:
   hash, branch, harness, daemon, obligations, telemetry, and monitored-config checks were recorded,
   but live native Claude processes on `ttys001` and `ttys005` made attribution ambiguous under the
   T282 contract.
+- T284 checks residual lifecycle/direct-legacy pressure read-only. A fresh lint sample returned 50
+  superseded-active warnings, but because it was global and limit-truncated, T284 defers broad
+  lifecycle cleanup and direct legacy deprecation/deletion instead of archiving or deleting data.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2680,6 +2684,10 @@ Proceed in this order from the current checkpoint:
      launch native Claude because already-running native Claude processes made a new prompt-bearing
      session's transcript attribution ambiguous. Retry only after fresh process preflight removes
      that ambiguity.
+181. Treat T284 as a residual lifecycle/direct-legacy deferral, not cleanup. A truncated global lint
+     sample can show cleanup pressure, but it must not authorize broad `lint apply_safe`, legacy
+     deletion, direct legacy deprecation, ranking changes, or `orient` changes. Future lifecycle
+     writes require exact target batches with fresh evidence.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
