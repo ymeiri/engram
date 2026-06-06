@@ -122,8 +122,10 @@ Harness and migration checkpoint, current through 2026-06-06:
   T280 published `yuval.meiri/memory-os-phase0`, set upstream, and opened draft PR `#2`.
   T281 hard-stopped the T255 native Claude prompt-bearing preflight before launch because the
   current Claude target/version is `2.1.163`, not the packet baseline `2.1.161`. T282 prepares a
-  docs-only successor packet for Claude `2.1.163` and does not launch native Claude. Future vault
-  update policy and direct legacy deprecation remain separate. T242
+  docs-only successor packet for Claude `2.1.163` and does not launch native Claude. T283 runs
+  that successor preflight and hard-stops before launch because ambient native Claude processes
+  make attribution ambiguous. Future vault update policy and direct legacy deprecation remain
+  separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -424,6 +426,10 @@ Harness and migration checkpoint, current through 2026-06-06:
   separate, requires future fresh preflight/path/version/hash/process/monitoring evidence, and
   explicitly rejects behavioral-equivalence claims between `2.1.161` and `2.1.163` until a future
   transcript proves the narrow prompt-bearing subclaim.
+- T283 attempts the T282 successor preflight but does not launch native Claude. The path, version,
+  hash, branch, harness, daemon, obligations, telemetry, and monitored-config checks were recorded,
+  but live native Claude processes on `ttys001` and `ttys005` made attribution ambiguous under the
+  T282 contract.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2670,6 +2676,10 @@ Proceed in this order from the current checkpoint:
      It preserves the prompt-bearing native-Claude scope and keeps T269/T270 separate. Execute it
      only in a future bounded slice with fresh matching preflight, and do not infer behavioral
      equivalence between Claude `2.1.161` and `2.1.163`.
+180. Treat T283 as a T282 successor preflight hard stop, not native Claude validation. T283 did not
+     launch native Claude because already-running native Claude processes made a new prompt-bearing
+     session's transcript attribution ambiguous. Retry only after fresh process preflight removes
+     that ambiguity.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
