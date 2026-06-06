@@ -205,6 +205,14 @@ Harness and migration checkpoint, current through 2026-06-06:
   showed the feature branch and upstream were `0 0` apart, `origin/main...HEAD` was `0 410`, and
   `origin/main` was an ancestor of `HEAD`; no pull, merge, rebase, or pull-policy change ran.
   KnowledgeCommit `019e9e4a-57ad-7b51-a787-6b4859421cfa` records the batch.
+  T295 records the beta release cut after PR CI run `27071097151` passed all five jobs on head
+  `688f8fe75f03a62e1712185258010edb22ae4574`: initial beta readiness is bounded to green CI,
+  the validated Codex/local Brain Loop path, canonical vault init/compile, lean `orient` with
+  current-plan/used-memory/obligation summary, M6 inspection/status/export paths, supported-path
+  doctors, explicit beta limitations, and preserved approval boundaries. Native Claude
+  prompt-bearing proof, effective-hook visibility, live Claude host-label proof, direct legacy
+  deprecation/deletion, exhaustive lifecycle cleanup beyond T294, broad `lint apply_safe`, and
+  full host parity are deferred known limitations, not beta blockers.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
