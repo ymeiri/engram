@@ -956,7 +956,7 @@ fn hook_additional_context(
                 .to_string(),
         ),
         "stop" => lines.push(
-            "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
+            "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect, project=..., cwd=...) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
                 .to_string(),
         ),
         "precompact" | "postcompact" => lines.push(
@@ -1930,8 +1930,9 @@ Lifecycle contract:
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Before final response, call `changes_since`; if relevant updates appeared, account for them.
-- Before final response, call `obligations(action=detect)` and `obligations(action=doctor)`;
-  resolve open obligations or report explicit skip reasons.
+- Before final response, call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`; resolve open obligations or report
+  explicit skip reasons.
 - Before context compaction, context transition, or any expected loss of conversation state,
   update `handoff` and record/commit compact durable memory for future sessions.
 - At session end, compile a handoff and create a knowledge commit candidate.
@@ -1974,7 +1975,8 @@ fn claude_end_session_command() -> String {
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -2050,7 +2052,7 @@ fi
 cat <<'EOF'
 {{
   "continue": true,
-  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
 }}
 EOF
 "#
@@ -2217,8 +2219,9 @@ Workflow:
   with `memory(action=capture_current_plan)`, linking it in `handoff`, or explicitly skipping it
   with a reason.
 - Before final response, run `obligations(action=detect, write=true, project=..., cwd=...)` and
-  `obligations(action=doctor)`; resolve or explicitly skip open obligations. If a document changes
-  again after resolution, rerun detection so a fresh content state gets its own disposition.
+  `obligations(action=doctor, project=..., cwd=...)`; resolve or explicitly skip open
+  obligations. If a document changes again after resolution, rerun detection so a fresh content
+  state gets its own disposition.
 - Before Codex context compaction or any expected context loss, update `handoff` and record or
   commit compact durable memory so the next Codex session can resume without the transcript.
 - For commit messages, check memory for user/project commit preferences first.
@@ -2282,9 +2285,10 @@ Follow this soft lifecycle contract:
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
-  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
-  skip open obligations.
+- Use `obligations(action=detect, project=..., cwd=...)` when documents change, tools fail,
+  or source/design reading is needed; before final response, run
+  `obligations(action=doctor, project=..., cwd=...)` and resolve or explicitly skip open
+  obligations.
 - Before context compaction or any expected context loss, update `handoff` and record or commit
   compact durable memory for the next session.
 - For commit messages, check memory for user/project commit preferences first.
@@ -2340,7 +2344,8 @@ This command is invoked as `/engram:end-session`.
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -2414,9 +2419,10 @@ Workflow:
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
-  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
-  skip open obligations.
+- Use `obligations(action=detect, project=..., cwd=...)` when documents change, tools fail,
+  or source/design reading is needed; before final response, run
+  `obligations(action=doctor, project=..., cwd=...)` and resolve or explicitly skip open
+  obligations.
 - Before context compaction or any expected context loss, update `handoff` and record or commit
   compact durable memory for the next session.
 - Use writer provenance with `writer_harness=cursor` when writing durable memory.
@@ -2474,7 +2480,8 @@ Use this skill when Cursor Agent is closing out a task or preparing a handoff.
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -2531,8 +2538,8 @@ Lifecycle:
 - after current method/plan/next-action changes: use `memory(action=capture_current_plan)` with
   compact content and evidence
 - before final response: call `changes_since` and distill if needed
-- before final response: detect obligations, run obligations doctor, and close or explicitly skip
-  open obligations
+- before final response: detect obligations with current project/cwd, run obligations doctor with
+  the same project/cwd scope, and close or explicitly skip open obligations
 - before final response: submit `telemetry(action=submit_feedback)` for relevant `trace_id`
   values with outcome, gap, and attribution fields when memory quality can be judged; include
   `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for returned
@@ -2817,11 +2824,13 @@ mod tests {
         let contents = &adapters[0].contents;
 
         assert!(contents.contains("obligations(action=detect, write=true"));
+        assert!(contents.contains("obligations(action=doctor, project=..., cwd=...)"));
         assert!(contents.contains("docs(action=index)"));
         assert!(contents.contains("knowledge(action=register)"));
         assert!(contents.contains("memory(action=capture_current_plan)"));
         assert!(contents.contains("explicitly skipping it"));
-        assert!(contents.contains("fresh content state gets its own disposition"));
+        assert!(contents.contains("fresh content"));
+        assert!(contents.contains("state gets its own disposition"));
     }
 
     #[test]

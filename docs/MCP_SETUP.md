@@ -2,6 +2,11 @@
 
 Ready-made configurations for connecting engram to your AI coding agent.
 
+> **Beta scope:** the current beta is validated for the local/Codex Brain Loop path. The
+> configurations below show MCP setup for common hosts, but full multi-host parity, native
+> Claude prompt-bearing proof, live host-label proof, and effective-hook proof are still
+> follow-up work.
+
 ## Claude Code
 
 Add to `~/.claude.json`:

@@ -16,7 +16,9 @@ Your AI coding assistant forgets everything between sessions — project convent
 > "What auth approach does this project use?"
 > *"This project uses OAuth. You chose it over API keys on Jan 12 for delegated partner access."*
 
-engram is a local-first memory system purpose-built for AI coding agents. It connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so any compatible agent — Claude Code, Cursor, Windsurf — gains persistent knowledge across sessions with zero cloud dependencies.
+engram is a local-first memory system purpose-built for AI coding agents. It connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so compatible agents can gain persistent knowledge across sessions with zero cloud dependencies.
+
+> **Beta scope:** the current beta is validated for the local/Codex Brain Loop path. Other MCP-compatible hosts can use the same server setup, but full multi-host parity, native Claude prompt-bearing proof, live host-label proof, and effective-hook proof are still in progress.
 
 ## Quick Start
 
@@ -93,7 +95,7 @@ engram gives your coding agent MCP tools that let it read, search, and write to 
 
 **Built for coding agents.** Not a chatbot memory system — engram understands repos, PRs, tasks, tool usage patterns, and multi-session coordination. It knows what a pull request *is*.
 
-**MCP-native.** Not an adapter or wrapper. Built from the ground up for the Model Context Protocol, so it works with any MCP-compatible agent out of the box.
+**MCP-native.** Not an adapter or wrapper. Built from the ground up for the Model Context Protocol. The beta-supported path is local/Codex; broader host parity is documented as follow-up work.
 
 **Minimal setup.** `engram init && engram serve`, add one MCP config entry, and your agent has persistent memory. No schema definitions, no ontology configuration, no embedding API keys.
 

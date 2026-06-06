@@ -93,11 +93,11 @@ enum Commands {
 
     /// Start the MCP server
     Serve {
-        /// Use in-memory storage (for testing)
+        /// Use in-memory storage in --http daemon mode (for testing)
         #[arg(long)]
         memory: bool,
 
-        /// Connect to remote SurrealDB server (e.g., ws://localhost:8000)
+        /// Connect to remote SurrealDB server in --http daemon mode (e.g., ws://localhost:8000)
         /// Enables concurrent access from multiple engram sessions
         #[arg(long)]
         remote: Option<String>,
@@ -114,7 +114,7 @@ enum Commands {
         #[arg(long)]
         http: bool,
 
-        /// Port to listen on (default: auto-select from 8765-8774)
+        /// Port to listen on in --http mode (default: 8765)
         #[arg(long)]
         port: Option<u16>,
 
@@ -2911,6 +2911,42 @@ fn extract_mcp_tool_json_text(response: serde_json::Value) -> Result<serde_json:
         .map_err(|error| anyhow::anyhow!("daemon MCP tool response was not JSON: {}", error))
 }
 
+fn validate_serve_options(
+    memory: bool,
+    remote: Option<&str>,
+    username: Option<&str>,
+    password: Option<&str>,
+    http: bool,
+    port: Option<u16>,
+) -> Result<()> {
+    if memory && remote.is_some() {
+        anyhow::bail!("--memory and --remote cannot be used together");
+    }
+    if remote.is_none() && (username.is_some() || password.is_some()) {
+        anyhow::bail!("--username and --password require --remote");
+    }
+    if !http {
+        if memory {
+            anyhow::bail!(
+                "--memory is only honored with --http; use `engram serve --http --memory` \
+                 or omit --memory for the default persistent stdio proxy"
+            );
+        }
+        if remote.is_some() || username.is_some() || password.is_some() {
+            anyhow::bail!(
+                "--remote/--username/--password are only honored with --http; use \
+                 `engram serve --http --remote ...` or omit them for the default stdio proxy"
+            );
+        }
+        if port.is_some() {
+            anyhow::bail!(
+                "--port is only honored with --http; omit it for the default stdio proxy"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
     cwd.map(std::path::PathBuf::from)
         .map(Ok)
@@ -5569,6 +5605,15 @@ async fn main() -> Result<()> {
             port,
             project,
         } => {
+            validate_serve_options(
+                memory,
+                remote.as_deref(),
+                username.as_deref(),
+                password.as_deref(),
+                http,
+                port,
+            )?;
+
             // If http mode is requested, run the HTTP server directly (daemon mode)
             if http {
                 // Determine storage configuration
@@ -9554,5 +9599,65 @@ mod tests {
             },
             _ => panic!("expected memory command"),
         }
+    }
+
+    #[test]
+    fn serve_stdio_rejects_http_only_storage_flags() {
+        let err = validate_serve_options(true, None, None, None, false, None).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--memory is only honored with --http"));
+
+        let err = validate_serve_options(
+            false,
+            Some("ws://localhost:8000"),
+            Some("root"),
+            Some("root"),
+            false,
+            None,
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--remote/--username/--password are only honored with --http"));
+
+        let err = validate_serve_options(false, None, None, None, false, Some(8766)).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--port is only honored with --http"));
+    }
+
+    #[test]
+    fn serve_http_accepts_storage_flags() {
+        validate_serve_options(true, None, None, None, true, Some(8766))
+            .expect("--http --memory should be valid");
+        validate_serve_options(
+            false,
+            Some("ws://localhost:8000"),
+            Some("root"),
+            Some("root"),
+            true,
+            Some(8766),
+        )
+        .expect("--http --remote with credentials should be valid");
+    }
+
+    #[test]
+    fn serve_rejects_conflicting_or_dangling_storage_credentials() {
+        let err = validate_serve_options(
+            true,
+            Some("ws://localhost:8000"),
+            Some("root"),
+            Some("root"),
+            true,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("--memory and --remote"));
+
+        let err = validate_serve_options(false, None, Some("root"), None, true, None).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--username and --password require --remote"));
     }
 }

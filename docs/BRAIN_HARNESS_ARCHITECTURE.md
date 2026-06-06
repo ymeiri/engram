@@ -234,8 +234,15 @@ Harness and migration checkpoint, current through 2026-06-06:
   `019dfd36-487d-7552-97cb-c81cf53d1be5`, and
   `019dfd36-d0e5-7d12-81ad-d5b84db1d514`. Post-archive lint advanced to
   `019dfd38-fc3d-7352-83a6-c9bbd16349ea`. Future exact-target lifecycle batches and direct
-  legacy behavior proof remain separate. T242
-  executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
+  legacy behavior proof remain separate.
+  T299 records the firm beta release boundary after AI Council and subagent fan-out: the T297
+  `0.35` number was telemetry feedback coverage, not beta readiness. Initial beta readiness is
+  the local/Codex Brain Loop path and is blocked only by exact-head CI, local-path validation,
+  clear limitations, and preserved approval boundaries. T299 fixes beta-contract issues in scoped
+  obligation closeout guidance, MCP `search.project` schema wording, default `engram serve`
+  storage/port flag handling, quarantine review export mutation labeling, and README/MCP setup
+  host-scope wording.
+  T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
   PID `14310` on port `8765`, and the live project-scoped current-plan list no longer leaked the
@@ -657,6 +664,15 @@ Harness and migration checkpoint, current through 2026-06-06:
   `019dfd38-fc3d-7352-83a6-c9bbd16349ea`. This is exact lifecycle maintenance only; broad
   cleanup, direct-legacy deprecation/deletion, native Claude, effective hooks, and live host
   labels remain separate.
+- T299 records the beta-scope consensus and fixes concrete public-contract blockers surfaced by
+  fan-out review. The beta is no longer framed by the T297 20-trace `feedback_coverage=0.35`
+  sample. It is the supported local/Codex Brain Loop path, with native Claude prompt-bearing
+  proof, effective-hook proof, live host labels, direct legacy cleanup, broad lifecycle cleanup,
+  and full multi-host parity deferred. The code/doc fixes keep Codex/generic obligation doctor
+  guidance scoped to project/cwd, describe MCP `search.project` as scoped memory filtering as well
+  as telemetry correlation, reject default-stdio `serve` storage/port flags instead of silently
+  ignoring them, mark quarantine review export as a write to generated pages, and add README/MCP
+  setup beta caveats. This does not prove exact-head PR CI for the T299 commit.
 
 Research checkpoint, current through 2026-05-27:
 

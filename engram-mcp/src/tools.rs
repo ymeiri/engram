@@ -3346,8 +3346,8 @@ pub struct SearchRequest {
     #[schemars(description = "Host/application session label for telemetry correlation")]
     pub external_session_id: Option<String>,
 
-    /// Project name for telemetry correlation.
-    #[schemars(description = "Project name for telemetry correlation")]
+    /// Project name for telemetry correlation and scoped memory filtering.
+    #[schemars(description = "Project name for telemetry correlation and scoped memory filtering")]
     pub project: Option<String>,
 
     /// Current working directory for repository-scoped memory filtering.
@@ -10770,7 +10770,7 @@ pub async fn docs_new(state: &ToolState, request: DocsRequestNew) -> Result<Stri
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "export": export,
-                "read_only": true,
+                "read_only": false,
                 "writes_generated_review_pages": true
             }))
             .map_err(|e| e.to_string())
