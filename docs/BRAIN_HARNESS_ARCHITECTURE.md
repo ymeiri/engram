@@ -129,6 +129,8 @@ Harness and migration checkpoint, current through 2026-06-06:
   PR #2 CI failures by replacing Clippy-reported timestamp sorts, collapsing a Rust 1.96-only
   `sessionend` match warning, serializing the CI Test job's build/link work, and adding Test-job
   disk-headroom mitigations after remote run `27058785227` still failed with only 87 MB free disk.
+  T286 records the fresh remote CI recheck: run `27059846266` passed Check, Format, Docs, Clippy,
+  and Test on branch head `54c12eb20eefe1f69f162d9151b66868c120a70d`.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -445,6 +447,9 @@ Harness and migration checkpoint, current through 2026-06-06:
   disk. The fix uses `sort_by_key`, a match guard, CI Test as
   `cargo test --all-targets --jobs 1`, and Test-job disk/debug/cache-target reductions, with local
   Clippy and serialized test validation passing before the CI-specific disk follow-up.
+- T286 closes that remote CI recheck for the current PR head. Run `27059846266` completed
+  successfully on `54c12eb20eefe1f69f162d9151b66868c120a70d`; Check, Format, Docs, Clippy, and
+  Test all passed. PR readiness/review follow-up remains separate.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2701,8 +2706,11 @@ Proceed in this order from the current checkpoint:
      writes require exact target batches with fresh evidence.
 182. Treat T285 as a PR CI fix, not PR readiness or Brain Harness completion. It fixes the observed
      Clippy warnings, including one Rust 1.96-only warning, and mitigates observed linker pressure
-     with serialization plus Test-job disk/debug/cache-target reductions; remote CI still has to
-     pass on the pushed fix before calling the branch green.
+     with serialization plus Test-job disk/debug/cache-target reductions.
+183. Treat T286 as remote CI closure for the current PR head, not PR readiness. Run `27059846266`
+     passed Check, Format, Docs, Clippy, and Test on
+     `54c12eb20eefe1f69f162d9151b66868c120a70d`; future pushes need their own CI and PR review
+     follow-up remains separate.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

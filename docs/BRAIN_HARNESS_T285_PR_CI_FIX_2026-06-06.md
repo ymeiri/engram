@@ -57,8 +57,14 @@ The following commands passed locally after the fix:
 The CI-specific disk cleanup is validated by a fresh pushed GitHub Actions run rather than by local
 filesystem behavior.
 
+## Remote Recheck
+
+T286 records the fresh pushed GitHub Actions run after the disk-headroom fix. Run `27059846266`
+completed successfully on head `54c12eb20eefe1f69f162d9151b66868c120a70d`; Check, Format, Docs,
+Clippy, and Test all passed. The Test job completed in `42m54s`.
+
 ## Non-Claims
 
 T285 does not prove full PR readiness. It fixes the observed CI failures and provides local
-validation for the updated commands. The pushed branch still needs a fresh remote GitHub Actions
-run on the new commit.
+validation for the updated commands. T286 closes the remote CI recheck for the current head, but PR
+readiness/review follow-up remains separate.
