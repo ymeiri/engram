@@ -26,6 +26,11 @@ The first pushed T285 fix reached run `27058068496`. That run used the serialize
 but Clippy on Rust `1.96.0` surfaced one additional `clippy::collapsible_match` warning in
 `engram-index/src/harness.rs` that was not emitted by the local Rust `1.93.0` toolchain.
 
+The second pushed T285 fix reached run `27058785227`. That run passed Check, Format, Docs, and
+Clippy, but Test still failed while linking `engram-mcp`'s test binary after the runner reported
+only 87 MB of free disk space. The failure was again `rust-lld` signal 7 / bus error and not a Rust
+test assertion failure.
+
 ## Changes
 
 - Replaced three timestamp comparisons with `sort_by_key` in
@@ -35,6 +40,9 @@ but Clippy on Rust `1.96.0` surfaced one additional `clippy::collapsible_match` 
 - Changed the CI Test job from `cargo test --all-targets` to
   `cargo test --all-targets --jobs 1` to serialize build/link work and reduce concurrent linker
   pressure on the GitHub runner.
+- Added Test-job runner cleanup, disabled incremental/debug-info-heavy dev builds, and stopped
+  restoring cached target artifacts so the GitHub runner has more disk headroom for the heavy test
+  link step.
 
 ## Local Verification
 
@@ -44,6 +52,10 @@ The following commands passed locally after the fix:
 - `cargo fmt --all --check`
 - `cargo clippy --all-targets -- -D warnings`
 - `cargo test --all-targets --jobs 1`
+- `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1`
+
+The CI-specific disk cleanup is validated by a fresh pushed GitHub Actions run rather than by local
+filesystem behavior.
 
 ## Non-Claims
 
