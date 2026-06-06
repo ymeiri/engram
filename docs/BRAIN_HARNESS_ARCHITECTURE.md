@@ -133,8 +133,17 @@ Harness and migration checkpoint, current through 2026-06-06:
   and Test on the T285 fix head `54c12eb20eefe1f69f162d9151b66868c120a70d`.
   T287 hardens the CI workflow by moving all five `actions/checkout@v4` steps to
   `actions/checkout@v5` after the latest PR CI run warned that checkout v4 uses the deprecated
-  Node.js 20 action runtime. T287 requires its own fresh PR CI run on the T287 head and should not
-  be treated as PR readiness.
+  Node.js 20 action runtime. Fresh PR CI run `27062763355` passed Check, Format, Docs, Clippy, and
+  Test on the T287 head `eb2882f77ace0036af0d415a2f871d82388fb49d`.
+  T288 then archives exactly five superseded rolling handoffs after `memory(get)` and
+  `graph(around)` review proved direct incoming `supersedes` edges:
+  `019dd5cd-a403-7b53-9010-47bd94bba51a`,
+  `019dd80d-7466-7061-8417-6d5f085defc6`,
+  `019dd846-0f0f-7271-9e38-34e1ffc4f6d6`,
+  `019dd84c-2812-75c0-bc3d-ab8ec05f9007`, and
+  `019dd84c-a8d4-7cd3-b1a3-0f910c7050cc`. A post-archive lint sample no longer returned those
+  IDs, and KnowledgeCommit `019e9d2a-e428-7903-b17d-11468e2644ae` records the archive batch. This
+  is exact lifecycle maintenance, not broad cleanup or PR readiness.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -456,8 +465,20 @@ Harness and migration checkpoint, current through 2026-06-06:
   Test all passed. PR readiness/review follow-up remains separate.
 - T287 hardens PR CI action runtime usage after run `27061750059` surfaced GitHub annotations for
   `actions/checkout@v4` using Node.js 20. All five checkout steps now use `actions/checkout@v5`.
-  This is CI maintenance only; it does not close PR readiness, native-Claude, effective-hook,
-  host-label, lifecycle, or direct-legacy gates, and it requires a fresh CI run on the T287 head.
+- The fresh T287 PR CI run `27062763355` passed Check, Format, Docs, Clippy, and Test on
+  `eb2882f77ace0036af0d415a2f871d82388fb49d`. This closes CI runtime hardening for the T287 head,
+  but not PR readiness, native-Claude, effective-hook, host-label, lifecycle, or direct-legacy
+  gates.
+- T288 archives five exact superseded rolling handoffs after per-target `memory(get)` and
+  `graph(around)` review:
+  `019dd5cd-a403-7b53-9010-47bd94bba51a`,
+  `019dd80d-7466-7061-8417-6d5f085defc6`,
+  `019dd846-0f0f-7271-9e38-34e1ffc4f6d6`,
+  `019dd84c-2812-75c0-bc3d-ab8ec05f9007`, and
+  `019dd84c-a8d4-7cd3-b1a3-0f910c7050cc`. A post-archive lint sample no longer returned those
+  IDs and advanced to the next unprocessed candidates. KnowledgeCommit
+  `019e9d2a-e428-7903-b17d-11468e2644ae` records the archive batch. This is exact lifecycle
+  maintenance only; broad cleanup and direct-legacy deprecation/deletion remain separate.
 
 Research checkpoint, current through 2026-05-27:
 
