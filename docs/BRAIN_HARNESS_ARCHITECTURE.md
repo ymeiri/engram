@@ -241,7 +241,10 @@ Harness and migration checkpoint, current through 2026-06-06:
   clear limitations, and preserved approval boundaries. T299 fixes beta-contract issues in scoped
   obligation closeout guidance, MCP `search.project` schema wording, default `engram serve`
   storage/port flag handling, quarantine review export mutation labeling, and README/MCP setup
-  host-scope wording.
+  host-scope wording. The T299 head
+  `37ca96f060293e4b584c4c9490a8205e010d3b6a` passed exact-head PR CI run
+  `27076011668`: Check `1m32s`, Format `17s`, Docs `1m11s`, Clippy `1m44s`,
+  and Test `40m10s`.
   T242 executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -672,7 +675,16 @@ Harness and migration checkpoint, current through 2026-06-06:
   guidance scoped to project/cwd, describe MCP `search.project` as scoped memory filtering as well
   as telemetry correlation, reject default-stdio `serve` storage/port flags instead of silently
   ignoring them, mark quarantine review export as a write to generated pages, and add README/MCP
-  setup beta caveats. This does not prove exact-head PR CI for the T299 commit.
+  setup beta caveats. The T299 commit then passed exact-head PR CI run `27076011668`; this still
+  does not mark PR #2 ready, merge the PR, or prove production-complete multi-host parity.
+- T300 repairs stale current-plan evidence after T299 exact-head CI closure. Startup `orient` and
+  direct search showed the active current-plan MemoryItem
+  `019e9eff-f670-7031-ac60-f9f68aa99255` and rolling handoff
+  `019e9f00-12ed-7e01-ba33-4bb2ab816f38` still pointed at T297 head `5a19053` and run
+  `27074430051`. T300 captures replacement current-plan MemoryItem
+  `019e9f46-9a46-7fe1-a061-711e5a221863` and rolling handoff
+  `019e9f46-c1d4-7220-98de-baefc5bd043e`; follow-up `orient` trace
+  `019e9f46-d254-7003-8fc2-6b1dbd18cdcf` returned the T299 current plan first.
 
 Research checkpoint, current through 2026-05-27:
 

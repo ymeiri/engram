@@ -44,7 +44,9 @@ The fan-out audit found five initial-beta contract issues:
 5. README/MCP setup docs overstated common-host support relative to the current beta decision.
 
 The PR body and exact-head CI gate also remain head-specific: any commit after T298 needs its
-own green PR CI before the branch can be treated as beta-ready.
+own green PR CI before the branch can be treated as beta-ready. The T299 head
+`37ca96f060293e4b584c4c9490a8205e010d3b6a` later passed exact-head PR CI run
+`27076011668`.
 
 ## Fixes
 
@@ -66,9 +68,18 @@ own green PR CI before the branch can be treated as beta-ready.
 - `cargo test -p engram-index render_codex_adapter_spells_out_document_lifecycle_disposition`
 - `cargo test -p engram-tests test_mcp_obligations_doctor_scopes_to_project_and_cwd -- --exact`
 - `cargo test -p engram-tests mcp_search_returns_trace_id_when_telemetry_is_initialized -- --exact`
+- `cargo fmt --all --check`
+- `git diff --check`
+- `git diff --cached --check`
+- `cargo check --all-targets`
+- `cargo clippy --all-targets -- -D warnings`
+- `cargo test --all-targets --jobs 1`
+- Exact-head PR CI run `27076011668` on
+  `37ca96f060293e4b584c4c9490a8205e010d3b6a`: Check `1m32s`, Format `17s`,
+  Docs `1m11s`, Clippy `1m44s`, and Test `40m10s`.
 
 ## Non-Claims
 
 T299 does not mark PR #2 ready, merge the PR, tag a release, run native Claude, prove effective
 hooks, prove live host labels, delete or deprecate direct legacy data, run broad
-`lint apply_safe`, apply M6 decisions, or prove exact-head CI for this T299 commit.
+`lint apply_safe`, apply M6 decisions, or prove production-complete Brain Harness parity.
