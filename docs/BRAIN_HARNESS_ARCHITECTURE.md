@@ -121,8 +121,9 @@ Harness and migration checkpoint, current through 2026-06-06:
   T234/T247/T248 lifecycle targets and recompiled the canonical vault to 2,291 generated files.
   T280 published `yuval.meiri/memory-os-phase0`, set upstream, and opened draft PR `#2`.
   T281 hard-stopped the T255 native Claude prompt-bearing preflight before launch because the
-  current Claude target/version is `2.1.163`, not the packet baseline `2.1.161`. Future vault update
-  policy and direct legacy deprecation remain separate. T242
+  current Claude target/version is `2.1.163`, not the packet baseline `2.1.161`. T282 prepares a
+  docs-only successor packet for Claude `2.1.163` and does not launch native Claude. Future vault
+  update policy and direct legacy deprecation remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -418,6 +419,11 @@ Harness and migration checkpoint, current through 2026-06-06:
   `2.1.163 (Claude Code)`, and stops because T255 hard-stops on anything other than baseline
   `2.1.161`. Prompt-bearing native Claude therefore remains open behind a successor packet or
   explicit deferral.
+- T282 prepares that successor packet for Claude `2.1.163` as docs-only work. It preserves T255's
+  prompt-bearing MCP-`orient` scope, keeps T269 effective-hook visibility and T270 host-label proof
+  separate, requires future fresh preflight/path/version/hash/process/monitoring evidence, and
+  explicitly rejects behavioral-equivalence claims between `2.1.161` and `2.1.163` until a future
+  transcript proves the narrow prompt-bearing subclaim.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2660,6 +2666,10 @@ Proceed in this order from the current checkpoint:
      against Claude `2.1.161`; current `/Users/yuval.meiri/.local/bin/claude` resolves to
      `2.1.163`, so no prompt-bearing native Claude session was launched. Do not claim T255,
      T269, or T270 completion from T281.
+179. Treat T282 as a docs-only successor packet for T255 under Claude `2.1.163`, not execution.
+     It preserves the prompt-bearing native-Claude scope and keeps T269/T270 separate. Execute it
+     only in a future bounded slice with fresh matching preflight, and do not infer behavioral
+     equivalence between Claude `2.1.161` and `2.1.163`.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
