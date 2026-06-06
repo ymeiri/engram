@@ -223,9 +223,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   lean `orient` trace `019e9ed6-784b-7513-be7f-ba7bb209e352` surfaced the T296 current plan
   with used-memory candidates and no open obligations, a temporary M6 review export/status path
   completed without warnings or writes, Codex/generic doctors are `ready=true`, and PR CI was
-  green on `f03fb4b714d7b20a561d3a2316c7444878af93fe`. Because this report changes the head,
-  fresh PR CI is still required on the T297 commit before beta review.
-  Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
+  green on `f03fb4b714d7b20a561d3a2316c7444878af93fe`. The T297 report commit
+  `5a1905398bfb5255b3314b1a78339cd655ccb964` then passed exact-head PR CI run
+  `27074430051`, and the draft PR body was updated with that T297 evidence.
+  T298 archives the next five exact superseded rolling handoffs after per-target
+  `memory(get)` and `graph(around)` review:
+  `019dfc97-4f9b-7301-b401-38179a03aeec`,
+  `019dfca2-cd3c-7241-a206-522556d5158b`,
+  `019dfce1-c566-7031-b024-86ae45ac9132`,
+  `019dfd36-487d-7552-97cb-c81cf53d1be5`, and
+  `019dfd36-d0e5-7d12-81ad-d5b84db1d514`. Post-archive lint advanced to
+  `019dfd38-fc3d-7352-83a6-c9bbd16349ea`. Future exact-target lifecycle batches and direct
+  legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -636,6 +645,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   after fetch, with no pull/rebase/merge/config change. KnowledgeCommit
   `019e9e4a-57ad-7b51-a787-6b4859421cfa` records the batch. This is exact lifecycle maintenance
   and pull-hint evidence only.
+- T298 archives the next five exact superseded rolling handoffs after the same per-target
+  `memory(get)`, direct successor, and `graph(around)` review:
+  `019dfc97-4f9b-7301-b401-38179a03aeec`,
+  `019dfca2-cd3c-7241-a206-522556d5158b`,
+  `019dfce1-c566-7031-b024-86ae45ac9132`,
+  `019dfd36-487d-7552-97cb-c81cf53d1be5`, and
+  `019dfd36-d0e5-7d12-81ad-d5b84db1d514`. The third target's direct successor is
+  `019dfe85-07ea-7600-987e-97aa1842c9e7`; the fifth target's direct successor is
+  `019dfd38-fc3d-7352-83a6-c9bbd16349ea`. The sampled lint queue advanced to
+  `019dfd38-fc3d-7352-83a6-c9bbd16349ea`. This is exact lifecycle maintenance only; broad
+  cleanup, direct-legacy deprecation/deletion, native Claude, effective hooks, and live host
+  labels remain separate.
 
 Research checkpoint, current through 2026-05-27:
 
