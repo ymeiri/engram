@@ -91,7 +91,7 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
-Harness and migration checkpoint, current through 2026-06-05:
+Harness and migration checkpoint, current through 2026-06-06:
 
 - Generated local harness adapter readiness is currently validated by read-only
   `harness(action="doctor")` checks for generic, Claude Code, Codex, Gemini CLI, and Cursor:
@@ -113,9 +113,12 @@ Harness and migration checkpoint, current through 2026-06-05:
   validates current-data vault compilation only in isolated temp output. T267 prepared a fixed-count
   canonical vault gate, T272 marked it historical/non-executable after normal source-count drift,
   T275 prepared a Snapshot A/B successor protocol, and T277 executed that protocol under the
-  2026-06-06 standing authorization. Canonical `/Users/yuval.meiri/.engram/vault` is now
-  initialized and compiled with 2,278 generated files, zero user files, and clean marker/frontmatter
-  scans. Future vault update policy remains separate. T242
+  2026-06-06 standing authorization. Canonical `/Users/yuval.meiri/.engram/vault` was initialized
+  and compiled with 2,278 generated files, zero user files, and clean marker/frontmatter scans.
+  T278 then applied the current M6 review batch, writing five reviewed project-scoped MemoryItems
+  and KnowledgeCommit `019e9bd6-7e8e-7611-8326-1811b3b799a2`, and recompiled the canonical vault to
+  2,287 generated files with zero user files and zero skipped files. Future vault update policy and
+  direct legacy deprecation remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -123,7 +126,7 @@ Harness and migration checkpoint, current through 2026-06-05:
   out-of-scope `voice-layer` item. This supersedes the older statement that the installed runtime
   had not been refreshed for the T217/T221/T223 source changes or T225/T227/T229/T232 fixtures,
   but it is point-in-time installed-runtime evidence only. It does not prove native Claude prompt
-  behavior, host external-session labeling, lifecycle cleanup, M6 completion, or broad
+  behavior, host external-session labeling, lifecycle cleanup, direct legacy deprecation, or broad
   cross-harness behavioral parity. Stale active handoffs remain until a future non-dry-run handoff
   update or explicit lifecycle cleanup.
 - T245 read-only lifecycle scoping clarifies the current lifecycle gate without mutating memory:
@@ -169,9 +172,10 @@ Harness and migration checkpoint, current through 2026-06-05:
 - T250 adds a docs-only M6 human-disposition worksheet compiled from existing committed reports
   T209/T210/T123/T124/T169/T121. It lists candidates 0001-0012 with report-derived labels,
   provenance, caveats, and explicit pending human-input fields, while preserving T210 as the
-  authoritative gate: all generated files remain undecided, `ready_to_apply=false`, and 0012 needs
-  explicit handling. T250 does not inspect or edit the generated review workspace, run M6 commands,
-  make candidate choices, or imply migration readiness.
+  then-authoritative gate before the 2026-06-06 standing authorization and T278 execution:
+  all generated files were undecided, `ready_to_apply=false`, and 0012 needed explicit handling.
+  T250 does not inspect or edit the generated review workspace, run M6 commands, make candidate
+  choices, or imply migration readiness.
 - T251 records fresh post-T250 lifecycle visibility evidence: the pending T247 target
   `019e8291-40aa-71a0-b16b-9ba7b6446cc6` and T248 target
   `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are both still active and visible, and fresh sampled
@@ -383,9 +387,11 @@ Harness and migration checkpoint, current through 2026-06-05:
   `confidence_gate.passed=true`, `task_failure_count=0`, `bad_memory_used_count=0`,
   `wrong_scope_memory_count=0`, and `missing_context_count=0`. This is a rolling operational
   signal, not proof of M6, lifecycle, harness, runtime, or hot-path completion.
-- M6 migration remains review-gated. Candidate inspection is complete for generated files
-  0001-0011, candidate 0012 is count-drift provenance requiring explicit scope handling, and the
-  next M6 progress requires human-provided dispositions under T210A/T210B or explicit deferral.
+- T278 closes the current M6 generated review-batch disposition/apply gate. Candidate files
+  0001-0012 now have one disposition each; five project-scoped candidates were written as active
+  reviewed MemoryItems, three broad/superseded candidates were quarantined, and four stale/low-value
+  candidates were rejected. Direct legacy deprecation and broad legacy simplification remain
+  separate evidence-gated work.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -1486,21 +1492,30 @@ through `orient`, memory-layer unified search visibility, and duplicate-safe re-
 does not justify broad legacy deletion, automatic MemoryItem dominance, or broad migration
 write-apply.
 
-Current-data M6 state, current through 2026-06-04:
+Current-data M6 state, current through 2026-06-06:
 
 - T58 inventory found 11 candidates.
 - T68 review export wrote the generated review workspace and surfaced 12 generated files because
   `0012-skip-plan.md` appeared as count-drift provenance.
 - T123, T124, and T169 inspected generated candidate files 0001-0011 without decisions.
-- T209 validated the snapshot and read-only status path; all 12 generated files remain undecided
-  and `ready_to_apply=false`.
-- T210 defines the next gate as human-provided candidate dispositions under T210A/T210B, or an
-  explicit deferral. Generic continuation or approval without explicit dispositions is not enough.
+- T209 validated the snapshot and read-only status path; at that checkpoint all 12 generated files
+  were undecided and `ready_to_apply=false`.
+- T210/T250 defined a human-disposition gate before the 2026-06-06 standing authorization. T278
+  supersedes that blocker for the current generated batch after AI Council recall/broadcast, source
+  parser inspection, live review-root preflight, status validation, and dry-run apply.
+- T278 records exactly one disposition per generated file: 3 accepted, 2 accepted with edits,
+  3 quarantined, and 4 rejected. Actual apply writes the five project-scoped accepted candidates
+  into active reviewed MemoryItems and creates KnowledgeCommit
+  `019e9bd6-7e8e-7611-8326-1811b3b799a2`.
+- Post-apply status remains ready and idempotent with `planned_count=0`, `duplicate_count=5`, and
+  only expected already-migrated duplicate warnings for the five accepted sources. Search traces
+  `019e9bd6-c2c6-7ff1-bd37-2f5a57f20ca1` and
+  `019e9bd6-cceb-7ba1-8b56-2e35ab0abd92` retrieve the edited migrated memories with reviewed
+  active `project:engram` metadata.
 
-No migration apply, KnowledgeCommit, vault compile, direct legacy deprecation, lifecycle cleanup,
-or deletion should run until reviewed dispositions, dry-run apply evidence, a rollback plan, and
-explicit write-path approval exist. If the user defers M6 instead, the deferral must be recorded as
-evidence and the completion matrix must keep migration open.
+No direct legacy deprecation, broad legacy deletion, lifecycle cleanup, or ranking/orient migration
+promotion is implied by T278. Those require separate evidence-backed slices after the current
+review-batch apply.
 
 ### M7: Tool Tiering
 
@@ -2595,7 +2610,15 @@ Proceed in this order from the current checkpoint:
      `origin/main` (`HEAD...origin/main` = `390 0`) and that the same recurring pull hint remains a
      policy/upstream-publication issue, not evidence to run `git pull`, merge, rebase, set pull
      policy, push, set upstream, or open a PR without the branch gate.
+175. Treat T278 as the current-data M6 review-batch disposition/apply result, not broad legacy
+     deprecation. It supersedes the older T210/T250 "human-provided dispositions" blocker for the
+     current 12-file generated batch under the 2026-06-06 standing authorization, writes only the
+     five accepted project-scoped candidates, leaves quarantined/rejected candidates unwritten,
+     creates KnowledgeCommit `019e9bd6-7e8e-7611-8326-1811b3b799a2`, and recompiles the canonical
+     vault to 2,287 generated files. It does not delete legacy observations, deprecate direct legacy
+     paths, mutate lifecycle state, validate native Claude/effective hooks/host labels, push the
+     branch, or change ranking/`orient`/public MCP/schema/storage behavior.
 
-Do not begin large deletion, broad legacy simplification, or migration write-apply until the
-confidence experiment shows MemoryItems improve agent behavior and migration preserves important
-knowledge.
+Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
+T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
+knowledge and improve agent behavior.
