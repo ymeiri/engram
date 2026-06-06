@@ -126,9 +126,9 @@ Harness and migration checkpoint, current through 2026-06-06:
   that successor preflight and hard-stops before launch because ambient native Claude processes
   make attribution ambiguous. T284 records a read-only deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
-  PR #2 CI failures by replacing Clippy-reported timestamp sorts and serializing the CI Test job's
-  build/link work. Future exact-target lifecycle batches and direct legacy behavior proof remain
-  separate. T242
+  PR #2 CI failures by replacing Clippy-reported timestamp sorts, collapsing a Rust 1.96-only
+  `sessionend` match warning, and serializing the CI Test job's build/link work. Future
+  exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -437,9 +437,11 @@ Harness and migration checkpoint, current through 2026-06-06:
   superseded-active warnings, but because it was global and limit-truncated, T284 defers broad
   lifecycle cleanup and direct legacy deprecation/deletion instead of archiving or deleting data.
 - T285 fixes the first PR #2 CI failures. Clippy failed on three `unnecessary_sort_by` findings in
-  `engram-store/src/repos/memory.rs`; Test failed with `rust-lld` signal 7 bus errors while
-  linking integration-test binaries. The fix uses `sort_by_key` and runs CI Test as
-  `cargo test --all-targets --jobs 1`, with local Clippy and serialized test validation passing.
+  `engram-store/src/repos/memory.rs`, then the first pushed fix surfaced a Rust 1.96-only
+  `collapsible_match` warning in `engram-index/src/harness.rs`; Test failed with `rust-lld` signal
+  7 bus errors while linking integration-test binaries. The fix uses `sort_by_key`, a match guard,
+  and CI Test as `cargo test --all-targets --jobs 1`, with local Clippy and serialized test
+  validation passing before the Rust 1.96-only follow-up.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2695,8 +2697,9 @@ Proceed in this order from the current checkpoint:
      deletion, direct legacy deprecation, ranking changes, or `orient` changes. Future lifecycle
      writes require exact target batches with fresh evidence.
 182. Treat T285 as a PR CI fix, not PR readiness or Brain Harness completion. It fixes the observed
-     Clippy warnings and mitigates the observed concurrent linker bus-error failure mode; remote
-     CI still has to pass on the pushed fix before calling the branch green.
+     Clippy warnings, including one Rust 1.96-only warning, and mitigates the observed concurrent
+     linker bus-error failure mode; remote CI still has to pass on the pushed fix before calling
+     the branch green.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

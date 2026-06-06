@@ -656,30 +656,28 @@ impl HarnessService {
                     }
                 }
             }
-            "sessionend" => {
-                if write_durable {
-                    if let Some(service) = services.handoff {
-                        let content = format!(
-                            "# Claude Code Session-End Handoff\n\nSession: {}\nCWD: {}\nReason: {}\nTranscript: {}\n\n## Next Actions\n- On resume, call orient and inspect this handoff before acting.\n",
-                            event.session_id.as_deref().unwrap_or("unknown"),
-                            event.cwd.as_deref().unwrap_or("unknown"),
-                            event.reason.as_deref().unwrap_or("unknown"),
-                            event.transcript_path.as_deref().unwrap_or("unknown"),
-                        );
-                        match service
-                            .update(
-                                project.clone(),
-                                None,
-                                content,
-                                vec!["On resume, call orient and inspect this handoff.".to_string()],
-                                writer.clone(),
-                                false,
-                            )
-                            .await
-                        {
-                            Ok(update) => handoff_written = update.written,
-                            Err(error) => warnings.push(format!("handoff update failed: {error}")),
-                        }
+            "sessionend" if write_durable => {
+                if let Some(service) = services.handoff {
+                    let content = format!(
+                        "# Claude Code Session-End Handoff\n\nSession: {}\nCWD: {}\nReason: {}\nTranscript: {}\n\n## Next Actions\n- On resume, call orient and inspect this handoff before acting.\n",
+                        event.session_id.as_deref().unwrap_or("unknown"),
+                        event.cwd.as_deref().unwrap_or("unknown"),
+                        event.reason.as_deref().unwrap_or("unknown"),
+                        event.transcript_path.as_deref().unwrap_or("unknown"),
+                    );
+                    match service
+                        .update(
+                            project.clone(),
+                            None,
+                            content,
+                            vec!["On resume, call orient and inspect this handoff.".to_string()],
+                            writer.clone(),
+                            false,
+                        )
+                        .await
+                    {
+                        Ok(update) => handoff_written = update.written,
+                        Err(error) => warnings.push(format!("handoff update failed: {error}")),
                     }
                 }
             }

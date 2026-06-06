@@ -22,10 +22,16 @@ Workflow run `27057416611` ran against PR merge commit
 | Clippy | Failed | Three `clippy::unnecessary_sort_by` errors in `engram-store/src/repos/memory.rs`. |
 | Test | Failed | `cargo test --all-targets` hit `rust-lld` signal 7 bus errors while linking integration-test binaries. |
 
+The first pushed T285 fix reached run `27058068496`. That run used the serialized Test command,
+but Clippy on Rust `1.96.0` surfaced one additional `clippy::collapsible_match` warning in
+`engram-index/src/harness.rs` that was not emitted by the local Rust `1.93.0` toolchain.
+
 ## Changes
 
 - Replaced three timestamp comparisons with `sort_by_key` in
   `engram-store/src/repos/memory.rs`.
+- Collapsed the durable `sessionend` branch in `engram-index/src/harness.rs` into a match guard so
+  Rust 1.96 Clippy accepts it.
 - Changed the CI Test job from `cargo test --all-targets` to
   `cargo test --all-targets --jobs 1` to serialize build/link work and reduce concurrent linker
   pressure on the GitHub runner.
