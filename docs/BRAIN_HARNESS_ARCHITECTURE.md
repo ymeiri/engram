@@ -117,8 +117,12 @@ Harness and migration checkpoint, current through 2026-06-06:
   and compiled with 2,278 generated files, zero user files, and clean marker/frontmatter scans.
   T278 then applied the current M6 review batch, writing five reviewed project-scoped MemoryItems
   and KnowledgeCommit `019e9bd6-7e8e-7611-8326-1811b3b799a2`, and recompiled the canonical vault to
-  2,287 generated files with zero user files and zero skipped files. Future vault update policy and
-  direct legacy deprecation remain separate. T242
+  2,287 generated files with zero user files and zero skipped files. T279 then archived the exact
+  T234/T247/T248 lifecycle targets and recompiled the canonical vault to 2,291 generated files.
+  T280 published `yuval.meiri/memory-os-phase0`, set upstream, and opened draft PR `#2`.
+  T281 hard-stopped the T255 native Claude prompt-bearing preflight before launch because the
+  current Claude target/version is `2.1.163`, not the packet baseline `2.1.161`. Future vault update
+  policy and direct legacy deprecation remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
   `1059ae2f44bdcddc56ff88f2a1ed441f51459572d24d9b429248e38df1e6e2dc`, daemon status reported
@@ -400,9 +404,20 @@ Harness and migration checkpoint, current through 2026-06-06:
   than the old pre-T278 `ready_to_apply=false` payload. The T247 archive is supported by fresh
   passing telemetry, and the T248 archive is supported by current-plan retrieval superseding the
   May 7 probe. KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582` records the batch, and the
-  canonical vault refreshes to 2,291 generated files. T279 leaves broad lifecycle inventory or
-  deferral, native Claude/effective hooks/host labels, branch publication, and direct legacy
-  deprecation as separate gates.
+  canonical vault refreshes to 2,291 generated files. At T279, broad lifecycle inventory or
+  deferral, native Claude/effective hooks/host labels, the remote branch gate, and direct legacy
+  deprecation remained separate gates; T280 later closes the initial remote branch gate.
+- T280 closes initial branch publication/upstream/PR. Fresh preflight showed
+  `HEAD=5b5e4bb92acf71a0f419e434b4725b6d47fe37fc`, `origin/main` as an ancestor,
+  `HEAD...origin/main` as `394 0`, no upstream, no same-named remote branch, and only user-owned
+  root `AGENTS.md` untracked. The branch now tracks `origin/yuval.meiri/memory-os-phase0`, and
+  draft PR `https://github.com/ymeiri/engram/pull/2` is open.
+- T281 attempts only the T255 read-only preflight and does not launch native Claude. It resolves
+  `/Users/yuval.meiri/.local/bin/claude` to
+  `/Users/yuval.meiri/.local/share/claude/versions/2.1.163`, observes
+  `2.1.163 (Claude Code)`, and stops because T255 hard-stops on anything other than baseline
+  `2.1.161`. Prompt-bearing native Claude therefore remains open behind a successor packet or
+  explicit deferral.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2637,6 +2652,14 @@ Proceed in this order from the current checkpoint:
      to 2,291 generated files. It does not run broad `lint apply_safe`, delete memory, change
      ranking/`orient`, execute native Claude/effective hooks/host labels, publish the branch, or
      deprecate legacy layers.
+177. Treat T280 as initial branch publication/upstream/PR closure. The branch now tracks
+     `origin/yuval.meiri/memory-os-phase0`, and draft PR `https://github.com/ymeiri/engram/pull/2`
+     is open. Future branch work is PR maintenance, CI/review follow-up, or readiness changes, not
+     another initial publication attempt unless fresh remote state contradicts this.
+178. Treat T281 as a T255 preflight hard stop, not native Claude validation. T255 was prepared
+     against Claude `2.1.161`; current `/Users/yuval.meiri/.local/bin/claude` resolves to
+     `2.1.163`, so no prompt-bearing native Claude session was launched. Do not claim T255,
+     T269, or T270 completion from T281.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
