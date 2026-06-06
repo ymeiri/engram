@@ -131,6 +131,10 @@ Harness and migration checkpoint, current through 2026-06-06:
   disk-headroom mitigations after remote run `27058785227` still failed with only 87 MB free disk.
   T286 records the fresh remote CI recheck: run `27059846266` passed Check, Format, Docs, Clippy,
   and Test on the T285 fix head `54c12eb20eefe1f69f162d9151b66868c120a70d`.
+  T287 hardens the CI workflow by moving all five `actions/checkout@v4` steps to
+  `actions/checkout@v5` after the latest PR CI run warned that checkout v4 uses the deprecated
+  Node.js 20 action runtime. T287 requires its own fresh PR CI run on the T287 head and should not
+  be treated as PR readiness.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -450,6 +454,10 @@ Harness and migration checkpoint, current through 2026-06-06:
 - T286 closes that remote CI recheck for the T285 fix head. Run `27059846266` completed
   successfully on `54c12eb20eefe1f69f162d9151b66868c120a70d`; Check, Format, Docs, Clippy, and
   Test all passed. PR readiness/review follow-up remains separate.
+- T287 hardens PR CI action runtime usage after run `27061750059` surfaced GitHub annotations for
+  `actions/checkout@v4` using Node.js 20. All five checkout steps now use `actions/checkout@v5`.
+  This is CI maintenance only; it does not close PR readiness, native-Claude, effective-hook,
+  host-label, lifecycle, or direct-legacy gates, and it requires a fresh CI run on the T287 head.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2711,6 +2719,11 @@ Proceed in this order from the current checkpoint:
      passed Check, Format, Docs, Clippy, and Test on
      `54c12eb20eefe1f69f162d9151b66868c120a70d`; future pushes need their own CI and PR review
      follow-up remains separate.
+184. Treat T287 as CI action-runtime hardening, not PR readiness or Brain Harness completion. It
+     updates all five workflow checkout steps from `actions/checkout@v4` to `actions/checkout@v5`
+     after the current PR CI annotations warned about Node.js 20 action-runtime deprecation. Record
+     the fresh T287-head CI result in Engram memory/handoff, not by creating a recursive docs-only
+     CI report.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
