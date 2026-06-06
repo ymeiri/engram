@@ -176,17 +176,19 @@ Harness and migration checkpoint, current through 2026-06-06:
   all generated files were undecided, `ready_to_apply=false`, and 0012 needed explicit handling.
   T250 does not inspect or edit the generated review workspace, run M6 commands, make candidate
   choices, or imply migration readiness.
-- T251 records fresh post-T250 lifecycle visibility evidence: the pending T247 target
+- T251 records historical post-T250 lifecycle visibility evidence: the then-pending T247 target
   `019e8291-40aa-71a0-b16b-9ba7b6446cc6` and T248 target
-  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are both still active and visible, and fresh sampled
+  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` were both active and visible, and fresh sampled
   lint reports feedback-stale findings for both with `safe_action=none`. T251 does not archive
   either item, run `lint apply_safe`, create a new packet, or change ranking/`orient`; it keeps
   lifecycle cleanup incomplete until exact packet approvals are executed or explicitly deferred.
+  T279 later executes these exact archives.
 - T252 reconciles the user's broad "continue without stopping for approval" instruction with the
-  pending default-deny lifecycle packets. AI Council and Claude Bridge agreed that broad workflow
+  then-pending default-deny lifecycle packets. AI Council and Claude Bridge agreed that broad workflow
   permission applies to ordinary Engram repo/docs/code work, not exact MemoryItem archive writes.
-  T234/T247/T248 therefore remain pending until their exact packet wording is provided after fresh
-  pre-write checks; no lifecycle archive or `lint apply_safe` ran.
+  At T252, T234/T247/T248 stayed pending until exact packet wording was provided after fresh
+  pre-write checks; no lifecycle archive or `lint apply_safe` ran then. This boundary is
+  historical after the later 2026-06-06 standing authorization and T279 execution.
 - T253 reconciles the matrix after the T252 telemetry intent-coverage catch-up. The latest
   20-trace rolling eval reports `feedback_coverage=0.8999999761581421`,
   `distinct_intent_count=4`, `task_failure_count=0`, `bad_memory_used_count=0`,
@@ -346,17 +348,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   `387 0`, no same-named remote branch exists, no upstream is configured, and no pull policy is
   configured. The repeated pull hint remains a signal to avoid bare `git pull`, not a reason to
   merge or rebase. The branch gate is still optional remote publication/upstream policy.
-- T274 refreshes lifecycle target visibility after T273 without mutating Memory OS state. Fresh
+- T274 refreshes lifecycle target visibility after T273 without mutating Memory OS state, before
+  T279 execution. Fresh
   `memory(get)` confirms the T234 migration-completion target
   `019dd3fe-ec94-7122-af04-1f35b839387f`, T247 telemetry target
   `019e8291-40aa-71a0-b16b-9ba7b6446cc6`, and T248 resume-probe target
-  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are still `status=active`. Direct lifecycle search
+  `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` were active immediately before T279. Direct lifecycle search
   returned T273 current-plan guidance first and the M6 gate second, but all three stale targets
   still appeared in the top memory results. Fresh global lint was dominated by unrelated
   superseded-active safe-action and open-obligation findings, so broad `lint apply_safe` remains
   the wrong operation. Lifecycle cleanup remains incomplete until exact T234/T247/T248 execution
-  or explicit deferral; T252's boundary still prevents treating broad continue instructions as
-  archive approval.
+  or explicit deferral. T279 later executes these three exact archives under the newer standing
+  authorization.
 - T275 prepares a successor canonical-vault approval packet without executing it. T267 remains
   historical but non-executable under current counts after T272/T275 drift. Fresh T275 read-only
   canonical status still shows `/Users/yuval.meiri/.engram/vault` absent and uninitialized, with
@@ -392,6 +395,14 @@ Harness and migration checkpoint, current through 2026-06-06:
   reviewed MemoryItems, three broad/superseded candidates were quarantined, and four stale/low-value
   candidates were rejected. Direct legacy deprecation and broad legacy simplification remain
   separate evidence-gated work.
+- T279 archives the three exact stale lifecycle targets prepared by T234/T247/T248 after fresh
+  post-T278 evidence. The T234 archive reason is rewritten around current T277/T278 facts rather
+  than the old pre-T278 `ready_to_apply=false` payload. The T247 archive is supported by fresh
+  passing telemetry, and the T248 archive is supported by current-plan retrieval superseding the
+  May 7 probe. KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582` records the batch, and the
+  canonical vault refreshes to 2,291 generated files. T279 leaves broad lifecycle inventory or
+  deferral, native Claude/effective hooks/host labels, branch publication, and direct legacy
+  deprecation as separate gates.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2594,7 +2605,7 @@ Proceed in this order from the current checkpoint:
      Git config, pulling, merging, rebasing, pushing, opening a PR, or setting upstream. Future
      publication still requires fresh preflight and an exact branch-publication decision.
 172. Treat T274 as a lifecycle target visibility recheck, not lifecycle cleanup. T274 confirms
-     T234/T247/T248 targets remain active and visible after T273, while current-plan/M6 gate
+     T234/T247/T248 targets remained active and visible after T273, while current-plan/M6 gate
      memory still outranks them for the tested lifecycle query. It does not archive, supersede,
      reject, review, or delete any MemoryItem, and it does not run `lint apply_safe`. Broad
      lifecycle cleanup remains incomplete and exact-target-gated; use T234/T247/T248 exact packet
@@ -2618,6 +2629,14 @@ Proceed in this order from the current checkpoint:
      vault to 2,287 generated files. It does not delete legacy observations, deprecate direct legacy
      paths, mutate lifecycle state, validate native Claude/effective hooks/host labels, push the
      branch, or change ranking/`orient`/public MCP/schema/storage behavior.
+176. Treat T279 as the exact T234/T247/T248 lifecycle archive execution result, not exhaustive
+     lifecycle cleanup. It archives only MemoryItems `019dd3fe-ec94-7122-af04-1f35b839387f`,
+     `019e8291-40aa-71a0-b16b-9ba7b6446cc6`, and
+     `019e01f2-0a87-7f73-9b0b-7f2443eac7bb` after fresh post-T278 evidence, records
+     KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and recompiles the canonical vault
+     to 2,291 generated files. It does not run broad `lint apply_safe`, delete memory, change
+     ranking/`orient`, execute native Claude/effective hooks/host labels, publish the branch, or
+     deprecate legacy layers.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

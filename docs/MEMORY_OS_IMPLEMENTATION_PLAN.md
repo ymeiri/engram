@@ -824,7 +824,7 @@ T233 freshness before execution, T241 clarifies M6 deferral state, T242 executes
 refresh plus daemon pidfile hardening, T244 records the current passing rolling telemetry gate,
 T245/T246 keep lifecycle cleanup exact-target-review-gated, T247/T248 add two pending
 default-deny lifecycle packets, T249 reconciles the matrix after T248, T250 adds the M6 human
-disposition worksheet, T251 confirms pending T247/T248 lifecycle targets remain active/visible,
+disposition worksheet, T251 confirmed pending T247/T248 lifecycle targets were active/visible,
 T252 preserves the exact lifecycle approval boundary despite the user's broad continue instruction,
 T253 reconciles the telemetry intent-coverage catch-up, T254 scopes the remaining
 native-Claude/harness parity gate, T255 prepares but does not execute a prompt-bearing native
@@ -845,8 +845,8 @@ T271 prepares the branch publication/upstream gate without pushing or changing G
 T272 records canonical-vault source-count drift after normal current-plan captures and marks T267
 historical/non-executable under current counts until a fresh successor packet is approved.
 T273 refreshes branch-publication freshness and confirms no local merge/rebase is needed.
-T274 refreshes T234/T247/T248 lifecycle target visibility and confirms those exact targets remain
-active/visible while lifecycle cleanup stays exact-target-gated.
+T274 refreshes T234/T247/T248 lifecycle target visibility before execution and confirms those exact
+targets remained active/visible while lifecycle cleanup stayed exact-target-gated.
 T275 prepares a canonical-vault successor packet that replaces T267's fixed-count future gate with
 a two-phase live Snapshot A/B approval protocol, without executing canonical vault writes.
 T276 refreshes the recurring pull-hint branch evidence after T275 and keeps the branch gate as
@@ -858,6 +858,9 @@ T278 records evidence-based dispositions for the 12-file M6 review batch under t
 authorization, dry-runs and applies the five accepted project-scoped candidates, creates Memory OS
 KnowledgeCommit `019e9bd6-7e8e-7611-8326-1811b3b799a2`, and recompiles the canonical vault to
 2,287 generated files with zero user files and zero skipped files.
+T279 archives the exact T234/T247/T248 lifecycle targets under the 2026-06-06 standing
+authorization, records KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and recompiles the
+canonical vault to 2,291 generated files with zero user files.
 Current read-only
 `harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
 CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
@@ -895,29 +898,37 @@ current T68/T209 review batch: all 12 generated files now have exactly one dispo
 candidates were quarantined, four stale/low-value candidates were rejected, and post-apply status is
 idempotent with `duplicate_count=5` and `planned_count=0`. T278 does not authorize direct legacy
 deprecation/deletion or broad legacy simplification.
+T279 then executes the exact T234/T247/T248 lifecycle archive path under the same standing
+authorization, after fresh get/search/graph/lint/git/obligations evidence and AI Council review.
+It archives exactly the stale migration-completion item
+`019dd3fe-ec94-7122-af04-1f35b839387f`, stale T76 telemetry item
+`019e8291-40aa-71a0-b16b-9ba7b6446cc6`, and stale resume-probe item
+`019e01f2-0a87-7f73-9b0b-7f2443eac7bb`, records KnowledgeCommit
+`019e9be1-67ff-7e92-a87e-f92667fa3582`, and recompiles the canonical vault to 2,291 generated
+files with zero user files.
 
-Current T278 matrix snapshot:
+Current T279 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
 | Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T276 refreshes the branch/pull-hint evidence after T275 and confirms `origin/main` remains an ancestor of `HEAD`; T274 confirms current-plan/M6 gate memory still outranks stale lifecycle targets for the tested lifecycle query; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence; T265 installs that source and proves live Codex labeling still works; T266 proves current data compiles into the generated vault projection in isolated temp output with exact expected file counts; T277 initializes and compiles the durable canonical generated vault at `/Users/yuval.meiri/.engram/vault` with 2,278 generated files, zero user files, zero skipped files, and marker/frontmatter scans clean; T278 validates the M6 review batch end to end with clean status, clean dry-run, five written reviewed MemoryItems, post-apply duplicate idempotence, content retrieval traces, and a post-apply canonical vault refresh to 2,287 generated files with zero user files. | Validations are point-in-time and bounded to the tested classes. T278 proves the current review-batch apply and immediate vault refresh, not direct legacy deletion/deprecation or broad legacy simplification. |
-| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264/T265 narrow Claude Code source/runtime labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env and installed-CLI simulated-Claude smoke; T270 defines the future live native Claude label proof contract and records Gemini as default-deny/no-contract rather than guessed; T277 closes initial canonical vault init/compile, and T278 proves one immediate post-write canonical vault refresh. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, live Claude host-label proof, lifecycle cleanup, branch publication, and direct legacy deprecation/deletion remain unproved. |
+| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T276 refreshes the branch/pull-hint evidence after T275 and confirms `origin/main` remains an ancestor of `HEAD`; T274 confirms current-plan/M6 gate memory still outranked stale lifecycle targets before cleanup; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence; T265 installs that source and proves live Codex labeling still works; T266 proves current data compiles into the generated vault projection in isolated temp output with exact expected file counts; T277 initializes and compiles the durable canonical generated vault at `/Users/yuval.meiri/.engram/vault` with 2,278 generated files, zero user files, zero skipped files, and marker/frontmatter scans clean; T278 validates the M6 review batch end to end with clean status, clean dry-run, five written reviewed MemoryItems, post-apply duplicate idempotence, content retrieval traces, and a post-apply canonical vault refresh to 2,287 generated files with zero user files; T279 archives the three exact T234/T247/T248 lifecycle targets, validates active search no longer returns them, records KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and refreshes the canonical vault to 2,291 generated files with zero user files. | Validations are point-in-time and bounded to the tested classes. T278 proves the current review-batch apply and immediate vault refresh, not direct legacy deletion/deprecation or broad legacy simplification. T279 closes exact target lifecycle cleanup for three IDs, not exhaustive global lint cleanup. |
+| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, lifecycle hygiene, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264/T265 narrow Claude Code source/runtime labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env and installed-CLI simulated-Claude smoke; T270 defines the future live native Claude label proof contract and records Gemini as default-deny/no-contract rather than guessed; T277 closes initial canonical vault init/compile, T278 proves one immediate post-write canonical vault refresh, and T279 proves exact target lifecycle archive plus vault refresh. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, live Claude host-label proof, residual broad lifecycle inventory/deferral if required, branch publication, and direct legacy deprecation/deletion remain unproved. |
 | Prepared but not executed | T255 commits an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules; T267 is historical/non-executable after count drift; T275 has now been executed by T277 for initial canonical vault init/compile; T269 commits an exact/default-deny effective-hook visibility revalidation packet with a falsifiable `/hooks` observation contract and T197-style process-group cleanup path; T270 commits an exact/default-deny host-label proof packet for live native Claude and Gemini no-contract deferral; T271 commits an exact/default-deny branch publication/upstream packet. | T255 has not run native Claude and does not prove prompt-bearing behavior; T269 has not run native Claude and does not prove effective-hook visibility; T270 has not run native Claude and does not prove live Claude labels; T271 has not pushed or set upstream. |
-| Missing | Broad lifecycle cleanup or deferral, prompt-bearing native Claude execution, effective-hook execution result, live Claude host-label proof, branch publication/upstream/PR, and any direct legacy deprecation/deletion decision after T278's current review-batch apply. | Requires separate evidence-backed slices. T276 reconfirms no local merge/rebase is currently needed and keeps optional remote publication/upstream behind the T271A-style gate. T274 reconfirms T234/T247/T248 lifecycle targets are still active/visible and exact-target-gated. |
-| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; the latest T265 20-trace window passes with 55% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; pending/default-deny lifecycle packets, T255, and T269 can be mistaken for executed cleanup/validation; quarantined T278 entity-scope M6 candidates are not active MemoryItems; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
-| Blocked | Lifecycle completion is blocked on exact-target review/approval and must not use broad `lint apply_safe`. Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. Branch publication remains unexecuted. | Keep future risky actions evidence-backed and scoped; do not treat one closed gate as broad Brain Harness completion. |
+| Missing | Prompt-bearing native Claude execution, effective-hook execution result, live Claude host-label proof, branch publication/upstream/PR, any direct legacy deprecation/deletion decision after T278's current review-batch apply, and residual broad lifecycle inventory/deferral if required beyond the three T279 exact targets. | Requires separate evidence-backed slices. T276 reconfirms no local merge/rebase is currently needed and keeps optional remote publication/upstream behind the T271A-style gate. |
+| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; fresh T279 50-trace eval passes with 54% coverage and clean outcomes, but that is still bounded Codex evidence. Harness lifecycle compliance is soft; stale docs-only packets, T255, and T269 can be mistaken for executed cleanup/validation; quarantined T278 entity-scope M6 candidates are not active MemoryItems; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Blocked | Full harness parity is blocked on unresolved native Claude/effective-hook/host-label evidence. Branch publication remains unexecuted. Residual broad lifecycle cleanup is not proven complete and must not use broad `lint apply_safe`. | Keep future risky actions evidence-backed and scoped; do not treat one closed gate as broad Brain Harness completion. |
 
 Gate-level T278 status:
 
 | Gate | Current state | Next closure condition |
 | --- | --- | --- |
 | M6 current review-batch disposition/apply | Closed for the T68/T209/T210/T250 review batch by T278. All 12 generated files have one disposition; pre-apply status was `ready_to_apply=true`; dry-run planned five writes with zero duplicates and zero warnings; actual apply wrote five reviewed active `project:engram` MemoryItems and KnowledgeCommit `019e9bd6-7e8e-7611-8326-1811b3b799a2`; post-apply status is idempotent with `planned_count=0` and `duplicate_count=5`. | No further action for the current batch. Direct legacy deprecation/deletion or broad migration simplification remains separate and evidence-gated. |
-| Lifecycle archive or deferral | Incomplete; T274 confirms T234/T247/T248 targets remain active and visible after T273, while current-plan/M6 gate memory still outranks them for the tested lifecycle query. Fresh global lint was dominated by unrelated safe-action/open-obligation findings and is not a scoped cleanup path. | Exact T234/T247/T248 packet execution after fresh checks, or explicit lifecycle deferral. Do not use broad `lint apply_safe` or ranking/`orient` changes as cleanup. |
+| Lifecycle archive or deferral | Partially closed by T279 for the exact T234/T247/T248 targets. Fresh preflight showed all three were active/visible and dependency-free; T279 archived exactly those IDs, post-archive active search no longer returns them, and the canonical vault now marks their pages archived. Fresh global lint remains unrelated/broader pressure and is not a scoped cleanup path. | No further action for those three IDs. Residual broad lifecycle inventory or deferral, if needed, requires future exact-target review; do not use broad `lint apply_safe` or ranking/`orient` changes as cleanup. |
 | Prompt-bearing native Claude | Prepared only by T255; not executed. | Exact T255 approval and one bounded live run, or explicit deferral. |
 | Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`; T269 now prepares a stricter default-deny revalidation packet with transcript-based pass/fail criteria and pre-authorized process-group cleanup if EOF/session exit hangs. | Exact T269 approval and one bounded live run, or equivalent official/runtime evidence. |
 | Host external-session labels | T265 installs T264 and live-validates Codex after refresh: daemon PID `25189` records live `orient` trace `019e964a-1aca-7a63-8549-04c39c491fc0` with `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`, and feedback `019e964a-3cfb-7de3-9b0d-c1671ebd489b` inherits that trace label when submitted without an explicit label. Installed CLI help now advertises explicit labels, `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID`, then guarded Codex, and a simulated Claude+inherited-Codex temp-data CLI smoke returned trace `019e964a-9283-7c32-b6db-84d02633a2a7`. T270 defines exact future native Claude stored-label proof criteria and records Gemini as deferred/default-deny for lack of a documented MCP-subprocess session-id contract. | Execute exact T270 or exact dual-scope T255+T270 for live native Claude label proof; do not infer live Claude adoption from installed CLI/source tests, and do not implement Gemini labels without a documented contract. |
-| KnowledgeCommit/vault compile | T277 executes the T275 Snapshot A/B successor protocol under the 2026-06-06 standing authorization. Snapshot A and B matched at 1,605 MemoryItems, 549 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,278 expected generated files. Canonical `/Users/yuval.meiri/.engram/vault` was absent/non-symlink before execution, then `vault init` created the expected directory skeleton and `vault compile` produced 2,278 generated files with zero skipped files and zero user files. T278 then writes five M6 MemoryItems plus a KnowledgeCommit and recompiles the canonical vault: post-compile status is 1,612 MemoryItems, 551 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,287 generated files with zero user files. Marker/frontmatter scans passed. | Initial canonical generated-vault init/compile is closed, and T278 proves immediate post-apply vault refresh. Future update policy, lifecycle, native-Claude/effective-hook/host-label, and branch-publication gates remain separate. |
+| KnowledgeCommit/vault compile | T277 executes the T275 Snapshot A/B successor protocol under the 2026-06-06 standing authorization. Snapshot A and B matched at 1,605 MemoryItems, 549 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,278 expected generated files. Canonical `/Users/yuval.meiri/.engram/vault` was absent/non-symlink before execution, then `vault init` created the expected directory skeleton and `vault compile` produced 2,278 generated files with zero skipped files and zero user files. T278 then writes five M6 MemoryItems plus a KnowledgeCommit and recompiles the canonical vault to 2,287 generated files. T279 archives three exact lifecycle targets, records KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and recompiles the canonical vault: post-compile status is 1,614 MemoryItems, 553 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,291 generated files with zero user files. Marker/frontmatter scans passed. | Initial canonical generated-vault init/compile is closed, and T278/T279 prove immediate post-write vault refreshes. Future update policy, native-Claude/effective-hook/host-label, and branch-publication gates remain separate. |
 | Branch synchronization | T261 completes the local regular merge of `origin/main` at `e6697eee18530bc64f64ae94b6fd6006c24c7423` into `yuval.meiri/memory-os-phase0`. T276 rechecks after fresh fetch and T275 commit: `HEAD` is `36c59d20450c98f03131d98853468770c4b254fc`, `origin/main` is still the merge-base and an ancestor of `HEAD`; `HEAD...origin/main` is `390 0`; the current branch has no upstream, no same-named fetched remote branch, and no configured pull policy. T271 remains the default no-PR future push/upstream packet; T276 does not rely on the network-failed `git ls-remote` probe as remote-absence evidence. | Exact T271A-style approval can publish `HEAD` to `origin/yuval.meiri/memory-os-phase0` and set upstream after fresh preflight; PR publication remains a separate exact approval. |
 | Worktree ownership | Tracked worktree clean after T255; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
 
@@ -927,9 +938,10 @@ labeled traces and three externally labeled feedback records, but this still doe
 lifecycle, native-Claude, live Claude host-label proof, Gemini no-contract deferral, or remote
 publication gates. T241 still
 rejects standalone M6 deferral without user-provided
-rationale/evidence, T252 still preserves exact approval boundaries for T234/T247/T248 lifecycle
-archives, and T255 says shorter or broader approval must not be treated as authorization to execute
-the native-Claude packet.
+rationale/evidence, T252 historically preserved exact approval boundaries for T234/T247/T248
+lifecycle archives before the later 2026-06-06 standing authorization and T279 execution, and T255
+says shorter or broader approval must not be treated as authorization to execute the native-Claude
+packet.
 
 T266 addendum: the generated vault compile path is now validated for current data only in isolated
 temp output. Do not state that the canonical vault exists or is initialized: `/Users/yuval.meiri/.engram/vault`
@@ -1016,18 +1028,18 @@ reconciliation hint should not be treated as permission to set pull config, pull
 push, open a PR, or set upstream. T273 keeps the remaining branch gate as optional remote
 publication/upstream policy with fresh preflight.
 
-T274 addendum: lifecycle target visibility is rechecked after T273 without execution.
+T274 addendum: lifecycle target visibility is rechecked after T273 without execution, before T279.
 `docs/BRAIN_HARNESS_T274_LIFECYCLE_TARGET_VISIBILITY_RECHECK_2026-06-05.md` records fresh
 read-only evidence that the T234 migration-completion target
 `019dd3fe-ec94-7122-af04-1f35b839387f`, T247 telemetry target
 `019e8291-40aa-71a0-b16b-9ba7b6446cc6`, and T248 resume-probe target
-`019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are all still `status=active`. Lean `orient` returned
+`019e01f2-0a87-7f73-9b0b-7f2443eac7bb` were all active immediately before T279. Lean `orient` returned
 the T273 current plan first, direct lifecycle search returned the current plan and M6 gate before
 the stale targets, and the current 50-trace telemetry sample still passes with stale-memory
 pressure. Fresh global lint does not authorize this cleanup class because it is global,
 limit-truncated, and `apply_safe` can archive unrelated safe-action findings. T274 does not
 archive memory or run `lint apply_safe`; lifecycle closure still requires exact packet execution
-or explicit deferral.
+or explicit deferral. T279 later executes these three exact archives.
 
 T275 addendum: the canonical-vault successor packet is prepared without execution.
 `docs/BRAIN_HARNESS_T275_CANONICAL_VAULT_SUCCESSOR_APPROVAL_PACKET_2026-06-05.md` supersedes
@@ -1081,12 +1093,23 @@ legacy deprecation/deletion, lifecycle cleanup, native-Claude/effective-hook/hos
 branch publication, ranking/`orient`, public MCP, schema/storage/index, document-index, and harness
 gates remain separate.
 
+T279 addendum: exact T234/T247/T248 lifecycle cleanup is executed.
+`docs/BRAIN_HARNESS_T279_LIFECYCLE_ARCHIVE_EXECUTION_RESULT_2026-06-06.md` records fresh
+post-T278 evidence, AI Council review, three direct `memory.archive` writes, KnowledgeCommit
+`019e9be1-67ff-7e92-a87e-f92667fa3582`, post-archive active-search validation, and canonical vault
+refresh to `2291` generated files. The archived target IDs are
+`019dd3fe-ec94-7122-af04-1f35b839387f`,
+`019e8291-40aa-71a0-b16b-9ba7b6446cc6`, and
+`019e01f2-0a87-7f73-9b0b-7f2443eac7bb`. T279 does not run `lint apply_safe`, prove exhaustive
+lifecycle cleanup, execute native Claude/effective-hook/host-label gates, publish the branch, or
+perform direct legacy deprecation/deletion.
+
 T252 historical addendum: the earlier broad instruction to continue without stopping for approval
 for Engram project-scope changes was treated as workflow permission for ordinary repo/docs/code
 work before the 2026-06-06 standing authorization. It did not authorize T234/T247/T248 MemoryItem
 archive writes because those packets explicitly defined exact approval wording and said any other
 reply was non-authorization. This note is historical and does not describe the later T278 standing
-authorization path for the current M6 review batch.
+authorization path for the current M6 review batch or the later T279 exact lifecycle archive path.
 
 Matrix freshness note, 2026-05-31: T43 and T44 extend the current-plan / next-step retrieval
 evidence beyond the older continuation and explicit migration-apply prompt classes. The exact
@@ -7273,8 +7296,8 @@ T251 pending lifecycle target visibility note:
 `docs/BRAIN_HARNESS_T251_PENDING_LIFECYCLE_TARGET_VISIBILITY_2026-06-04.md` records a docs-only
 post-T250 lifecycle visibility follow-through. Fresh read-only evidence showed the pending T247
 target `019e8291-40aa-71a0-b16b-9ba7b6446cc6` and T248 target
-`019e01f2-0a87-7f73-9b0b-7f2443eac7bb` are both still active and visible; `019e01f2...` can still
-appear in lean `orient` top items, and direct search returned both targets behind the current
+`019e01f2-0a87-7f73-9b0b-7f2443eac7bb` were both active and visible at T251; `019e01f2...` could
+appear in lean `orient` top items then, and direct search returned both targets behind the current
 T250 plan. Fresh sampled lint reports feedback-stale findings for both targets with
 `safe_action=none` (`019e01f2...` by four recent feedback records and `019e8291...` by nine).
 T251 does not archive either item, run `lint apply_safe`, create a new packet, mutate lifecycle
