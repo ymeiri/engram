@@ -144,6 +144,17 @@ Harness and migration checkpoint, current through 2026-06-06:
   `019dd84c-a8d4-7cd3-b1a3-0f910c7050cc`. A post-archive lint sample no longer returned those
   IDs, and KnowledgeCommit `019e9d2a-e428-7903-b17d-11468e2644ae` records the archive batch. This
   is exact lifecycle maintenance, not broad cleanup or PR readiness.
+  T289 archives the next five exact superseded rolling handoffs after the same per-target
+  `memory(get)`, active-successor fetch, and direct incoming `supersedes` graph review:
+  `019dd912-7adc-7860-bd80-95cc681cc061`,
+  `019dd93c-b7f1-7e92-ac27-262e128163cd`,
+  `019dd93f-2c18-7bf3-a4a4-038bac9d74fb`,
+  `019dd940-7207-7f51-93ea-533d5f80d6e7`, and
+  `019dd941-314b-74d3-a879-4e451c7bd258`. Post-archive lint advanced to
+  `019dd944-8d69-7b81-8659-b0ef8e23c75f` as the next unprocessed candidate. A fresh fetch also
+  showed the feature branch and upstream were `0 0` apart, `origin/main...HEAD` was `0 405`, and
+  `origin/main` was an ancestor of `HEAD`; no pull, merge, rebase, or pull-policy change ran.
+  KnowledgeCommit `019e9d5c-9c39-7c63-89a2-a8d2741c03e0` records the batch.
   Future exact-target lifecycle batches and direct legacy behavior proof remain separate. T242
   executed the T233 runtime-refresh gate on 2026-06-04: the observed installed
   binary hash was
@@ -479,6 +490,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   IDs and advanced to the next unprocessed candidates. KnowledgeCommit
   `019e9d2a-e428-7903-b17d-11468e2644ae` records the archive batch. This is exact lifecycle
   maintenance only; broad cleanup and direct-legacy deprecation/deletion remain separate.
+- T289 archives the next five exact superseded rolling handoffs after per-target `memory(get)`,
+  direct successor fetch, and `graph(around)` review:
+  `019dd912-7adc-7860-bd80-95cc681cc061`,
+  `019dd93c-b7f1-7e92-ac27-262e128163cd`,
+  `019dd93f-2c18-7bf3-a4a4-038bac9d74fb`,
+  `019dd940-7207-7f51-93ea-533d5f80d6e7`, and
+  `019dd941-314b-74d3-a879-4e451c7bd258`. A post-archive lint sample no longer returned those
+  IDs and advanced to `019dd944-8d69-7b81-8659-b0ef8e23c75f`. A fresh branch audit showed
+  `HEAD...origin/yuval.meiri/memory-os-phase0` at `0 0` and `origin/main...HEAD` at `0 405`
+  after fetch, with no pull/rebase/merge/config change. KnowledgeCommit
+  `019e9d5c-9c39-7c63-89a2-a8d2741c03e0` records the batch. This is exact lifecycle maintenance
+  and pull-hint evidence only.
 
 Research checkpoint, current through 2026-05-27:
 
