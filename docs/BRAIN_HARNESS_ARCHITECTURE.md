@@ -1,7 +1,7 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh, and
-research-method checkpoints
+Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
+snippet-only repair safety evidence, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -765,6 +765,12 @@ Harness and migration checkpoint, current through 2026-06-07:
   three generated adapter diffs, distinguishes default install's planned `settings.json` merge from
   the safer `--settings-target snippet-only` path, and does not write adapters, hooks, settings,
   or runtime state.
+- T315 adds focused source-level safety evidence for that safer path. The new harness test proves
+  that `HarnessSettingsTarget::SnippetOnly` can repair generated Claude Code adapters while leaving
+  existing `settings.json`, `settings.local.json`, and `engram-settings-snippet.json` unchanged.
+  Local validation passes on head `8f228ecacd436fb4f6c0078e59fb385eacc800eb`; hosted PR CI run
+  `27090842423` is externally blocked before job steps by GitHub Actions billing/spending-limit
+  annotations. T315 does not execute T314 or mutate real user harness files.
 
 Research checkpoint, current through 2026-05-27:
 
