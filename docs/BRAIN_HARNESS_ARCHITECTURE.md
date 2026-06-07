@@ -814,6 +814,14 @@ Harness and migration checkpoint, current through 2026-06-07:
   install plan, then hard-stops before launch because native Claude CLI PIDs `60453` on `ttys001`
   and `311` on `ttys005` still make attribution ambiguous. T340 does not run `/hooks`, execute
   T312, execute T270, signal processes, mutate settings/adapters, or prove production parity.
+- T341 validates PR #3 head `2fa5b577bda8ab6141e0f7272736044d441a7e88` locally with the
+  CI-equivalent workflow after hosted run `27101388242` failed all jobs before workflow-step
+  execution with `steps: []`. `git diff --check`, `cargo check --all-targets`, serialized
+  `cargo test --all-targets --jobs 1` with CI test env, `cargo fmt --all --check`,
+  `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps` all passed. Fresh AI
+  Council consensus says the scoped local/Codex MVP beta is shippable if the release owner accepts
+  the local-validation fallback; hosted CI restoration and native-Claude/effective-hook/live
+  host-label proof remain ops or production/GA follow-up gates.
 - T336 adds optional project-scoped lint. `LintOptions.project`, MCP `lint(project=...)`, and CLI
   `lint run --scope-project ...` filter project-bound memory, stale sessions, and open obligations
   while preserving global/user memory and existing unscoped behavior. T336 validates the service,

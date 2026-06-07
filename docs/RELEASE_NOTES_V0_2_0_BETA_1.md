@@ -215,3 +215,25 @@ remain live on `ttys001` and `ttys005`, making new-session attribution ambiguous
 launch native Claude, run `/hooks`, signal processes, mutate settings or adapters, prove
 prompt-bearing behavior, prove effective-hook visibility, prove live host labels, close hosted CI,
 or change the initial beta scope.
+
+## Exact-Head Local CI Fallback
+
+T341 validates PR #3 head `2fa5b577bda8ab6141e0f7272736044d441a7e88` with the full
+CI-equivalent local workflow after hosted run `27101388242` again failed all five jobs before
+executing any workflow steps. `gh run view` reports `steps: []` for Check, Test, Format, Clippy,
+and Docs, matching the prior external account/billing/spending-limit pattern.
+
+That T341 head passed:
+
+- `git diff --check`
+- `cargo check --all-targets`
+- `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1`
+- `cargo fmt --all --check`
+- `cargo clippy --all-targets -- -D warnings`
+- `cargo doc --no-deps`
+
+Fresh AI Council consensus after T341 puts the scoped local/Codex MVP beta at about `95%`
+complete and shippable if the release owner accepts local validation as the fallback. Hosted CI
+passing is still not achieved and remains either an ops/GA hygiene item or a beta gate only if the
+release owner requires it. T341 does not mark PR #3 ready, merge, tag, publish, close hosted CI,
+or change the production/GA deferrals.
