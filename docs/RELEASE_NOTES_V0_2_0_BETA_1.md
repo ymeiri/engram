@@ -201,3 +201,17 @@ preflight status showed the vault was initialized and generated-only, but count-
 
 This restores the canonical vault validation gate for the current Memory OS state. It does not
 change source behavior, run `lint apply_safe`, close hosted CI, or change the beta deferrals.
+
+## Native Claude Preflight Refresh
+
+T340 reruns the read-only native-Claude/effective-hook/host-label preflight at PR #3 head
+`6d0467e933a880f9039fd943b34848c2ca93f069`. The Claude `2.1.168` path, target, SHA-256, Engram
+daemon, obligations doctor, canonical vault status, Claude Code harness readiness, and snippet-only
+install dry-run all match the expected state. The canonical vault is currently count-aligned at
+`2573` generated files, zero user files, and `2573` expected generated files.
+
+The preflight still hard-stops before launching native Claude because native Claude CLI sessions
+remain live on `ttys001` and `ttys005`, making new-session attribution ambiguous. T340 does not
+launch native Claude, run `/hooks`, signal processes, mutate settings or adapters, prove
+prompt-bearing behavior, prove effective-hook visibility, prove live host labels, close hosted CI,
+or change the initial beta scope.

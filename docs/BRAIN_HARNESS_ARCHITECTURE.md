@@ -139,7 +139,11 @@ Harness and migration checkpoint, current through 2026-06-07:
   processes on `ttys001` and `ttys005` still make attribution ambiguous, so no native Claude
   session was launched. T335 then records a docs-only T269 successor packet for the same observed
   Claude Code `2.1.168` runtime and preserves T334's no-launch attribution blocker; it makes no
-  `/hooks` visibility claim. T336 adds optional project-scoped lint through service, MCP, and CLI
+  `/hooks` visibility claim. T340 refreshes that read-only preflight at PR #3 head `6d0467e`: the
+  Claude path/version/hash, harness readiness, daemon, obligations, vault, and snippet-only dry-run
+  still match, but the same live native Claude processes on `ttys001` and `ttys005` still block
+  clean attribution, so no native Claude session was launched. T336 adds optional project-scoped
+  lint through service, MCP, and CLI
   surfaces so current project health can be checked without unrelated historical project findings
   dominating the report; unscoped lint remains unchanged. T284
   records a read-only
@@ -804,6 +808,12 @@ Harness and migration checkpoint, current through 2026-06-07:
   path/version/hash, and keeps T312 prompt-bearing validation plus T270 host-label proof separate.
   T335 does not launch native Claude, run `/hooks`, signal processes, mutate settings/adapters, or
   prove effective-hook visibility.
+- T340 refreshes the native-Claude/effective-hook/live-host-label preflight at PR #3 head
+  `6d0467e`. It confirms the Claude `2.1.168` path/target/hash, Engram daemon, obligations,
+  count-aligned canonical vault, Claude Code harness `ready=true` state, and empty snippet-only
+  install plan, then hard-stops before launch because native Claude CLI PIDs `60453` on `ttys001`
+  and `311` on `ttys005` still make attribution ambiguous. T340 does not run `/hooks`, execute
+  T312, execute T270, signal processes, mutate settings/adapters, or prove production parity.
 - T336 adds optional project-scoped lint. `LintOptions.project`, MCP `lint(project=...)`, and CLI
   `lint run --scope-project ...` filter project-bound memory, stale sessions, and open obligations
   while preserving global/user memory and existing unscoped behavior. T336 validates the service,
