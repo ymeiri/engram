@@ -840,6 +840,15 @@ Harness and migration checkpoint, current through 2026-06-07:
   `019e1d51-b545-7d71-9584-b008c448ad2e`. Post-archive lint no longer
   returns those IDs in the sampled findings and advances to
   `019e1d56-4fff-7dc3-822c-383132c57a25`.
+- T327 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+  successor `memory(get)`, and `graph(around)` review proved direct active successors:
+  `019e1d56-4fff-7dc3-822c-383132c57a25`,
+  `019e2088-da67-7d23-9e43-3082d9157208`,
+  `019e212b-a519-7341-9524-4a028685580b`,
+  `019e212e-d7d4-75d1-962d-219413f93d4f`, and
+  `019e5daf-f50b-7a22-82a3-5d62ffe9a8bb`. Post-archive lint no longer
+  returns those IDs in the sampled findings and advances to
+  `019e5db0-070d-7211-acb0-a69f5b575c5d`.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3172,6 +3181,16 @@ Proceed in this order from the current checkpoint:
      `019e1d3c-eb00-7eb0-90f9-fa7944557b90`,
      `019e1d3f-51c7-7050-8108-b667120b7514`, and
      `019e1d51-b545-7d71-9584-b008c448ad2e`. It does not authorize broad
+     `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
+     writes, PR-ready, merge, tag, publish, or release actions.
+193. Treat T327 as an exact lifecycle archive batch, not broad lifecycle cleanup. T327 archives
+     exactly five active rolling handoffs after per-target `memory(get)`, successor `memory(get)`,
+     and `graph(around)` review proved direct active successors:
+     `019e1d56-4fff-7dc3-822c-383132c57a25`,
+     `019e2088-da67-7d23-9e43-3082d9157208`,
+     `019e212b-a519-7341-9524-4a028685580b`,
+     `019e212e-d7d4-75d1-962d-219413f93d4f`, and
+     `019e5daf-f50b-7a22-82a3-5d62ffe9a8bb`. It does not authorize broad
      `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
      writes, PR-ready, merge, tag, publish, or release actions.
 190. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
