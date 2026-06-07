@@ -159,3 +159,16 @@ lint behavior.
 
 This improves project health visibility for beta closeout. It does not run `lint apply_safe`,
 archive memory, or close lifecycle cleanup.
+
+## Project-Scoped Lint Installed Runtime Refresh
+
+T337 installs the current `engram-cli` into `/Users/yuval.meiri/.local/bin/engram` and restarts the
+daemon so the T336 project-scoped lint surface is live in the installed local/Codex path. The
+installed binary hash changed from
+`01b171ec654da95ea5b1f8363bc109e3069c0ff78bdb38581a202e472f9fd09b` to
+`b775efa0946862eba8d4d8993bb946f0926372d8a3fe9bbfea98ea38e786e7c2`, `daemon status` now reports
+PID `57356` spawned by `/Users/yuval.meiri/.local/bin/engram`, and fresh installed MCP smoke
+confirmed `lint.project` appears in `tools/list` and `tools/call` accepts `project=engram`.
+
+T337 is installed-runtime adoption for T336 only. It does not run `lint apply_safe`, mutate memory,
+or change the beta deferrals.

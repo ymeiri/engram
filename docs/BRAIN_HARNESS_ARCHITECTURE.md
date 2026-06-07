@@ -809,6 +809,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   while preserving global/user memory and existing unscoped behavior. T336 validates the service,
   MCP request surface, and isolated CLI path; it does not run `lint apply_safe` or claim lifecycle
   cleanup.
+- T337 refreshes the installed local/Codex runtime for T336. `cargo install --path engram-cli
+  --force --root /Users/yuval.meiri/.local` replaced `/Users/yuval.meiri/.local/bin/engram` with
+  hash `b775efa0946862eba8d4d8993bb946f0926372d8a3fe9bbfea98ea38e786e7c2`, the daemon restarted
+  as PID `57356` from that installed path, installed CLI help exposes `--scope-project`, and a
+  fresh installed MCP smoke proved `tools/list` exposes `lint.project` and `tools/call` accepts
+  `project=engram`. T337 is installed-runtime adoption only; it does not run `lint apply_safe`,
+  mutate memory, or prove lifecycle cleanup.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3350,6 +3357,10 @@ Proceed in this order from the current checkpoint:
      makes current-project lint reports less noisy while preserving unscoped lint and global/user
      memory checks; it does not authorize broad `lint apply_safe`, archive memory, or close
      lifecycle debt.
+193. Treat T337 as installed-runtime adoption for T336, not a new lint behavior or cleanup claim.
+     The installed binary and restarted daemon now expose `lint.project` through CLI help and fresh
+     MCP `tools/list` / `tools/call` smoke, but no memory lifecycle writes, `lint apply_safe`,
+     native-Claude validation, effective-hook proof, or hosted-CI closure occurred.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
