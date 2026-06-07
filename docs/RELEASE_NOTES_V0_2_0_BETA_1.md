@@ -45,6 +45,10 @@ externally account-blocked. The expected gate remains:
 - `obligations(action=doctor, project=engram, cwd=/Users/yuval.meiri/projects/engram)` clean,
 - a refreshed installed runtime/adapters check.
 
+The local fallback command is `./scripts/local-ci.sh`. It mirrors the exact-head local validation
+sequence used for this candidate: whitespace diff check, rustfmt, check, clippy, tests with CI-like
+incremental/debug settings, and docs.
+
 Recent phase-1 local evidence is strong: T317 validated PR #3 head
 `78f14d0bebd980070a4fcb8d1f259be47517c704` with `cargo fmt --all --check`,
 `git diff --check`, `cargo check --all-targets`,

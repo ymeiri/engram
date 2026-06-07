@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial local/Codex Brain Loop beta scope with lean `orient`, current-plan retrieval,
   used-memory candidate IDs, obligation summaries, telemetry feedback, generated vault support,
   and review-gated Memory OS flows.
+- Local CI-equivalent validation script (`scripts/local-ci.sh`) for exact-head release checks when
+  hosted GitHub Actions is externally blocked.
 - Memory OS harness adapter rendering for Codex, generic harnesses, Claude Code, Gemini CLI, and
   Cursor, with lifecycle guidance kept advisory and approval-gated.
 - Generated Markdown vault support for durable local inspection of MemoryItems, knowledge commits,

@@ -210,6 +210,7 @@ cargo build                    # Build all crates
 cargo test                     # Run tests
 cargo clippy --all-targets -- -D warnings
 cargo fmt
+./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 
