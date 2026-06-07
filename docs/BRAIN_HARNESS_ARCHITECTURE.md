@@ -725,6 +725,11 @@ Harness and migration checkpoint, current through 2026-06-06:
   pass after the change. This is documentation hardening only and does not change graph behavior,
   MCP schema shape, installed runtime, release approval, or any native Claude/effective-hook/
   host-label/multi-host gate.
+- T307 improves read-only Claude harness diagnostics for one effective-hook ambiguity: status now
+  warns when generated `SessionStart` or `SessionEnd` hook files are installed but the matching
+  required Claude settings registration is missing. Focused harness tests pass. This does not run
+  native Claude, edit settings, install adapters, change hook behavior, or close the native
+  Claude/effective-hook/host-label gates.
 
 Research checkpoint, current through 2026-05-27:
 

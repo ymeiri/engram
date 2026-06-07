@@ -1178,7 +1178,17 @@ in `engram-core/src/graph.rs`, `engram-mcp/src/tools.rs`, and `engram-cli/src/ma
 does not change graph behavior, MCP request/response structure, installed runtime, harness adapters,
 release approval, native Claude, effective-hook visibility, host labels, M6, or lifecycle state.
 
-Current T306 matrix snapshot:
+T307 closes a narrow read-only Claude harness diagnostics gap. `HarnessService::status` now warns
+when generated `SessionStart` or `SessionEnd` hook files are installed but the matching required
+Claude settings registration is missing, making the difference between file installation and
+effective hook configuration explicit. Validation passed `cargo fmt --all --check`,
+`cargo test -p engram-index status_warns_when_claude_hook_files_are_installed_but_settings_missing`,
+`cargo test -p engram-index harness::tests`, and
+`cargo test -p engram-tests --test harness_tests`. T307 does not run native Claude, edit settings,
+install adapters, change hook behavior, mutate lifecycle/M6 state, or close native
+Claude/effective-hook/host-label gates.
+
+Current T307 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |

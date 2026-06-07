@@ -257,6 +257,11 @@ impl HarnessService {
             }
             warnings.extend(settings_status.warnings);
             settings = settings_status.checks;
+            warn_for_installed_claude_hook_files_without_settings(
+                &adapters,
+                &settings,
+                &mut warnings,
+            );
         }
 
         Ok(HarnessStatusReport {
@@ -1507,6 +1512,44 @@ fn warn_for_split_settings(checks: &[HarnessSettingsCheck], warnings: &mut Vec<S
         warnings.push(format!(
             "Engram Claude settings are split across {}; verify effective hook configuration with Claude Code /hooks.",
             locations.into_iter().collect::<Vec<_>>().join(" and ")
+        ));
+    }
+}
+
+fn warn_for_installed_claude_hook_files_without_settings(
+    adapters: &[HarnessAdapterCheck],
+    settings: &[HarnessSettingsCheck],
+    warnings: &mut Vec<String>,
+) {
+    let hook_mappings = [
+        (
+            "SessionStart:startup|resume|compact",
+            "claude-session-start-hook",
+            "SessionStart startup|resume|compact",
+        ),
+        ("SessionEnd", "claude-session-end-hook", "SessionEnd"),
+    ];
+
+    for (setting_name, adapter_name, event_label) in hook_mappings {
+        let missing_required_setting = settings.iter().any(|check| {
+            check.kind == "hook"
+                && check.required
+                && check.name == setting_name
+                && check.locations.is_empty()
+        });
+        if !missing_required_setting {
+            continue;
+        }
+
+        let Some(adapter) = adapters.iter().find(|check| {
+            check.name == adapter_name && check.status == HarnessAdapterStatus::Installed
+        }) else {
+            continue;
+        };
+
+        warnings.push(format!(
+            "Generated Claude hook file for {event_label} is installed at {}, but Claude settings do not register the required {setting_name} hook; Claude will not run that file until settings.json or settings.local.json references it.",
+            adapter.path
         ));
     }
 }
@@ -3054,6 +3097,46 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("settings target is snippet-only")));
+    }
+
+    #[test]
+    fn status_warns_when_claude_hook_files_are_installed_but_settings_missing() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::SnippetOnly,
+                },
+            )
+            .unwrap();
+
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(!status.ready);
+        for adapter_name in ["claude-session-start-hook", "claude-session-end-hook"] {
+            assert!(status.adapters.iter().any(|check| {
+                check.name == adapter_name && check.status == HarnessAdapterStatus::Installed
+            }));
+        }
+        for setting_name in ["SessionStart:startup|resume|compact", "SessionEnd"] {
+            assert!(status.settings.iter().any(|check| {
+                check.name == setting_name && check.kind == "hook" && check.locations.is_empty()
+            }));
+        }
+        assert!(status.warnings.iter().any(|warning| {
+            warning.contains("SessionStart startup|resume|compact")
+                && warning.contains("Claude settings do not register")
+        }));
+        assert!(status.warnings.iter().any(|warning| {
+            warning.contains("SessionEnd") && warning.contains("Claude settings do not register")
+        }));
     }
 
     #[test]

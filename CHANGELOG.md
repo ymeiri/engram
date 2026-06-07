@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   beta candidate so installed local/Codex guidance matches source.
 - Escaped graph node ID examples in Rustdoc comments so the Docs CI job no longer reports invalid
   HTML tag warnings for `memory:<...>` examples.
+- Claude harness status now warns when generated `SessionStart` or `SessionEnd` hook files are
+  installed but Claude settings do not register the corresponding required hook.
 - CI checkout runtime drift by moving workflow checkout steps to `actions/checkout@v5`.
 
 ### Known Limitations
