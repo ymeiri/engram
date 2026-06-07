@@ -771,6 +771,14 @@ Harness and migration checkpoint, current through 2026-06-07:
   Local validation passes on code commit `8f228ecacd436fb4f6c0078e59fb385eacc800eb`; hosted PR CI
   runs on the T315 code/evidence heads are externally blocked before job steps by GitHub Actions
   billing/spending-limit annotations. T315 does not execute T314 or mutate real user harness files.
+- T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
+  workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
+  `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
+  `cargo doc --no-deps`.
+- T318 reruns hosted GitHub Actions run `27091138284` on that same PR #3 head. Attempt 2 still
+  fails before runner assignment: all five jobs have zero steps, `runner_id=0`, and check-run
+  annotations say jobs were not started because recent account payments failed or the spending
+  limit needs to be increased. This confirms an external account gate, not a source failure.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3037,7 +3045,15 @@ Proceed in this order from the current checkpoint:
      after the current PR CI annotations warned about Node.js 20 action-runtime deprecation. Record
      the fresh T287-head CI result in Engram memory/handoff, not by creating a recursive docs-only
      CI report.
-185. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
+185. Treat T317 as local exact-head validation fallback evidence, not hosted CI proof or release
+     approval. It proves the CI-equivalent commands passed locally on PR #3 head
+     `78f14d0bebd980070a4fcb8d1f259be47517c704`; it does not make the hosted GitHub Actions badge
+     green or authorize PR-ready, merge, tag, publish, or release actions.
+186. Treat T318 as an external hosted-CI blocker confirmation, not a code failure. Attempt 2 of run
+     `27091138284` failed before runner assignment with zero steps and billing/spending-limit
+     annotations. The next closure condition is either fixed billing plus a hosted rerun, or an
+     explicit release-owner decision accepting the local validation fallback.
+187. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
      exactly five active rolling handoffs after per-target `memory(get)`, direct successor fetch,
      and `graph(around)` review proved direct incoming `supersedes` edges:
      `019dfd38-fc3d-7352-83a6-c9bbd16349ea`,

@@ -34,7 +34,9 @@ production-hardening activity, not an initial-beta blocker.
 
 ## Release Gate
 
-Before tagging this beta, the candidate commit must have:
+Before tagging this beta, the candidate commit must have normal exact-head hosted CI proof, or an
+explicit release-owner decision accepting local validation as a fallback while hosted Actions is
+externally account-blocked. The expected gate remains:
 
 - exact-head CI green for Format, Docs, Check, Clippy, and Test,
 - `cargo fmt --all --check` passing locally,
@@ -43,14 +45,15 @@ Before tagging this beta, the candidate commit must have:
 - `obligations(action=doctor, project=engram, cwd=/Users/yuval.meiri/projects/engram)` clean,
 - a refreshed installed runtime/adapters check.
 
-Recent phase-1 local evidence is strong: T315 code commit
-`8f228ecacd436fb4f6c0078e59fb385eacc800eb` passes `cargo fmt --all --check`,
-`git diff --check`, `cargo test -p engram-index harness::tests`,
-`cargo clippy --all-targets -- -D warnings`, and full `cargo test`. Hosted CI runs on the T315
-code/evidence heads failed before running workflow steps because GitHub Actions reported an account
-billing/spending-limit block. That external account gate does not contradict the local validation,
-but the normal exact-head hosted-CI release proof is still missing until Actions can rerun on the
-head intended for release.
+Recent phase-1 local evidence is strong: T317 validated PR #3 head
+`78f14d0bebd980070a4fcb8d1f259be47517c704` with `cargo fmt --all --check`,
+`git diff --check`, `cargo check --all-targets`,
+`cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
+`cargo doc --no-deps`. T318 reran hosted GitHub Actions run `27091138284`, creating attempt 2 on
+that same head, but all five jobs failed before runner assignment with zero steps, `runner_id=0`,
+and billing/spending-limit annotations. That external account gate does not contradict the local
+validation, but the normal exact-head hosted-CI release proof is still missing until Actions can run
+on the head intended for release or the release owner explicitly accepts the local fallback.
 
 ## Current Installation Status
 
