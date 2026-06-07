@@ -258,8 +258,31 @@ release mechanics if the release owner accepts local validation as fallback. The
 is either explicit release-owner fallback acceptance or restored exact-head hosted CI. Production/GA
 readiness remains separate and materially lower because native Claude prompt-bearing proof,
 effective-hook visibility, live host labels, full multi-host parity, broad lifecycle cleanup,
-direct legacy deprecation/deletion, exhaustive telemetry, auth edge hardening, packaging,
-performance, and cross-platform polish remain open.
+direct legacy deprecation/deletion, exhaustive telemetry, auth edge hardening, performance, and
+cross-platform polish remain open.
 
 T343 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, or change the supported beta scope.
+
+## One-Command Local CI and Package Proof
+
+T345 adds `./scripts/local-ci.sh` as the single exact-head local CI-equivalent fallback command for
+release validation. It runs whitespace diff checks, rustfmt, cargo check, clippy with warnings as
+errors, the full test suite with CI-like incremental/debug settings, and rustdoc generation.
+
+T346 adds `./scripts/package-release.sh` as the local pre-publish packaging command. It builds the
+release binary, checks that `engram --version` matches the workspace package version, packages the
+binary with README, LICENSE, changelog, and these release notes, and writes a SHA-256 checksum under
+ignored `dist/`.
+
+T347 validates PR #3 head `b0d8e075a04b5e35f4ed7c4d60654231ed5c1324` with both commands. The
+exact head passed `./scripts/local-ci.sh`, and `./scripts/package-release.sh` produced
+`dist/engram-0.2.0-beta.1-aarch64-apple-darwin.tar.gz` plus its `.sha256` file. The archive
+contents were inspected, the checksum verified, and the extracted packaged binary reported
+`engram 0.2.0-beta.1`.
+
+Hosted GitHub Actions run `27102953577` on that same head still failed before workflow-step
+execution with `steps: []` and account billing/spending-limit annotations. The remaining beta gate
+is therefore explicit release-owner fallback acceptance or restored exact-head hosted CI. T347 does
+not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove hooks or host
+labels, or change the supported beta scope.

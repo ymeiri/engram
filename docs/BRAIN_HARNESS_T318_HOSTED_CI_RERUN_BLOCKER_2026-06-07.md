@@ -59,4 +59,3 @@ available validation fallback unless the release owner explicitly requires hoste
 T318 does not mark PR #3 ready, merge, tag, publish, release, change beta scope, execute T314,
 write harness adapters or settings, launch native Claude, run `/hooks`, send process signals,
 change CI workflow behavior, or treat the local fallback as accepted release approval.
-
