@@ -779,6 +779,15 @@ Harness and migration checkpoint, current through 2026-06-07:
   fails before runner assignment: all five jobs have zero steps, `runner_id=0`, and check-run
   annotations say jobs were not started because recent account payments failed or the spending
   limit needs to be increased. This confirms an external account gate, not a source failure.
+- T320 archives exactly five more active rolling handoffs after per-target `memory(get)` and
+  `graph(around)` review proved direct incoming supersedes edges:
+  `019e1612-f863-7f63-bacb-a6d03ddf1f7c`,
+  `019e1614-5134-7f32-9ffc-a6d7567f6f7a`,
+  `019e1618-d7b9-77c1-b795-d2ded5233a7c`,
+  `019e162b-a94f-7c53-87c0-969e35c8cc6a`, and
+  `019e162e-7f15-7da0-9450-ac98f63062c0`. Post-archive lint no longer
+  returns those IDs in the sampled findings and advances to
+  `019e1681-c15b-7642-ab66-3fd846b72cb1`.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3053,7 +3062,17 @@ Proceed in this order from the current checkpoint:
      `27091138284` failed before runner assignment with zero steps and billing/spending-limit
      annotations. The next closure condition is either fixed billing plus a hosted rerun, or an
      explicit release-owner decision accepting the local validation fallback.
-187. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
+187. Treat T320 as an exact lifecycle archive batch, not broad lifecycle cleanup. T320 archives
+     exactly five active rolling handoffs after per-target `memory(get)` and `graph(around)`
+     review proved direct incoming `supersedes` edges:
+     `019e1612-f863-7f63-bacb-a6d03ddf1f7c`,
+     `019e1614-5134-7f32-9ffc-a6d7567f6f7a`,
+     `019e1618-d7b9-77c1-b795-d2ded5233a7c`,
+     `019e162b-a94f-7c53-87c0-969e35c8cc6a`, and
+     `019e162e-7f15-7da0-9450-ac98f63062c0`. It does not authorize broad
+     `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
+     writes, PR-ready, merge, tag, publish, or release actions.
+188. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
      exactly five active rolling handoffs after per-target `memory(get)`, direct successor fetch,
      and `graph(around)` review proved direct incoming `supersedes` edges:
      `019dfd38-fc3d-7352-83a6-c9bbd16349ea`,
