@@ -804,6 +804,15 @@ Harness and migration checkpoint, current through 2026-06-07:
   keeps initial MVP beta readiness around `90-93%` while hosted CI is blocked, or about `95%` if
   the release owner accepts local validation as the beta fallback; production/GA readiness remains
   lower and separate.
+- T323 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+  successor `memory(get)`, and `graph(around)` review proved direct active successors:
+  `019e17da-5dc1-7b30-a440-f980f16bfefb`,
+  `019e17dd-0e7c-7773-8fa9-df8196d3c474`,
+  `019e17ea-e7f6-7c30-8635-1ad43345ee70`,
+  `019e17eb-00d7-7230-9257-a8188bee6811`, and
+  `019e1825-056e-7ac3-a5f0-053e4703afef`. Post-archive lint no longer
+  returns those IDs in the sampled findings and advances to
+  `019e1837-6d1c-7772-a026-4b2fd41c3490`.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3098,7 +3107,17 @@ Proceed in this order from the current checkpoint:
      `019e179d-f906-7063-b00c-3c879ca83e1c`. It does not authorize broad
      `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
      writes, PR-ready, merge, tag, publish, or release actions.
-189. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
+189. Treat T323 as an exact lifecycle archive batch, not broad lifecycle cleanup. T323 archives
+     exactly five active rolling handoffs after per-target `memory(get)`, successor `memory(get)`,
+     and `graph(around)` review proved direct active successors:
+     `019e17da-5dc1-7b30-a440-f980f16bfefb`,
+     `019e17dd-0e7c-7773-8fa9-df8196d3c474`,
+     `019e17ea-e7f6-7c30-8635-1ad43345ee70`,
+     `019e17eb-00d7-7230-9257-a8188bee6811`, and
+     `019e1825-056e-7ac3-a5f0-053e4703afef`. It does not authorize broad
+     `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
+     writes, PR-ready, merge, tag, publish, or release actions.
+190. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
      exactly five active rolling handoffs after per-target `memory(get)`, direct successor fetch,
      and `graph(around)` review proved direct incoming `supersedes` edges:
      `019dfd38-fc3d-7352-83a6-c9bbd16349ea`,
