@@ -94,7 +94,7 @@ Implementation checkpoint, 2026-05-06:
 Harness and migration checkpoint, current through 2026-06-07:
 
 - Supported local/Codex beta harness readiness remains validated for the current MVP path.
-  Current Claude Code harness readiness is not green: T311/T312 read-only checks report
+  Current Claude Code harness readiness is not green: T311/T312/T313 read-only checks report
   `ready=false` because generated `claude-memory-session-command`,
   `claude-end-session-command`, and `claude-stop-nudge-hook` adapters drift from current
   policy. This supersedes older green Claude Code snapshots for current native-Claude
@@ -128,7 +128,10 @@ Harness and migration checkpoint, current through 2026-06-07:
   `2.1.168` with target hash
   `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`; it does not launch
   native Claude and keeps live native Claude processes plus Claude Code harness `ready=false` as
-  hard stops. T284 records a read-only deferral of broad residual lifecycle cleanup
+  hard stops. T313 records a docs-only approval packet for the exact generated-adapter repair and
+  identifies `--settings-target snippet-only` as the preferred future T314 path to avoid
+  `settings.json` mutation unless settings writes are separately approved. T284 records a read-only
+  deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
   PR #2 CI failures by replacing Clippy-reported timestamp sorts, collapsing a Rust 1.96-only
   `sessionend` match warning, serializing the CI Test job's build/link work, and adding Test-job
@@ -758,6 +761,10 @@ Harness and migration checkpoint, current through 2026-06-07:
 - T312 records the docs-only successor packet for the observed Claude Code `2.1.168` target and
   SHA-256. It makes no runtime changes, does not repair adapters, does not execute T269/T270, and
   does not change the supported local/Codex beta scope.
+- T313 records the docs-only Claude Code adapter-drift repair approval packet. It captures the
+  three generated adapter diffs, distinguishes default install's planned `settings.json` merge from
+  the safer `--settings-target snippet-only` path, and does not write adapters, hooks, settings,
+  or runtime state.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3056,6 +3063,10 @@ Proceed in this order from the current checkpoint:
      native Claude validation or adapter repair. It supersedes T282 only for the target/version/hash
      baseline; current execution remains hard-stopped by live native Claude processes and Claude
      Code harness `ready=false` until fresh preflight proves clean attribution and readiness.
+189. Treat T313 as an approval packet, not an executed repair. The preferred future T314 command is
+     `engram harness install --harness claude-code --settings-target snippet-only --write --json`,
+     because the default install target would also plan a `settings.json` merge. Do not execute it
+     without explicit approval for the exact three generated adapter paths.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
