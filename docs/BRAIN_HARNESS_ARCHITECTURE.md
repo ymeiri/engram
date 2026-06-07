@@ -694,6 +694,16 @@ Harness and migration checkpoint, current through 2026-06-06:
   untracked. A fresh native Claude preflight still found live `claude` processes on `ttys001` and
   `ttys005`, so the T282 prompt-bearing packet remains blocked by attribution ambiguity and no
   native Claude prompt was launched.
+- T303 archives the next five exact `project:dd-source` superseded rolling handoffs after
+  per-target `memory(get)`, direct successor, and `graph(around)` review:
+  `019e01a0-5d8c-76f3-b537-935a53207cc0`,
+  `019e01d6-adc4-7971-aca3-c663b2be52c5`,
+  `019e01db-1e53-7c23-b6c0-b4ba8d58b0bc`,
+  `019e01f2-cfa4-7de0-b073-3bc1926e5c3c`, and
+  `019e01f4-5fd7-77c2-8491-2f66a2eebda1`. Post-archive lint advances to
+  `019e02b0-22ab-72c0-8105-1e7909dd4279`. This is exact lifecycle maintenance only; broad
+  cleanup, direct-legacy deprecation/deletion, native Claude, effective hooks, and live host
+  labels remain separate.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2971,6 +2981,18 @@ Proceed in this order from the current checkpoint:
      `019e01a0-5d8c-76f3-b537-935a53207cc0` as the next sampled candidate. T301 does not run
      broad `lint apply_safe`, delete memory, change ranking/`orient`, execute native Claude,
      mark PR #2 ready, or deprecate legacy layers.
+186. Treat T303 as an exact lifecycle archive batch, not broad lifecycle cleanup. T303 archives
+     exactly five active `project:dd-source` rolling handoffs after per-target `memory(get)`,
+     direct successor fetch, and `graph(around)` review proved direct incoming `supersedes`
+     edges:
+     `019e01a0-5d8c-76f3-b537-935a53207cc0`,
+     `019e01d6-adc4-7971-aca3-c663b2be52c5`,
+     `019e01db-1e53-7c23-b6c0-b4ba8d58b0bc`,
+     `019e01f2-cfa4-7de0-b073-3bc1926e5c3c`, and
+     `019e01f4-5fd7-77c2-8491-2f66a2eebda1`. Post-archive lint advances to
+     `019e02b0-22ab-72c0-8105-1e7909dd4279` as the next sampled candidate. T303 does not run
+     broad `lint apply_safe`, delete memory, change ranking/`orient`, execute native Claude,
+     validate hooks/host labels, or deprecate legacy layers.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
