@@ -108,10 +108,20 @@ host labels, or full multi-host parity.
 
 ## Claude Code Adapter Safety Follow-Up
 
-T315 adds source-level coverage for the future T314 repair path. The new harness test proves that
-`HarnessSettingsTarget::SnippetOnly` can repair generated Claude Code adapters without rewriting an
-existing `settings.json`, `settings.local.json`, or `engram-settings-snippet.json`.
+T315 adds source-level coverage for the T314 repair path later executed by T333. The new harness
+test proves that `HarnessSettingsTarget::SnippetOnly` can repair generated Claude Code adapters
+without rewriting an existing `settings.json`, `settings.local.json`, or
+`engram-settings-snippet.json`.
 
-This is safety evidence for the approval-gated T314 command, not execution of that command. Calling
-the Claude Code harness beta-ready still requires explicit approval for T314 or an explicit beta
-decision that Claude Code adapter repair is deferred from the supported path.
+T333 executes the prepared T314 command with the installed CLI:
+
+```text
+/Users/yuval.meiri/.local/bin/engram harness install --harness claude-code --settings-target snippet-only --write --json
+```
+
+The write updated exactly the three generated Claude Code adapters, left `settings.json`,
+`settings.local.json`, and `engram-settings-snippet.json` unchanged, and made Claude Code
+`harness status` and `harness doctor` report `ready=true`.
+
+This closes generated-adapter drift only. It still does not prove native Claude prompt-bearing
+execution, effective-hook visibility, live host labels, or full production parity.

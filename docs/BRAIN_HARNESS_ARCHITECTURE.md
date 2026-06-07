@@ -1,7 +1,7 @@
 # Engram Brain Harness Architecture
 
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
-snippet-only repair safety evidence, exact lifecycle maintenance, and research-method checkpoints
+snippet-only Claude Code adapter repair, exact lifecycle maintenance, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -94,11 +94,11 @@ Implementation checkpoint, 2026-05-06:
 Harness and migration checkpoint, current through 2026-06-07:
 
 - Supported local/Codex beta harness readiness remains validated for the current MVP path.
-  Current Claude Code harness readiness is not green: T311/T312/T313 read-only checks report
-  `ready=false` because generated `claude-memory-session-command`,
-  `claude-end-session-command`, and `claude-stop-nudge-hook` adapters drift from current
-  policy. This supersedes older green Claude Code snapshots for current native-Claude
-  decisions until a fresh doctor reports `ready=true`.
+  T333 closes the Claude Code generated-adapter drift recorded by T311/T312/T313: the installed
+  `claude-memory-session-command`, `claude-end-session-command`, and `claude-stop-nudge-hook`
+  adapters now match current policy, and installed Claude Code harness status/doctor report
+  `ready=true`. This supersedes the older adapter-drift `ready=false` snapshots only for generated
+  adapter readiness.
 - The harness claim remains bounded. Lifecycle compliance is still a soft contract; Claude Code
   settings remain split across settings files with a user-owned snippet and extra legacy Engram
   permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
@@ -127,10 +127,12 @@ Harness and migration checkpoint, current through 2026-06-07:
   make attribution ambiguous. T312 prepares a docs-only successor packet for observed Claude Code
   `2.1.168` with target hash
   `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`; it does not launch
-  native Claude and keeps live native Claude processes plus Claude Code harness `ready=false` as
-  hard stops. T313 records a docs-only approval packet for the exact generated-adapter repair and
-  identifies `--settings-target snippet-only` as the preferred future T314 path to avoid
-  `settings.json` mutation unless settings writes are separately approved. T284 records a read-only
+  native Claude and kept live native Claude processes plus generated-adapter drift as hard stops
+  before T333. T313 records a docs-only approval packet for the exact generated-adapter repair and
+  identifies `--settings-target snippet-only` as the preferred T314 path to avoid `settings.json`
+  mutation unless settings writes are separately approved. T333 later executes that snippet-only
+  path and makes Claude Code status/doctor report `ready=true` without settings mutation. T284
+  records a read-only
   deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
   PR #2 CI failures by replacing Clippy-reported timestamp sorts, collapsing a Rust 1.96-only
@@ -771,6 +773,15 @@ Harness and migration checkpoint, current through 2026-06-07:
   Local validation passes on code commit `8f228ecacd436fb4f6c0078e59fb385eacc800eb`; hosted PR CI
   runs on the T315 code/evidence heads are externally blocked before job steps by GitHub Actions
   billing/spending-limit annotations. T315 does not execute T314 or mutate real user harness files.
+- T333 executes the prepared T314 adapter-repair contract with the installed CLI command
+  `/Users/yuval.meiri/.local/bin/engram harness install --harness claude-code --settings-target
+  snippet-only --write --json`. Fresh preflight matched the T313 hashes and exact three-adapter
+  write set; postflight hashes match the expected generated contents, `engram-stop-nudge.sh`
+  remains executable, settings/snippet hashes are unchanged, snippet-only dry-run reports
+  `planned=[]`, and Claude Code harness status/doctor now report `ready=true`. T333 does not
+  launch native Claude, run `/hooks`, mutate settings, change repo files, or prove native Claude
+  prompt-bearing behavior, effective-hook visibility, live host labels, hosted CI, or production
+  parity.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3292,10 +3303,13 @@ Proceed in this order from the current checkpoint:
      native Claude validation or adapter repair. It supersedes T282 only for the target/version/hash
      baseline; current execution remains hard-stopped by live native Claude processes and Claude
      Code harness `ready=false` until fresh preflight proves clean attribution and readiness.
-189. Treat T313 as an approval packet, not an executed repair. The preferred future T314 command is
+189. Treat T313 as an approval packet at the time it was written, not as its own executed repair.
+     T333 later executed the exact preferred T314 command,
      `engram harness install --harness claude-code --settings-target snippet-only --write --json`,
-     because the default install target would also plan a `settings.json` merge. Do not execute it
-     without explicit approval for the exact three generated adapter paths.
+     because the default install target would also plan a `settings.json` merge. Do not infer
+     native Claude prompt-bearing behavior, effective-hook visibility, live host labels, hosted CI,
+     or production parity from the adapter repair; future settings writes still require separate
+     approval.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
