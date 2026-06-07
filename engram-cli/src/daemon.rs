@@ -262,7 +262,7 @@ fn spawn_daemon(config: &DaemonConfig, port: u16, exe: &Path) -> Result<Child> {
         use std::os::unix::process::CommandExt;
 
         // Create a new process group so the daemon survives parent exit
-        Command::new(&exe)
+        Command::new(exe)
             .args(&args)
             .stdin(Stdio::null())
             .stdout(log_file.try_clone()?)
