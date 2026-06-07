@@ -55,6 +55,18 @@ and billing/spending-limit annotations. That external account gate does not cont
 validation, but the normal exact-head hosted-CI release proof is still missing until Actions can run
 on the head intended for release or the release owner explicitly accepts the local fallback.
 
+T321 advanced the draft PR #3 head to `22bd01ccc0276ba41d846ef368ab950869a83da5` through
+docs-only release evidence plus exact lifecycle archive records. Local validation for that head
+passed `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`, and cached diff
+checks. Hosted GitHub Actions run `27092233443` on the same head again failed before workflow steps
+ran with the same billing/spending-limit annotations. Treat this as the current hosted-CI blocker.
+
+Fresh AI Council review after T321 places the initial local/Codex beta at about `90-93%` ready while
+hosted CI is externally blocked, or about `95%` ready if the release owner explicitly accepts local
+validation as the beta fallback. This is not a production/GA readiness claim; production readiness
+remains materially lower because native Claude proof, effective hooks, host-label proof, host
+parity, telemetry completeness, and operational hardening remain open.
+
 ## Current Installation Status
 
 T305 refreshed the installed local binary, generated Codex adapter, and global daemon from the

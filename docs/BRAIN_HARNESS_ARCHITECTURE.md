@@ -797,6 +797,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   `019e179d-f906-7063-b00c-3c879ca83e1c`. Post-archive lint no longer
   returns those IDs in the sampled findings and advances to
   `019e17da-5dc1-7b30-a440-f980f16bfefb`.
+- T322 refreshes the release-facing readiness statement for PR #3 head
+  `22bd01ccc0276ba41d846ef368ab950869a83da5`. The branch is synced, local validation passed for
+  the docs/lifecycle head, and hosted CI run `27092233443` remains externally blocked before
+  workflow steps by GitHub Actions billing/spending-limit annotations. Fresh AI Council consensus
+  keeps initial MVP beta readiness around `90-93%` while hosted CI is blocked, or about `95%` if
+  the release owner accepts local validation as the beta fallback; production/GA readiness remains
+  lower and separate.
 
 Research checkpoint, current through 2026-05-27:
 
