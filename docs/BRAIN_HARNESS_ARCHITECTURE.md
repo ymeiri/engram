@@ -2951,6 +2951,17 @@ Proceed in this order from the current checkpoint:
      after the current PR CI annotations warned about Node.js 20 action-runtime deprecation. Record
      the fresh T287-head CI result in Engram memory/handoff, not by creating a recursive docs-only
      CI report.
+185. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
+     exactly five active rolling handoffs after per-target `memory(get)`, direct successor fetch,
+     and `graph(around)` review proved direct incoming `supersedes` edges:
+     `019dfd38-fc3d-7352-83a6-c9bbd16349ea`,
+     `019dfd39-d183-7d42-bf44-87950acc27ef`,
+     `019dfd3a-eb89-7bd2-85d1-4420c24c4e5d`,
+     `019dfd3b-7502-7cf2-a097-9ffdf2458729`, and
+     `019e019c-43a3-7a30-af48-dec8bbfe432f`. Post-archive lint advances to
+     `019e01a0-5d8c-76f3-b537-935a53207cc0` as the next sampled candidate. T301 does not run
+     broad `lint apply_safe`, delete memory, change ranking/`orient`, execute native Claude,
+     mark PR #2 ready, or deprecate legacy layers.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
