@@ -28,6 +28,9 @@ const MAX_FEEDBACK_ROWS_FOR_LINT: usize = 500;
 /// Options for lint execution.
 #[derive(Debug, Clone, Default)]
 pub struct LintOptions {
+    /// Optional project scope to lint. Keeps global/user memory and filters
+    /// project-bound memory, sessions, and obligations to the requested project.
+    pub project: Option<String>,
     /// Optional vault root to scan.
     pub vault_path: Option<String>,
     /// Maximum findings to return.
@@ -66,7 +69,9 @@ impl LintService {
     /// Run all MVP lint rules.
     pub async fn run(&self, options: LintOptions) -> IndexResult<LintReport> {
         let mut findings = Vec::new();
-        let items = self.memory_repo.list_memory_items(None, None).await?;
+        let all_items = self.memory_repo.list_memory_items(None, None).await?;
+        let project = options.project.as_deref();
+        let items = filter_memory_items_for_project(&all_items, project);
 
         lint_missing_evidence(&items, &mut findings);
         lint_stale_preferences(&items, &mut findings);
@@ -74,8 +79,9 @@ impl LintService {
         lint_orphan_project_subprojects(&items, &mut findings);
         lint_superseded_active_items(&items, &mut findings);
         lint_handoffs_missing_next_actions(&items, &mut findings);
-        self.lint_stale_active_sessions(&mut findings).await?;
-        self.lint_open_obligations(&mut findings).await?;
+        self.lint_stale_active_sessions(project, &mut findings)
+            .await?;
+        self.lint_open_obligations(project, &mut findings).await?;
         self.lint_feedback_flagged_active_memory(&items, &mut findings)
             .await?;
 
@@ -143,10 +149,14 @@ impl LintService {
         Ok(report)
     }
 
-    async fn lint_stale_active_sessions(&self, findings: &mut Vec<LintFinding>) -> IndexResult<()> {
+    async fn lint_stale_active_sessions(
+        &self,
+        project: Option<&str>,
+        findings: &mut Vec<LintFinding>,
+    ) -> IndexResult<()> {
         let sessions = self
             .session_repo
-            .list_sessions(Some(&SessionStatus::Active), None, None, None)
+            .list_sessions(Some(&SessionStatus::Active), None, project, None)
             .await?;
         let stale_before = OffsetDateTime::now_utc() - Duration::days(1);
         for session in sessions
@@ -167,12 +177,19 @@ impl LintService {
         Ok(())
     }
 
-    async fn lint_open_obligations(&self, findings: &mut Vec<LintFinding>) -> IndexResult<()> {
+    async fn lint_open_obligations(
+        &self,
+        project: Option<&str>,
+        findings: &mut Vec<LintFinding>,
+    ) -> IndexResult<()> {
         let obligations = self
             .obligation_repo
             .list_obligations(Some(AgentObligationStatus::Open), None)
             .await?;
-        for obligation in obligations {
+        for obligation in obligations
+            .into_iter()
+            .filter(|obligation| scope_matches_project(&obligation.scope, project))
+        {
             findings.push(
                 LintFinding::new(
                     format!("unresolved-agent-obligation:{}", obligation.id),
@@ -203,6 +220,35 @@ impl LintService {
         lint_feedback_wrong_scope_active_memory(items, &feedback, findings);
         Ok(())
     }
+}
+
+fn filter_memory_items_for_project(items: &[MemoryItem], project: Option<&str>) -> Vec<MemoryItem> {
+    items
+        .iter()
+        .filter(|item| scope_matches_project(&item.scope, project))
+        .cloned()
+        .collect()
+}
+
+fn scope_matches_project(scope: &MemoryScope, project: Option<&str>) -> bool {
+    let Some(project) = project else {
+        return true;
+    };
+    match scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project { project_name, .. } => scope_name_matches(project_name, project),
+        MemoryScope::Task { project_name, .. } => project_name
+            .as_deref()
+            .is_some_and(|project_name| scope_name_matches(project_name, project)),
+        MemoryScope::Entity { .. }
+        | MemoryScope::Repository { .. }
+        | MemoryScope::Session { .. }
+        | MemoryScope::Custom { .. } => false,
+    }
+}
+
+fn scope_name_matches(left: &str, right: &str) -> bool {
+    left.eq_ignore_ascii_case(right)
 }
 
 fn lint_missing_evidence(items: &[MemoryItem], findings: &mut Vec<LintFinding>) {
@@ -732,6 +778,7 @@ mod tests {
 
         let report = service
             .run(LintOptions {
+                project: None,
                 vault_path: None,
                 limit: Some(1),
             })
@@ -815,6 +862,7 @@ mod tests {
 
         let report = service
             .run(LintOptions {
+                project: None,
                 vault_path: None,
                 limit: Some(2),
             })
@@ -850,6 +898,137 @@ mod tests {
             finding.rule == LintRule::UnresolvedAgentObligation
                 && finding.obligation_id == Some(obligation.id)
         }));
+    }
+
+    #[tokio::test]
+    async fn lint_project_scope_filters_memory_obligations_and_sessions() {
+        let service = service().await;
+        let global = MemoryItem::new(
+            MemoryKind::Rule,
+            "Global rule without evidence",
+            "Global guidance should remain visible in every project-scoped lint report.",
+            MemoryScope::Global,
+            ClaimOrigin::AgentObserved,
+            writer(),
+        );
+        let engram = MemoryItem::new(
+            MemoryKind::Decision,
+            "Engram decision without evidence",
+            "Project-scoped lint should include this item.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        );
+        let engram_task = MemoryItem::new(
+            MemoryKind::TaskFact,
+            "Engram task without evidence",
+            "Task-scoped lint should include tasks whose parent project matches.",
+            MemoryScope::Task {
+                project_id: None,
+                project_name: Some("engram".to_string()),
+                task_id: None,
+                task_name: "beta".to_string(),
+            },
+            ClaimOrigin::AgentObserved,
+            writer(),
+        );
+        let other = MemoryItem::new(
+            MemoryKind::Decision,
+            "Other project decision without evidence",
+            "Project-scoped lint should exclude this item.",
+            MemoryScope::project("other-project"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        );
+        service.memory_repo.save_memory_item(&global).await.unwrap();
+        service.memory_repo.save_memory_item(&engram).await.unwrap();
+        service
+            .memory_repo
+            .save_memory_item(&engram_task)
+            .await
+            .unwrap();
+        service.memory_repo.save_memory_item(&other).await.unwrap();
+
+        let engram_obligation = AgentObligation::new(
+            AgentObligationKind::SourceReading,
+            "Read Engram source",
+            "Project-scoped lint should include this obligation.",
+            MemoryScope::project("engram"),
+            AgentObligationTrigger::new("prompt", "implementation request"),
+            writer(),
+        );
+        let other_obligation = AgentObligation::new(
+            AgentObligationKind::SourceReading,
+            "Read other source",
+            "Project-scoped lint should exclude this obligation.",
+            MemoryScope::project("other-project"),
+            AgentObligationTrigger::new("prompt", "implementation request"),
+            writer(),
+        );
+        service
+            .obligation_repo
+            .save_obligation(&engram_obligation)
+            .await
+            .unwrap();
+        service
+            .obligation_repo
+            .save_obligation(&other_obligation)
+            .await
+            .unwrap();
+
+        let mut engram_session = engram_core::session::Session::new().with_project("engram");
+        engram_session.started_at = OffsetDateTime::now_utc() - Duration::days(2);
+        let mut other_session = engram_core::session::Session::new().with_project("other-project");
+        other_session.started_at = OffsetDateTime::now_utc() - Duration::days(2);
+        service
+            .session_repo
+            .save_session(&engram_session)
+            .await
+            .unwrap();
+        service
+            .session_repo
+            .save_session(&other_session)
+            .await
+            .unwrap();
+
+        let report = service
+            .run(LintOptions {
+                project: Some("engram".to_string()),
+                vault_path: None,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(report.findings.iter().any(|finding| {
+            finding.rule == LintRule::MissingEvidence && finding.item_id == Some(global.id)
+        }));
+        assert!(report.findings.iter().any(|finding| {
+            finding.rule == LintRule::MissingEvidence && finding.item_id == Some(engram.id)
+        }));
+        assert!(report.findings.iter().any(|finding| {
+            finding.rule == LintRule::MissingEvidence && finding.item_id == Some(engram_task.id)
+        }));
+        assert!(!report
+            .findings
+            .iter()
+            .any(|finding| finding.item_id == Some(other.id)));
+        assert!(report.findings.iter().any(|finding| {
+            finding.rule == LintRule::UnresolvedAgentObligation
+                && finding.obligation_id == Some(engram_obligation.id)
+        }));
+        assert!(!report
+            .findings
+            .iter()
+            .any(|finding| finding.obligation_id == Some(other_obligation.id)));
+        assert!(report.findings.iter().any(|finding| {
+            finding.rule == LintRule::StaleActiveSession
+                && finding.session_id == Some(engram_session.id)
+        }));
+        assert!(!report
+            .findings
+            .iter()
+            .any(|finding| finding.session_id == Some(other_session.id)));
     }
 
     #[tokio::test]
@@ -1098,6 +1277,7 @@ mod tests {
 
         let report = service
             .run(LintOptions {
+                project: None,
                 vault_path: Some(root.path().display().to_string()),
                 limit: None,
             })
@@ -1118,6 +1298,7 @@ mod tests {
 
         let report = service
             .run(LintOptions {
+                project: None,
                 vault_path: Some(root.path().display().to_string()),
                 limit: None,
             })

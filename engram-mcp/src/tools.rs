@@ -7948,6 +7948,8 @@ pub struct LintRequest {
     /// Action: run, list, apply_safe
     #[schemars(description = "Action: run, list, apply_safe")]
     pub action: String,
+    /// Optional project scope to lint.
+    pub project: Option<String>,
     /// Optional Memory OS vault root to scan.
     pub vault_path: Option<String>,
     /// Maximum findings to return.
@@ -7965,6 +7967,7 @@ pub async fn lint_new(state: &ToolState, request: LintRequest) -> Result<String,
         .as_ref()
         .ok_or_else(|| "Lint service not initialized".to_string())?;
     let options = LintOptions {
+        project: request.project,
         vault_path: request.vault_path,
         limit: request.limit,
     };

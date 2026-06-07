@@ -2,7 +2,8 @@
 
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
-effective-hook successor packet, exact lifecycle maintenance, and research-method checkpoints
+effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
+and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -138,7 +139,9 @@ Harness and migration checkpoint, current through 2026-06-07:
   processes on `ttys001` and `ttys005` still make attribution ambiguous, so no native Claude
   session was launched. T335 then records a docs-only T269 successor packet for the same observed
   Claude Code `2.1.168` runtime and preserves T334's no-launch attribution blocker; it makes no
-  `/hooks` visibility claim. T284
+  `/hooks` visibility claim. T336 adds optional project-scoped lint through service, MCP, and CLI
+  surfaces so current project health can be checked without unrelated historical project findings
+  dominating the report; unscoped lint remains unchanged. T284
   records a read-only
   deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
@@ -801,6 +804,11 @@ Harness and migration checkpoint, current through 2026-06-07:
   path/version/hash, and keeps T312 prompt-bearing validation plus T270 host-label proof separate.
   T335 does not launch native Claude, run `/hooks`, signal processes, mutate settings/adapters, or
   prove effective-hook visibility.
+- T336 adds optional project-scoped lint. `LintOptions.project`, MCP `lint(project=...)`, and CLI
+  `lint run --scope-project ...` filter project-bound memory, stale sessions, and open obligations
+  while preserving global/user memory and existing unscoped behavior. T336 validates the service,
+  MCP request surface, and isolated CLI path; it does not run `lint apply_safe` or claim lifecycle
+  cleanup.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3338,6 +3346,10 @@ Proceed in this order from the current checkpoint:
      effective-hook validation. T335 supersedes T269 only for the target/version/hash baseline and
      future execution contract; it preserves the T334 attribution hard-stop, keeps T312 and T270
      separate, and does not prove `/hooks` visibility or production parity.
+192. Treat T336 as project-health lint scoping, not lifecycle cleanup. The optional project filter
+     makes current-project lint reports less noisy while preserving unscoped lint and global/user
+     memory checks; it does not authorize broad `lint apply_safe`, archive memory, or close
+     lifecycle debt.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

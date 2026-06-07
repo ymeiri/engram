@@ -36,6 +36,7 @@ async fn setup_tool_state() -> (ToolState, MemoryService, TelemetryRepo) {
 fn lint_request(action: &str) -> LintRequest {
     LintRequest {
         action: action.to_string(),
+        project: None,
         vault_path: None,
         limit: None,
         write: None,
@@ -49,6 +50,56 @@ fn writer() -> WriterProvenance {
 
 fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+#[tokio::test]
+async fn test_mcp_lint_project_filter_excludes_unrelated_project_memory() {
+    let (state, memory_service, _) = setup_tool_state().await;
+
+    let engram = MemoryItem::new(
+        MemoryKind::Decision,
+        "Engram scoped item",
+        "Project-scoped lint should include this missing-evidence item.",
+        MemoryScope::project("engram"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    );
+    let engram_id = engram.id;
+    memory_service
+        .capture_memory(engram)
+        .await
+        .expect("engram memory should be captured");
+
+    let other = MemoryItem::new(
+        MemoryKind::Decision,
+        "Other project item",
+        "Project-scoped lint should exclude this missing-evidence item.",
+        MemoryScope::project("other-project"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    );
+    let other_id = other.id;
+    memory_service
+        .capture_memory(other)
+        .await
+        .expect("other memory should be captured");
+
+    let mut request = lint_request("run");
+    request.project = Some("engram".to_string());
+    let response = tools::lint_new(&state, request)
+        .await
+        .expect("lint should run");
+    let json = parse_json(&response);
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be an array");
+
+    assert!(findings
+        .iter()
+        .any(|finding| finding["item_id"] == engram_id.to_string()));
+    assert!(!findings
+        .iter()
+        .any(|finding| finding["item_id"] == other_id.to_string()));
 }
 
 #[tokio::test]

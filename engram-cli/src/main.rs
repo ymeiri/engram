@@ -2121,6 +2121,10 @@ enum HarnessCommands {
 enum LintCommands {
     /// Run lint checks
     Run {
+        /// Optional project scope to lint
+        #[arg(long = "scope-project")]
+        scope_project: Option<String>,
+
         /// Optional Memory OS vault root to scan
         #[arg(long)]
         vault_path: Option<String>,
@@ -2136,6 +2140,10 @@ enum LintCommands {
 
     /// Alias for run
     List {
+        /// Optional project scope to lint
+        #[arg(long = "scope-project")]
+        scope_project: Option<String>,
+
         /// Optional Memory OS vault root to scan
         #[arg(long)]
         vault_path: Option<String>,
@@ -2151,6 +2159,10 @@ enum LintCommands {
 
     /// Apply safe lint actions only
     ApplySafe {
+        /// Optional project scope to lint
+        #[arg(long = "scope-project")]
+        scope_project: Option<String>,
+
         /// Optional Memory OS vault root to scan
         #[arg(long)]
         vault_path: Option<String>,
@@ -8104,16 +8116,24 @@ async fn main() -> Result<()> {
 
             match command {
                 LintCommands::Run {
+                    scope_project,
                     vault_path,
                     limit,
                     json,
                 }
                 | LintCommands::List {
+                    scope_project,
                     vault_path,
                     limit,
                     json,
                 } => {
-                    let report = service.run(LintOptions { vault_path, limit }).await?;
+                    let report = service
+                        .run(LintOptions {
+                            project: scope_project,
+                            vault_path,
+                            limit,
+                        })
+                        .await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -8121,17 +8141,21 @@ async fn main() -> Result<()> {
                     }
                 }
                 LintCommands::ApplySafe {
+                    scope_project,
                     vault_path,
                     limit,
                     write,
                     json,
                 } => {
+                    let options = LintOptions {
+                        project: scope_project,
+                        vault_path,
+                        limit,
+                    };
                     let mut report = if write {
-                        service
-                            .apply_safe(LintOptions { vault_path, limit })
-                            .await?
+                        service.apply_safe(options).await?
                     } else {
-                        service.run(LintOptions { vault_path, limit }).await?
+                        service.run(options).await?
                     };
                     if !write {
                         report.applied_safe_actions = 0;

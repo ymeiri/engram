@@ -149,3 +149,13 @@ attribution hard-stop.
 
 T335 does not launch native Claude, run `/hooks`, mutate settings or adapters, prove
 effective-hook visibility, or change the initial beta scope.
+
+## Project-Scoped Lint
+
+T336 adds optional project filtering to Memory OS lint. MCP callers can pass `project`, and the CLI
+can run `engram lint run --scope-project <name>` to focus memory, stale-session, and open-obligation
+findings on the current project while preserving global/user memory checks and unchanged unscoped
+lint behavior.
+
+This improves project health visibility for beta closeout. It does not run `lint apply_safe`,
+archive memory, or close lifecycle cleanup.
