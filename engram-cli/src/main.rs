@@ -5776,6 +5776,39 @@ async fn main() -> Result<()> {
                             if let Some(project) = &config.project {
                                 println!("  Project: {}", project);
                             }
+                            let current_exe = std::env::current_exe().ok();
+                            let current_version = env!("CARGO_PKG_VERSION");
+                            if let Some(metadata) = &info.metadata {
+                                println!("  Spawned by: {}", metadata.executable_path);
+                                println!("  Spawn version: {}", metadata.executable_version);
+                                if let Some(path) = &current_exe {
+                                    let current_path = path.display().to_string();
+                                    println!("  Current CLI: {}", current_path);
+                                    if metadata.executable_path != current_path {
+                                        println!(
+                                            "  Warning: daemon was spawned by a different executable path; restart it after updating Engram if runtime drift is suspected"
+                                        );
+                                    }
+                                }
+                                if metadata.executable_version != current_version {
+                                    println!(
+                                        "  Warning: daemon version {} differs from current CLI version {}",
+                                        metadata.executable_version, current_version
+                                    );
+                                }
+                                if metadata.pid != info.pid || metadata.port != info.port {
+                                    println!(
+                                        "  Warning: daemon spawn metadata does not match pid/port files"
+                                    );
+                                }
+                            } else {
+                                println!(
+                                    "  Spawn metadata: unavailable (daemon may have been started by an older Engram binary)"
+                                );
+                                if let Some(path) = &current_exe {
+                                    println!("  Current CLI: {}", path.display());
+                                }
+                            }
                         }
                         Err(_) => {
                             println!("Daemon status: 🔴 not running");

@@ -1190,7 +1190,23 @@ effective hook configuration explicit. Validation passed `cargo fmt --all --chec
 install adapters, change hook behavior, mutate lifecycle/M6 state, or close native
 Claude/effective-hook/host-label gates.
 
-Current T307 matrix snapshot:
+T308 closes the beta-scope wording gap after fresh AI Council and read-only fan-out review. PR #3
+and release-facing docs now explicitly define the initial beta as the local/Codex Brain Loop MVP and
+defer production/GA work. Exact-head CI run `27085706164` passes Format, Docs, Check, Clippy, and
+Test on head `8b86961cbbec7211a445aafe9c8edcc7c7d1624d`. PR #3 remains draft/open/clean; release
+mechanics still require explicit approval.
+
+T309 adds daemon spawn provenance as a first-class production-hardening diagnostic. When a daemon
+starts, Engram now writes spawn metadata beside the daemon pid/port files: executable path, package
+version, PID, and port. `engram daemon status` prints this metadata when available, prints the
+current CLI path, and warns if the daemon was spawned by a different executable path, a different
+version, or metadata that no longer matches the pid/port files. Older daemons without metadata keep
+working and report metadata unavailable instead of failing. This removes one repeated manual
+runtime-drift inspection step without restarting the daemon, installing binaries, changing MCP
+schema/proxy behavior, running native Claude, mutating lifecycle state, or closing host-parity
+gates.
+
+Current T309 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |

@@ -4,10 +4,11 @@
 //! multiple Claude/Cursor sessions to share the same knowledge base.
 
 use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -72,10 +73,35 @@ impl DaemonConfig {
         self.daemon_dir().join("daemon.log")
     }
 
+    /// Get the path to the daemon spawn metadata file.
+    pub fn metadata_file(&self) -> PathBuf {
+        self.daemon_dir().join("daemon.meta.json")
+    }
+
     /// Get the data directory for this daemon.
     #[allow(dead_code)]
     pub fn data_dir(&self) -> PathBuf {
         self.daemon_dir().join("data")
+    }
+}
+
+/// Spawn-time runtime metadata for a daemon.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DaemonSpawnMetadata {
+    pub executable_path: String,
+    pub executable_version: String,
+    pub pid: u32,
+    pub port: u16,
+}
+
+impl DaemonSpawnMetadata {
+    fn new(executable_path: &Path, pid: u32, port: u16) -> Self {
+        Self {
+            executable_path: executable_path.display().to_string(),
+            executable_version: env!("CARGO_PKG_VERSION").to_string(),
+            pid,
+            port,
+        }
     }
 }
 
@@ -85,6 +111,7 @@ pub struct DaemonInfo {
     pub port: u16,
     pub pid: u32,
     pub healthy: bool,
+    pub metadata: Option<DaemonSpawnMetadata>,
 }
 
 /// Ensure a daemon is running, starting one if necessary.
@@ -110,14 +137,16 @@ pub async fn ensure_daemon_running(config: &DaemonConfig) -> Result<u16> {
     info!("Starting daemon on port {}", port);
 
     // Spawn the daemon and make sure the spawned child is the process that stays alive.
-    let mut child = spawn_daemon(config, port)?;
+    let exe = std::env::current_exe().context("Failed to get current executable path")?;
+    let mut child = spawn_daemon(config, port, &exe)?;
     let pid = child.id();
 
     // Wait for daemon to be ready
     wait_for_spawned_daemon(port, &mut child, Duration::from_secs(30)).await?;
 
     // Save daemon info
-    save_daemon_info(config, port, pid)?;
+    let metadata = DaemonSpawnMetadata::new(&exe, pid, port);
+    save_daemon_info(config, port, pid, &metadata)?;
 
     Ok(port)
 }
@@ -127,8 +156,14 @@ pub async fn get_daemon_info(config: &DaemonConfig) -> Result<DaemonInfo> {
     let port = read_daemon_port(config)?;
     let pid = read_daemon_pid(config)?;
     let healthy = check_daemon_health(port).await.is_ok();
+    let metadata = read_daemon_metadata(config);
 
-    Ok(DaemonInfo { port, pid, healthy })
+    Ok(DaemonInfo {
+        port,
+        pid,
+        healthy,
+        metadata,
+    })
 }
 
 /// Check if the daemon is healthy by hitting the health endpoint.
@@ -199,9 +234,7 @@ fn find_available_port() -> u16 {
 }
 
 /// Spawn a daemon process.
-fn spawn_daemon(config: &DaemonConfig, port: u16) -> Result<Child> {
-    let exe = std::env::current_exe().context("Failed to get current executable path")?;
-
+fn spawn_daemon(config: &DaemonConfig, port: u16, exe: &Path) -> Result<Child> {
     // Ensure daemon directory exists
     let daemon_dir = config.daemon_dir();
     fs::create_dir_all(&daemon_dir).context("Failed to create daemon directory")?;
@@ -311,19 +344,44 @@ fn read_daemon_pid(config: &DaemonConfig) -> Result<u32> {
 }
 
 /// Save daemon info to files.
-fn save_daemon_info(config: &DaemonConfig, port: u16, pid: u32) -> Result<()> {
+fn save_daemon_info(
+    config: &DaemonConfig,
+    port: u16,
+    pid: u32,
+    metadata: &DaemonSpawnMetadata,
+) -> Result<()> {
     let mut pid_file = fs::File::create(config.pid_file())?;
     writeln!(pid_file, "{}", pid)?;
 
     let mut port_file = fs::File::create(config.port_file())?;
     writeln!(port_file, "{}", port)?;
+
+    if let Err(err) = write_daemon_metadata_file(&config.metadata_file(), metadata) {
+        warn!(?err, "Failed to write daemon spawn metadata");
+    }
     Ok(())
+}
+
+fn write_daemon_metadata_file(path: &Path, metadata: &DaemonSpawnMetadata) -> Result<()> {
+    let contents = serde_json::to_string_pretty(metadata)
+        .context("Failed to serialize daemon spawn metadata")?;
+    fs::write(path, contents).context("Failed to write daemon spawn metadata")
+}
+
+fn read_daemon_metadata(config: &DaemonConfig) -> Option<DaemonSpawnMetadata> {
+    read_daemon_metadata_file(&config.metadata_file())
+}
+
+fn read_daemon_metadata_file(path: &Path) -> Option<DaemonSpawnMetadata> {
+    let contents = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&contents).ok()
 }
 
 /// Clean up daemon files.
 fn cleanup_daemon_files(config: &DaemonConfig) -> Result<()> {
     let _ = fs::remove_file(config.port_file());
     let _ = fs::remove_file(config.pid_file());
+    let _ = fs::remove_file(config.metadata_file());
     Ok(())
 }
 
@@ -382,5 +440,32 @@ mod tests {
         assert!(error
             .to_string()
             .contains("exited before daemon readiness was confirmed"));
+    }
+
+    #[test]
+    fn daemon_spawn_metadata_round_trips_json() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("daemon.meta.json");
+        let metadata = DaemonSpawnMetadata {
+            executable_path: "/tmp/engram".to_string(),
+            executable_version: "0.2.0-test".to_string(),
+            pid: 42,
+            port: 8765,
+        };
+
+        write_daemon_metadata_file(&path, &metadata).expect("write metadata");
+
+        assert_eq!(read_daemon_metadata_file(&path), Some(metadata));
+    }
+
+    #[test]
+    fn daemon_spawn_metadata_missing_or_invalid_is_absent() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let missing = dir.path().join("missing.json");
+        assert_eq!(read_daemon_metadata_file(&missing), None);
+
+        let invalid = dir.path().join("invalid.json");
+        fs::write(&invalid, "not json").expect("write invalid metadata");
+        assert_eq!(read_daemon_metadata_file(&invalid), None);
     }
 }

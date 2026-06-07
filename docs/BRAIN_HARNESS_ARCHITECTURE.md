@@ -732,6 +732,18 @@ Harness and migration checkpoint, current through 2026-06-06:
   required Claude settings registration is missing. Focused harness tests pass. This does not run
   native Claude, edit settings, install adapters, change hook behavior, or close the native
   Claude/effective-hook/host-label gates.
+- T308 tightens release-facing beta-scope wording after fresh AI Council and read-only fan-out
+  review. PR #3 and docs now state that the initial beta is the supported local/Codex Brain Loop
+  MVP, while production/GA concerns such as native Claude proof, effective hooks, host labels,
+  multi-host parity, broad lifecycle cleanup, telemetry completeness, auth/debug hardening, and new
+  feature work are deferred. Exact-head CI run `27085706164` passes all five jobs on head
+  `8b86961cbbec7211a445aafe9c8edcc7c7d1624d`; PR #3 remains draft/open/clean.
+- T309 adds a first-class daemon runtime-drift diagnostic. Daemon start now records spawn metadata
+  beside the existing pid/port files, and `engram daemon status` prints the daemon's spawn
+  executable path/version plus warnings for executable path, version, or pid/port metadata drift.
+  Older daemons without metadata continue to report status, with metadata marked unavailable. T309
+  does not restart the daemon, install binaries, change MCP schema/proxy behavior, run native
+  Claude, mutate lifecycle state, or close production host-parity gates.
 
 Research checkpoint, current through 2026-05-27:
 
