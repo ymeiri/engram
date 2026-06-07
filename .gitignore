@@ -65,5 +65,8 @@ temp/
 # Documentation build
 /docs/_build/
 
+# Local release artifacts
+/dist/
+
 # Snapshot testing
 *.snap.new

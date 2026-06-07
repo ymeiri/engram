@@ -49,6 +49,10 @@ The local fallback command is `./scripts/local-ci.sh`. It mirrors the exact-head
 sequence used for this candidate: whitespace diff check, rustfmt, check, clippy, tests with CI-like
 incremental/debug settings, and docs.
 
+The local pre-publish packaging command is `./scripts/package-release.sh`. It builds the release
+binary, verifies that `engram --version` matches the workspace package version, and writes a tarball
+plus SHA-256 checksum under ignored `dist/`.
+
 Recent phase-1 local evidence is strong: T317 validated PR #3 head
 `78f14d0bebd980070a4fcb8d1f259be47517c704` with `cargo fmt --all --check`,
 `git diff --check`, `cargo check --all-targets`,

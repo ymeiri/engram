@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and review-gated Memory OS flows.
 - Local CI-equivalent validation script (`scripts/local-ci.sh`) for exact-head release checks when
   hosted GitHub Actions is externally blocked.
+- Local release packaging script (`scripts/package-release.sh`) that builds the release binary,
+  verifies its version, and writes a tarball plus SHA-256 checksum under `dist/`.
 - Memory OS harness adapter rendering for Codex, generic harnesses, Claude Code, Gemini CLI, and
   Cursor, with lifecycle guidance kept advisory and approval-gated.
 - Generated Markdown vault support for durable local inspection of MemoryItems, knowledge commits,
