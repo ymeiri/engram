@@ -53,6 +53,11 @@ The local pre-publish packaging command is `./scripts/package-release.sh`. It bu
 binary, verifies that `engram --version` matches the workspace package version, and writes a tarball
 plus SHA-256 checksum under ignored `dist/`.
 
+The local install-smoke command is `./scripts/package-install-smoke.sh`. It builds the package,
+verifies the checksum, extracts the archive, installs the packaged binary into a temporary prefix,
+confirms `PATH` resolution and `engram --version`, starts the packaged binary with
+`engram serve --http --memory`, and verifies `/health`.
+
 ## Beta Install Quickstart
 
 For source installs, build and place the binary on `PATH` before running `engram init` or

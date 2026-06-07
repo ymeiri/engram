@@ -235,6 +235,7 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt
 ./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
 ./scripts/package-release.sh   # Build a local release tarball and checksum
+./scripts/package-install-smoke.sh  # Verify the tarball installs and serves /health
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 
