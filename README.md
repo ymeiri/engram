@@ -24,14 +24,37 @@ engram is a local-first memory system purpose-built for AI coding agents. It con
 
 ### 1. Install
 
+From source with Rust 1.80+:
+
 ```bash
-# From source (Rust 1.80+)
 git clone https://github.com/ymeiri/engram.git
-cd engram && cargo build --release
-# Binary: ./target/release/engram
+cd engram
+cargo build --release
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 ./target/release/engram "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
 ```
 
-> Pre-built binaries coming soon. See [Releases](https://github.com/ymeiri/engram/releases).
+From a published beta release artifact:
+
+```bash
+version=0.2.0-beta.1
+archive="engram-${version}-aarch64-apple-darwin.tar.gz"
+
+curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
+curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}.sha256"
+shasum -a 256 -c "${archive}.sha256"
+tar -xzf "${archive}"
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 "engram-${version}-aarch64-apple-darwin/engram" "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
+```
+
+See [Releases](https://github.com/ymeiri/engram/releases) for published artifacts.
 
 ### 2. Initialize and start
 

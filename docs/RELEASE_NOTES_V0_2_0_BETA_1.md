@@ -53,6 +53,46 @@ The local pre-publish packaging command is `./scripts/package-release.sh`. It bu
 binary, verifies that `engram --version` matches the workspace package version, and writes a tarball
 plus SHA-256 checksum under ignored `dist/`.
 
+## Beta Install Quickstart
+
+For source installs, build and place the binary on `PATH` before running `engram init` or
+`engram serve`:
+
+```bash
+git clone https://github.com/ymeiri/engram.git
+cd engram
+cargo build --release
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 ./target/release/engram "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
+```
+
+After `v0.2.0-beta.1` is published, install the macOS arm64 release artifact with checksum
+verification:
+
+```bash
+version=0.2.0-beta.1
+archive="engram-${version}-aarch64-apple-darwin.tar.gz"
+
+curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
+curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}.sha256"
+shasum -a 256 -c "${archive}.sha256"
+tar -xzf "${archive}"
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 "engram-${version}-aarch64-apple-darwin/engram" "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
+```
+
+The expected version output for this beta is:
+
+```text
+engram 0.2.0-beta.1
+```
+
 Recent phase-1 local evidence is strong: T317 validated PR #3 head
 `78f14d0bebd980070a4fcb8d1f259be47517c704` with `cargo fmt --all --check`,
 `git diff --check`, `cargo check --all-targets`,
