@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lost in the supported local/Codex beta path.
 - Refreshed the installed local `engram` binary, Codex generated adapter, and global daemon from the
   beta candidate so installed local/Codex guidance matches source.
+- Escaped graph node ID examples in Rustdoc comments so the Docs CI job no longer reports invalid
+  HTML tag warnings for `memory:<...>` examples.
 - CI checkout runtime drift by moving workflow checkout steps to `actions/checkout@v5`.
 
 ### Known Limitations

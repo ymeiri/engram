@@ -1170,7 +1170,15 @@ data-dir smoke produced trace `019ea053-7511-7e92-b2df-df4ac1a26883`. T305 does 
 Claude, prove effective-hook visibility or host labels, mark PR #3 ready, merge, tag, or claim full
 multi-host parity.
 
-Current T305 matrix snapshot:
+T306 closes a narrow Docs CI hardening issue. Local `cargo doc --no-deps` initially emitted three
+`rustdoc::invalid_html_tags` warnings because graph node examples such as `memory:<uuid>` and
+`memory:<id>` were parsed as HTML tags in Rustdoc comments. T306 marks those examples as inline code
+in `engram-core/src/graph.rs`, `engram-mcp/src/tools.rs`, and `engram-cli/src/main.rs`. Local
+`cargo doc --no-deps`, `cargo fmt --all --check`, and `git diff --check` pass after the change. This
+does not change graph behavior, MCP request/response structure, installed runtime, harness adapters,
+release approval, native Claude, effective-hook visibility, host labels, M6, or lifecycle state.
+
+Current T306 matrix snapshot:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |

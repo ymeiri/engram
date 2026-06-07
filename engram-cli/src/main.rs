@@ -2173,7 +2173,7 @@ enum LintCommands {
 enum GraphCommands {
     /// Return a subgraph around a node ID
     Around {
-        /// Node ID. Plain UUIDs are treated as memory:<id>.
+        /// Node ID. Plain UUIDs are treated as `memory:<id>`.
         node: String,
 
         /// Traversal depth

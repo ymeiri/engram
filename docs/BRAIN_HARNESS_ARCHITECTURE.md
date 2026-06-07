@@ -719,6 +719,12 @@ Harness and migration checkpoint, current through 2026-06-06:
   mapped to the new installed binary inode; and live Codex MCP `orient` recovered with trace
   `019ea054-61fa-79d2-96e7-8f0780f82b82`. Already-open host sessions may still need to reload
   instructions, and this does not prove native Claude/effective-hook/host-label/multi-host parity.
+- T306 removes the current Rustdoc invalid-HTML warnings from graph node ID examples by marking
+  `memory:<uuid>` / `memory:<id>` examples as inline code in `engram-core`, `engram-mcp`, and
+  `engram-cli`. Local `cargo doc --no-deps`, `cargo fmt --all --check`, and `git diff --check`
+  pass after the change. This is documentation hardening only and does not change graph behavior,
+  MCP schema shape, installed runtime, release approval, or any native Claude/effective-hook/
+  host-label/multi-host gate.
 
 Research checkpoint, current through 2026-05-27:
 

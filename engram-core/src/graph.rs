@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Node in the Memory OS graph.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MemoryNode {
-    /// Stable graph node ID, e.g. memory:<uuid>.
+    /// Stable graph node ID, e.g. `memory:<uuid>`.
     pub id: String,
     /// Node kind.
     pub kind: String,

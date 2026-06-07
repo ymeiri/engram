@@ -8002,7 +8002,7 @@ pub struct GraphRequest {
     /// Action: around, path, subgraph, export
     #[schemars(description = "Action: around, path, subgraph, export")]
     pub action: String,
-    /// Start node ID for around/subgraph/path. Plain UUIDs are treated as memory:<id>.
+    /// Start node ID for around/subgraph/path. Plain UUIDs are treated as `memory:<id>`.
     pub node: Option<String>,
     /// Start node ID for path.
     pub from: Option<String>,
