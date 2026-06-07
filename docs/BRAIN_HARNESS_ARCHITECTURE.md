@@ -91,14 +91,14 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
-Harness and migration checkpoint, current through 2026-06-06:
+Harness and migration checkpoint, current through 2026-06-07:
 
-- Generated local harness adapter readiness is currently validated by read-only
-  `harness(action="doctor")` checks for generic, Claude Code, Codex, Gemini CLI, and Cursor:
-  all five report `ready=true`.
-- This supersedes older harness-readiness checkpoints below that recorded `ready=false`, missing
-  Claude hook registrations, generic policy absence, or generated-adapter drift before the T135
-  repair.
+- Supported local/Codex beta harness readiness remains validated for the current MVP path.
+  Current Claude Code harness readiness is not green: T311/T312 read-only checks report
+  `ready=false` because generated `claude-memory-session-command`,
+  `claude-end-session-command`, and `claude-stop-nudge-hook` adapters drift from current
+  policy. This supersedes older green Claude Code snapshots for current native-Claude
+  decisions until a fresh doctor reports `ready=true`.
 - The harness claim remains bounded. Lifecycle compliance is still a soft contract; Claude Code
   settings remain split across settings files with a user-owned snippet and extra legacy Engram
   permissions; T179 observed native Claude startup guidance but did not obtain usable `/hooks`
@@ -124,7 +124,11 @@ Harness and migration checkpoint, current through 2026-06-06:
   current Claude target/version is `2.1.163`, not the packet baseline `2.1.161`. T282 prepares a
   docs-only successor packet for Claude `2.1.163` and does not launch native Claude. T283 runs
   that successor preflight and hard-stops before launch because ambient native Claude processes
-  make attribution ambiguous. T284 records a read-only deferral of broad residual lifecycle cleanup
+  make attribution ambiguous. T312 prepares a docs-only successor packet for observed Claude Code
+  `2.1.168` with target hash
+  `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`; it does not launch
+  native Claude and keeps live native Claude processes plus Claude Code harness `ready=false` as
+  hard stops. T284 records a read-only deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
   PR #2 CI failures by replacing Clippy-reported timestamp sorts, collapsing a Rust 1.96-only
   `sessionend` match warning, serializing the CI Test job's build/link work, and adding Test-job
@@ -744,6 +748,16 @@ Harness and migration checkpoint, current through 2026-06-06:
   Older daemons without metadata continue to report status, with metadata marked unavailable. T309
   does not restart the daemon, install binaries, change MCP schema/proxy behavior, run native
   Claude, mutate lifecycle state, or close production host-parity gates.
+- T310 installs and smokes the `0.2.0-beta.1` runtime with daemon spawn provenance visible from
+  `engram daemon status`. This validates the local installed/Codex diagnostic path, not native
+  Claude prompt-bearing behavior, effective hooks, live host labels, or production parity.
+- T311 performs a read-only native Claude/effective-hook/host-label preflight and stops before any
+  native Claude launch. It observes Claude Code `2.1.168`, live native Claude CLI processes on
+  `ttys001` and `ttys005`, and Claude Code harness `ready=false` because generated adapters drift
+  from current policy.
+- T312 records the docs-only successor packet for the observed Claude Code `2.1.168` target and
+  SHA-256. It makes no runtime changes, does not repair adapters, does not execute T269/T270, and
+  does not change the supported local/Codex beta scope.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3038,6 +3052,10 @@ Proceed in this order from the current checkpoint:
      Codex guidance contains scoped final-response obligation doctor text. Installed global
      adapter/runtime state still needs explicit approval and a fresh smoke before claiming
      installed local/Codex parity for the beta tag.
+188. Treat T312 as a docs-only successor packet for the observed Claude Code `2.1.168` target, not
+     native Claude validation or adapter repair. It supersedes T282 only for the target/version/hash
+     baseline; current execution remains hard-stopped by live native Claude processes and Claude
+     Code harness `ready=false` until fresh preflight proves clean attribution and readiness.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
