@@ -80,6 +80,12 @@ T331 closes the next exact superseded rolling-handoff lifecycle batch:
 `019e7db8-de1e-7251-87ba-fea21bed17f7`, so broad lifecycle cleanup remains deferred and
 exact-target-gated rather than part of the beta release gate.
 
+T332 closes the next single exact superseded rolling-handoff target,
+`019e7db8-de1e-7251-87ba-fea21bed17f7`, after successor review showed it is directly superseded
+by active handoff `019e844c-6a05-7a10-858b-5212d117a4bb`. Post-archive lint no longer returns the
+T332 target in the first ten sampled findings; the bounded sample now reports stale-feedback review
+signals rather than a superseded-active warning.
+
 ## Current Installation Status
 
 T305 refreshed the installed local binary, generated Codex adapter, and global daemon from the

@@ -889,6 +889,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   returns those IDs in the sampled findings and advances to
   `019e7db8-de1e-7251-87ba-fea21bed17f7`. This is exact lifecycle maintenance only, not broad
   cleanup or a production/GA readiness claim.
+- T332 archives the next single active rolling handoff after per-target `memory(get)`, successor
+  fetch, and `graph(around)` review proved the direct successor:
+  `019e7db8-de1e-7251-87ba-fea21bed17f7` is superseded by
+  `019e844c-6a05-7a10-858b-5212d117a4bb`. Post-archive lint no longer returns the T332 target ID
+  in the first ten sampled findings and reports only stale-feedback review signals in that bounded
+  sample. This is exact lifecycle maintenance only, not broad cleanup or a production/GA readiness
+  claim.
 
 Research checkpoint, current through 2026-05-27:
 
