@@ -825,6 +825,12 @@ Harness and migration checkpoint, current through 2026-06-07:
   `92750`, wrote active handoff `019ea34a-c3ac-74d0-ae42-52cd6adcb610` with tool-call evidence, and
   installed project-scoped lint no longer flags that handoff. T338 does not run `lint apply_safe`,
   archive memory, or close hosted CI.
+- T339 refreshes the durable canonical generated vault after the latest Memory OS writes.
+  Preflight status showed `generated_file_count=2566`, `user_file_count=0`, and
+  `expected_generated_file_count=2568`; `vault(action=compile)` completed with `files_skipped=[]`;
+  and postflight status returned `generated_file_count=2568`, `user_file_count=0`, and
+  `expected_generated_file_count=2568`. T339 is generated-vault maintenance only, not source
+  behavior, hosted-CI, lifecycle-cleanup, or host-parity closure.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3375,6 +3381,10 @@ Proceed in this order from the current checkpoint:
      session-event evidence for session handoffs; the refreshed runtime proves the current active
      handoff is evidence-backed, but historical unevidenced handoffs remain separate unless
      superseded by later refreshed-runtime updates.
+195. Treat T339 as canonical generated-vault maintenance, not a new feature or release action. It
+     restores count alignment for `/Users/yuval.meiri/.engram/vault` after the latest Memory OS
+     writes with zero user files and zero skipped files, but it does not close hosted CI, native
+     Claude, effective-hook, host-label, broad lifecycle, or direct-legacy gates.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

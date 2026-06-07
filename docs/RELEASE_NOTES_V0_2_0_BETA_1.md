@@ -188,3 +188,16 @@ that active handoff as missing evidence.
 
 This improves Memory OS hygiene for future handoffs. It does not run `lint apply_safe`, archive
 historical handoffs, or change the beta deferrals.
+
+## Canonical Vault Resync
+
+T339 refreshes the durable generated Memory OS vault after the latest T338/T339 memory writes. The
+preflight status showed the vault was initialized and generated-only, but count-stale:
+`generated_file_count=2566` while `expected_generated_file_count=2568`.
+
+`vault(action=compile, vault_path="/Users/yuval.meiri/.engram/vault")` completed with
+`files_skipped=[]`, and postflight status returned `generated_file_count=2568`,
+`user_file_count=0`, and `expected_generated_file_count=2568`.
+
+This restores the canonical vault validation gate for the current Memory OS state. It does not
+change source behavior, run `lint apply_safe`, close hosted CI, or change the beta deferrals.
