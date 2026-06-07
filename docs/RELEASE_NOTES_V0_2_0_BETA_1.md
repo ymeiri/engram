@@ -138,3 +138,14 @@ ambiguous for a new prompt-bearing run.
 This narrows the remaining production-hardening gap: adapter drift is closed, but native Claude
 prompt-bearing proof, effective-hook visibility, and live host labels remain deferred from the
 initial beta.
+
+## Effective-Hook Successor Packet
+
+T335 records a docs-only successor for the T269 effective-hook visibility packet under the observed
+Claude Code `2.1.168` runtime. It updates the future `/hooks` preflight baseline from the stale
+`2.1.161` target to the T334-observed path, version, and SHA-256, while preserving the strict
+one-`/hooks` transcript observation contract, bounded cleanup, T312/T270 separation, and T334
+attribution hard-stop.
+
+T335 does not launch native Claude, run `/hooks`, mutate settings or adapters, prove
+effective-hook visibility, or change the initial beta scope.

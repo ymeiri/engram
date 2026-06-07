@@ -2,7 +2,7 @@
 
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
-exact lifecycle maintenance, and research-method checkpoints
+effective-hook successor packet, exact lifecycle maintenance, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -136,7 +136,9 @@ Harness and migration checkpoint, current through 2026-06-07:
   reruns the native-Claude/effective-hook/host-label preflight after T333: path, target, version,
   hash, daemon, obligations, vault, and harness readiness now match, but live native Claude
   processes on `ttys001` and `ttys005` still make attribution ambiguous, so no native Claude
-  session was launched. T284
+  session was launched. T335 then records a docs-only T269 successor packet for the same observed
+  Claude Code `2.1.168` runtime and preserves T334's no-launch attribution blocker; it makes no
+  `/hooks` visibility claim. T284
   records a read-only
   deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
@@ -793,6 +795,12 @@ Harness and migration checkpoint, current through 2026-06-07:
   hard-stops before launch because native Claude CLI PIDs `60453` on `ttys001` and `311` on
   `ttys005` make new-session attribution ambiguous. T334 does not run `/hooks`, execute T312,
   execute T269/T270, signal processes, mutate settings/adapters, or prove production parity.
+- T335 records the docs-only successor packet for T269 under the observed Claude Code `2.1.168`
+  runtime. It carries forward T269's strict one-`/hooks` transcript observation contract and
+  process-group cleanup boundary, updates the future hard preflight assertions to the current
+  path/version/hash, and keeps T312 prompt-bearing validation plus T270 host-label proof separate.
+  T335 does not launch native Claude, run `/hooks`, signal processes, mutate settings/adapters, or
+  prove effective-hook visibility.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3326,6 +3334,10 @@ Proceed in this order from the current checkpoint:
      harness status/doctor are `ready=true`, but it hard-stopped before launch because ambient
      native Claude processes still make attribution ambiguous. T269 also remains stale as-is for
      the current `2.1.168` runtime because its packet baseline is `2.1.161`.
+191. Treat T335 as a docs-only T269 successor for the observed Claude Code `2.1.168` runtime, not
+     effective-hook validation. T335 supersedes T269 only for the target/version/hash baseline and
+     future execution contract; it preserves the T334 attribution hard-stop, keeps T312 and T270
+     separate, and does not prove `/hooks` visibility or production parity.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
