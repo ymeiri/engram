@@ -172,3 +172,19 @@ confirmed `lint.project` appears in `tools/list` and `tools/call` accepts `proje
 
 T337 is installed-runtime adoption for T336 only. It does not run `lint apply_safe`, mutate memory,
 or change the beta deferrals.
+
+## Rolling Handoff Evidence
+
+T338 makes rolling handoff updates evidence-backed. After T337, project-scoped lint showed the
+current rolling handoff was active but missing evidence. `HandoffService::update` now adds
+tool-call evidence for global, project, and session handoff writes while preserving existing
+session-event evidence for session-scoped handoffs.
+
+The T338 runtime was installed to `/Users/yuval.meiri/.local/bin/engram` with hash
+`e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5`, daemon PID `92750`, and the
+new active handoff `019ea34a-c3ac-74d0-ae42-52cd6adcb610` carries
+`handoff(action=update,project=engram)` evidence. Installed project-scoped lint no longer flags
+that active handoff as missing evidence.
+
+This improves Memory OS hygiene for future handoffs. It does not run `lint apply_safe`, archive
+historical handoffs, or change the beta deferrals.

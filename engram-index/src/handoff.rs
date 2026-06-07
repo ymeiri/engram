@@ -88,6 +88,7 @@ impl HandoffService {
         let previous_items = self.active_handoffs(project.as_deref(), session_id).await?;
         let scope = handoff_scope(project, session_id);
         let content = normalize_handoff_content(&content, &next_actions);
+        let update_evidence = handoff_update_evidence(&scope);
         let mut item = MemoryItem::new(
             MemoryKind::Handoff,
             "Rolling handoff",
@@ -97,7 +98,8 @@ impl HandoffService {
             writer,
         )
         .with_tag("handoff")
-        .with_tag("rolling");
+        .with_tag("rolling")
+        .with_evidence(update_evidence);
         if let Some(session_id) = session_id {
             item = item.with_evidence(
                 EvidenceRef::new(EvidenceKind::SessionEvent, session_id.to_string())
@@ -204,6 +206,21 @@ fn handoff_scope(project: Option<String>, session_id: Option<Id>) -> MemoryScope
     project
         .map(MemoryScope::project)
         .unwrap_or(MemoryScope::Global)
+}
+
+fn handoff_update_evidence(scope: &MemoryScope) -> EvidenceRef {
+    let target = match scope {
+        MemoryScope::Global => "handoff(action=update,scope=global)".to_string(),
+        MemoryScope::Project { project_name, .. } => {
+            format!("handoff(action=update,project={project_name})")
+        }
+        MemoryScope::Session { session_id } => {
+            format!("handoff(action=update,session_id={session_id})")
+        }
+        _ => "handoff(action=update)".to_string(),
+    };
+    EvidenceRef::new(EvidenceKind::ToolCall, target)
+        .with_summary("Rolling handoff content was provided through the handoff update API.")
 }
 
 fn handoff_matches(item: &MemoryItem, project: Option<&str>, session_id: Option<Id>) -> bool {
@@ -364,6 +381,12 @@ mod tests {
         assert!(update.dry_run);
         assert!(!update.written);
         assert!(update.item.content.contains("Next Actions"));
+        assert!(update
+            .item
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ToolCall
+                && evidence.target.contains("project=engram")));
         assert!(get.item.is_none());
     }
 
@@ -456,6 +479,12 @@ mod tests {
         assert!(update.written);
         assert_eq!(update.previous_id, Some(newest.id));
         assert_eq!(update.item.supersedes.len(), 2);
+        assert!(update
+            .item
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ToolCall
+                && evidence.target.contains("project=engram")));
         assert!(update.item.supersedes.contains(&newest.id));
         assert!(update.item.supersedes.contains(&older.id));
         assert_eq!(stored_older.status, MemoryStatus::Superseded);
@@ -579,6 +608,18 @@ mod tests {
 
         assert_eq!(update.previous_id, Some(previous.id));
         assert!(update.item.supersedes.contains(&previous.id));
+        assert!(update
+            .item
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ToolCall
+                && evidence.target.contains(&session.id.to_string())));
+        assert!(update
+            .item
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::SessionEvent
+                && evidence.target == session.id.to_string()));
         assert_eq!(stored_previous.status, MemoryStatus::Superseded);
         assert_eq!(latest.item.unwrap().id, update.item.id);
     }

@@ -816,6 +816,15 @@ Harness and migration checkpoint, current through 2026-06-07:
   fresh installed MCP smoke proved `tools/list` exposes `lint.project` and `tools/call` accepts
   `project=engram`. T337 is installed-runtime adoption only; it does not run `lint apply_safe`,
   mutate memory, or prove lifecycle cleanup.
+- T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
+  the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
+  evidence to every `HandoffService::update` item and preserves session-event evidence for
+  session-scoped handoffs. Focused handoff tests validate dry-run, write, supersession, compile,
+  and harness session-end paths. Installed hash
+  `e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5` was restarted as daemon PID
+  `92750`, wrote active handoff `019ea34a-c3ac-74d0-ae42-52cd6adcb610` with tool-call evidence, and
+  installed project-scoped lint no longer flags that handoff. T338 does not run `lint apply_safe`,
+  archive memory, or close hosted CI.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3361,6 +3370,11 @@ Proceed in this order from the current checkpoint:
      The installed binary and restarted daemon now expose `lint.project` through CLI help and fresh
      MCP `tools/list` / `tools/call` smoke, but no memory lifecycle writes, `lint apply_safe`,
      native-Claude validation, effective-hook proof, or hosted-CI closure occurred.
+194. Treat T338 as a handoff evidence-contract fix for future writes, not historical lifecycle
+     cleanup. The service now adds scoped tool-call evidence to handoff updates and keeps
+     session-event evidence for session handoffs; the refreshed runtime proves the current active
+     handoff is evidence-backed, but historical unevidenced handoffs remain separate unless
+     superseded by later refreshed-runtime updates.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
