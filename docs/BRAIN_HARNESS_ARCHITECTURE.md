@@ -1,7 +1,7 @@
 # Engram Brain Harness Architecture
 
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
-snippet-only repair safety evidence, and research-method checkpoints
+snippet-only repair safety evidence, exact lifecycle maintenance, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -879,6 +879,16 @@ Harness and migration checkpoint, current through 2026-06-07:
   workflow steps by GitHub Actions billing/spending-limit annotations. T330 does not execute M6
   write apply, broad lifecycle cleanup, adapter repair, native Claude, PR-ready, merge, tag,
   publish, or release actions.
+- T331 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+  successor fetch, and `graph(around)` review proved direct successors:
+  `019e7cf7-560c-70e2-bbeb-3448f4637055`,
+  `019e7d27-32d6-7200-944c-ef5945436f8c`,
+  `019e7d28-add4-70e3-a55c-453f8fe8695d`,
+  `019e7d29-0f3c-7961-9588-c1adbe4628af`, and
+  `019e7da0-d384-7b12-b43a-d7188b1a8c38`. Post-archive lint no longer
+  returns those IDs in the sampled findings and advances to
+  `019e7db8-de1e-7251-87ba-fea21bed17f7`. This is exact lifecycle maintenance only, not broad
+  cleanup or a production/GA readiness claim.
 
 Research checkpoint, current through 2026-05-27:
 

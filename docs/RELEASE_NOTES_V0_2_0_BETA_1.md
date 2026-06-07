@@ -71,6 +71,15 @@ inventory/temp-export/status/dry-run-apply evidence. This is not a production/GA
 production readiness remains materially lower because native Claude proof, effective hooks,
 host-label proof, host parity, telemetry completeness, and operational hardening remain open.
 
+T331 closes the next exact superseded rolling-handoff lifecycle batch:
+`019e7cf7-560c-70e2-bbeb-3448f4637055`,
+`019e7d27-32d6-7200-944c-ef5945436f8c`,
+`019e7d28-add4-70e3-a55c-453f8fe8695d`,
+`019e7d29-0f3c-7961-9588-c1adbe4628af`, and
+`019e7da0-d384-7b12-b43a-d7188b1a8c38`. Post-archive lint advances to
+`019e7db8-de1e-7251-87ba-fea21bed17f7`, so broad lifecycle cleanup remains deferred and
+exact-target-gated rather than part of the beta release gate.
+
 ## Current Installation Status
 
 T305 refreshed the installed local binary, generated Codex adapter, and global daemon from the
