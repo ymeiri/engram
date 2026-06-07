@@ -25,8 +25,12 @@ The following remain production-hardening or host-parity gates, not blockers for
 - full multi-host parity,
 - direct legacy deprecation/deletion,
 - broad lifecycle cleanup or broad `lint apply_safe`,
-- exhaustive telemetry coverage,
-- native auth/debugging edge cases.
+- exhaustive telemetry completeness,
+- OIDC/Vault/native-Claude auth/debugging edge cases,
+- new feature work.
+
+T306 resolved the current Rustdoc warning set for this candidate. Future Rustdoc polish remains a
+production-hardening activity, not an initial-beta blocker.
 
 ## Release Gate
 

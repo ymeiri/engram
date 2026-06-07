@@ -1092,8 +1092,10 @@ T299 records the beta-scope consensus after AI Council and eight read-only subag
 `feedback_coverage=0.35` value was a telemetry coverage sample, not beta readiness. Initial beta
 readiness is the supported local/Codex Brain Loop path, while native Claude prompt-bearing proof,
 effective-hook proof, live host labels, direct legacy cleanup, exhaustive lifecycle cleanup,
-rustdoc/OIDC/Vault/native-Claude auth debugging, full multi-host parity, and new feature work are
-deferred from beta. T299 fixes concrete beta-contract issues: generated Codex/generic closeout
+OIDC/Vault/native-Claude auth debugging, broad `lint apply_safe`, exhaustive telemetry
+completeness, full multi-host parity, and new feature work are deferred from beta. T306 later
+closed the current Rustdoc warning set; future Rustdoc polish remains production hardening, not an
+initial-beta gate. T299 fixes concrete beta-contract issues: generated Codex/generic closeout
 guidance now scopes `obligations(action=doctor, project=..., cwd=...)`, MCP `search.project`
 schema text now says it also drives scoped memory filtering, default stdio/proxy `engram serve`
 rejects `--memory`/`--remote`/credentials/`--port` instead of silently using persistent storage,

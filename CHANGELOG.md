@@ -38,8 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known Limitations
 - Native Claude prompt-bearing proof, effective-hook visibility, live Claude host-label proof,
-  direct legacy deprecation/deletion, broad lifecycle cleanup, and full multi-host parity are not
-  part of this beta gate.
+  direct legacy deprecation/deletion, broad lifecycle cleanup, broad `lint apply_safe`, exhaustive
+  telemetry completeness, OIDC/Vault/native-Claude auth/debugging, full multi-host parity, and new
+  feature work are not part of this beta gate.
+- The current Rustdoc warning set was closed in this candidate; future Rustdoc polish remains
+  production-hardening work, not an initial-beta gate.
 - Already-open agent UI sessions may need a fresh session or tool reload before they pick up the
   refreshed installed Codex skill text.
 

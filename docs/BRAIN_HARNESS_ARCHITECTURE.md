@@ -672,7 +672,9 @@ Harness and migration checkpoint, current through 2026-06-06:
   fan-out review. The beta is no longer framed by the T297 20-trace `feedback_coverage=0.35`
   sample. It is the supported local/Codex Brain Loop path, with native Claude prompt-bearing
   proof, effective-hook proof, live host labels, direct legacy cleanup, broad lifecycle cleanup,
-  and full multi-host parity deferred. The code/doc fixes keep Codex/generic obligation doctor
+  broad `lint apply_safe`, exhaustive telemetry completeness, OIDC/Vault/native-Claude auth
+  debugging, full multi-host parity, and new feature work deferred. The code/doc fixes keep
+  Codex/generic obligation doctor
   guidance scoped to project/cwd, describe MCP `search.project` as scoped memory filtering as well
   as telemetry correlation, reject default-stdio `serve` storage/port flags instead of silently
   ignoring them, mark quarantine review export as a write to generated pages, and add README/MCP
