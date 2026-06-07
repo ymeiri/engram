@@ -1,8 +1,8 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC with Brain Loop v1, orient contract, research-method checkpoints, and first
-matched dogfood evidence
-Date: 2026-05-06
+Status: Draft RFC with Brain Loop v1, beta release metadata, runtime-refresh gates, and
+research-method checkpoints
+Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
 
@@ -704,6 +704,12 @@ Harness and migration checkpoint, current through 2026-06-06:
   `019e02b0-22ab-72c0-8105-1e7909dd4279`. This is exact lifecycle maintenance only; broad
   cleanup, direct-legacy deprecation/deletion, native Claude, effective hooks, and live host
   labels remain separate.
+- T304 prepares beta release metadata for `0.2.0-beta.1` and records an installed-runtime refresh
+  gate without writing installed adapters or runtime binaries. Source-rendered Codex guidance now
+  includes scoped final-response obligation checks
+  `obligations(action=doctor, project=..., cwd=...)`, while the installed global Codex skill and
+  installed global binary render path still show the older unscoped `obligations(action=doctor)`
+  until an approved runtime/adapters refresh is performed.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -2993,6 +2999,11 @@ Proceed in this order from the current checkpoint:
      `019e02b0-22ab-72c0-8105-1e7909dd4279` as the next sampled candidate. T303 does not run
      broad `lint apply_safe`, delete memory, change ranking/`orient`, execute native Claude,
      validate hooks/host labels, or deprecate legacy layers.
+187. Treat T304 as release metadata plus a runtime-refresh gate, not installed-runtime proof.
+     T304 prepares `0.2.0-beta.1` repo metadata and release notes, and confirms source-rendered
+     Codex guidance contains scoped final-response obligation doctor text. Installed global
+     adapter/runtime state still needs explicit approval and a fresh smoke before claiming
+     installed local/Codex parity for the beta tag.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

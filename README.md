@@ -55,6 +55,9 @@ Add to your Claude Code config (`~/.claude.json`):
 }
 ```
 
+This is an MCP setup example. Current beta behavior is validated on the local/Codex Brain Loop
+path; host-specific prompt, hook, and label parity remains follow-up work.
+
 For Cursor or Windsurf, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
 
 ### 4. Verify it works

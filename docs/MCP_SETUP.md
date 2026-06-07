@@ -7,6 +7,9 @@ Ready-made configurations for connecting engram to your AI coding agent.
 > Claude prompt-bearing proof, live host-label proof, and effective-hook proof are still
 > follow-up work.
 
+The sections below are connection examples. They are not proof of host behavioral parity,
+prompt-bearing native execution, lifecycle hook correctness, or host-label propagation.
+
 ## Claude Code
 
 Add to `~/.claude.json`:
@@ -76,6 +79,8 @@ Agent 2 (Cursor)       ──┘
 ```
 
 No extra configuration needed. `engram serve` auto-starts the daemon on first launch and subsequent agents connect automatically.
+Daemon sharing is supported by the server/proxy path; host-specific prompt, hook, and label
+behavior remains a separate beta follow-up unless validated for that host.
 
 ### Project Isolation
 

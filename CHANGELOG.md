@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta.1] - 2026-06-07
+
+### Added
+- Initial local/Codex Brain Loop beta scope with lean `orient`, current-plan retrieval,
+  used-memory candidate IDs, obligation summaries, telemetry feedback, generated vault support,
+  and review-gated Memory OS flows.
+- Memory OS harness adapter rendering for Codex, generic harnesses, Claude Code, Gemini CLI, and
+  Cursor, with lifecycle guidance kept advisory and approval-gated.
+- Generated Markdown vault support for durable local inspection of MemoryItems, knowledge commits,
+  repositories, entities, and projects.
+
+### Changed
+- Public setup docs now state that the beta-supported path is local/Codex; multi-host parity,
+  native Claude prompt-bearing proof, live host-label proof, and effective-hook proof remain
+  follow-up work.
+- Default `engram serve` stdio/proxy behavior now rejects incompatible HTTP-only or memory-only
+  flags instead of silently starting a different persistence mode.
+
+### Fixed
+- Scoped Memory OS search and final-response obligation guidance so project/cwd context is not
+  lost in the supported local/Codex beta path.
+- CI checkout runtime drift by moving workflow checkout steps to `actions/checkout@v5`.
+
+### Known Limitations
+- Native Claude prompt-bearing proof, effective-hook visibility, live Claude host-label proof,
+  direct legacy deprecation/deletion, broad lifecycle cleanup, and full multi-host parity are not
+  part of this beta gate.
+- Installed local harness adapters can drift from source-rendered adapters until the runtime and
+  adapters are refreshed from the beta commit.
+
 ### Added
 - MCP setup guide for Claude Code, Cursor, and Windsurf (`docs/MCP_SETUP.md`)
 
@@ -83,4 +113,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - SurrealDB datetime deserialization using custom `SurrealDateTime` enum
 - Raw SurQL queries to avoid SDK serialization issues with complex types
-
