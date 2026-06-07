@@ -3,7 +3,7 @@
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
-and research-method checkpoints
+beta-scope consensus refresh, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -822,6 +822,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   Council consensus says the scoped local/Codex MVP beta is shippable if the release owner accepts
   the local-validation fallback; hosted CI restoration and native-Claude/effective-hook/live
   host-label proof remain ops or production/GA follow-up gates.
+- T343 refreshes the beta-scope consensus for current PR #3 head
+  `966dc00d5248ac342b156974b5392700706f3139`. PR #3 records T342 exact-head
+  local CI-equivalent validation on that head, while hosted run `27101972733` failed all five jobs
+  before workflow-step execution with `steps: []`. Fresh AI Council consensus says the scoped
+  local/Codex MVP beta is about `95-98%` ready before release mechanics if the release owner
+  accepts local validation as fallback. The remaining beta gate is either explicit release-owner
+  fallback acceptance or restored exact-head hosted CI; production/GA remains incomplete.
 - T336 adds optional project-scoped lint. `LintOptions.project`, MCP `lint(project=...)`, and CLI
   `lint run --scope-project ...` filter project-bound memory, stale sessions, and open obligations
   while preserving global/user memory and existing unscoped behavior. T336 validates the service,
@@ -3403,6 +3410,13 @@ Proceed in this order from the current checkpoint:
      restores count alignment for `/Users/yuval.meiri/.engram/vault` after the latest Memory OS
      writes with zero user files and zero skipped files, but it does not close hosted CI, native
      Claude, effective-hook, host-label, broad lifecycle, or direct-legacy gates.
+196. Treat T343 as release-scope consensus evidence, not a release action. It refreshes the current
+     PR #3 head to `966dc00d5248ac342b156974b5392700706f3139`, records fresh AI Council agreement
+     that the local/Codex MVP beta is shippable only with explicit local-validation fallback
+     acceptance or restored exact-head hosted CI, and preserves native Claude, effective-hook, live
+     host-label, lifecycle, legacy, telemetry, auth, packaging, performance, and cross-platform work
+     as production/GA follow-up. It does not mark PR #3 ready, merge, tag, publish, close hosted CI,
+     or change product behavior.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

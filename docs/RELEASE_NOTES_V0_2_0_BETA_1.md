@@ -237,3 +237,21 @@ complete and shippable if the release owner accepts local validation as the fall
 passing is still not achieved and remains either an ops/GA hygiene item or a beta gate only if the
 release owner requires it. T341 does not mark PR #3 ready, merge, tag, publish, close hosted CI,
 or change the production/GA deferrals.
+
+## Beta Scope Consensus Refresh
+
+T343 refreshes the release-scope decision on the current PR #3 head
+`966dc00d5248ac342b156974b5392700706f3139`. The PR body records that this exact head passed the
+full local CI-equivalent workflow before push, while hosted run `27101972733` failed Check, Test,
+Format, Clippy, and Docs before workflow-step execution with `steps: []`.
+
+Fresh AI Council consensus keeps the scoped local/Codex MVP beta at about `95-98%` ready before
+release mechanics if the release owner accepts local validation as fallback. The remaining beta gate
+is either explicit release-owner fallback acceptance or restored exact-head hosted CI. Production/GA
+readiness remains separate and materially lower because native Claude prompt-bearing proof,
+effective-hook visibility, live host labels, full multi-host parity, broad lifecycle cleanup,
+direct legacy deprecation/deletion, exhaustive telemetry, auth edge hardening, packaging,
+performance, and cross-platform polish remain open.
+
+T343 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, or change the supported beta scope.
