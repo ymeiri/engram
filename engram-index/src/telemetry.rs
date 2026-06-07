@@ -3,9 +3,9 @@
 use crate::error::{IndexError, IndexResult};
 use engram_core::id::Id;
 use engram_core::telemetry::{
-    AgentFeedback, BrainHarnessTrace, IntentTelemetryStats, RealSessionConfidenceGate,
-    RealSessionEvalAppliedFilters, RealSessionEvalArmRow, RealSessionEvalIntentRow,
-    RealSessionEvalReport,
+    AgentFeedback, BrainHarnessIntent, BrainHarnessTrace, IntentTelemetryStats,
+    RealSessionConfidenceGate, RealSessionEvalAppliedFilters, RealSessionEvalArmRow,
+    RealSessionEvalIntentRow, RealSessionEvalReport,
 };
 use engram_store::{Db, TelemetryRepo};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -17,6 +17,7 @@ const MIN_REAL_SESSION_FEEDBACK: usize = 10;
 const MIN_REAL_SESSION_FEEDBACK_COVERAGE: f32 = 0.5;
 const MIN_REAL_SESSION_INTENTS_WITH_FEEDBACK: usize = 3;
 const MIN_REAL_SESSION_OUTCOME_FEEDBACK: usize = 1;
+const DEFAULT_TELEMETRY_LIST_LIMIT: usize = 100;
 
 /// Service for retrieval traces and agent feedback.
 #[derive(Clone)]
@@ -55,19 +56,32 @@ impl TelemetryService {
         Ok(self.repo.list_traces(limit).await?)
     }
 
-    /// List traces scoped by optional scenario and arm filters.
+    /// List traces scoped by optional project, scenario, arm, and intent filters.
     pub async fn list_traces_scoped(
         &self,
         limit: Option<usize>,
+        project: Option<&str>,
         scenario_id: Option<&str>,
         arm: Option<&str>,
+        intent: Option<&str>,
     ) -> IndexResult<Vec<BrainHarnessTrace>> {
-        let traces = self.repo.list_traces(limit).await?;
-        if !has_scope_filter(scenario_id, arm) {
-            return Ok(traces);
+        let applied_filters = applied_filters(project, scenario_id, arm);
+        let intent_key =
+            normalized_label(intent).map(|value| BrainHarnessIntent::parse(&value).to_string());
+        if !has_any_filter(&applied_filters) && intent_key.is_none() {
+            return self.list_traces(limit).await;
         }
 
-        Ok(filter_traces_by_scope(traces, scenario_id, arm))
+        Ok(self
+            .repo
+            .list_traces_scoped(
+                limit,
+                applied_filters.project.as_deref(),
+                applied_filters.scenario_id.as_deref(),
+                applied_filters.arm.as_deref(),
+                intent_key.as_deref(),
+            )
+            .await?)
     }
 
     /// Submit agent feedback for a trace.
@@ -103,26 +117,29 @@ impl TelemetryService {
         Ok(self.repo.list_feedback(limit).await?)
     }
 
-    /// List recent feedback linked to traces matching optional scenario and arm filters.
+    /// List recent feedback linked to traces matching optional project, scenario, and arm filters.
     pub async fn list_feedback_scoped(
         &self,
         limit: Option<usize>,
+        project: Option<&str>,
         scenario_id: Option<&str>,
         arm: Option<&str>,
     ) -> IndexResult<Vec<AgentFeedback>> {
-        if !has_scope_filter(scenario_id, arm) {
+        if !has_scope_filter(project, scenario_id, arm) {
             return self.list_feedback(limit).await;
         }
 
-        let traces = self.repo.list_traces(limit).await?;
-        let traces = filter_traces_by_scope(traces, scenario_id, arm);
-        let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
-        let feedback = self.repo.list_feedback(limit).await?;
+        let result_limit = limit.unwrap_or(DEFAULT_TELEMETRY_LIST_LIMIT);
+        let trace_scan_limit = result_limit.max(DEFAULT_TELEMETRY_LIST_LIMIT);
+        let traces = self
+            .repo
+            .list_traces_scoped(Some(trace_scan_limit), project, scenario_id, arm, None)
+            .await?;
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let mut feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
+        feedback.truncate(result_limit);
 
-        Ok(feedback
-            .into_iter()
-            .filter(|item| trace_ids.contains(&item.trace_id))
-            .collect())
+        Ok(feedback)
     }
 
     /// Aggregate traces and feedback by intent.
@@ -230,7 +247,8 @@ impl TelemetryService {
     ) -> IndexResult<RealSessionEvalReport> {
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
         let traces = self.repo.list_traces(Some(sample_limit)).await?;
-        let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
 
         Ok(build_real_session_eval_report(
             sample_limit,
@@ -248,37 +266,24 @@ impl TelemetryService {
         scenario_id: Option<&str>,
         arm: Option<&str>,
     ) -> IndexResult<RealSessionEvalReport> {
-        let applied_filters = RealSessionEvalAppliedFilters {
-            project: normalized_label(project),
-            scenario_id: normalized_label(scenario_id),
-            arm: normalized_label(arm),
-        };
-        if applied_filters.project.is_none()
-            && applied_filters.scenario_id.is_none()
-            && applied_filters.arm.is_none()
-        {
+        let applied_filters = applied_filters(project, scenario_id, arm);
+        if !has_any_filter(&applied_filters) {
             return self.real_session_eval_report(limit).await;
         }
 
         let sample_limit = limit.unwrap_or(DEFAULT_REAL_SESSION_EVAL_LIMIT);
-        let traces = self.repo.list_traces(Some(sample_limit)).await?;
-        let traces = traces
-            .into_iter()
-            .filter(|trace| {
-                label_matches(trace.project.as_deref(), applied_filters.project.as_deref())
-                    && trace_matches_scope(
-                        trace,
-                        applied_filters.scenario_id.as_deref(),
-                        applied_filters.arm.as_deref(),
-                    )
-            })
-            .collect::<Vec<_>>();
-        let trace_ids = traces.iter().map(|trace| trace.id).collect::<HashSet<_>>();
-        let feedback = self.repo.list_feedback(Some(sample_limit)).await?;
-        let feedback = feedback
-            .into_iter()
-            .filter(|item| trace_ids.contains(&item.trace_id))
-            .collect::<Vec<_>>();
+        let traces = self
+            .repo
+            .list_traces_scoped(
+                Some(sample_limit),
+                applied_filters.project.as_deref(),
+                applied_filters.scenario_id.as_deref(),
+                applied_filters.arm.as_deref(),
+                None,
+            )
+            .await?;
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
 
         Ok(build_real_session_eval_report(
             sample_limit,
@@ -316,6 +321,8 @@ impl IntentAggregate {
 #[derive(Debug)]
 struct RealSessionEvalAggregate {
     row: RealSessionEvalIntentRow,
+    feedback_trace_ids: HashSet<Id>,
+    outcome_trace_ids: HashSet<Id>,
     latency_sum: u64,
     latency_count: usize,
     usefulness_sum: u32,
@@ -333,6 +340,8 @@ impl RealSessionEvalAggregate {
                 intent,
                 ..Default::default()
             },
+            feedback_trace_ids: HashSet::new(),
+            outcome_trace_ids: HashSet::new(),
             latency_sum: 0,
             latency_count: 0,
             usefulness_sum: 0,
@@ -357,6 +366,7 @@ impl RealSessionEvalAggregate {
 
     fn add_feedback(&mut self, feedback: &AgentFeedback) {
         self.row.feedback_count += 1;
+        self.feedback_trace_ids.insert(feedback.trace_id);
         self.row.used_memory_count += feedback.used_memory_ids.len();
         self.row.rejected_memory_count += feedback.rejected_memory_ids.len();
         self.row.stale_memory_count += feedback.stale_memory_ids.len();
@@ -375,6 +385,9 @@ impl RealSessionEvalAggregate {
             || feedback.noise_score.is_some()
         {
             self.row.scored_feedback_count += 1;
+        }
+        if has_outcome_feedback(feedback) {
+            self.outcome_trace_ids.insert(feedback.trace_id);
         }
         add_outcome_counts_to_intent_row(&mut self.row, feedback);
 
@@ -396,7 +409,12 @@ impl RealSessionEvalAggregate {
     }
 
     fn into_row(mut self) -> RealSessionEvalIntentRow {
-        self.row.feedback_coverage = coverage(self.row.feedback_count, self.row.trace_count);
+        self.row.feedback_trace_count = self.feedback_trace_ids.len();
+        self.row.feedback_coverage = coverage(self.row.feedback_trace_count, self.row.trace_count);
+        self.row.feedback_records_per_trace =
+            coverage(self.row.feedback_count, self.row.trace_count);
+        self.row.outcome_trace_count = self.outcome_trace_ids.len();
+        self.row.outcome_coverage = coverage(self.row.outcome_trace_count, self.row.trace_count);
         self.row.avg_latency_ms = average_u64(self.latency_sum, self.latency_count);
         self.row.avg_usefulness_score = average_u32(self.usefulness_sum, self.usefulness_count);
         self.row.avg_correctness_score = average_u32(self.correctness_sum, self.correctness_count);
@@ -408,6 +426,8 @@ impl RealSessionEvalAggregate {
 #[derive(Debug)]
 struct RealSessionEvalArmAggregate {
     row: RealSessionEvalArmRow,
+    feedback_trace_ids: HashSet<Id>,
+    outcome_trace_ids: HashSet<Id>,
 }
 
 impl RealSessionEvalArmAggregate {
@@ -417,6 +437,8 @@ impl RealSessionEvalArmAggregate {
                 arm,
                 ..Default::default()
             },
+            feedback_trace_ids: HashSet::new(),
+            outcome_trace_ids: HashSet::new(),
         }
     }
 
@@ -426,15 +448,24 @@ impl RealSessionEvalArmAggregate {
 
     fn add_feedback(&mut self, feedback: &AgentFeedback) {
         self.row.feedback_count += 1;
+        self.feedback_trace_ids.insert(feedback.trace_id);
         self.row.used_memory_count += feedback.used_memory_ids.len();
         self.row.rejected_memory_count += feedback.rejected_memory_ids.len();
         self.row.stale_memory_count += feedback.stale_memory_ids.len();
         self.row.wrong_scope_memory_count += feedback.wrong_scope_memory_ids.len();
+        if has_outcome_feedback(feedback) {
+            self.outcome_trace_ids.insert(feedback.trace_id);
+        }
         add_outcome_counts_to_arm_row(&mut self.row, feedback);
     }
 
     fn into_row(mut self) -> RealSessionEvalArmRow {
-        self.row.feedback_coverage = coverage(self.row.feedback_count, self.row.trace_count);
+        self.row.feedback_trace_count = self.feedback_trace_ids.len();
+        self.row.feedback_coverage = coverage(self.row.feedback_trace_count, self.row.trace_count);
+        self.row.feedback_records_per_trace =
+            coverage(self.row.feedback_count, self.row.trace_count);
+        self.row.outcome_trace_count = self.outcome_trace_ids.len();
+        self.row.outcome_coverage = coverage(self.row.outcome_trace_count, self.row.trace_count);
         self.row
     }
 }
@@ -467,6 +498,19 @@ struct ReportRows {
     unspecified_arm_trace_count: usize,
     intents: Vec<RealSessionEvalIntentRow>,
     arms: Vec<RealSessionEvalArmRow>,
+}
+
+#[derive(Debug)]
+struct ReportTotals {
+    trace_count: usize,
+    feedback_count: usize,
+    feedback_trace_count: usize,
+    memory_judgment_feedback_count: usize,
+    memory_judgment_trace_count: usize,
+    memory_judgment_eligible_trace_count: usize,
+    unjudged_memory_feedback_count: usize,
+    external_session_feedback: ExternalSessionFeedbackAggregation,
+    outcome_trace_count: usize,
 }
 
 fn build_real_session_eval_report(
@@ -521,13 +565,20 @@ fn build_real_session_eval_report(
         intents,
         arms,
     };
-    let mut report = report_from_rows(
-        sample_limit,
-        traces.len(),
-        feedback.len(),
-        applied_filters,
-        rows,
-    );
+    let totals = ReportTotals {
+        trace_count: traces.len(),
+        feedback_count: feedback.len(),
+        feedback_trace_count: count_feedback_traces(traces, feedback),
+        memory_judgment_feedback_count: count_memory_judgment_feedback(feedback),
+        memory_judgment_trace_count: count_memory_judgment_traces(traces, feedback),
+        memory_judgment_eligible_trace_count: count_memory_judgment_eligible_traces(
+            traces, feedback,
+        ),
+        unjudged_memory_feedback_count: count_unjudged_memory_feedback(traces, feedback),
+        external_session_feedback: aggregate_feedback_external_sessions(feedback),
+        outcome_trace_count: count_outcome_traces(traces, feedback),
+    };
+    let mut report = report_from_rows(sample_limit, totals, applied_filters, rows);
     report.confidence_gate = confidence_gate(&report);
     report.recommendations = recommendations(&report);
     report
@@ -627,8 +678,7 @@ fn aggregate_feedback(
 
 fn report_from_rows(
     sample_limit: usize,
-    trace_count: usize,
-    feedback_count: usize,
+    totals: ReportTotals,
     applied_filters: RealSessionEvalAppliedFilters,
     rows: ReportRows,
 ) -> RealSessionEvalReport {
@@ -636,15 +686,35 @@ fn report_from_rows(
         generated_at: OffsetDateTime::now_utc(),
         sample_limit,
         applied_filters,
-        trace_count,
-        feedback_count,
-        feedback_coverage: coverage(feedback_count, trace_count),
+        trace_count: totals.trace_count,
+        feedback_count: totals.feedback_count,
+        feedback_trace_count: totals.feedback_trace_count,
+        feedback_coverage: coverage(totals.feedback_trace_count, totals.trace_count),
+        feedback_records_per_trace: coverage(totals.feedback_count, totals.trace_count),
+        memory_judgment_feedback_count: totals.memory_judgment_feedback_count,
+        memory_judgment_coverage: coverage(
+            totals.memory_judgment_feedback_count,
+            totals.feedback_count,
+        ),
+        memory_judgment_trace_count: totals.memory_judgment_trace_count,
+        memory_judgment_trace_coverage: coverage(
+            totals.memory_judgment_trace_count,
+            totals.memory_judgment_eligible_trace_count,
+        ),
+        unjudged_memory_feedback_count: totals.unjudged_memory_feedback_count,
         distinct_intent_count: rows.intents.len(),
         distinct_operation_count: rows.operation_counts.len(),
         unspecified_intent_trace_count: rows.unspecified_intent_trace_count,
         external_session_trace_count: rows.external_session_trace_count,
         distinct_external_session_count: rows.distinct_external_session_count,
         unspecified_external_session_trace_count: rows.unspecified_external_session_trace_count,
+        external_session_feedback_count: totals.external_session_feedback.with_session_count,
+        distinct_external_session_feedback_count: totals
+            .external_session_feedback
+            .distinct_session_count,
+        unspecified_external_session_feedback_count: totals
+            .external_session_feedback
+            .without_session_count,
         operation_counts: rows.operation_counts,
         distinct_scenario_count: rows.scenario_counts.len(),
         distinct_arm_count: rows
@@ -668,6 +738,8 @@ fn report_from_rows(
         suggested_change_count: sum_rows(&rows.intents, |row| row.suggested_change_count),
         scored_feedback_count: sum_rows(&rows.intents, |row| row.scored_feedback_count),
         outcome_feedback_count: sum_rows(&rows.intents, |row| row.outcome_feedback_count),
+        outcome_trace_count: totals.outcome_trace_count,
+        outcome_coverage: coverage(totals.outcome_trace_count, totals.trace_count),
         task_success_count: sum_rows(&rows.intents, |row| row.task_success_count),
         task_failure_count: sum_rows(&rows.intents, |row| row.task_failure_count),
         preference_adhered_count: sum_rows(&rows.intents, |row| row.preference_adhered_count),
@@ -780,6 +852,13 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
                 .to_string(),
         );
     }
+    if report.feedback_records_per_trace > report.feedback_coverage {
+        recommendations.push(
+            "Multiple feedback records exist for at least one trace; use feedback_coverage for \
+             trace coverage and feedback_records_per_trace for feedback density."
+                .to_string(),
+        );
+    }
     if report.unspecified_intent_trace_count > 0 {
         recommendations.push(
             "Set intent on telemetry traces when the workflow phase is known; keep it as \
@@ -815,6 +894,13 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
                 .to_string(),
         );
     }
+    if report.unjudged_memory_feedback_count > 0 {
+        recommendations.push(
+            "Ask agents to populate memory attribution fields when returned memory shaped or was \
+             considered for the result."
+                .to_string(),
+        );
+    }
     if report.warning_count > 0 {
         recommendations.push(
             "Inspect trace warnings before treating latency or retrieval quality as healthy."
@@ -832,11 +918,127 @@ fn recommendations(report: &RealSessionEvalReport) -> Vec<String> {
     recommendations
 }
 
+#[derive(Debug, Default)]
+struct ExternalSessionFeedbackAggregation {
+    with_session_count: usize,
+    distinct_session_count: usize,
+    without_session_count: usize,
+}
+
+fn count_feedback_traces(traces: &[BrainHarnessTrace], feedback: &[AgentFeedback]) -> usize {
+    let trace_ids = trace_id_set(traces);
+    feedback
+        .iter()
+        .filter(|item| trace_ids.contains(&item.trace_id))
+        .map(|item| item.trace_id)
+        .collect::<HashSet<_>>()
+        .len()
+}
+
+fn count_memory_judgment_traces(traces: &[BrainHarnessTrace], feedback: &[AgentFeedback]) -> usize {
+    let trace_ids = trace_id_set(traces);
+    feedback
+        .iter()
+        .filter(|item| trace_ids.contains(&item.trace_id) && has_memory_judgment(item))
+        .map(|item| item.trace_id)
+        .collect::<HashSet<_>>()
+        .len()
+}
+
+fn count_memory_judgment_eligible_traces(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> usize {
+    memory_judgment_eligible_trace_ids(traces, feedback).len()
+}
+
+fn count_outcome_traces(traces: &[BrainHarnessTrace], feedback: &[AgentFeedback]) -> usize {
+    let trace_ids = trace_id_set(traces);
+    feedback
+        .iter()
+        .filter(|item| trace_ids.contains(&item.trace_id) && has_outcome_feedback(item))
+        .map(|item| item.trace_id)
+        .collect::<HashSet<_>>()
+        .len()
+}
+
+fn aggregate_feedback_external_sessions(
+    feedback: &[AgentFeedback],
+) -> ExternalSessionFeedbackAggregation {
+    let mut session_ids = HashSet::<String>::new();
+    let mut aggregation = ExternalSessionFeedbackAggregation::default();
+
+    for item in feedback {
+        if let Some(external_session_id) = normalized_label(item.external_session_id.as_deref()) {
+            aggregation.with_session_count += 1;
+            session_ids.insert(external_session_id);
+        } else {
+            aggregation.without_session_count += 1;
+        }
+    }
+
+    aggregation.distinct_session_count = session_ids.len();
+    aggregation
+}
+
+fn trace_id_set(traces: &[BrainHarnessTrace]) -> HashSet<Id> {
+    traces.iter().map(|trace| trace.id).collect()
+}
+
 fn sum_rows(
     rows: &[RealSessionEvalIntentRow],
     value: impl Fn(&RealSessionEvalIntentRow) -> usize,
 ) -> usize {
     rows.iter().map(value).sum()
+}
+
+fn count_memory_judgment_feedback(feedback: &[AgentFeedback]) -> usize {
+    feedback
+        .iter()
+        .filter(|item| has_memory_judgment(item))
+        .count()
+}
+
+fn count_unjudged_memory_feedback(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> usize {
+    let memory_bearing_trace_ids = memory_judgment_eligible_trace_ids(traces, feedback);
+
+    feedback
+        .iter()
+        .filter(|item| {
+            memory_bearing_trace_ids.contains(&item.trace_id) && !has_memory_judgment(item)
+        })
+        .count()
+}
+
+fn memory_judgment_eligible_trace_ids(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> HashSet<Id> {
+    let trace_ids = trace_id_set(traces);
+    let mut eligible_ids = traces
+        .iter()
+        .filter(|trace| !trace.returned_memory_ids.is_empty())
+        .map(|trace| trace.id)
+        .collect::<HashSet<_>>();
+
+    for item in feedback
+        .iter()
+        .filter(|item| trace_ids.contains(&item.trace_id) && has_memory_judgment(item))
+    {
+        eligible_ids.insert(item.trace_id);
+    }
+
+    eligible_ids
+}
+
+fn has_memory_judgment(feedback: &AgentFeedback) -> bool {
+    !feedback.used_memory_ids.is_empty()
+        || !feedback.rejected_memory_ids.is_empty()
+        || !feedback.stale_memory_ids.is_empty()
+        || !feedback.wrong_scope_memory_ids.is_empty()
 }
 
 fn add_outcome_counts_to_intent_row(row: &mut RealSessionEvalIntentRow, feedback: &AgentFeedback) {
@@ -1009,35 +1211,26 @@ fn has_text(value: Option<&str>) -> bool {
     value.is_some_and(|text| !text.trim().is_empty())
 }
 
-fn has_scope_filter(scenario_id: Option<&str>, arm: Option<&str>) -> bool {
-    normalized_label_ref(scenario_id).is_some() || normalized_label_ref(arm).is_some()
+fn has_scope_filter(project: Option<&str>, scenario_id: Option<&str>, arm: Option<&str>) -> bool {
+    normalized_label_ref(project).is_some()
+        || normalized_label_ref(scenario_id).is_some()
+        || normalized_label_ref(arm).is_some()
 }
 
-fn filter_traces_by_scope(
-    traces: Vec<BrainHarnessTrace>,
+fn applied_filters(
+    project: Option<&str>,
     scenario_id: Option<&str>,
     arm: Option<&str>,
-) -> Vec<BrainHarnessTrace> {
-    traces
-        .into_iter()
-        .filter(|trace| trace_matches_scope(trace, scenario_id, arm))
-        .collect()
+) -> RealSessionEvalAppliedFilters {
+    RealSessionEvalAppliedFilters {
+        project: normalized_label(project),
+        scenario_id: normalized_label(scenario_id),
+        arm: normalized_label(arm),
+    }
 }
 
-fn trace_matches_scope(
-    trace: &BrainHarnessTrace,
-    scenario_id: Option<&str>,
-    arm: Option<&str>,
-) -> bool {
-    label_matches(trace.scenario_id.as_deref(), scenario_id)
-        && label_matches(trace.arm.as_deref(), arm)
-}
-
-fn label_matches(actual: Option<&str>, expected: Option<&str>) -> bool {
-    let Some(expected) = normalized_label_ref(expected) else {
-        return true;
-    };
-    normalized_label_ref(actual) == Some(expected)
+fn has_any_filter(filters: &RealSessionEvalAppliedFilters) -> bool {
+    filters.project.is_some() || filters.scenario_id.is_some() || filters.arm.is_some()
 }
 
 fn has_outcome_feedback(feedback: &AgentFeedback) -> bool {

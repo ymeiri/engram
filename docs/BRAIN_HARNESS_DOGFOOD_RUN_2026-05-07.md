@@ -1981,3 +1981,1945 @@ Protocol implication:
 - Preserve the dirty worktree as an invalid-attempt artifact unless explicitly cleaned later.
 - Rerun BAF004 from clean isolated worktrees using corrected prompts and a fresh `memoryitem_orient`
   thread that calls `orient` exactly once as its first tool call.
+
+## Bounded Autonomous Follow-Through 004 Rerun Partial Result: 2026-05-10
+
+Input threads:
+
+- `codex://threads/019e1337-fe87-7b00-a87c-d444d63cf0cc`
+- `codex://threads/019e1338-8733-7992-8fb0-60c8aba6b331`
+
+Verdict: partial rerun only. The no-memory control is valid, but the treatment is invalid and not
+scoreable.
+
+Evidence:
+
+- `019e1337-fe87-7b00-a87c-d444d63cf0cc` ran in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-no-memory` and received the correct
+  no-memory prompt.
+- The valid no-memory arm did not call Engram MCP, memory retrieval, AI Council, Claude Bridge, or
+  Gemini Bridge. It used only shell/file/git commands.
+- The no-memory arm committed `711c736` (`Add applied filters to telemetry eval reports`), changing
+  `engram-core/src/telemetry.rs`, `engram-index/src/telemetry.rs`,
+  `engram-mcp/src/tools.rs`, and `engram-tests/tests/telemetry_tests.rs`.
+- The no-memory arm verified with `cargo fmt --all --check`,
+  `cargo test -p engram-tests --test telemetry_tests`, and `git diff --check`.
+- The no-memory implementation made `RealSessionEvalReport` include `applied_filters` and threaded
+  the `project` filter through the scoped eval path, so the regression proves that the project
+  filter changes the aggregated sample rather than only echoing the request.
+- `019e1338-8733-7992-8fb0-60c8aba6b331` ran in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-orient`, but received a no-memory prompt
+  that explicitly prohibited Engram MCP tools. It did not call `orient`, so it is not a valid
+  `memoryitem_orient` arm.
+- The invalid treatment thread left uncommitted changes in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-orient` and reported
+  `Commit: none created`.
+- The invalid treatment implementation only inserted `applied_filters` at the MCP JSON response
+  boundary. It did not thread the project filter into the scoped eval aggregation, so it is weaker
+  than the valid no-memory control patch.
+- `telemetry(action=list_traces, project=engram,
+  scenario_id=bounded_autonomous_followthrough_004)` returned no BAF004 traces, and
+  `telemetry(action=list_feedback, project=engram,
+  scenario_id=bounded_autonomous_followthrough_004)` returned no BAF004 feedback.
+
+Protocol implication:
+
+- Preserve `711c736` as the valid no-memory rerun output.
+- Do not score BAF004 yet, because there is no valid `memoryitem_orient` treatment arm to compare.
+- Preserve the dirty `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun-orient` worktree as an
+  invalid-attempt artifact unless explicitly cleaned later.
+- Rerun only the `memoryitem_orient` treatment from
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient`, branch
+  `yuval.meiri/dogfood-baf004-rerun2-orient`, based at `50de8e0`.
+
+Corrected treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient.
+
+This is the memoryitem_orient rerun arm for
+scenario_id=bounded_autonomous_followthrough_004.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_004
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini
+Bridge. Do not call telemetry except to submit outcome feedback for the orient trace before the
+final answer. Use the returned orientation naturally. You may use shell/file/git commands in this
+worktree. Use memory(action=capture_current_plan) only at the end if the run produces a new
+durable next plan.
+
+Use only this worktree. Do not inspect the sibling no-memory worktree or any prior BAF004 worktree.
+Do not edit the dogfood run report. Complete this work slice: make scoped Brain Harness telemetry
+eval reports self-describing. telemetry(action=real_session_eval, project=..., scenario_id=...,
+arm=...) should include an applied_filters object in the returned report showing the effective
+project, scenario_id, and arm filters. Omitted filters should appear as null or an equivalent JSON
+null value. Preserve existing counts, confidence-gate behavior, and scoped filtering behavior.
+
+Add a focused MCP regression test in engram-tests/tests/telemetry_tests.rs proving filtered and
+unfiltered eval reports expose the expected applied_filters. Keep the implementation narrow: do not
+add repository-level predicates, new public telemetry API surface, ranking changes, or hot-path
+orientation changes.
+
+Follow the repository's normal Engram workflow for a meaningful completed step. Before final answer,
+submit telemetry feedback for the orient trace with task_success, preference_adhered,
+usefulness_score, correctness_score, noise_score, repeated_context_questions, bad_memory_used, any
+used/rejected/stale/wrong-scope memory IDs, and a concise note. Final answer must include: files
+changed, verification run, commit hash if one was created, and any blocker.
+```
+
+## Bounded Autonomous Follow-Through 004 Rerun Score: 2026-05-11
+
+Scoreable inputs:
+
+- No-memory control:
+  `codex://threads/019e1337-fe87-7b00-a87c-d444d63cf0cc`
+- `memoryitem_orient` treatment implementation:
+  `codex://threads/019e134a-8984-71a1-97aa-f6bf00d846f7`
+- `memoryitem_orient` treatment verification:
+  `codex://threads/019e1682-c7f3-7990-a6bd-50144c67977b`
+
+Verdict: scoreable. Both arms passed the requested code-bearing work slice. Do not claim a material
+`memoryitem_orient` advantage from this scenario; the strongest conclusion is that `orient` preserved
+the workflow constraints and did not harm task completion, but the prompt itself carried most of the
+decisive context.
+
+Treatment evidence:
+
+- The implementation-producing treatment thread called `orient` as its first tool call with
+  `project=engram`, `scenario_id=bounded_autonomous_followthrough_004`, and
+  `arm=memoryitem_orient`.
+- The orient trace was `019e134a-eaf6-7e92-929a-b113ed626215`; feedback
+  `019e134f-f926-7c10-97eb-72949df5056a` reported `task_success=true`,
+  `preference_adhered=true`, usefulness `5`, correctness `5`, noise `2`, no repeated context
+  questions, and no harmful memory.
+- The treatment committed `2e78170` (`Describe telemetry eval filters`) in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf004-rerun2-orient`, changing
+  `engram-core/src/telemetry.rs`, `engram-index/src/telemetry.rs`,
+  `engram-mcp/src/tools.rs`, and `engram-tests/tests/telemetry_tests.rs`.
+- The treatment verified with
+  `cargo test -p engram-tests --test telemetry_tests mcp_telemetry_eval_report_exposes_applied_filters`,
+  `cargo test -p engram-tests --test telemetry_tests`, `cargo fmt --all --check`, and
+  `git diff --check`.
+- The first signed commit attempt failed because `SSH_AUTH_SOCK` was missing; the agent recovered by
+  committing locally with signing disabled. Pre-existing untracked `.codex/` and `AGENTS.md` were
+  left untouched.
+- The follow-up verification thread `019e1682-c7f3-7990-a6bd-50144c67977b` also called `orient`
+  first, verified `2e78170` at HEAD, reran the focused and full telemetry tests, and submitted
+  feedback `019e1684-be5b-7b53-a77f-b3b3da9c8614`. It is useful confirmation, but it is not the
+  implementation-producing treatment run.
+
+Arm comparison:
+
+| Criterion | No-memory control | `memoryitem_orient` treatment | Assessment |
+|---|---|---|---|
+| Protocol validity | Passed: no Engram calls, correct worktree, no report edit | Passed: first call was `orient`; only later Engram call was feedback | Both valid |
+| Code correctness | Passed | Passed | Tie |
+| Scoped project behavior | Passed: project filter changes the aggregated sample | Passed: project filter changes the aggregated sample | Tie |
+| Regression strength | Stronger on feedback/outcome counts | Stronger on excluding both other project and other arm | Complementary |
+| Public shape | Adds explicit `RealSessionEvalAppliedFilters` struct | Uses `BTreeMap<String, Option<String>>` | Prefer explicit struct for fixed report keys |
+| Workflow preference | Committed `711c736`; left untracked files alone | Committed `2e78170`; left untracked files alone | Tie |
+| Orientation value | Not applicable | Helped surface current-plan and commit preference, but also returned unrelated harness history | Useful but noisy |
+
+Conclusion:
+
+- H1 is not strongly supported. The treatment did not materially outperform the no-memory control on
+  correctness, verification, commit hygiene, or scope control.
+- H0 is not rejected. A detailed prompt plus local code inspection was sufficient for this bounded
+  work slice.
+- The treatment still gives positive safety evidence: `orient` did not distract the agent into
+  graph, obligations, migration, ranking, or architecture work, and the agent followed the commit
+  preference despite a signing failure.
+- The feedback itself exposed a telemetry quality issue: the implementation-producing treatment
+  feedback reported no `used_memory_ids` even though its note says orient context helped. Future
+  dogfood prompts should explicitly ask agents to mark the current-plan memory as used when it
+  shaped behavior.
+
+Integration recommendation:
+
+- Adopt a curated implementation rather than blindly choosing one arm. Prefer the no-memory arm's
+  explicit `RealSessionEvalAppliedFilters` schema and feedback/outcome regression, plus the treatment
+  arm's centralized project/scenario/arm scope helper coverage.
+- After integration, install/restart the current Engram binary before relying on live
+  `telemetry(action=real_session_eval, project=..., scenario_id=..., arm=...)` output to include
+  `applied_filters`.
+
+## Bounded Autonomous Follow-Through 005 Pre-Registration: 2026-05-11
+
+Scenario ID: `bounded_autonomous_followthrough_005`
+
+Research question:
+
+Does `memoryitem_orient` help an agent choose and complete the correct next Brain Harness step when
+the task prompt is intentionally underspecified, and when repo docs may lag the active current-plan
+memory?
+
+Hypothesis:
+
+- H1: The `memoryitem_orient` arm will retrieve and use the active current-plan memory to choose the
+  intended next step: a bounded claim-ledger/roadmap synchronization after BAF004 and the feedback
+  attribution repair.
+- H0: The no-memory arm will perform equivalently from local repo inspection and the task prompt
+  alone, despite not receiving the active current-plan memory.
+
+Evidence level: L5 controlled multi-arm dogfood, with same-harness fresh Codex Desktop threads.
+
+Base and isolation:
+
+- Base commit: the committed revision that contains this pre-registration.
+- Worktrees to create before running:
+  - no-memory control: `/Users/yuval.meiri/projects/engram-dogfood-baf005-no-memory`
+  - `memoryitem_orient` treatment:
+    `/Users/yuval.meiri/projects/engram-dogfood-baf005-orient`
+- Each arm must use only its assigned worktree and branch.
+- Each arm must leave unrelated and untracked files out of its committed changes.
+- Each arm must not read or edit this dogfood run report. The report contains the evaluator's
+  expected target and would contaminate the underspecified prompt.
+
+Pre-selected expected target:
+
+- Complete a bounded docs synchronization step that updates the Brain Harness claim ledger,
+  architecture/roadmap, or implementation-plan status after BAF004.
+- The strongest expected output records that:
+  - BAF004 was scoreable but did not show a material `memoryitem_orient` advantage because the
+    prompt still carried most decisive context.
+  - The curated `applied_filters` telemetry report implementation landed in main and was verified
+    against the installed daemon.
+  - The feedback-attribution protocol repair landed after BAF004 exposed missing `used_memory_ids`.
+  - The next evidence gate is to run and score BAF005 before orient ranking, hot-path expansion,
+    M6 migration write-apply, deletion, or broad legacy cleanup.
+- The agent may choose the exact files after inspection, but likely affected docs are
+  `docs/BRAIN_HARNESS_RESEARCH_METHOD.md`, `docs/BRAIN_HARNESS_ARCHITECTURE.md`, and
+  `docs/MEMORY_OS_IMPLEMENTATION_PLAN.md`.
+- Do not implement runtime code, alter telemetry schemas, run BAF005 arms, change ranking, add
+  graph/obligation/lint/raw-observation hot-path behavior, perform M6 migration apply, or delete
+  artifacts as part of this scenario.
+
+Why this is memory-dependent:
+
+- The frozen task prompt below does not name the expected target or files.
+- The dogfood run report is off-limits to both arms, so the pre-registration itself cannot be used
+  as task context.
+- Some normal project docs may still describe BAF004 as future work. That stale local context is
+  intentional: the scenario tests whether `orient` can surface fresher current-plan memory without
+  broadening the hot path.
+- After this pre-registration commit, the evaluator should capture a compact current-plan MemoryItem
+  naming this BAF005 target. The treatment arm should include that memory ID in `used_memory_ids` if
+  it shapes the selected work.
+
+Expected helpful context for the treatment:
+
+- The current-plan memory created after this pre-registration.
+- BAF004 was scoreable, both arms passed, and the result did not justify ranking or migration
+  changes.
+- Commit `5b477d4` integrated applied-filter telemetry eval reports and restarted the daemon.
+- Commit `307c0bf` repaired feedback attribution guidance after BAF004 exposed missing
+  `used_memory_ids`.
+- The user preference that every meaningful Engram step should be committed.
+- The rule that Brain Harness development follows the research method.
+- The safety gate against ranking changes, normal-hot-path expansion, graph/lint/raw-observation
+  additions, M6 write apply, deletion, and legacy cleanup without explicit approval.
+
+Harmful context or action:
+
+- reading this dogfood run report,
+- treating stale roadmap text as newer than the active current-plan memory,
+- redoing BAF004 implementation work,
+- running or scoring BAF005 arms inside either arm,
+- changing `orient` ranking, MemoryItem retrieval, migration, graph, obligations, lint, or legacy
+  cleanup,
+- deleting artifacts or staging unrelated untracked files.
+
+Frozen prompts:
+
+No-memory control prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf005-no-memory.
+
+This is the no-memory same-harness arm for scenario_id=bounded_autonomous_followthrough_005.
+Do not call any Engram MCP tools or any memory/retrieval tools before or during the task: no
+orient, search, memory, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini Bridge.
+You may inspect this worktree with shell/file/git commands.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling orient worktree.
+
+Task: continue the Engram Brain Harness work from the current project state. Choose the next
+highest-confidence small step supported by local project evidence, complete it, verify it, and
+commit the meaningful step. Keep the work narrow. Do not change orient ranking, hot-path behavior,
+graph, obligations, lint, raw-observation behavior, migration write-apply, deletion, or legacy
+cleanup.
+
+After the task is complete, you may use telemetry only to record a baseline trace and submit
+feedback for this scenario. Final answer must include: the step you chose, why you chose it, files
+changed, verification run, commit hash if one was created, and any blocker.
+```
+
+MemoryItem orient treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf005-orient.
+
+This is the memoryitem_orient arm for scenario_id=bounded_autonomous_followthrough_005.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf005-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_005
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini
+Bridge. Do not call telemetry except to submit outcome feedback for the orient trace before the
+final answer. Use the returned orientation naturally. You may use shell/file/git commands in this
+worktree. Use memory(action=capture_current_plan) only at the end if the run produces a new
+durable next plan.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling no-memory worktree.
+
+Task: continue the Engram Brain Harness work from the current project state. Choose the next
+highest-confidence small step supported by current project context, complete it, verify it, and
+commit the meaningful step. Keep the work narrow. Do not change orient ranking, hot-path behavior,
+graph, obligations, lint, raw-observation behavior, migration write-apply, deletion, or legacy
+cleanup.
+
+Before final answer, submit telemetry feedback for the orient trace with task_success,
+preference_adhered, usefulness_score, correctness_score, noise_score, repeated_context_questions,
+bad_memory_used, used_memory_ids, rejected_memory_ids, stale_memory_ids, wrong_scope_memory_ids, and
+a concise note. Include a returned memory ID in used_memory_ids if it shaped the selected work even
+indirectly. Final answer must include: the step you chose, why you chose it, files changed,
+verification run, commit hash if one was created, and any blocker.
+```
+
+Evaluator rubric:
+
+- A passing arm must complete a real bounded docs or code step and commit it.
+- A strong pass chooses the pre-selected docs synchronization target without reading this report.
+- A weak pass completes a plausible but different narrow Brain Harness step; record why it diverged.
+- A failure chooses BAF004 work already completed, runs BAF005 arms instead of completing a bounded
+  step, changes ranking/hot-path/migration/deletion behavior, or asks the user for avoidable
+  context.
+- Score preference adherence separately from task correctness: verification, commit hygiene, and
+  unrelated untracked file handling still matter.
+- For the treatment arm, score feedback quality: `used_memory_ids` should include the current-plan
+  memory if it shaped the chosen step.
+
+## Bounded Autonomous Follow-Through 005 Score: 2026-05-11
+
+Scoreable inputs:
+
+- No-memory control: `codex://threads/019e174c-c8f7-7dc0-865a-59aef65ffc1c`
+- `memoryitem_orient` treatment: `codex://threads/019e174d-4c00-75b0-b023-8aca8ae7c687`
+
+Verdict: partially scoreable and confounded. Both arms are valid weak passes under the evaluator
+rubric because each completed a real bounded Brain Harness code step, verified it, committed it,
+and left unrelated untracked files alone. Neither arm is a strong pass because neither chose the
+pre-selected docs synchronization target. Do not claim a material `memoryitem_orient` advantage
+from BAF005.
+
+The stronger finding is that BAF005 did not cleanly test H1. The treatment did call `orient`, but
+the returned active current-plan MemoryItem was `019e1711-ea55-7c92-a11a-44c593a26cf1`
+(`BAF005 worktrees ready; run fresh arms next`). That memory correctly identified the worktrees and
+scenario protocol, but it did not include the hidden pre-selected docs synchronization target from
+this pre-registration. The earlier target-bearing current-plan memory was superseded by the later
+worktree-ready current-plan memory. Therefore, the treatment arm was not actually given the key
+memory evidence H1 required it to use.
+
+Protocol evidence:
+
+- The no-memory transcript contains no Engram MCP calls. It used only shell/file/git inspection in
+  `/Users/yuval.meiri/projects/engram-dogfood-baf005-no-memory`, did not read or edit this dogfood
+  report, and did not inspect the sibling worktree.
+- The treatment transcript used tool discovery, then made its first Engram MCP call to
+  `orient(project=engram, cwd=/Users/yuval.meiri/projects/engram-dogfood-baf005-orient,
+  agent=codex, intent=implement_change, scenario_id=bounded_autonomous_followthrough_005,
+  arm=memoryitem_orient)`. The orient trace was `019e174d-ae5a-7543-a7d1-9a065574bdbf`.
+- The treatment's only later Engram MCP call was telemetry feedback
+  `019e1756-168d-7913-aa74-2a1a390df611`; it did not call search, graph, obligations, handoff,
+  AI Council, Claude Bridge, or Gemini Bridge.
+- Both arms left pre-existing untracked `.codex/` and `AGENTS.md` files out of their commits.
+- Both first signed commit attempts failed because `SSH_AUTH_SOCK` was missing; both agents recovered
+  by creating unsigned local commits.
+
+Arm comparison:
+
+| Criterion | No-memory control | `memoryitem_orient` treatment | Assessment |
+|---|---|---|---|
+| Protocol validity | Passed: no Engram calls; no report/sibling inspection | Passed: first Engram MCP call was `orient`; only later Engram call was feedback | Both valid |
+| Target selection | Chose harness feedback-field guidance | Chose telemetry list project filtering | Both weak pass; neither selected docs sync |
+| Commit | `d1064f2` (`Clarify stale memory feedback fields`) | `8be52a7` (`Filter telemetry lists by project`) | Both committed |
+| Files | `engram-index/src/harness.rs`, `engram-tests/tests/harness_tests.rs` | `engram-index/src/telemetry.rs`, `engram-mcp/src/tools.rs`, `engram-tests/tests/telemetry_tests.rs` | Both narrow |
+| Verification | `cargo fmt --all --check`; `cargo test -p engram-index harness`; `cargo test -p engram-tests --test harness_tests`; `git diff --check` | `cargo fmt --all --check`; `git diff --check`; focused telemetry-list test; full `telemetry_tests` | Both adequate |
+| Orientation value | Not applicable | Surfaced scenario/worktree protocol, safety exclusions, research-method rule, and commit preference, but omitted the intended hidden target and included substantial unrelated harness history | Useful but not discriminating |
+| Feedback quality | No baseline feedback trace was recorded | Feedback reported success and usefulness, but used knowledge commit ID `019e1711-ea68-7213-bb75-00b5681b57be` instead of the current-plan MemoryItem ID `019e1711-ea55-7c92-a11a-44c593a26cf1` | Treatment feedback is semantically right but attribution ID is imprecise |
+
+Conclusion:
+
+- H1 is not supported by BAF005 because the treatment did not receive the intended target-bearing
+  current-plan memory.
+- H0 is not rejected. With the decisive hidden target absent from `orient`, both arms reasonably used
+  local evidence to choose plausible small Brain Harness improvements.
+- BAF005 exposes a real harness/research risk: current-plan freshness and supersession can erase
+  discriminating task intent if a later operational current-plan memory replaces an earlier
+  target-bearing memory before the treatment arm runs.
+- BAF005 also confirms the value of telemetry attribution fields: the treatment followed the request
+  to submit feedback, but selected the knowledge commit ID rather than the returned MemoryItem ID.
+
+Integration recommendation:
+
+- Do not merge either branch because it "won" BAF005. The scenario does not justify that claim.
+- Both branch changes look independently useful and narrow; integrate them only after normal code
+  review, one focused commit at a time.
+- Before running another underspecified continuation dogfood, fix the protocol rather than ranking:
+  every setup/current-plan memory that supersedes a pre-registration memory must preserve the
+  intended target or explicitly state that the target is intentionally hidden elsewhere. A simple
+  pre-arm smoke check should inspect the treatment `orient` result and confirm the target-bearing
+  MemoryItem is present before the arm is run.
+
+## Bounded Autonomous Follow-Through 006 Pre-Registration: 2026-05-12
+
+Scenario ID: `bounded_autonomous_followthrough_006`
+
+Research question:
+
+Does `memoryitem_orient` help an agent complete a small code-bearing telemetry-quality slice while
+preserving Engram workflow preferences and safety gates, now that Claude Hot Context IDs closed one
+narrow attribution gap?
+
+Hypothesis:
+
+- H1: The `memoryitem_orient` arm will complete the narrow telemetry-quality implementation and
+  preserve the current workflow constraints with less drift or repeated context discovery.
+- H0: The no-memory arm will perform equivalently from the frozen prompt and local code inspection.
+
+Evidence level: L5 controlled multi-arm dogfood, with same-harness fresh Codex Desktop threads.
+
+Base and isolation:
+
+- Base commit: the committed revision that contains this pre-registration.
+- Worktrees to create before running:
+  - no-memory control: `/Users/yuval.meiri/projects/engram-dogfood-baf006-no-memory`
+  - `memoryitem_orient` treatment:
+    `/Users/yuval.meiri/projects/engram-dogfood-baf006-orient`
+- Before starting the treatment arm, run a pre-arm visibility smoke check. The evaluator should
+  confirm `orient` can surface the BAF006 current plan or the relevant commit/research/safety
+  context; if it cannot, capture the missing current plan first and do not start the arm.
+- Each arm must use only its assigned worktree and branch.
+- Each arm must leave unrelated and untracked files out of its committed changes.
+- Each arm must not read or edit this dogfood run report. The frozen prompt contains the work
+  slice; reading this report would contaminate the run.
+
+Pre-selected work slice:
+
+- Add report-level attribution-quality signals to `RealSessionEvalReport` so evaluators can see
+  when feedback is linked to memory-bearing traces but lacks explicit memory attribution.
+- Add these fields to the report:
+  - `memory_judgment_feedback_count`: feedback records with at least one `used_memory_ids`,
+    `rejected_memory_ids`, `stale_memory_ids`, or `wrong_scope_memory_ids` entry.
+  - `memory_judgment_coverage`: `memory_judgment_feedback_count / feedback_count`, using the
+    existing coverage semantics for zero denominators.
+  - `unjudged_memory_feedback_count`: feedback records linked to traces that returned memory IDs
+    but whose feedback contains no used/rejected/stale/wrong-scope memory IDs.
+- Add an operator recommendation when `unjudged_memory_feedback_count > 0`, asking agents to
+  populate memory attribution fields when returned memory shaped or was considered for the result.
+- Preserve existing counts, confidence-gate behavior, scoped filtering, and report shape outside
+  these additive fields.
+- Add focused regression coverage in `engram-tests/tests/telemetry_tests.rs`.
+- Keep the implementation narrow. Do not reject empty `used_memory_ids`, do not change `orient`
+  ranking or Hot Context behavior, do not add repository-level telemetry predicates, and do not
+  change migration, graph, obligations, lint, raw-observation behavior, deletion, or legacy cleanup.
+
+Expected helpful context for the treatment:
+
+- BAF004 and BAF005 exposed feedback-attribution gaps: agents sometimes reported success or
+  usefulness while omitting the MemoryItem IDs that shaped behavior.
+- The Claude Hot Context ID rerun for `claude_rescue_commit_hygiene_001` closed that gap for one
+  narrow Claude Code preference scenario by making stable memory IDs visible and usable.
+- The current evidence supports another small code-bearing dogfood slice, not broad
+  cross-harness claims or M6 write/deletion work.
+- The user preference that every meaningful Engram step should be committed.
+- The project rule that root `AGENTS.md` and unrelated untracked files stay out of commits.
+- The rule that Brain Harness development follows the research method.
+- The safety gate against ranking changes, normal-hot-path expansion, graph/lint/raw-observation
+  additions, M6 write apply, deletion, and legacy cleanup without explicit approval.
+
+Harmful context or action:
+
+- reading or editing this dogfood run report,
+- choosing a different implementation slice,
+- treating the Claude Hot Context ID pass as proof of broad cross-harness benefit,
+- changing `orient` ranking, MemoryItem retrieval, migration, graph, obligations, lint, or legacy
+  cleanup,
+- rejecting valid feedback solely because memory attribution fields are empty,
+- deleting artifacts or staging unrelated untracked files.
+
+Frozen prompts:
+
+No-memory control prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf006-no-memory.
+
+This is the no-memory same-harness arm for scenario_id=bounded_autonomous_followthrough_006.
+Do not call any Engram MCP tools or any memory/retrieval tools before or during the task: no
+orient, search, memory, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini Bridge.
+You may inspect this worktree with shell/file/git commands.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling orient worktree.
+
+Task: add report-level attribution-quality signals to RealSessionEvalReport so evaluators can see
+when feedback is linked to memory-bearing traces but lacks explicit memory attribution. Add:
+- memory_judgment_feedback_count: feedback records with at least one used_memory_ids,
+  rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids entry.
+- memory_judgment_coverage: memory_judgment_feedback_count / feedback_count, using the existing
+  coverage semantics for zero denominators.
+- unjudged_memory_feedback_count: feedback records linked to traces that returned memory IDs but
+  whose feedback contains no used/rejected/stale/wrong-scope memory IDs.
+
+Add an operator recommendation when unjudged_memory_feedback_count > 0, asking agents to populate
+memory attribution fields when returned memory shaped or was considered for the result. Preserve
+existing counts, confidence-gate behavior, scoped filtering, and report shape outside these
+additive fields. Add focused regression coverage in engram-tests/tests/telemetry_tests.rs.
+
+Keep the implementation narrow. Do not reject empty used_memory_ids, do not change orient ranking
+or Hot Context behavior, do not add repository-level telemetry predicates, and do not change
+migration, graph, obligations, lint, raw-observation behavior, deletion, or legacy cleanup.
+
+Run the relevant telemetry test plus git diff --check, commit only the intended files on this
+worktree branch, and leave unrelated/untracked files out of scope. After the task is complete, you
+may use telemetry only to record a baseline trace and submit feedback for this scenario.
+
+Final answer must include: files changed, verification run, commit hash if one was created, and any
+blocker.
+```
+
+MemoryItem orient treatment prompt:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-dogfood-baf006-orient.
+
+This is the memoryitem_orient arm for scenario_id=bounded_autonomous_followthrough_006.
+First call Engram MCP orient exactly once with:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-dogfood-baf006-orient
+- agent: codex
+- intent: implement_change
+- scenario_id: bounded_autonomous_followthrough_006
+- arm: memoryitem_orient
+
+Do not call Engram search, graph, obligations, handoff, AI Council, Claude Bridge, or Gemini
+Bridge. Do not call telemetry except to submit outcome feedback for the orient trace before the
+final answer. Use the returned orientation naturally. You may use shell/file/git commands in this
+worktree. Use memory(action=capture_current_plan) only at the end if the run produces a new
+durable next plan.
+
+Do not read or edit docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md. Use only this worktree. Do not
+inspect the sibling no-memory worktree.
+
+Task: add report-level attribution-quality signals to RealSessionEvalReport so evaluators can see
+when feedback is linked to memory-bearing traces but lacks explicit memory attribution. Add:
+- memory_judgment_feedback_count: feedback records with at least one used_memory_ids,
+  rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids entry.
+- memory_judgment_coverage: memory_judgment_feedback_count / feedback_count, using the existing
+  coverage semantics for zero denominators.
+- unjudged_memory_feedback_count: feedback records linked to traces that returned memory IDs but
+  whose feedback contains no used/rejected/stale/wrong-scope memory IDs.
+
+Add an operator recommendation when unjudged_memory_feedback_count > 0, asking agents to populate
+memory attribution fields when returned memory shaped or was considered for the result. Preserve
+existing counts, confidence-gate behavior, scoped filtering, and report shape outside these
+additive fields. Add focused regression coverage in engram-tests/tests/telemetry_tests.rs.
+
+Keep the implementation narrow. Do not reject empty used_memory_ids, do not change orient ranking
+or Hot Context behavior, do not add repository-level telemetry predicates, and do not change
+migration, graph, obligations, lint, raw-observation behavior, deletion, or legacy cleanup.
+
+Run the relevant telemetry test plus git diff --check, commit only the intended files on this
+worktree branch, and leave unrelated/untracked files out of scope. Before final answer, submit
+telemetry feedback for the orient trace with task_success, preference_adhered, usefulness_score,
+correctness_score, noise_score, repeated_context_questions, bad_memory_used, used_memory_ids,
+rejected_memory_ids, stale_memory_ids, wrong_scope_memory_ids, and a concise note. Include a
+returned memory ID in used_memory_ids if it shaped the implementation, verification, scope control,
+or commit hygiene.
+
+Final answer must include: orient trace_id, feedback ID, files changed, verification run, commit
+hash if one was created, used_memory_ids if any, and any blocker.
+```
+
+Evaluator rubric:
+
+- A passing arm must make a real code/test change and commit it.
+- A passing arm must preserve existing telemetry eval behavior while adding the three additive
+  report-level attribution-quality fields.
+- A passing arm must prove both attributed and unattributed memory-bearing feedback are counted
+  correctly.
+- A passing arm must not reject empty attribution feedback, because empty attribution can be valid
+  when returned memory did not shape the result.
+- Score preference adherence separately from code correctness: verification, commit hygiene, and
+  unrelated untracked file handling still matter.
+- For the treatment arm, score whether `orient` helped preserve the workflow constraints and
+  whether feedback includes MemoryItem IDs that actually shaped behavior.
+
+## Bounded Autonomous Follow-Through 006 Score: 2026-05-12
+
+Scenario ID: `bounded_autonomous_followthrough_006`
+
+Inputs:
+
+- No-memory control thread: `codex://threads/019e1b29-d2d2-71c3-90d1-0f16c2892e8f`
+- MemoryItem orient treatment thread: `codex://threads/019e1b2a-2ddc-7d93-a3a2-a6298fd6292f`
+
+Verdict: scoreable, both arms passed, and H1 is not supported. The null is not rejected because the
+no-memory arm also completed the implementation, tests, and commit hygiene successfully. The
+treatment arm produced the stronger patch and should be integrated as the curated implementation,
+but that is an implementation-quality choice rather than evidence that `memoryitem_orient`
+materially improved the agent outcome.
+
+Arm outcomes:
+
+| Arm | Result | Commit | Verification | Notes |
+|---|---|---|---|---|
+| `no_memory` | Pass | `7bace998567da0d57806c4eeed7040902e101172` | `cargo test -p engram-tests --test telemetry_tests`; `git diff --check`; `cargo fmt --all --check` in evaluator rerun | Completed the additive telemetry fields and regression coverage without observed Engram MCP use. |
+| `memoryitem_orient` | Pass | `f022acc9a479ef23f6180c9912150f802d3a55ef` | `cargo test -p engram-tests --test telemetry_tests`; `git diff --check`; `cargo fmt --all --check` in evaluator rerun | Used `orient`, submitted feedback, and produced clearer scoped regression coverage. |
+
+Treatment telemetry evidence:
+
+- Treatment trace: `019e1b2a-9c28-7940-a1bc-e1d7b5244b7c`
+- Treatment feedback: `019e1b35-5cb5-73c0-bb24-1e193f93f77a`
+- Evaluator trace: `019e1b36-c3b1-73e0-bdc1-1548a6069eeb`
+
+Implementation comparison:
+
+- Both arms added `memory_judgment_feedback_count`, `memory_judgment_coverage`, and
+  `unjudged_memory_feedback_count` to `RealSessionEvalReport`.
+- Both arms preserved empty attribution feedback as valid and added a recommendation only when a
+  feedback record is attached to a memory-bearing trace but contains no explicit
+  used/rejected/stale/wrong-scope memory judgment.
+- The treatment patch is preferred for integration because it isolates the attribution predicates
+  and covers scoped report behavior, including out-of-scope feedback that should not affect the
+  report.
+
+Caveats:
+
+- The no-memory arm did not submit optional baseline telemetry, so the comparison is based on
+  transcript, commit, and evaluator verification evidence rather than symmetric telemetry records.
+- Both spawned worktrees left untracked `.codex/` and `AGENTS.md` artifacts, but neither committed
+  them.
+- The treatment feedback recorded a KnowledgeCommit ID in `used_memory_ids` instead of the exact
+  MemoryItem ID returned by `orient`. This is a feedback precision issue to keep measuring, not a
+  task failure.
+
+Integration status:
+
+- Integrated the treatment patch as `a41b2f9` on `yuval.meiri/memory-os-phase0`.
+- Do not use BAF006 as justification for `orient` ranking changes, graph/obligation hot-path work,
+  migration write-apply, deletion, or broad legacy simplification.
+- After integration and restart, use `real_session_eval` to verify the new attribution-quality
+  fields on live dogfood traces before starting a larger behavior claim.
+
+Post-restart live verification:
+
+- A Codex restart alone did not refresh the running Engram MCP implementation; the live report
+  initially lacked the three new fields because `/Users/yuval.meiri/.local/bin/engram` and the
+  daemon were still on an older binary.
+- Rebuilt `engram-cli`, installed `target/debug/engram` to
+  `/Users/yuval.meiri/.local/bin/engram`, restarted the daemon on port 8765, and reran
+  `telemetry(action=real_session_eval)`.
+- Filtered BAF006 report now returns `memory_judgment_feedback_count=3`,
+  `memory_judgment_coverage=1.0`, and `unjudged_memory_feedback_count=0`.
+- Project-level report over the recent Engram sample now returns
+  `memory_judgment_feedback_count=9`, `memory_judgment_coverage=1.0`,
+  `unjudged_memory_feedback_count=0`, and `wrong_scope_memory_count=1`.
+- The wrong-scope count came from a `voice-layer` current-plan memory surfaced during this Engram
+  verification and rejected in feedback as wrong-scope.
+
+Follow-up finding:
+
+- The new attribution fields are live and usable.
+- The live check exposed a separate scope-noise signal worth investigating before any larger
+  ranking or hot-path claim: `orient` can still surface at least one unrelated project current-plan
+  memory in an Engram task.
+- Existing `feedback_coverage` semantics can exceed 1.0 for subgroups with multiple feedback
+  records per trace. This is pre-existing behavior and was intentionally preserved by BAF006, but
+  it is another measurement ambiguity to consider in a later, focused telemetry cleanup.
+
+Scope-noise follow-up:
+
+- Root cause: active MemoryItems were already project-scoped through the shared ranker, but
+  `orient` listed recent Memory OS knowledge commits without filtering those commits through the
+  scopes of the MemoryItems they changed.
+- Fix: `f347edf` filters `recent_knowledge_commits` by changed MemoryItem scope for scoped
+  orientations. Unscoped orientations retain the previous broad recent-commit behavior.
+- Regression: `orient_recent_knowledge_commits_respect_explicit_project_scope` creates both Engram
+  and `voice-layer` current-plan commits, then asserts explicit `project=engram` orientation
+  includes only the Engram commit.
+- Live verification: after rebuilding `engram-cli`, installing the refreshed binary, and restarting
+  the daemon on port 8765, `orient(project=engram)` used commit `f347edf` and no longer surfaced the
+  unrelated `voice-layer` current-plan knowledge commit.
+- Remaining telemetry ambiguity: subgroup `feedback_coverage` can still exceed 1.0 when multiple
+  feedback records attach to the same trace. Keep that as a separate cleanup; it is not a reason for
+  ranking or hot-path changes.
+
+## Scope Noise Live Recheck 001 Pre-Registration: 2026-05-12
+
+Scenario ID: `scope_noise_live_recheck_001`
+
+Purpose: run a live, post-fix diagnostic dogfood sample to see whether explicit `project=engram`
+orientation remains scoped after `f347edf`, especially with recent knowledge commits enabled.
+
+Research question:
+
+- Does live `orient(project=engram, cwd=/Users/yuval.meiri/projects/engram)` avoid surfacing
+  unrelated `voice-layer` current-plan memory or knowledge commits across several realistic
+  intents?
+
+Hypotheses:
+
+- H1: after `f347edf`, explicit Engram orientation returns only Engram-scoped or global/user memory
+  and no wrong-scope memory judgments are needed.
+- H0: at least one live orientation still returns unrelated project memory, requiring
+  `wrong_scope_memory_ids` feedback.
+
+Method:
+
+- Use the installed daemon on port 8765, not only unit tests.
+- Run four live `orient` calls under this scenario: `plan_work`, `resume_session`,
+  `implement_change`, and `verify_decision`.
+- Keep `project=engram`, `cwd=/Users/yuval.meiri/projects/engram`, and recent knowledge commits
+  enabled through the MCP default.
+- Inspect each returned context for `voice-layer`, `Voice Layer`, and unrelated current-plan
+  knowledge commits.
+- Submit feedback for every trace with explicit `used_memory_ids`; use `wrong_scope_memory_ids`
+  only if a returned MemoryItem is actually judged wrong-scope.
+- Score the scenario through `telemetry(action=real_session_eval, scenario_id=...)`.
+
+Success criteria:
+
+- `trace_count=4` or more for the scenario.
+- `feedback_count` equals `trace_count`.
+- `memory_judgment_coverage=1.0`.
+- `wrong_scope_memory_count=0`.
+- `unjudged_memory_feedback_count=0`.
+- No returned context contains unrelated `voice-layer` current-plan guidance.
+
+Limits:
+
+- This is a live diagnostic sample, not a controlled no-memory comparison.
+- It can increase confidence in the scope-noise fix, but it does not justify ranking, graph,
+  obligation hot-path, M6 write-apply, deletion, or broad legacy-simplification changes.
+
+## Scope Noise Live Recheck 001 Score: 2026-05-12
+
+Verdict: pass for the narrow live diagnostic. Do not treat this as a controlled benchmark or as
+evidence for unrelated Brain Harness hot-path changes.
+
+Run shape:
+
+- Scenario: `scope_noise_live_recheck_001`
+- Project/cwd: `engram`, `/Users/yuval.meiri/projects/engram`
+- Operation: live MCP `orient`
+- Installed daemon path: the same daemon path used after `f347edf` was installed and restarted
+- Arms judged:
+  - `preregistration`: trace `019e1c63-06c7-70e1-9264-7a1f18929dbf`, feedback
+    `019e1c64-1136-7332-862d-d03fdd4b9faf`
+  - `resume_session_probe`: trace `019e1c64-2961-7f42-8973-efe6e100ca25`, feedback
+    `019e1c66-ee10-7090-96ea-08f45e411779`
+  - `resume_session`: trace `019e1c65-74d3-7bb1-b73a-c3da6c970a1e`, feedback
+    `019e1c65-afa2-7d51-a918-052186c28df6`
+  - `implement_change`: trace `019e1c65-c866-7e41-9016-12be0feb4ede`, feedback
+    `019e1c65-eb84-75c0-9aa2-59b3741e931f`
+  - `verify_decision`: trace `019e1c66-04f4-7540-acb8-5f477a920343`, feedback
+    `019e1c66-2fd0-71a2-bd1f-79b9124921ef`
+
+Protocol note: the pre-registration expected four or more traces and every trace judged. The live
+run produced one extra in-scenario `resume_session_probe` trace. It was judged rather than dropped
+because it used the same scenario, explicit project, and live post-fix orientation path. This should
+be treated as a protocol expansion, not as a clean four-arm controlled run.
+
+Report metrics from `telemetry(action=real_session_eval, project=engram,
+scenario_id=scope_noise_live_recheck_001, limit=50)`:
+
+- `trace_count=5`
+- `feedback_count=5`
+- `feedback_coverage=1.0`
+- `memory_judgment_feedback_count=5`
+- `memory_judgment_coverage=1.0`
+- `unjudged_memory_feedback_count=0`
+- `wrong_scope_memory_count=0`
+- `stale_memory_count=0`
+- `bad_memory_used_count=0`
+- `task_success_count=5`
+- `preference_adhered_count=5`
+- `warning_count=0`
+- `returned_memory_count=94`
+- `used_memory_count=14`
+
+Confidence gate: failed as expected for a small live diagnostic sample. The telemetry report requires
+at least 20 real-session traces and 10 feedback records; this run had five of each.
+
+Scope result:
+
+- All judged traces selected explicit `project=engram`.
+- Recent repository commits were Engram branch commits such as `05b67bc`, `08f26a7`, `f347edf`,
+  `709336e`, and `57dc349`.
+- Recent Memory OS knowledge commits no longer included the unrelated `voice-layer` current-plan
+  knowledge commit that motivated the fix.
+- The word `voice-layer` still appeared inside the Engram current-plan memory as the known prior
+  bug example. That was not counted as wrong-scope because it was not returned as independent
+  `voice-layer` project guidance.
+- The `verify_decision` trace returned graph/obligation/migration-related Engram memories because
+  the prompt explicitly asked whether the evidence justified changes in those areas. That is
+  relevant Engram context, not scope leakage.
+
+Claim update:
+
+- This increases confidence that commit `f347edf` fixed the identified recent-knowledge-commit
+  scope path for explicit Engram orientation.
+- It does not prove ranking quality, Claude Code harness quality, no-memory superiority/inferiority,
+  graph or obligation hot-path readiness, migration apply readiness, or deletion safety.
+- The next high-confidence code direction remains telemetry semantics cleanup: keep the
+  multi-feedback subgroup `feedback_coverage` ambiguity separate from scope correctness, and improve
+  trace joinability by setting `external_session_id` when the host thread/session ID is known.
+
+## Telemetry Semantics Cleanup 001: 2026-05-12
+
+Purpose: implement the bounded post-consultation telemetry cleanup without changing `orient`
+ranking, hot-path retrieval, graph/obligation/lint behavior, migration, or deletion.
+
+Implemented semantics:
+
+- `feedback_coverage` is now trace-level coverage: traces with at least one linked feedback record
+  divided by traces. This should not exceed 1.0.
+- `feedback_trace_count` exposes the numerator behind trace-level coverage.
+- `feedback_records_per_trace` preserves feedback density and can exceed 1.0 when multiple feedback
+  records attach to the same trace.
+- `memory_judgment_trace_count` and `memory_judgment_trace_coverage` separate trace-level memory
+  attribution from feedback-record-level `memory_judgment_feedback_count`.
+- `outcome_trace_count` and `outcome_coverage` separate behavioral outcome coverage from raw
+  `outcome_feedback_count`.
+- Feedback reports now include external-session feedback counts so joinability can be checked on
+  both trace and feedback records.
+
+Regression:
+
+- `real_session_eval_report_separates_trace_coverage_from_feedback_density` creates two traces in
+  one arm, attaches two feedback records to only one trace, and verifies:
+  - `feedback_count=2`
+  - `feedback_trace_count=1`
+  - `feedback_coverage=0.5`
+  - `feedback_records_per_trace=1.0`
+  - `outcome_trace_count=1`
+  - `outcome_coverage=0.5`
+
+Claim boundary:
+
+- This improves measurement semantics only. It is not behavioral evidence that MemoryItem retrieval
+  beats no-memory or static instruction files.
+- The next evidence step remains a discriminative continuity benchmark design after this code path
+  is installed and live-smoked.
+
+## Discriminative Continuity Benchmark 001: 2026-05-12
+
+Purpose: add an executable benchmark fixture for the next evidence gate after telemetry semantics
+cleanup. The target is not a broad live claim; it is a deterministic check that the benchmark
+instrument can distinguish `memory_items` from `no_memory` and `static_instructions` when the
+scenario depends on target MemoryItems.
+
+Implemented fixture:
+
+- `discriminative_continuity_benchmark_separates_memoryitems_from_static_instructions`
+  creates two target MemoryItems:
+  - a current-plan decision saying telemetry semantics cleanup is complete and the next action is a
+    discriminative continuity benchmark, with graph/obligation/lint/raw-observation hot-path,
+    M6 write/apply, deletion, and legacy cleanup still blocked;
+  - the durable user preference to commit every meaningful Engram step while keeping unrelated
+    user-owned files such as root `AGENTS.md` out of commits unless explicitly requested.
+- It scores two continuity scenarios:
+  - `resume_continuity_discriminative_001`
+  - `follow_preference_discriminative_001`
+- Each scenario has three arms:
+  - `no_memory`
+  - `static_instructions`
+  - `memory_items`
+
+Passing condition:
+
+- both baseline arms must record the expected target MemoryItem as missing context;
+- the `memory_items` arm must retrieve and use the expected MemoryItem without repeated context
+  questions or bad-memory use;
+- the generated telemetry report must show complete trace-level feedback and outcome coverage using
+  the cleaned-up fields: `feedback_trace_count`, `feedback_records_per_trace`,
+  `outcome_trace_count`, and `outcome_coverage`.
+
+Focused validation:
+
+- `cargo test -p engram-tests --test brain_harness_eval_tests \
+  discriminative_continuity_benchmark_separates_memoryitems_from_static_instructions -- --nocapture`
+  passed.
+
+Claim boundary:
+
+- This is deterministic fixture evidence that the benchmark protocol can represent a discriminative
+  continuity task and verify telemetry attribution quality.
+- It is not yet live dogfood evidence that Codex Desktop or Claude Code will behave better with
+  Engram in unconstrained runs.
+- The next evidence step should be either the full `brain_harness_eval_tests` suite plus hygiene
+  checks, or a pre-registered live dogfood run that reuses the same target facts and arms.
+
+## Live Discriminative Continuity 001 Pre-registration: 2026-05-12
+
+Purpose: run the live version of the deterministic discriminative continuity fixture from commit
+`4e8f723`. This is a controlled live dogfood probe, not a broad benchmark. It tests whether a fresh
+agent can recover two current target facts through Engram MemoryItems better than `no_memory` and
+`static_instructions` controls.
+
+Base commit for all arms: `4e8f723` (`Add discriminative continuity benchmark fixture`).
+
+Worktrees:
+
+| Arm | Branch | Worktree |
+| --- | --- | --- |
+| `no_memory` | `yuval.meiri/live-discriminative-no-memory` | `/Users/yuval.meiri/projects/engram-live-discriminative-no-memory` |
+| `static_instructions` | `yuval.meiri/live-discriminative-static-instructions` | `/Users/yuval.meiri/projects/engram-live-discriminative-static-instructions` |
+| `memoryitem_orient` | `yuval.meiri/live-discriminative-memoryitem-orient` | `/Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient` |
+
+Evaluator-only target facts:
+
+1. Current plan target: deterministic discriminative continuity fixture is implemented and committed
+   in `4e8f723`; the next evidence step is a live or cross-harness version using the same target
+   facts and arms.
+2. Safety gate target: do not expand `orient` hot path with graph, obligations, lint, or raw
+   observations; do not run M6 write/apply, deletion, or legacy cleanup.
+3. Workflow preference target: after every meaningful Engram implementation, validation, or
+   documentation step, create a focused commit and keep unrelated user-owned files such as root
+   `AGENTS.md` out of commits unless explicitly requested.
+
+The arms must not read this dogfood report. The report is evaluator-only and contains target facts.
+
+### Shared Task
+
+The final answer from each arm should answer these questions only:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+No arm should edit files, create commits, change runtime code, run M6 inventory/apply, delete
+artifacts, alter harness settings, or inspect sibling worktrees.
+
+### Arm Prompt: `no_memory`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-discriminative-no-memory.
+
+This is a controlled no-memory benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and non-Brain-Harness-plan
+repository context:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `static_instructions`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-discriminative-static-instructions.
+
+This is a controlled static-instructions benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Static instruction excerpt:
+- Read actual code before describing behavior.
+- Make only requested changes.
+- After modifying code, run the relevant test command.
+- Before destructive actions, confirm with the user.
+- If the request is genuinely ambiguous, ask; otherwise proceed.
+- Brain Harness work should stay evidence-gated. Do not treat deterministic tests as live behavior
+  evidence.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and the static instruction
+excerpt:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `memoryitem_orient`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient.
+
+This is a controlled MemoryItem-orient benchmark arm.
+
+Rules:
+- Use Engram MCP only through orient and telemetry feedback for this task.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+- Preserve every orient trace_id.
+
+First call Engram orient for resume continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient
+- agent: codex
+- intent: resume_session
+- scenario_id: live_discriminative_continuity_001
+- arm: memoryitem_orient
+- prompt: "What is the current Engram Brain Harness plan, current evidence gate, and next action?"
+
+Then call Engram orient for preference continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-discriminative-memoryitem-orient
+- agent: codex
+- intent: follow_user_preference
+- scenario_id: live_discriminative_continuity_001
+- arm: memoryitem_orient
+- prompt: "What user workflow preference should constrain the next Engram implementation or validation step?"
+
+Task:
+Answer these four questions using only the retrieved Engram context plus this prompt:
+
+1. What is the correct next Engram Brain Harness step?
+2. What actions remain blocked?
+3. What workflow preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+Before the final answer, submit telemetry feedback for each orient trace_id. Include:
+- task_success
+- preference_adhered
+- repeated_context_questions
+- bad_memory_used
+- used_memory_ids for any returned MemoryItems that directly informed the answer
+- rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids when applicable
+- missing_context if Engram failed to provide a target fact
+
+If the answer is underdetermined even after orient, say exactly what is missing instead of inventing
+it.
+```
+
+### Scoring Rubric
+
+Each arm is judged by an evaluator after the transcript is returned.
+
+Pass criteria for `memoryitem_orient`:
+
+- identifies the live discriminative benchmark as the next step, not another deterministic fixture
+  or broad architecture change;
+- keeps hot-path expansion, graph/obligation/lint/raw-observation default retrieval, M6 write/apply,
+  deletion, and legacy cleanup blocked;
+- identifies the focused-commit workflow preference and the `AGENTS.md` exclusion constraint;
+- submits feedback for both orient traces with `used_memory_ids` when target MemoryItems are used;
+- asks zero repeated context questions.
+
+Baseline interpretation:
+
+- `no_memory` and `static_instructions` may pass only if they independently recover all target facts
+  without Engram. If either baseline says the answer is underdetermined, that is a clean control
+  failure, not a protocol failure.
+- The expected discriminative pattern is: `memoryitem_orient` passes, and at least one baseline
+  misses or marks missing the current-plan target or workflow-preference target.
+
+Telemetry expectation:
+
+- Treatment should produce two orient traces with
+  `scenario_id=live_discriminative_continuity_001` and `arm=memoryitem_orient`.
+- Evaluator scoring should later record or summarize baseline outcomes so the live report can
+  separate trace coverage, feedback density, outcome coverage, and memory attribution.
+
+Required user/evaluator return values:
+
+- the three fresh thread links or terminal exports;
+- for the treatment arm, the two orient trace IDs and feedback IDs if visible;
+- any deviations from the prompts, especially accidental use of Engram in a baseline or accidental
+  reading of this dogfood report.
+
+Claim boundary:
+
+- A clean pass supports Engram continuity for this narrow target-fact recovery task.
+- It does not prove cross-harness generality, ranking optimality, hot-path expansion readiness,
+  migration write/apply readiness, deletion safety, or legacy-layer removal readiness.
+
+## Live Discriminative Continuity 001 Scoring: 2026-05-12
+
+Evaluator trace: `019e1d67-535a-7a00-b038-8e2084a66550`.
+
+Supplied transcripts:
+
+| Arm | Thread | Transcript |
+| --- | --- | --- |
+| `memoryitem_orient` | `codex://threads/019e1d5c-cd14-7ea0-ac3f-d05e36c3533c` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-04-41-019e1d5c-cd14-7ea0-ac3f-d05e36c3533c.jsonl` |
+| `static_instructions` | `codex://threads/019e1d5d-3e89-7000-97f7-36c1935b1bab` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-05-10-019e1d5d-3e89-7000-97f7-36c1935b1bab.jsonl` |
+| `no_memory` | `codex://threads/019e1d5d-ab42-7bb2-ac7e-41eb448d6dd1` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-05-38-019e1d5d-ab42-7bb2-ac7e-41eb448d6dd1.jsonl` |
+
+### Arm Outcomes
+
+| Arm | Target-current plan | Safety gates | Workflow preference | Repeated context questions | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `memoryitem_orient` | Pass | Pass | Pass | 0 | Treatment behaved as expected, with one attribution gap. |
+| `static_instructions` | Missed; answered underdetermined | Pass | Missed | 0 | Clean control failure. |
+| `no_memory` | Pass | Pass | Pass | 0 | Behavioral pass, but via protocol leakage from allowed repo context. |
+
+Treatment trace IDs:
+
+- `resume_session`: `019e1d5d-1fdc-7251-8dd3-3a5abc70d6e7`
+- `follow_user_preference`: `019e1d5d-3620-79d2-ad08-41595834a019`
+
+Treatment feedback IDs:
+
+- `019e1d5d-c1b4-71d0-a460-fdc0126eb6a8`
+- `019e1d5d-db00-7282-8a65-9d8e9ba16faa`
+
+Treatment assessment:
+
+- The `memoryitem_orient` arm identified the live discriminative benchmark as the next step,
+  preserved the blocked-action list, identified the focused-commit preference, and submitted
+  telemetry feedback for both orient traces.
+- The `follow_user_preference` feedback correctly included used MemoryItem
+  `019e03be-a9a5-7db2-848d-eb26ef78bcb5`.
+- The `resume_session` feedback marked success but sent `used_memory_ids=[]` while its note said
+  the current-plan MemoryItem shaped the answer. This is an attribution-quality gap, not an answer
+  failure.
+
+Static-control assessment:
+
+- The `static_instructions` arm did not call tools and did not invent target facts. It correctly
+  answered that the next Brain Harness step was underdetermined from the static prompt alone.
+- This is a clean control failure and supports the view that generic static instructions do not
+  carry the current-plan target.
+
+No-memory-control assessment:
+
+- The `no_memory` arm obeyed the no-Engram constraint and did not read the evaluator-only dogfood
+  report, architecture document, or research-method document.
+- It recovered the target facts by reading allowed repository context, especially
+  `engram-tests/tests/brain_harness_eval_tests.rs`, where the deterministic fixture embeds the
+  current-plan target, safety gates, and workflow preference.
+- This means the arm's behavioral pass is not evidence that no-memory continuity is adequate. It is
+  evidence that the live protocol leaked target facts through an allowed file.
+
+### Telemetry Report
+
+`telemetry(action=real_session_eval, project=engram,
+scenario_id=live_discriminative_continuity_001)` reported:
+
+- `trace_count=4`
+- `feedback_count=2`
+- `feedback_coverage=0.5`
+- `memory_judgment_feedback_count=1`
+- `outcome_feedback_count=2`
+- `task_success_count=2`
+- `bad_memory_used_count=0`
+- `repeated_context_question_count=0`
+
+The four traces include two evaluator-orient traces plus the two treatment-orient traces. The two
+baseline arms did not create telemetry traces by design, so telemetry alone cannot compare all
+three arms. The transcript score above is still required for cross-arm interpretation.
+
+### Decision
+
+Hypothesis H1, "MemoryItem orient materially outperforms both baselines on this live task", is not
+supported by this run. The treatment passed, and the static baseline failed cleanly, but the
+`no_memory` baseline also passed after recovering the target from allowed repo files.
+
+Hypothesis H2, "the current live protocol leaks evaluator target facts into baseline-visible
+context", is supported. The deterministic fixture was committed before the live worktrees were cut,
+and that fixture contained the same target facts the live benchmark was trying to hide.
+
+The correct interpretation is:
+
+- Engram `orient` can recover and apply the target current-plan and preference facts in this
+  scenario.
+- This run does not establish a discriminative MemoryItem advantage over `no_memory`.
+- The next evidence step must repair target visibility before running more live arms.
+
+### Next Gate
+
+Before running another live discriminative continuity benchmark, make the target facts invisible to
+baseline arms. A valid next protocol should satisfy all of these constraints:
+
+- the target current-plan and preference facts exist only in Engram MemoryItems and evaluator notes,
+  not in allowed repository files;
+- arm worktrees are cut before the evaluator captures the new target facts, or the target facts are
+  created after worktree setup without committing them to files the arms can read;
+- baseline prompts either forbid reading known eval fixture files or the fixture files contain no
+  evaluator target facts;
+- baseline scoring records whether target facts came from repo context, static prompt text, or
+  memory retrieval;
+- treatment feedback must include `used_memory_ids` whenever a returned MemoryItem shaped the
+  answer, including current-plan MemoryItems.
+
+Do not use this run to justify orient hot-path expansion, graph/obligation/lint/raw-observation
+default retrieval, M6 write/apply, deletion, or legacy cleanup.
+
+## Live Blind Continuity 002 Protocol: 2026-05-12
+
+Status: protocol template. This section intentionally contains no evaluator target facts.
+
+Purpose: rerun the discriminative continuity probe after repairing the target-visibility leak found
+in `live_discriminative_continuity_001`. The run should test whether a fresh agent can recover
+post-worktree current-plan facts through Engram MemoryItems when those facts are not present in
+baseline-visible repository files, prompts, or committed docs.
+
+Protocol order:
+
+1. Commit this protocol template before creating arm worktrees.
+2. Create fresh `no_memory`, `static_instructions`, and `memoryitem_orient` worktrees from the
+   committed protocol state.
+3. Only after the worktrees exist, capture the evaluator target facts into Engram MemoryItems.
+4. Do not write the target facts into repository files, prompts, comments, branch names, commit
+   messages, or user-facing instructions before all arm transcripts are collected.
+5. Before launching arms, run a target-visibility check from each arm worktree for every hidden
+   target phrase. Any hit outside Engram is a protocol failure and aborts the run.
+
+Planned worktrees:
+
+| Arm | Branch | Worktree |
+| --- | --- | --- |
+| `no_memory` | `yuval.meiri/live-blind-continuity-002-no-memory` | `/Users/yuval.meiri/projects/engram-live-blind-continuity-002-no-memory` |
+| `static_instructions` | `yuval.meiri/live-blind-continuity-002-static-instructions` | `/Users/yuval.meiri/projects/engram-live-blind-continuity-002-static-instructions` |
+| `memoryitem_orient` | `yuval.meiri/live-blind-continuity-002-memoryitem-orient` | `/Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient` |
+
+### Shared Task
+
+The final answer from each arm should answer these questions only:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+No arm should edit files, create commits, change runtime code, run M6 inventory/apply, delete
+artifacts, alter harness settings, inspect sibling worktrees, or use prior transcript context.
+
+### Target Visibility Rules
+
+- The evaluator target facts must exist only in Engram MemoryItems and evaluator-private notes until
+  all transcripts are returned.
+- Baseline arms may inspect allowed repository context, but the target facts must not be discoverable
+  there. If a baseline recovers a target fact from repo context, score it as leakage, not continuity.
+- Treatment feedback must include `used_memory_ids` for every MemoryItem that directly shaped the
+  answer. If a current-plan MemoryItem shaped the answer but was not exposed as a hot-context ID,
+  the feedback note must say so explicitly.
+- Every scored target fact should record source provenance as one of: `engram_memory`,
+  `static_prompt`, `repo_context`, `inference`, or `unknown`.
+
+### Arm Prompt: `no_memory`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-blind-continuity-002-no-memory.
+
+This is a controlled no-memory benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not read engram-tests/tests/brain_harness_eval_tests.rs.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and non-Brain-Harness-plan
+repository context:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `static_instructions`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-blind-continuity-002-static-instructions.
+
+This is a controlled static-instructions benchmark arm.
+
+Rules:
+- Do not call Engram MCP tools.
+- Do not use orient, memory, search, handoff, graph, obligations, lint, or telemetry.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not read engram-tests/tests/brain_harness_eval_tests.rs.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+
+Static instruction excerpt:
+- Read actual code before describing behavior.
+- Make only requested changes.
+- After modifying code, run the relevant test command.
+- Before destructive actions, confirm with the user.
+- If the request is genuinely ambiguous, ask; otherwise proceed.
+- Brain Harness work should stay evidence-gated. Do not treat deterministic tests as live behavior
+  evidence.
+
+Task:
+Answer these four questions as accurately as you can from this prompt and the static instruction
+excerpt:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+If the answer is underdetermined, say exactly what is missing instead of inventing it.
+```
+
+### Arm Prompt: `memoryitem_orient`
+
+Use this prompt in a fresh Codex Desktop thread or equivalent fresh agent session:
+
+```text
+You are in /Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient.
+
+This is a controlled MemoryItem-orient benchmark arm.
+
+Rules:
+- Use Engram MCP only through orient and telemetry feedback for this task.
+- Do not read docs/BRAIN_HARNESS_DOGFOOD_RUN_2026-05-07.md.
+- Do not read docs/BRAIN_HARNESS_ARCHITECTURE.md.
+- Do not read docs/BRAIN_HARNESS_RESEARCH_METHOD.md.
+- Do not read engram-tests/tests/brain_harness_eval_tests.rs.
+- Do not inspect sibling worktrees.
+- Do not use prior transcript context.
+- Do not edit files or commit.
+- Preserve every orient trace_id.
+
+First call Engram orient for resume continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient
+- agent: codex
+- intent: resume_session
+- scenario_id: live_blind_continuity_002
+- arm: memoryitem_orient
+- prompt: "What is the current Engram Brain Harness plan, evidence gate, and next action?"
+
+Then call Engram orient for preference continuity:
+- project: engram
+- cwd: /Users/yuval.meiri/projects/engram-live-blind-continuity-002-memoryitem-orient
+- agent: codex
+- intent: follow_user_preference
+- scenario_id: live_blind_continuity_002
+- arm: memoryitem_orient
+- prompt: "What workflow or evaluation preference should constrain the next Engram validation step?"
+
+Task:
+Answer these four questions using only the retrieved Engram context plus this prompt:
+
+1. What is the current Engram Brain Harness plan and evidence gate?
+2. What actions remain blocked?
+3. What workflow or evaluation preference should constrain the next step?
+4. What would you do next if asked to proceed?
+
+Before the final answer, submit telemetry feedback for each orient trace_id. Include:
+- task_success
+- preference_adhered
+- repeated_context_questions
+- bad_memory_used
+- used_memory_ids for any returned MemoryItems that directly informed the answer
+- rejected_memory_ids, stale_memory_ids, or wrong_scope_memory_ids when applicable
+- missing_context if Engram failed to provide a target fact
+
+If the answer is underdetermined even after orient, say exactly what is missing instead of inventing
+it.
+```
+
+### Scoring Rubric
+
+Pass criteria for `memoryitem_orient`:
+
+- recovers the hidden current-plan and evidence-gate target facts from Engram;
+- keeps hot-path expansion, graph/obligation/lint/raw-observation default retrieval, M6 write/apply,
+  deletion, and legacy cleanup blocked unless the hidden target explicitly changes a gate;
+- identifies the hidden workflow or evaluation preference;
+- submits feedback for both orient traces with accurate memory attribution;
+- asks zero repeated context questions.
+
+Baseline interpretation:
+
+- `no_memory` and `static_instructions` should answer underdetermined unless they independently
+  recover target facts without Engram.
+- If a baseline recovers a target from repository context, the run fails as a target-leak protocol
+  failure.
+- If a baseline guesses a target fact without evidence, score the answer separately from source
+  provenance and do not treat it as continuity evidence.
+
+Claim boundary:
+
+- A clean pass supports Engram continuity only for this sealed target-fact recovery task.
+- It does not prove cross-harness generality, ranking optimality, hot-path expansion readiness,
+  migration write/apply readiness, deletion safety, or legacy-layer removal readiness.
+
+## Live Blind Continuity 002 Scoring: 2026-05-12
+
+Evaluator trace: `019e1d7c-75a4-72c3-a5b9-a41806e3e6a2`.
+
+Supplied transcripts:
+
+| Arm | Thread | Transcript |
+| --- | --- | --- |
+| `no_memory` | `codex://threads/019e1d76-e420-72f3-a6f6-8aab7ee6fcbc` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-33-11-019e1d76-e420-72f3-a6f6-8aab7ee6fcbc.jsonl` |
+| `static_instructions` | `codex://threads/019e1d77-7bd6-77c3-868e-91d934e6aaf5` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-33-50-019e1d77-7bd6-77c3-868e-91d934e6aaf5.jsonl` |
+| `memoryitem_orient` | `codex://threads/019e1d77-f20b-7960-be5a-e13553b9bd16` | `/Users/yuval.meiri/.codex/sessions/2026/05/12/rollout-2026-05-12T21-34-20-019e1d77-f20b-7960-be5a-e13553b9bd16.jsonl` |
+
+Environment note: Codex Desktop session metadata points at internal `.codex/worktrees/...`
+checkouts, while tool calls in the transcripts used the intended `/Users/yuval.meiri/projects/...`
+arm worktrees. The arm worktrees were still clean at score time.
+
+### Arm Outcomes
+
+| Arm | Current plan and evidence gate | Blocked actions | Workflow/eval preference | Source provenance | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| `no_memory` | Missed; answered underdetermined | Partial generic recovery | Static/prompt-constrained only | `static_prompt`, `repo_context` for generic gates | Clean control failure; no hidden-target leak detected. |
+| `static_instructions` | Missed; answered underdetermined | Prompt-rule recovery | Static/prompt-constrained only | `static_prompt` | Clean control failure; no hidden-target leak detected. |
+| `memoryitem_orient` | Pass | Pass | Pass | `engram_memory` | Behavioral pass, with current-plan attribution failure. |
+
+The sealed target marker and hidden target facts were recovered only by the `memoryitem_orient` arm.
+Both baseline arms said the current plan was underdetermined rather than inventing it. This is the
+expected discriminative pattern and shows that the previous target-visibility leak was repaired for
+this run.
+
+### Treatment Telemetry
+
+Treatment trace IDs:
+
+- `resume_session`: `019e1d78-4993-7a02-964d-845f220f9d43`
+- `follow_user_preference`: `019e1d78-8815-7ba1-a8ff-084845af4862`
+
+Treatment feedback IDs:
+
+- `019e1d79-ebc6-7df2-9b28-ae1df1cfbb98`
+- `019e1d7a-0649-7d43-8e08-9210817ed8f1`
+
+Telemetry report from `telemetry(action=real_session_eval, project=engram,
+scenario_id=live_blind_continuity_002)`:
+
+- `trace_count=3`
+- `feedback_count=2`
+- `feedback_coverage=0.6666666865348816`
+- `outcome_feedback_count=2`
+- `task_success_count=2`
+- `bad_memory_used_count=0`
+- `repeated_context_question_count=0`
+- `missing_context_count=2`
+- `used_memory_count=1`
+
+The treatment feedback preserved both trace IDs and reported success. It correctly identified the
+reviewed commit-hygiene preference ID (`019e03be-a9a5-7db2-848d-eb26ef78bcb5`) when that preference
+was returned explicitly.
+
+Attribution gap: the current-plan MemoryItem shaped the answer, but the treatment could not include
+its ID in `used_memory_ids`. It submitted `used_memory_ids=[]` for `resume_session` and used
+`missing_context` to explain that the current-plan facts were visible while the current-plan
+MemoryItem ID was not exposed in a usable hot-context field. The evaluator knows the current-plan
+MemoryItem was `019e1d71-9078-7d70-b3a5-1a543176d269`, but the participating agent did not have a
+reliable visible ID path.
+
+### Decision
+
+Hypothesis H1, "MemoryItem orient materially outperforms both baselines on sealed target-fact
+recovery", is supported for this narrow live run:
+
+- `no_memory` did not recover the hidden current plan;
+- `static_instructions` did not recover the hidden current plan;
+- `memoryitem_orient` recovered the hidden current plan, evidence gate, blocked actions, and
+  provenance-scoring preference from Engram.
+
+Hypothesis H2, "target facts leak through baseline-visible repository context", is not supported in
+this run. Baseline recovery did not include the sealed target facts, and a prior marker search found
+no repository hits before arms were launched.
+
+The behavior supports Engram continuity for this narrow sealed-target task. Manual transcript
+inspection is sufficient to close the behavioral checkpoint. The telemetry attribution contract is
+still imperfect: it underreports the current-plan MemoryItem that made the answer possible.
+
+### Instrumentation Backlog
+
+Before relying on automated dashboards or large unattended sealed-target batches, fix or explicitly
+account for current-plan attribution:
+
+- ensure `orient` exposes active current-plan MemoryItem IDs in a field agents can reliably submit
+  in `used_memory_ids`; or
+- provide a dedicated feedback helper that lets an agent mark "active current-plan item used" without
+  copying IDs from prose.
+
+This is instrumentation work, not a product blocker for the next Brain Harness slice.
+
+### Next Product Gate
+
+Move forward to a product-facing Brain Harness capability while keeping the same claim boundary. The
+strongest queued product-facing gap is agent lifecycle follow-through: harnesses can expose memory
+tools, but they still do not reliably ensure that newly created or updated project documents are
+ingested, registered, recorded, or explicitly skipped before the final response.
+
+Do not use this single run to justify orient hot-path expansion,
+graph/obligation/lint/raw-observation default retrieval, M6 write/apply, deletion, or legacy cleanup.
+
+## BAF007 Pre-Registration: Sealed Memory-Obligate Code Slice
+
+Status: pre-registered, sealed target not repo-visible before scoring.
+
+Scenario ID: `bounded_autonomous_followthrough_007`
+
+Base commit: `d9925b96013e8b942a764e5a8a179b48130fcc74`
+
+Intent: `implement_change`
+
+Arms:
+
+- `no_memory`
+- `static_instructions`
+- `memoryitem_orient`
+
+### Research Question
+
+Can Brain Loop v1 let an agent recover and act on a prior-session, code-bearing Engram work target
+that is not available from repository-visible context, while baseline arms correctly treat the task
+as underdetermined?
+
+### Hypotheses
+
+- H1: `memoryitem_orient` retrieves the sealed target MemoryItem, uses it to complete a small
+  code-bearing Engram change, verifies the change, commits only intended files, and submits accurate
+  telemetry attribution.
+- H0: `memoryitem_orient` does not materially outperform baselines, either because it misses the
+  target, the baselines recover enough context without memory, or all arms reasonably mark the task
+  underdetermined.
+- H2: the target leaks through repository-visible context, recent git history, static instructions,
+  or prompt wording; if so, the run is invalid and must not be used as evidence for memory benefit.
+
+### Sealing Rules
+
+The exact target marker and target facts are held only in a project-scoped Engram MemoryItem before
+arm execution. They are intentionally not reproduced in this report, the arm prompts, or any
+repo-visible document until after scoring.
+
+Before launching arms, the evaluator must:
+
+- search the repository-visible tree for exact target phrases;
+- search recent git history for exact target phrases;
+- run a pre-arm `orient` smoke check with `arm=prearm_smoke`;
+- proceed only if the target MemoryItem is visible to `orient` and absent from repo-visible context.
+
+### Arm Rules
+
+Baseline arms must not call Engram tools or inspect sibling worktrees. They should answer
+underdetermined if the sealed target is not recoverable from the prompt and allowed repository
+context.
+
+The treatment arm must call `orient` once with this scenario ID and `arm=memoryitem_orient`, preserve
+the returned trace ID, use any relevant returned MemoryItem naturally, and submit telemetry feedback
+with `used_memory_ids` before completion.
+
+All implementation-bearing arms must start from isolated clean worktrees at the same base commit.
+
+### Scoring
+
+The treatment passes only if it:
+
+- retrieves and uses the sealed target MemoryItem;
+- implements the target without expanding `orient`, running M6, deleting data, re-enabling Claude
+  hooks, or broadening ranking/migration scope;
+- runs the relevant validation;
+- commits only intended tracked files;
+- leaves unrelated user-owned files untouched;
+- submits complete feedback for the treatment trace.
+
+Baselines pass as controls only if they do not recover the sealed target and do not fabricate it.
+
+If any baseline recovers the target from allowed non-memory context, score the run as a protocol
+leak, not as Brain Harness evidence.
+
+### Claim Boundary
+
+A clean BAF007 pass supports only this narrow claim: Engram can carry a sealed, prior-session
+code-bearing target through `orient` into a fresh agent run. It does not justify hot-path expansion,
+graph/obligation/lint/raw-observation default retrieval, M6 write/apply, deletion, legacy cleanup,
+or Claude hook re-enablement.
+
+## BAF007 Scoring: Sealed Resolve-Evidence Target
+
+Status: passed, discriminating.
+
+Accepted code commit: `9967f3a` (`Preserve obligation resolve evidence`)
+
+Treatment worktree commit: `db0e6b82e746751b195c965d276069dd69e17a7a`
+
+Sealed MemoryItem: `019e3a42-5721-70f1-a1c5-c337acca01b0`
+
+Sealed marker: `BAF007-SEAL-RESOLVE-EVIDENCE-PRESERVE-CALLER-EVIDENCE`
+
+Target after scoring disclosure: preserve caller-provided resolution evidence for
+`obligations(resolve)` while keeping the public MCP request shape unchanged. Resolved obligations
+must include caller evidence plus any service-added document content fingerprint evidence.
+
+### Arm Outcomes
+
+- `no_memory`: passed as a control. The arm found only the redacted pre-registration protocol in
+  repo-visible context and ended underdetermined. It made no edits and no commit.
+- `static_instructions`: passed as a control. The arm found only the redacted pre-registration
+  protocol and ended underdetermined. It made no edits, ran no tests, and made no commit.
+- `memoryitem_orient`: passed as treatment. The arm called `orient` with trace
+  `019e3a47-2da0-7dc3-a1fe-ecf0447b6164`, recovered the sealed target, implemented the narrow
+  evidence-preservation fix, verified it, and committed only `engram-mcp/src/tools.rs` and
+  `engram-tests/tests/obligation_tests.rs`.
+
+### Validation
+
+The accepted main-branch commit passed:
+
+- `cargo fmt --all --check`
+- `cargo test -p engram-index obligation`
+- `cargo test -p engram-tests --test obligation_tests`
+- `cargo check -p engram-cli`
+- `cargo check --workspace`
+- `git diff --check`
+
+Claude Bridge reviewed the extracted transcripts and treatment commit as a read-only judge. Its
+verdict was discriminating: both baselines correctly failed to recover target facts, while the
+treatment recovered the target through `orient` and shipped a correctly scoped patch. Claude's only
+acceptance condition was the `cargo check -p engram-cli` gate, which passed; the extra workspace
+check also passed.
+
+### Caveats
+
+The run exposed an attribution-surface gap. The treatment used the sealed MemoryItem content, but
+its initial feedback reported `used_memory_ids=[]` because the orient packet did not expose the
+MemoryItem ID in a machine-friendly attribution field. The evaluator submitted correction feedback
+`019e3a55-ed31-73b0-87a3-1dd374b4d9a8` with
+`used_memory_ids=[019e3a42-5721-70f1-a1c5-c337acca01b0]`. This should be treated as an Engram
+observability issue, not a treatment behavior failure.
+
+The run supports only a narrow claim: Engram can carry a sealed code-bearing target into a fresh
+Codex run through `orient`. It does not justify re-enabling Claude hooks, expanding `orient`,
+running M6 write/apply, deleting artifacts, changing ranking, or simplifying legacy paths.
+
+### Next Follow-Up
+
+Fix the orient attribution surface so MemoryItem IDs used to shape a response are available to the
+agent as explicit `used_memory_ids` candidates. This should be handled as a focused observability
+improvement before using automated feedback dashboards as evidence for larger Brain Harness claims.
+
+## BAF008 Pre-Registration: Claude Code Sealed Memory-Obligate Code Slice
+
+Status: pre-registered, sealed target not repo-visible before scoring.
+
+Scenario ID: `bounded_autonomous_followthrough_008`
+
+Surface: real interactive Claude Code terminal.
+
+Base commit: `5b3fecaba52fa5c7226bb2505e6cbedf0eb24280`
+
+Intent: `implement_change`
+
+Primary arm:
+
+- `claude_code_memoryitem_orient`
+
+Optional controls, if time permits:
+
+- `no_memory`
+- `static_instructions`
+
+### Research Question
+
+Can the real Claude Code terminal recover a prior-session, code-bearing Engram work target from a
+sealed MemoryItem, implement it narrowly, verify it, commit it, and submit structured feedback with
+the exact `used_memory_ids` that shaped the work?
+
+### Hypotheses
+
+- H1: `claude_code_memoryitem_orient` retrieves the sealed target MemoryItem, uses it to complete a
+  small Engram implementation slice, verifies the change, commits only intended files, and submits
+  telemetry feedback with the sealed MemoryItem ID in `used_memory_ids`.
+- H0: Claude Code does not materially demonstrate memory-obligate benefit because it misses the
+  target, implements from guesswork, omits attribution, expands scope, or cannot complete the
+  verified implementation.
+- H2: the target leaks through repository-visible context, recent git history, static instructions,
+  prompt wording, or another non-memory path; if so, the run is invalid for memory-benefit claims.
+
+### Sealing Rules
+
+The exact target marker and target facts are held only in a project-scoped Engram MemoryItem before
+arm execution. They are intentionally not reproduced in this report, the arm prompt, or any
+repo-visible document until after scoring.
+
+Before launching the Claude Code arm, the evaluator must:
+
+- search the repository-visible tree for the exact sealed marker and target phrases;
+- search recent git history for the exact sealed marker and target phrases;
+- run a pre-arm `orient` smoke check with `arm=prearm_smoke`;
+- proceed only if the sealed MemoryItem is visible to `orient` and absent from repo-visible
+  context.
+
+### Expected Helpful Memory
+
+- A sealed project-scoped MemoryItem containing the exact implementation target, marker, scope
+  boundaries, required tests, and attribution requirement.
+- Existing reviewed memory about commit hygiene and keeping unrelated root `AGENTS.md` untouched.
+- Existing Brain Harness research-method memory requiring precise claim boundaries.
+
+### Harmful Memory To Reject
+
+- Older broad current-plan memories that would steer the run toward M6, migration writes, ranking
+  churn, graph expansion, deletion, or Claude hook reconfiguration.
+- Any stale claim that Claude hooks are disabled; they have since been re-enabled and smoke-tested.
+- Any target inferred only from this redacted report rather than from the sealed MemoryItem.
+
+### Measurable Success Outcome
+
+The primary arm passes only if it:
+
+- calls `orient` with `project=engram`, the arm name, and this scenario ID;
+- recovers the sealed target from a returned MemoryItem;
+- implements the target without expanding unrelated Brain Harness surfaces;
+- runs the target-specific validation plus `git diff --check`;
+- commits only intended tracked files;
+- leaves root `AGENTS.md` untouched and untracked;
+- submits feedback for the orient trace with the sealed MemoryItem ID in `used_memory_ids`;
+- exports or provides enough transcript detail for evaluator scoring.
+
+### Expected Failure Modes
+
+- Claude Code calls `orient` but fails to notice the sealed target.
+- Claude Code implements a plausible but unsealed improvement from repo-visible context.
+- Claude Code completes the change but submits empty or wrong `used_memory_ids`.
+- Claude Code broadens the task into ranking, migration, graph, deletion, or hook work.
+- The exact target appears in repo-visible context before scoring, invalidating the run.
+
+### User Judgment Required
+
+Yes. The user must run the real interactive Claude Code terminal arm so startup hooks and manual
+terminal behavior are exercised. The evaluator can prepare the sealed memory, worktree, prompt,
+and scoring checks, but cannot honestly replace this with Claude Bridge for a real terminal claim.
+
+## BAF008 Scoring: Claude Code Sealed Feedback-Attribution Target
+
+Status: passed for the primary real Claude Code terminal arm.
+
+Accepted code commit: `5f3f74a` (`Warn on unattributed memory feedback`)
+
+Treatment worktree: `/Users/yuval.meiri/projects/engram-dogfood-baf008-claude-orient`
+
+Treatment branch: `yuval.meiri/dogfood-baf008-claude-orient`
+
+Sealed MemoryItem: `019e5912-c803-7c90-9fdd-6875859fbcb7`
+
+Sealed marker: `BAF008-SEAL-FEEDBACK-MEMORY-ATTRIBUTION-WARNING`
+
+Target after scoring disclosure: add a non-blocking `warnings` array to
+`telemetry(action=submit_feedback)` responses when the linked trace returned memory IDs and the
+feedback contains no memory judgment fields. The warning must be advisory only: do not reject empty
+`used_memory_ids`, do not change telemetry storage schema, do not change public request parameters,
+and do not change `orient` ranking or retrieval.
+
+### Arm Outcome
+
+- `claude_code_memoryitem_orient`: passed. The real interactive Claude Code terminal called
+  `orient` with trace `019e591b-2ab3-72b1-ba1a-bf32da4a399d`, recovered sealed MemoryItem
+  `019e5912-c803-7c90-9fdd-6875859fbcb7`, implemented the narrow MCP response warning, verified
+  it, and committed only `engram-mcp/src/tools.rs` and
+  `engram-tests/tests/telemetry_tests.rs`.
+
+Claude submitted feedback `019e5924-6ac5-7dd1-bf98-4455be12f480` for the treatment trace with
+`used_memory_ids=["019e5912-c803-7c90-9fdd-6875859fbcb7"]`,
+`task_success=true`, `preference_adhered=true`, `repeated_context_questions=0`,
+`bad_memory_used=false`, `usefulness_score=5`, `correctness_score=5`, and `noise_score=2`.
+
+### Validation
+
+The evaluator inspected the accepted patch and reran the target validation in the treatment
+worktree:
+
+- `cargo fmt --all --check`
+- `cargo test -p engram-tests --test telemetry_tests`
+- `cargo check -p engram-cli`
+- `git diff --check`
+
+All checks passed. The worktree was clean after the Claude commit.
+
+### Scope And Caveats
+
+This run is stronger than a connectivity smoke: it exercised real interactive Claude Code, real
+startup/final hooks, a sealed prior-session MemoryItem, implementation, validation, commit hygiene,
+and structured memory attribution.
+
+This run is still not a broad benchmark. The optional no-memory and static-instructions controls
+were not run, so the claim should stay narrow: real Claude Code can recover and act on a sealed
+code-bearing Engram MemoryItem through `orient`, and can submit the exact sealed MemoryItem ID in
+`used_memory_ids` when prompted. It does not justify M6 write/apply, migration writes, deletion,
+legacy cleanup, graph expansion, ranking changes, or broader hot-path changes.
+
+Claude's stop hook reported transient open obligations after final response, but a follow-up scoped
+`obligations.doctor(project=engram,cwd=/Users/yuval.meiri/projects/engram-dogfood-baf008-claude-orient)`
+returned `open=[]` and `warnings=[]`.
+
+The live daemon binary still needed to be rebuilt and restarted after accepting `5f3f74a`; before
+that restart, live `submit_feedback` responses would not yet include the new `warnings` field.
+
+## BAF008 Control Addendum: Sanitized No-Memory And Static Arms
+
+Status: pre-registered before control execution.
+
+Purpose: close the main BAF008 interpretation gap. The primary Claude Code treatment arm passed,
+but the target is now disclosed in this report and recent git history. The controls therefore must
+run from sanitized archive directories based on base commit `5b3fecaba52fa5c7226bb2505e6cbedf0eb24280`,
+not from the current checkout or a normal worktree.
+
+Control arms:
+
+- `no_memory`
+- `static_instructions`
+
+Sanitized control directories:
+
+- `/Users/yuval.meiri/projects/engram-baf008-control-no-memory`
+- `/Users/yuval.meiri/projects/engram-baf008-control-static-instructions`
+
+### Control Rules
+
+- Create each directory with `git archive` from base commit `5b3fecaba52fa5c7226bb2505e6cbedf0eb24280`.
+- Initialize each directory as a standalone git repository containing only the base snapshot.
+- Run real Claude Code with Engram disabled. Prefer `claude --bare`; if auth does not work in
+  bare mode, use a temporary no-hook/no-Engram settings file and strict MCP config.
+- Verify startup output contains no `<engram_session_activation>` or Engram hook text.
+- Forbid Engram MCP, sibling worktrees, the current main repo, user/session history, web lookup,
+  and Brain Harness docs or git history that disclose BAF008 target facts.
+- Do not edit unless the exact target is recoverable with cited allowed evidence. If the target is
+  underdetermined, the control should say so and stop.
+
+### Scoring Rules
+
+- Clean control failure: the arm says the target is underdetermined and does not invent an
+  implementation.
+- Contaminated/invalid: the arm uses Engram, reads forbidden docs/history/sibling repos, or receives
+  Engram startup/hook context.
+- Baseline success: the arm identifies the telemetry warning target or implements an equivalent
+  change without Engram.
+
+If both controls fail cleanly, BAF008 becomes stronger evidence for sealed MemoryItem recovery and
+the next product step remains document lifecycle follow-through. If either control succeeds
+materially, stop product expansion and redesign the benchmark because BAF008 is not memory-obligate.
+If either run is contaminated, rerun it under stricter isolation before scoring.
+
+## BAF008 Control Scoring: Sanitized Claude Code Baselines
+
+Status: passed as clean controls.
+
+Scored transcripts:
+
+- `no_memory`: `/Users/yuval.meiri/projects/engram-baf008-control-results/no-memory-strict.stream.jsonl`
+- `static_instructions`: `/Users/yuval.meiri/projects/engram-baf008-control-results/static-instructions-strict.stream.jsonl`
+
+Strict sanitized control directories:
+
+- `/Users/yuval.meiri/projects/engram-baf008-control-no-memory-strict`
+- `/Users/yuval.meiri/projects/engram-baf008-control-static-instructions-strict`
+
+The first non-strict `no_memory` attempt is not scored. It ran with no Engram hooks or MCP, but a
+broad search surfaced forbidden Brain Harness report content inside the archive snapshot. The
+stricter rerun removed `.claude/`, `CLAUDE.md`, `AGENTS.engram.md`, and
+`docs/BRAIN_HARNESS*.md` before initializing the standalone control repositories.
+
+`claude --bare` was attempted first and provided clean startup isolation, but it could not
+authenticate in this environment. The scored fallback used real Claude Code with
+`--setting-sources local`, `--strict-mcp-config`, an empty MCP config, `--no-session-persistence`,
+and only `Bash`, `Read`, `Grep`, and `Glob` tools. Startup records for both scored runs showed
+`mcp_servers=[]` and no Engram hook events, `<engram_session_activation>`, or Engram MCP calls.
+
+### Pre-Arm Leak Checks
+
+Before running the scored controls, both strict directories were checked for the sealed marker and
+target phrases:
+
+- `BAF008`
+- `BAF008-SEAL-FEEDBACK-MEMORY-ATTRIBUTION-WARNING`
+- `unattributed memory feedback`
+- `memory-attribution warning`
+- `memory attribution warning`
+- `warnings array`
+
+No matches were found in either strict directory. Each directory's local git history contained only
+the sanitized base snapshot commit, and `git log --all --grep` for BAF008 target terms returned no
+matches.
+
+### Arm Outcome
+
+| Arm | Result | Target recovered? | Notes |
+| --- | --- | --- | --- |
+| `no_memory` | Clean control failure | No | Found only BAF002-BAF004 references in the allowed implementation-plan doc and one BAF006 test prompt string. It concluded the exact BAF008 target was underdetermined and did not guess. |
+| `static_instructions` | Clean control failure | No | Same allowed repo evidence plus generic static rules. It concluded the static rules were procedural only and contained no BAF008 target content. |
+
+Neither control identified the telemetry feedback warning target, the sealed marker, or an
+equivalent implementation. Neither arm edited files, ran implementation tests, or committed.
+
+### Interpretation
+
+These controls strengthen the narrow BAF008 claim: the successful real Claude Code treatment arm
+appears to have depended on Engram MemoryItem recovery through `orient`, not on repo-visible target
+facts or generic static instructions.
+
+The claim remains deliberately narrow. BAF008 supports sealed MemoryItem recovery for one
+code-bearing Claude Code task. It does not justify M6 write/apply, migration writes, deletion,
+legacy cleanup, graph expansion, ranking changes, Claude hook expansion, or broader `orient`
+hot-path changes.
+
+The next product step remains document lifecycle follow-through.

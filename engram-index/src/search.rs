@@ -3,6 +3,7 @@
 //! Provides a single entry point for searching across all knowledge layers:
 //! entities, aliases, observations, session events, documents, tool usages, and memory items.
 
+use crate::document_search::merge_document_results;
 use crate::error::IndexResult;
 use crate::memory_ranker::{
     memory_scope_label, rank_memory_items, MemoryRankContext, RankedMemoryItem,
@@ -447,11 +448,13 @@ impl SearchService {
         // Generate query embedding
         let query_embedding = embedder.embed(query)?;
 
-        // Search for similar chunks
-        let results = self
+        // Search chunks semantically and source metadata lexically for known-item lookups.
+        let semantic_results = self
             .doc_repo
             .search_similar(&query_embedding, limit)
             .await?;
+        let lexical_results = self.doc_repo.search_source_metadata(query, limit).await?;
+        let results = merge_document_results(semantic_results, lexical_results, limit);
 
         Ok(results
             .into_iter()

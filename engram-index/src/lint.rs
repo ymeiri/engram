@@ -5,13 +5,16 @@ use engram_core::lint::{LintFinding, LintReport, LintRule, LintSafeAction, LintS
 use engram_core::memory::{MemoryItem, MemoryKind, MemoryScope, MemoryStatus};
 use engram_core::obligation::AgentObligationStatus;
 use engram_core::session::SessionStatus;
-use engram_store::{Db, MemoryRepo, ObligationRepo, SessionRepo};
+use engram_core::telemetry::AgentFeedback;
+use engram_core::Id;
+use engram_store::{Db, MemoryRepo, ObligationRepo, SessionRepo, TelemetryRepo};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use time::{Duration, OffsetDateTime};
 
 const VAULT_MARKER: &str = "<!-- engram:generated:file memory-vault-v1 -->";
+const CURRENT_PLAN_TAG: &str = "current-plan";
 const GENERATED_VAULT_PREFIXES: &[&str] = &[
     "99_System",
     "memory",
@@ -19,6 +22,8 @@ const GENERATED_VAULT_PREFIXES: &[&str] = &[
     "projects",
     "repositories",
 ];
+const MAX_DUPLICATE_ENTITY_IDS_IN_FINDING: usize = 8;
+const MAX_FEEDBACK_ROWS_FOR_LINT: usize = 500;
 
 /// Options for lint execution.
 #[derive(Debug, Clone, Default)]
@@ -35,6 +40,7 @@ pub struct LintService {
     memory_repo: MemoryRepo,
     session_repo: SessionRepo,
     obligation_repo: ObligationRepo,
+    telemetry_repo: TelemetryRepo,
 }
 
 impl LintService {
@@ -43,7 +49,8 @@ impl LintService {
         Self {
             memory_repo: MemoryRepo::new(db.clone()),
             session_repo: SessionRepo::new(db.clone()),
-            obligation_repo: ObligationRepo::new(db),
+            obligation_repo: ObligationRepo::new(db.clone()),
+            telemetry_repo: TelemetryRepo::new(db),
         }
     }
 
@@ -52,6 +59,7 @@ impl LintService {
         self.memory_repo.init_schema().await?;
         self.session_repo.init_schema().await?;
         self.obligation_repo.init_schema().await?;
+        self.telemetry_repo.init_schema().await?;
         Ok(())
     }
 
@@ -68,12 +76,37 @@ impl LintService {
         lint_handoffs_missing_next_actions(&items, &mut findings);
         self.lint_stale_active_sessions(&mut findings).await?;
         self.lint_open_obligations(&mut findings).await?;
+        self.lint_feedback_flagged_active_memory(&items, &mut findings)
+            .await?;
 
         if let Some(vault_path) = options.vault_path {
             lint_vault_pages(Path::new(&vault_path), &mut findings)?;
         }
 
-        findings.sort_by(|left, right| left.id.cmp(&right.id));
+        findings.sort_by(|left, right| {
+            let priority = |finding: &LintFinding| match finding.rule {
+                LintRule::FeedbackStaleCurrentPlan => 10,
+                LintRule::FeedbackWrongScopeActiveMemory => 20,
+                LintRule::FeedbackStaleActiveMemory => 30,
+                LintRule::UnresolvedAgentObligation => 40,
+                LintRule::SupersededItemStillActive
+                    if finding.safe_action != LintSafeAction::None =>
+                {
+                    25
+                }
+                LintRule::MissingEvidence
+                | LintRule::HandoffMissingNextActions
+                | LintRule::OrphanProjectSubproject
+                | LintRule::StaleActiveSession
+                | LintRule::VaultPageMissingMarkerFrontmatter => 50,
+                LintRule::StalePreference => 60,
+                LintRule::DuplicateEntityCandidate => 90,
+                LintRule::SupersededItemStillActive => 50,
+            };
+            priority(left)
+                .cmp(&priority(right))
+                .then_with(|| left.id.cmp(&right.id))
+        });
         if let Some(limit) = options.limit {
             findings.truncate(limit);
         }
@@ -156,6 +189,20 @@ impl LintService {
         }
         Ok(())
     }
+
+    async fn lint_feedback_flagged_active_memory(
+        &self,
+        items: &[MemoryItem],
+        findings: &mut Vec<LintFinding>,
+    ) -> IndexResult<()> {
+        let feedback = self
+            .telemetry_repo
+            .list_feedback(Some(MAX_FEEDBACK_ROWS_FOR_LINT))
+            .await?;
+        lint_feedback_stale_active_memory(items, &feedback, findings);
+        lint_feedback_wrong_scope_active_memory(items, &feedback, findings);
+        Ok(())
+    }
 }
 
 fn lint_missing_evidence(items: &[MemoryItem], findings: &mut Vec<LintFinding>) {
@@ -171,7 +218,11 @@ fn lint_missing_evidence(items: &[MemoryItem], findings: &mut Vec<LintFinding>) 
                 LintRule::MissingEvidence,
                 LintSeverity::Warning,
                 "Memory item has no evidence",
-                "Durable memory should point to source evidence, review, or observed context.",
+                format!(
+                    "Memory item '{}' ({}) has no evidence; durable memory should point to \
+                     source evidence, review, or observed context.",
+                    item.title, item.kind
+                ),
             )
             .with_item(item.id),
         );
@@ -217,19 +268,27 @@ fn lint_duplicate_entities(items: &[MemoryItem], findings: &mut Vec<LintFinding>
     }
 
     for (entity_name, group) in groups.into_iter().filter(|(_, group)| group.len() > 1) {
-        let item_ids = group
+        let total = group.len();
+        let displayed_ids = group
             .iter()
+            .take(MAX_DUPLICATE_ENTITY_IDS_IN_FINDING)
             .map(|item| item.id.to_string())
             .collect::<Vec<_>>()
             .join(", ");
+        let omitted = total.saturating_sub(MAX_DUPLICATE_ENTITY_IDS_IN_FINDING);
+        let item_ids = if omitted == 0 {
+            displayed_ids
+        } else {
+            format!("{displayed_ids}, ... ({omitted} more)")
+        };
         findings.push(LintFinding::new(
             format!("duplicate-entity-candidate:{entity_name}"),
             LintRule::DuplicateEntityCandidate,
             LintSeverity::Info,
             "Duplicate entity memory candidate",
             format!(
-                "Multiple active memory items target entity '{}': {}.",
-                entity_name, item_ids
+                "Multiple active memory items target entity '{}': {} active items: {}.",
+                entity_name, total, item_ids
             ),
         ));
     }
@@ -307,11 +366,125 @@ fn lint_handoffs_missing_next_actions(items: &[MemoryItem], findings: &mut Vec<L
                 LintRule::HandoffMissingNextActions,
                 LintSeverity::Warning,
                 "Handoff is missing next actions",
-                "Rolling handoffs should include concrete next actions for future agents.",
+                format!(
+                    "Handoff '{}' is missing next actions; rolling handoffs should include \
+                     concrete next actions for future agents.",
+                    item.title
+                ),
             )
             .with_item(item.id),
         );
     }
+}
+
+fn lint_feedback_stale_active_memory(
+    items: &[MemoryItem],
+    feedback: &[AgentFeedback],
+    findings: &mut Vec<LintFinding>,
+) {
+    let active_items = active_memory_items_by_id(items);
+    let stale_counts = feedback_signal_counts(feedback, |feedback| &feedback.stale_memory_ids);
+
+    for (item_id, count) in stale_counts {
+        let Some(item) = active_items.get(&item_id) else {
+            continue;
+        };
+        if is_current_plan_guidance(item) {
+            findings.push(
+                LintFinding::new(
+                    format!("feedback-stale-current-plan:{item_id}"),
+                    LintRule::FeedbackStaleCurrentPlan,
+                    LintSeverity::Info,
+                    "Current-plan guidance has stale feedback",
+                    format!(
+                        "Active current-plan memory item '{}' ({}) was marked stale by {count} \
+                         recent feedback record(s). Treat this as a review signal for \
+                         supersession, archival, or scope correction; no automatic lifecycle \
+                         action is safe.",
+                        item.title, item.kind
+                    ),
+                )
+                .with_item(item_id),
+            );
+            continue;
+        }
+        findings.push(
+            LintFinding::new(
+                format!("feedback-stale-active-memory:{item_id}"),
+                LintRule::FeedbackStaleActiveMemory,
+                LintSeverity::Info,
+                "Active memory has stale feedback",
+                format!(
+                    "Active memory item '{}' ({}) was marked stale by {count} recent \
+                     feedback record(s). Treat this as a review signal, not proof; no \
+                     automatic lifecycle action is safe.",
+                    item.title, item.kind
+                ),
+            )
+            .with_item(item_id),
+        );
+    }
+}
+
+fn is_current_plan_guidance(item: &MemoryItem) -> bool {
+    matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
+        && item
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
+}
+
+fn lint_feedback_wrong_scope_active_memory(
+    items: &[MemoryItem],
+    feedback: &[AgentFeedback],
+    findings: &mut Vec<LintFinding>,
+) {
+    let active_items = active_memory_items_by_id(items);
+    let wrong_scope_counts =
+        feedback_signal_counts(feedback, |feedback| &feedback.wrong_scope_memory_ids);
+
+    for (item_id, count) in wrong_scope_counts {
+        let Some(item) = active_items.get(&item_id) else {
+            continue;
+        };
+        findings.push(
+            LintFinding::new(
+                format!("feedback-wrong-scope-active-memory:{item_id}"),
+                LintRule::FeedbackWrongScopeActiveMemory,
+                LintSeverity::Info,
+                "Active memory has wrong-scope feedback",
+                format!(
+                    "Active memory item '{}' ({}) was marked wrong-scope by {count} recent \
+                     feedback record(s). Review its scope or retrieval behavior before changing \
+                     lifecycle status.",
+                    item.title, item.kind
+                ),
+            )
+            .with_item(item_id),
+        );
+    }
+}
+
+fn active_memory_items_by_id(items: &[MemoryItem]) -> HashMap<Id, &MemoryItem> {
+    items
+        .iter()
+        .filter(|item| item.status == MemoryStatus::Active)
+        .map(|item| (item.id, item))
+        .collect()
+}
+
+fn feedback_signal_counts(
+    feedback: &[AgentFeedback],
+    ids: impl Fn(&AgentFeedback) -> &[Id],
+) -> HashMap<Id, usize> {
+    let mut counts = HashMap::new();
+    for feedback in feedback {
+        let unique_ids: HashSet<_> = ids(feedback).iter().copied().collect();
+        for item_id in unique_ids {
+            *counts.entry(item_id).or_insert(0) += 1;
+        }
+    }
+    counts
 }
 
 fn has_next_actions(content: &str) -> bool {
@@ -381,6 +554,7 @@ mod tests {
         WriterProvenance,
     };
     use engram_core::obligation::{AgentObligation, AgentObligationKind, AgentObligationTrigger};
+    use engram_core::telemetry::AgentFeedback;
     use engram_store::{connect_and_init, StoreConfig};
 
     async fn service() -> LintService {
@@ -409,10 +583,248 @@ mod tests {
 
         let report = service.run(LintOptions::default()).await.unwrap();
 
-        assert!(report
+        let finding = report
             .findings
             .iter()
-            .any(|finding| finding.rule == LintRule::MissingEvidence));
+            .find(|finding| finding.rule == LintRule::MissingEvidence)
+            .unwrap();
+        assert!(finding.message.contains("No evidence"));
+        assert!(finding.message.contains("decision"));
+    }
+
+    #[tokio::test]
+    async fn lint_reports_handoff_titles_when_next_actions_are_missing() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Incomplete handoff",
+            "Useful context without an explicit action list.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::HandoffMissingNextActions)
+            .unwrap();
+        assert!(finding.message.contains("Incomplete handoff"));
+    }
+
+    #[tokio::test]
+    async fn lint_bounds_duplicate_entity_candidate_messages() {
+        let service = service().await;
+        let mut item_ids = Vec::new();
+        for index in 0..10 {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Duplicate {index}"),
+                "Duplicate entity-scoped content.",
+                MemoryScope::entity("ide-mcp-eval"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+            item_ids.push(item.id);
+            service.memory_repo.save_memory_item(&item).await.unwrap();
+        }
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::DuplicateEntityCandidate)
+            .unwrap();
+        let displayed_id_count = item_ids
+            .iter()
+            .filter(|item_id| finding.message.contains(&item_id.to_string()))
+            .count();
+        assert!(finding.message.contains("10 active items"));
+        assert!(finding.message.contains("... (2 more)"));
+        assert_eq!(displayed_id_count, MAX_DUPLICATE_ENTITY_IDS_IN_FINDING);
+    }
+
+    #[tokio::test]
+    async fn lint_prioritizes_feedback_signals_before_duplicate_entity_noise() {
+        let service = service().await;
+        let current_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after older slice",
+            "Old current-plan guidance that feedback later marked stale.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_tag(CURRENT_PLAN_TAG);
+        service
+            .memory_repo
+            .save_memory_item(&current_plan)
+            .await
+            .unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![current_plan.id];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let obligation = AgentObligation::new(
+            AgentObligationKind::DocumentDisposition,
+            "Resolve historical document status",
+            "An older document obligation should not hide feedback-stale plan signals.",
+            MemoryScope::project("other-project"),
+            AgentObligationTrigger::new("test", "historical document obligation"),
+            writer(),
+        );
+        service
+            .obligation_repo
+            .save_obligation(&obligation)
+            .await
+            .unwrap();
+
+        let old = MemoryItem::new(
+            MemoryKind::Decision,
+            "Superseded older decision",
+            "Old content.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        let replacement = MemoryItem::new(
+            MemoryKind::Decision,
+            "Replacement decision",
+            "New content.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_superseded_item(old.id);
+        service.memory_repo.save_memory_item(&old).await.unwrap();
+        service
+            .memory_repo
+            .save_memory_item(&replacement)
+            .await
+            .unwrap();
+
+        for index in 0..3 {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Duplicate {index}"),
+                "Duplicate entity-scoped content.",
+                MemoryScope::entity("ide-mcp-eval"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+            service.memory_repo.save_memory_item(&item).await.unwrap();
+        }
+
+        let report = service
+            .run(LintOptions {
+                vault_path: None,
+                limit: Some(1),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(report.findings.len(), 1);
+        assert_eq!(report.findings[0].rule, LintRule::FeedbackStaleCurrentPlan);
+    }
+
+    #[tokio::test]
+    async fn lint_prioritizes_superseded_active_items_before_generic_feedback_noise() {
+        let service = service().await;
+        let current_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after latest slice",
+            "Current-plan guidance that stale feedback should keep first.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_tag(CURRENT_PLAN_TAG);
+        service
+            .memory_repo
+            .save_memory_item(&current_plan)
+            .await
+            .unwrap();
+
+        let old_handoff = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Superseded handoff",
+            "# Handoff\n\n## Next Actions\n- Continue from the replacement handoff.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        let replacement_handoff = MemoryItem::new(
+            MemoryKind::Handoff,
+            "Replacement handoff",
+            "# Handoff\n\n## Next Actions\n- Continue from the latest handoff.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_superseded_item(old_handoff.id);
+        service
+            .memory_repo
+            .save_memory_item(&old_handoff)
+            .await
+            .unwrap();
+        service
+            .memory_repo
+            .save_memory_item(&replacement_handoff)
+            .await
+            .unwrap();
+
+        let mut stale_ids = vec![current_plan.id];
+        for index in 0..5 {
+            let item = MemoryItem::new(
+                MemoryKind::ProjectFact,
+                format!("Generic stale item {index}"),
+                "Generic active memory with stale feedback.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+            stale_ids.push(item.id);
+            service.memory_repo.save_memory_item(&item).await.unwrap();
+        }
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = stale_ids;
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service
+            .run(LintOptions {
+                vault_path: None,
+                limit: Some(2),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(report.findings.len(), 2);
+        assert_eq!(report.findings[0].rule, LintRule::FeedbackStaleCurrentPlan);
+        assert_eq!(report.findings[1].rule, LintRule::SupersededItemStillActive);
+        assert_eq!(report.findings[1].item_id, Some(old_handoff.id));
     }
 
     #[tokio::test]
@@ -437,6 +849,201 @@ mod tests {
         assert!(report.findings.iter().any(|finding| {
             finding.rule == LintRule::UnresolvedAgentObligation
                 && finding.obligation_id == Some(obligation.id)
+        }));
+    }
+
+    #[tokio::test]
+    async fn lint_reports_feedback_flagged_active_memory_once_per_item() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Possibly stale fact",
+            "Content that feedback later questioned.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut first_feedback = AgentFeedback::new(Id::new());
+        first_feedback.stale_memory_ids = vec![item.id, item.id];
+        first_feedback.wrong_scope_memory_ids = vec![item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&first_feedback)
+            .await
+            .unwrap();
+
+        let mut second_feedback = AgentFeedback::new(Id::new());
+        second_feedback.stale_memory_ids = vec![item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&second_feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let stale_findings = report
+            .findings
+            .iter()
+            .filter(|finding| finding.rule == LintRule::FeedbackStaleActiveMemory)
+            .collect::<Vec<_>>();
+        let wrong_scope_findings = report
+            .findings
+            .iter()
+            .filter(|finding| finding.rule == LintRule::FeedbackWrongScopeActiveMemory)
+            .collect::<Vec<_>>();
+
+        assert_eq!(stale_findings.len(), 1);
+        assert_eq!(wrong_scope_findings.len(), 1);
+        assert_eq!(
+            stale_findings[0].id,
+            format!("feedback-stale-active-memory:{}", item.id)
+        );
+        assert_eq!(stale_findings[0].item_id, Some(item.id));
+        assert_eq!(stale_findings[0].severity, LintSeverity::Info);
+        assert_eq!(stale_findings[0].safe_action, LintSafeAction::None);
+        assert!(stale_findings[0]
+            .message
+            .contains("marked stale by 2 recent feedback record(s)"));
+        assert!(wrong_scope_findings[0]
+            .message
+            .contains("marked wrong-scope by 1 recent feedback record(s)"));
+    }
+
+    #[tokio::test]
+    async fn lint_reports_stale_current_plan_feedback_with_specific_rule() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after older slice",
+            "Old current-plan guidance that feedback later marked stale.",
+            MemoryScope::repository(None, Some("/Users/yuval.meiri/projects/engram".to_string())),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_tag("current-plan");
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![item.id, item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let current_plan_finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::FeedbackStaleCurrentPlan)
+            .expect("stale current-plan finding should be present");
+
+        assert_eq!(
+            current_plan_finding.id,
+            format!("feedback-stale-current-plan:{}", item.id)
+        );
+        assert_eq!(current_plan_finding.item_id, Some(item.id));
+        assert_eq!(current_plan_finding.severity, LintSeverity::Info);
+        assert_eq!(current_plan_finding.safe_action, LintSafeAction::None);
+        assert!(current_plan_finding
+            .message
+            .contains("Current plan after older slice"));
+        assert!(current_plan_finding
+            .message
+            .contains("marked stale by 1 recent feedback record(s)"));
+        assert!(!report.findings.iter().any(|finding| {
+            finding.rule == LintRule::FeedbackStaleActiveMemory && finding.item_id == Some(item.id)
+        }));
+    }
+
+    #[tokio::test]
+    async fn lint_keeps_stale_migration_authorization_on_generic_feedback_rule() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Approved repo topology migration write applied first batch",
+            "Old migration approval record from an earlier scoped repository topology write. \
+             It is not current M6 authorization.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![item.id];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        let stale_finding = report
+            .findings
+            .iter()
+            .find(|finding| finding.rule == LintRule::FeedbackStaleActiveMemory)
+            .expect("stale migration authorization should use generic stale feedback lint");
+
+        assert_eq!(
+            stale_finding.id,
+            format!("feedback-stale-active-memory:{}", item.id)
+        );
+        assert_eq!(stale_finding.item_id, Some(item.id));
+        assert_eq!(stale_finding.severity, LintSeverity::Info);
+        assert_eq!(stale_finding.safe_action, LintSafeAction::None);
+        assert!(stale_finding
+            .message
+            .contains("Approved repo topology migration write applied first batch"));
+        assert!(stale_finding
+            .message
+            .contains("no automatic lifecycle action is safe"));
+        assert!(!report.findings.iter().any(|finding| {
+            finding.rule == LintRule::FeedbackStaleCurrentPlan && finding.item_id == Some(item.id)
+        }));
+    }
+
+    #[tokio::test]
+    async fn lint_ignores_feedback_for_non_active_or_missing_memory() {
+        let service = service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Archived fact",
+            "Content that is no longer active.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "test"))
+        .with_archive("test archive", Some("test".to_string()));
+        service.memory_repo.save_memory_item(&item).await.unwrap();
+
+        let mut feedback = AgentFeedback::new(Id::new());
+        feedback.stale_memory_ids = vec![item.id, Id::new()];
+        feedback.wrong_scope_memory_ids = vec![item.id, Id::new()];
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.run(LintOptions::default()).await.unwrap();
+
+        assert!(!report.findings.iter().any(|finding| {
+            matches!(
+                finding.rule,
+                LintRule::FeedbackStaleActiveMemory
+                    | LintRule::FeedbackStaleCurrentPlan
+                    | LintRule::FeedbackWrongScopeActiveMemory
+            )
         }));
     }
 

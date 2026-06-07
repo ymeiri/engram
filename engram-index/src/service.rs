@@ -4,9 +4,10 @@
 //! combining the ingestion pipeline with the storage repository.
 
 use crate::digest::{DigestService, DigestSourceIndexDocument, DigestSourceIndexOptions};
+use crate::document_search::merge_document_results;
 use crate::error::{IndexError, IndexResult};
 use crate::pipeline::{DocumentIngestionPlan, IndexedDocument, Pipeline, PipelineConfig};
-use engram_core::document::{DocChunk, DocSearchResult};
+use engram_core::document::{DocChunk, DocSearchResult, DocSource};
 use engram_core::id::Id;
 use engram_embed::Embedder;
 use engram_store::repos::document::{normalize_for_fingerprint, stable_fingerprint};
@@ -78,31 +79,17 @@ impl DocumentService {
         let path = path.as_ref();
         info!("Indexing file: {}", path.display());
 
-        // Check if already indexed
         let path_str = path.display().to_string();
-        if let Some(existing) = self.repo.find_source_by_path(&path_str).await? {
-            if !existing.needs_reindex() {
-                debug!("File already indexed and fresh: {}", path.display());
-                // Return existing document info
-                let chunks = self.repo.get_chunks_for_source(&existing.id).await?;
-                let parsed = crate::parser::parse_file(path)?;
-                return Ok(IndexedDocument {
-                    source: existing,
-                    parsed,
-                    chunks: chunks
-                        .into_iter()
-                        .map(|chunk| crate::pipeline::IndexedChunk {
-                            chunk,
-                            embedding: Vec::new(), // Not loading embeddings for existing
-                        })
-                        .collect(),
-                });
-            }
-            debug!("Re-indexing stale file: {}", path.display());
+        let existing = self.repo.find_source_by_path(&path_str).await?;
+        if existing.is_some() {
+            debug!("Re-indexing existing file: {}", path.display());
         }
 
         // Index the file
         let mut result = self.pipeline.index_file(path)?;
+        if let Some(existing) = &existing {
+            reuse_existing_source_identity(&mut result, existing);
+        }
 
         // Mark as indexed and save
         result.source.mark_indexed();
@@ -141,30 +128,15 @@ impl DocumentService {
         let path_or_url = path_or_url.into();
         info!("Indexing supplied content: {}", path_or_url);
 
-        if let Some(existing) = self.repo.find_source_by_path(&path_or_url).await? {
-            if !existing.needs_reindex() {
-                debug!("Source already indexed and fresh: {}", path_or_url);
-                let chunks = self.repo.get_chunks_for_source(&existing.id).await?;
-                let mut parsed = crate::parser::parse_content(path_or_url, content.into())?;
-                if let Some(title) = title.filter(|title| !title.trim().is_empty()) {
-                    parsed.title = title;
-                }
-                return Ok(IndexedDocument {
-                    source: existing,
-                    parsed,
-                    chunks: chunks
-                        .into_iter()
-                        .map(|chunk| crate::pipeline::IndexedChunk {
-                            chunk,
-                            embedding: Vec::new(),
-                        })
-                        .collect(),
-                });
-            }
-            debug!("Re-indexing stale source: {}", path_or_url);
+        let existing = self.repo.find_source_by_path(&path_or_url).await?;
+        if existing.is_some() {
+            debug!("Re-indexing existing source: {}", path_or_url);
         }
 
         let mut result = self.pipeline.index_content(path_or_url, content, title)?;
+        if let Some(existing) = &existing {
+            reuse_existing_source_identity(&mut result, existing);
+        }
         result.source.mark_indexed();
         self.repo.save_source(&result.source).await?;
 
@@ -201,13 +173,20 @@ impl DocumentService {
         // Save all to database
         for doc in &results {
             let mut source = doc.source.clone();
+            if let Some(existing) = self.repo.find_source_by_path(&source.path_or_url).await? {
+                source.id = existing.id;
+            }
             source.mark_indexed();
             self.repo.save_source(&source).await?;
 
             let chunks_with_embeddings: Vec<_> = doc
                 .chunks
                 .iter()
-                .map(|ic| (ic.chunk.clone(), ic.embedding.clone()))
+                .map(|ic| {
+                    let mut chunk = ic.chunk.clone();
+                    chunk.source_id = source.id;
+                    (chunk, ic.embedding.clone())
+                })
                 .collect();
             self.repo
                 .save_chunks(&source.id, chunks_with_embeddings)
@@ -250,8 +229,10 @@ impl DocumentService {
         // Generate embedding for the query
         let query_embedding = self.embedder.embed(query)?;
 
-        // Search in database
-        let results = self.repo.search_similar(&query_embedding, limit).await?;
+        // Search chunks semantically and source metadata lexically for known-item lookups.
+        let semantic_results = self.repo.search_similar(&query_embedding, limit).await?;
+        let lexical_results = self.repo.search_source_metadata(query, limit).await?;
+        let results = merge_document_results(semantic_results, lexical_results, limit);
 
         info!("Found {} results for query", results.len());
         Ok(results)
@@ -723,6 +704,13 @@ impl DocumentService {
             }
             Err(error) => DocumentReindexExecutionAction::failed(source, false, error.to_string()),
         }
+    }
+}
+
+fn reuse_existing_source_identity(result: &mut IndexedDocument, existing: &DocSource) {
+    result.source.id = existing.id;
+    for chunk in &mut result.chunks {
+        chunk.chunk.source_id = existing.id;
     }
 }
 
@@ -4125,11 +4113,41 @@ pub struct DocumentStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::ParsedDocument;
+    use crate::pipeline::IndexedChunk;
     use engram_store::{
         DocumentDetectedReference, DocumentOrphanGroup, DocumentOrphanReport,
         DocumentRecoveryCandidateMatch, DocumentRecoveryClass, DocumentRecoverySummary,
     };
     use std::fs;
+
+    #[test]
+    fn reusing_existing_source_identity_updates_source_and_chunk_ids() {
+        let existing = DocSource::local_file("/docs/report.md");
+        let original_source = DocSource::local_file("/docs/report.md");
+        let stale_chunk = DocChunk::new(original_source.id, "# Report", 1, "old content");
+        let mut result = IndexedDocument {
+            source: original_source,
+            parsed: ParsedDocument {
+                path: "/docs/report.md".to_string(),
+                title: "Report".to_string(),
+                sections: Vec::new(),
+                raw_content: "# Report".to_string(),
+            },
+            chunks: vec![IndexedChunk {
+                chunk: stale_chunk,
+                embedding: vec![0.1, 0.2],
+            }],
+        };
+
+        assert_ne!(result.source.id, existing.id);
+        assert_ne!(result.chunks[0].chunk.source_id, existing.id);
+
+        reuse_existing_source_identity(&mut result, &existing);
+
+        assert_eq!(result.source.id, existing.id);
+        assert_eq!(result.chunks[0].chunk.source_id, existing.id);
+    }
 
     #[test]
     fn recovery_matching_finds_current_file_by_content_anchor() {

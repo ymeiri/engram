@@ -158,6 +158,64 @@ impl TelemetryRepo {
         records.into_iter().map(TraceRecord::into_trace).collect()
     }
 
+    /// List scoped traces, newest first, applying the limit after scope filters.
+    pub async fn list_traces_scoped(
+        &self,
+        limit: Option<usize>,
+        project: Option<&str>,
+        scenario_id: Option<&str>,
+        arm: Option<&str>,
+        intent_key: Option<&str>,
+    ) -> StoreResult<Vec<BrainHarnessTrace>> {
+        debug!("Listing scoped brain harness traces");
+
+        let mut conditions = Vec::new();
+        if project.is_some() {
+            conditions.push("project = $project");
+        }
+        if scenario_id.is_some() {
+            conditions.push("trace.scenario_id = $scenario_id");
+        }
+        if arm.is_some() {
+            conditions.push("trace.arm = $arm");
+        }
+        if intent_key.is_some() {
+            conditions.push("intent_key = $intent_key");
+        }
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let mut query = self.db.query(format!(
+            r#"
+            SELECT meta::id(id) AS record_id, trace, created_at
+            FROM {TABLE_TRACE}
+            {where_clause}
+            ORDER BY created_at DESC
+            LIMIT {}
+            "#,
+            limit.unwrap_or(100)
+        ));
+        if let Some(project) = project {
+            query = query.bind(("project", project.to_string()));
+        }
+        if let Some(scenario_id) = scenario_id {
+            query = query.bind(("scenario_id", scenario_id.to_string()));
+        }
+        if let Some(arm) = arm {
+            query = query.bind(("arm", arm.to_string()));
+        }
+        if let Some(intent_key) = intent_key {
+            query = query.bind(("intent_key", intent_key.to_string()));
+        }
+
+        let mut result = query.await?;
+        let records: Vec<TraceRecord> = result.take(0)?;
+        records.into_iter().map(TraceRecord::into_trace).collect()
+    }
+
     /// Save agent feedback.
     pub async fn save_feedback(&self, feedback: &AgentFeedback) -> StoreResult<()> {
         debug!("Saving agent feedback: {}", feedback.id);
@@ -222,6 +280,41 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("trace_id", trace_id.to_string()))
+            .await?;
+
+        let records: Vec<FeedbackRecord> = result.take(0)?;
+        records
+            .into_iter()
+            .map(FeedbackRecord::into_feedback)
+            .collect()
+    }
+
+    /// List feedback for a set of traces, newest first.
+    pub async fn list_feedback_for_traces(
+        &self,
+        trace_ids: &[Id],
+    ) -> StoreResult<Vec<AgentFeedback>> {
+        debug!("Listing feedback for {} traces", trace_ids.len());
+
+        if trace_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let trace_ids = trace_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        let mut result = self
+            .db
+            .query(
+                r#"
+                SELECT meta::id(id) AS record_id, feedback, created_at
+                FROM agent_feedback
+                WHERE trace_id IN $trace_ids
+                ORDER BY created_at DESC
+                "#,
+            )
+            .bind(("trace_ids", trace_ids))
             .await?;
 
         let records: Vec<FeedbackRecord> = result.take(0)?;

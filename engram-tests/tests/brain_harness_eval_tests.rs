@@ -16,8 +16,8 @@ use engram_core::telemetry::{
 use engram_core::{entity::EntityType, session::EventType};
 use engram_index::ToolIntelService;
 use engram_index::{
-    EntityService, MemoryService, OrientInput, SearchOptions, SearchService, SessionService,
-    TelemetryService, WorkService,
+    CurrentPlanCaptureInput, EntityService, MemoryService, OrientInput, SearchOptions,
+    SearchService, SessionService, TelemetryService, WorkService,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 enum EvalArm {
     NoMemory,
+    StaticInstructions,
     LegacyObservations,
     MemoryItems,
     Hybrid,
@@ -35,6 +36,7 @@ impl EvalArm {
     const fn as_str(self) -> &'static str {
         match self {
             Self::NoMemory => "no_memory",
+            Self::StaticInstructions => "static_instructions",
             Self::LegacyObservations => "legacy_observations",
             Self::MemoryItems => "memory_items",
             Self::Hybrid => "hybrid",
@@ -282,6 +284,51 @@ impl FullScenarioComparison {
     }
 }
 
+#[derive(Debug, Clone)]
+struct DiscriminativeContinuityComparison {
+    scenario: String,
+    expected_item_ids: Vec<String>,
+    no_memory: BrainHarnessEvalTrace,
+    static_instructions: BrainHarnessEvalTrace,
+    memory_items: BrainHarnessEvalTrace,
+}
+
+impl DiscriminativeContinuityComparison {
+    fn memory_items_outperform_baselines(&self) -> bool {
+        self.no_memory.scenario == self.scenario
+            && self.static_instructions.scenario == self.scenario
+            && self.memory_items.scenario == self.scenario
+            && !self.no_memory.outcome.success
+            && !self.static_instructions.outcome.success
+            && self.memory_items.outcome.success
+            && self.memory_items.outcome.preference_adhered
+            && self.memory_items.outcome.repeated_context_questions == 0
+            && !self.memory_items.outcome.bad_memory_used
+            && self.baselines_record_missing_expected_context()
+            && self.expected_items_were_used()
+    }
+
+    fn baselines_record_missing_expected_context(&self) -> bool {
+        self.expected_item_ids.iter().all(|expected_id| {
+            self.no_memory.memory_calls.iter().any(|call| {
+                call.missing_expected_item_ids
+                    .iter()
+                    .any(|missing| missing == expected_id)
+            }) && self.static_instructions.memory_calls.iter().any(|call| {
+                call.missing_expected_item_ids
+                    .iter()
+                    .any(|missing| missing == expected_id)
+            })
+        })
+    }
+
+    fn expected_items_were_used(&self) -> bool {
+        self.expected_item_ids
+            .iter()
+            .all(|expected_id| self.memory_items.used_item_ids.contains(expected_id))
+    }
+}
+
 #[derive(Clone)]
 struct BrainHarnessEvalServices {
     memory: MemoryService,
@@ -409,6 +456,27 @@ fn reviewed_evidence(summary: &str) -> EvidenceRef {
         .with_excerpt("accepted by deterministic eval fixture")
 }
 
+fn current_plan_input(title: &str, content: &str) -> CurrentPlanCaptureInput {
+    CurrentPlanCaptureInput {
+        kind: MemoryKind::Decision,
+        title: title.to_string(),
+        content: content.to_string(),
+        scope: MemoryScope::project("engram"),
+        origin: ClaimOrigin::ToolResult,
+        writer: writer(),
+        evidence: vec![
+            EvidenceRef::new(EvidenceKind::ToolCall, "brain-harness-eval")
+                .with_summary("Deterministic benchmark fixture current-plan evidence."),
+        ],
+        confidence: Some(0.9),
+        tags: Vec::new(),
+        create_commit: false,
+        commit_message: None,
+        session_id: None,
+        parent_id: None,
+    }
+}
+
 fn trace_returned_item_ids(trace: &BrainHarnessTrace) -> Vec<String> {
     let mut ids = trace
         .returned_memory_ids
@@ -504,6 +572,58 @@ async fn record_no_memory_baseline(
         prompt,
         &trace,
         Vec::new(),
+        expected_item_ids,
+        outcome,
+    )
+}
+
+async fn record_static_instruction_baseline(
+    telemetry_service: &TelemetryService,
+    scenario: &str,
+    prompt: &str,
+    intent: BrainHarnessIntent,
+    static_context_ids: Vec<String>,
+    expected_item_ids: Vec<String>,
+    missing_context: &str,
+    outcome: EvalOutcome,
+) -> BrainHarnessEvalTrace {
+    let trace = telemetry_service
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Custom(
+                "static_instruction_baseline".to_string(),
+            ))
+            .with_agent(Some("codex".to_string()))
+            .with_intent(Some(intent))
+            .with_scenario_id(Some(scenario.to_string()))
+            .with_arm(Some(EvalArm::StaticInstructions.as_str().to_string()))
+            .with_query(Some(prompt.to_string()))
+            .with_project(Some("engram".to_string()))
+            .with_returned_result_ids(static_context_ids.clone())
+            .with_latency_ms(0),
+        )
+        .await
+        .expect("static instruction baseline trace should be recorded");
+
+    let used_result_ids = static_context_ids.clone();
+    let mut feedback = AgentFeedback::new(trace.id);
+    feedback.agent = Some("codex".to_string());
+    feedback.used_result_ids = used_result_ids.clone();
+    feedback.missing_context = Some(missing_context.to_string());
+    feedback.usefulness_score = Some(2);
+    feedback.correctness_score = Some(3);
+    feedback.noise_score = Some(2);
+    apply_outcome_feedback(&mut feedback, &outcome);
+    telemetry_service
+        .submit_feedback(feedback)
+        .await
+        .expect("static instruction baseline feedback should be recorded");
+
+    eval_trace_from_operation(
+        scenario,
+        EvalArm::StaticInstructions,
+        prompt,
+        &trace,
+        used_result_ids,
         expected_item_ids,
         outcome,
     )
@@ -1910,6 +2030,288 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
     assert_eq!(hybrid_summary.success_count, 3);
     assert_eq!(hybrid_summary.bad_memory_count, 0);
     assert!(hybrid_summary.avg_quality_score >= memory_summary.avg_quality_score);
+}
+
+#[tokio::test]
+async fn discriminative_continuity_benchmark_separates_memoryitems_from_static_instructions() {
+    let services = setup_brain_harness_eval_services().await;
+    let current_plan = services
+        .memory
+        .capture_current_plan(current_plan_input(
+            "Telemetry semantics cleanup complete; benchmark next",
+            "Telemetry coverage semantics are complete. The next action is a discriminative \
+             continuity benchmark. Do not expand orient with graph, obligations, lint, or raw \
+             observations, and do not run M6 write/apply, deletion, or legacy cleanup.",
+        ))
+        .await
+        .expect("current plan should be captured")
+        .item;
+    let preference = services
+        .memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Preference,
+                "Commit every meaningful Engram step",
+                "When developing Engram, create a focused git commit after each meaningful \
+                 implementation, validation, or documentation step. Keep unrelated user-owned \
+                 files, such as root AGENTS.md, out of commits unless explicitly requested.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(reviewed_evidence(
+                "User explicitly asked for every meaningful Engram step to be committed.",
+            )),
+        )
+        .await
+        .expect("commit preference should be captured");
+    services
+        .memory
+        .capture_memory(MemoryItem::new(
+            MemoryKind::Decision,
+            "Old broad cleanup idea",
+            "Older guidance suggested broad inventory and cleanup before the telemetry benchmark.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        ))
+        .await
+        .expect("distractor should be captured");
+
+    let static_context_ids = vec![
+        "static:AGENTS.md".to_string(),
+        "static:docs/ORIENT_CONTRACT.md".to_string(),
+    ];
+    let mut traces = Vec::new();
+
+    let resume_scenario = "resume_continuity_discriminative_001";
+    let resume_prompt = "I restarted. What is the current Engram Brain Harness next step and what \
+                         gates should remain blocked?";
+    let resume_expected_ids = vec![current_plan.id.to_string()];
+    let resume_no_memory = record_no_memory_baseline(
+        &services.telemetry,
+        resume_scenario,
+        resume_prompt,
+        BrainHarnessIntent::ResumeSession,
+        resume_expected_ids.clone(),
+        "Expected the current-plan MemoryItem naming the discriminative continuity benchmark.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: false,
+            quality_score: 0.25,
+        },
+    )
+    .await;
+    let resume_static = record_static_instruction_baseline(
+        &services.telemetry,
+        resume_scenario,
+        resume_prompt,
+        BrainHarnessIntent::ResumeSession,
+        static_context_ids.clone(),
+        resume_expected_ids.clone(),
+        "Static repo instructions do not contain the current telemetry-cleanup completion state.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: true,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: Some(false),
+            bad_memory_used: false,
+            quality_score: 0.45,
+        },
+    )
+    .await;
+    let resume_packet = services
+        .memory
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(resume_prompt.to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some(BrainHarnessIntent::ResumeSession),
+            scenario_id: Some(resume_scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("resume orient should return a packet");
+    assert_eq!(
+        resume_packet.active_decisions.first().map(|item| item.id),
+        Some(current_plan.id)
+    );
+    assert_eq!(
+        resume_packet
+            .brain_loop
+            .top_items
+            .first()
+            .map(|item| item.id),
+        Some(current_plan.id)
+    );
+    let resume_memory = memoryitem_trace_from_orient(
+        &services,
+        resume_scenario,
+        resume_prompt,
+        resume_packet
+            .trace_id
+            .expect("orient should return a trace id"),
+        vec![current_plan.id],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: Some(true),
+            bad_memory_used: false,
+            quality_score: 0.92,
+        },
+    )
+    .await;
+    let resume_comparison = DiscriminativeContinuityComparison {
+        scenario: resume_scenario.to_string(),
+        expected_item_ids: resume_expected_ids,
+        no_memory: resume_no_memory,
+        static_instructions: resume_static,
+        memory_items: resume_memory,
+    };
+    assert!(resume_comparison.memory_items_outperform_baselines());
+    traces.extend([
+        resume_comparison.no_memory.clone(),
+        resume_comparison.static_instructions.clone(),
+        resume_comparison.memory_items.clone(),
+    ]);
+
+    let preference_scenario = "follow_preference_discriminative_001";
+    let preference_prompt =
+        "Continue an Engram implementation checkpoint. What workflow preference \
+                             must constrain the next step?";
+    let preference_expected_ids = vec![preference.id.to_string()];
+    let preference_no_memory = record_no_memory_baseline(
+        &services.telemetry,
+        preference_scenario,
+        preference_prompt,
+        BrainHarnessIntent::FollowUserPreference,
+        preference_expected_ids.clone(),
+        "Expected the durable commit-every-meaningful-step preference.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.3,
+        },
+    )
+    .await;
+    let preference_static = record_static_instruction_baseline(
+        &services.telemetry,
+        preference_scenario,
+        preference_prompt,
+        BrainHarnessIntent::FollowUserPreference,
+        static_context_ids,
+        preference_expected_ids.clone(),
+        "Static instructions mention verification but not the user's commit-every-step workflow.",
+        EvalOutcome {
+            success: false,
+            preference_adhered: false,
+            repeated_context_questions: 1,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.42,
+        },
+    )
+    .await;
+    let preference_packet = services
+        .memory
+        .orient(OrientInput {
+            project: Some("engram".to_string()),
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(preference_prompt.to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some(BrainHarnessIntent::FollowUserPreference),
+            scenario_id: Some(preference_scenario.to_string()),
+            arm: Some(EvalArm::MemoryItems.as_str().to_string()),
+            include_recent_commits: false,
+            limit: Some(10),
+        })
+        .await
+        .expect("preference orient should return a packet");
+    assert_eq!(preference_packet.hot_context_ids, vec![preference.id]);
+    assert_eq!(
+        preference_packet
+            .hot_context_items
+            .first()
+            .map(|item| item.id),
+        Some(preference.id)
+    );
+    let preference_memory = memoryitem_trace_from_orient(
+        &services,
+        preference_scenario,
+        preference_prompt,
+        preference_packet
+            .trace_id
+            .expect("orient should return a trace id"),
+        vec![preference.id],
+        Vec::new(),
+        EvalOutcome {
+            success: true,
+            preference_adhered: true,
+            repeated_context_questions: 0,
+            conflict_resolution_correct: None,
+            bad_memory_used: false,
+            quality_score: 0.9,
+        },
+    )
+    .await;
+    let preference_comparison = DiscriminativeContinuityComparison {
+        scenario: preference_scenario.to_string(),
+        expected_item_ids: preference_expected_ids,
+        no_memory: preference_no_memory,
+        static_instructions: preference_static,
+        memory_items: preference_memory,
+    };
+    assert!(preference_comparison.memory_items_outperform_baselines());
+    traces.extend([
+        preference_comparison.no_memory.clone(),
+        preference_comparison.static_instructions.clone(),
+        preference_comparison.memory_items.clone(),
+    ]);
+
+    let report = BrainHarnessEvalReport::new(traces);
+    let no_memory_summary = report.arm_summary(EvalArm::NoMemory);
+    let static_summary = report.arm_summary(EvalArm::StaticInstructions);
+    let memory_summary = report.arm_summary(EvalArm::MemoryItems);
+    assert_eq!(no_memory_summary.success_count, 0);
+    assert_eq!(static_summary.success_count, 0);
+    assert_eq!(memory_summary.success_count, 2);
+    assert_eq!(memory_summary.repeated_context_questions, 0);
+    assert!(memory_summary.avg_quality_score > static_summary.avg_quality_score);
+
+    let telemetry_report = services
+        .telemetry
+        .real_session_eval_report_scoped(Some(20), Some("engram"), None, None)
+        .await
+        .expect("telemetry report should build");
+    assert_eq!(telemetry_report.trace_count, 6);
+    assert_eq!(telemetry_report.feedback_count, 6);
+    assert_eq!(telemetry_report.feedback_trace_count, 6);
+    assert_eq!(telemetry_report.feedback_coverage, 1.0);
+    assert_eq!(telemetry_report.feedback_records_per_trace, 1.0);
+    assert_eq!(telemetry_report.outcome_feedback_count, 6);
+    assert_eq!(telemetry_report.outcome_trace_count, 6);
+    assert_eq!(telemetry_report.outcome_coverage, 1.0);
+    assert_eq!(telemetry_report.memory_judgment_feedback_count, 2);
+    assert_eq!(telemetry_report.memory_judgment_trace_count, 2);
+    assert_eq!(telemetry_report.used_memory_count, 2);
+    assert_eq!(telemetry_report.missing_context_count, 4);
+    assert_eq!(telemetry_report.task_success_count, 2);
+    assert_eq!(telemetry_report.task_failure_count, 4);
+    assert_eq!(telemetry_report.distinct_scenario_count, 2);
+    assert_eq!(telemetry_report.distinct_arm_count, 3);
 }
 
 #[tokio::test]

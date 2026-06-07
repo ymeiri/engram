@@ -13,6 +13,7 @@ use engram_index::{
 use engram_mcp::tools::{self, OrientRequest, SearchRequest, TelemetryRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
+use time::{Duration, OffsetDateTime};
 
 async fn setup_services() -> (TelemetryService, MemoryService) {
     let config = StoreConfig::memory();
@@ -225,6 +226,9 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
     assert_eq!(report.trace_count, 2);
     assert_eq!(report.feedback_count, 1);
     assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.memory_judgment_feedback_count, 1);
+    assert_eq!(report.memory_judgment_coverage, 1.0);
+    assert_eq!(report.unjudged_memory_feedback_count, 0);
     assert_eq!(report.operation_counts["orient"], 1);
     assert_eq!(report.operation_counts["search"], 1);
     assert_eq!(report.distinct_scenario_count, 1);
@@ -289,6 +293,518 @@ async fn real_session_eval_report_summarizes_feedback_coverage_and_gate_reasons(
         .recommendations
         .iter()
         .any(|recommendation| recommendation.contains("Keep M6 write-apply blocked")));
+}
+
+#[tokio::test]
+async fn real_session_eval_report_separates_trace_coverage_from_feedback_density() {
+    let (telemetry, _) = setup_services().await;
+    let used_memory_id = engram_core::Id::new();
+
+    let trace_with_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some("telemetry_semantics_cleanup_001".to_string()))
+                .with_arm(Some("memoryitem_orient".to_string()))
+                .with_external_session_id(Some("codex://threads/telemetry-cleanup".to_string()))
+                .with_returned_memory_ids(vec![used_memory_id]),
+        )
+        .await
+        .expect("trace with feedback should be recorded");
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some("telemetry_semantics_cleanup_001".to_string()))
+                .with_arm(Some("memoryitem_orient".to_string()))
+                .with_returned_memory_ids(vec![engram_core::Id::new()]),
+        )
+        .await
+        .expect("trace without feedback should be recorded");
+
+    let mut attribution_feedback = AgentFeedback::new(trace_with_feedback.id);
+    attribution_feedback.used_memory_ids = vec![used_memory_id];
+    telemetry
+        .submit_feedback(attribution_feedback)
+        .await
+        .expect("attribution feedback should be accepted");
+
+    let mut outcome_feedback = AgentFeedback::new(trace_with_feedback.id);
+    outcome_feedback.task_success = Some(true);
+    outcome_feedback.bad_memory_used = Some(false);
+    telemetry
+        .submit_feedback(outcome_feedback)
+        .await
+        .expect("outcome feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report_scoped(
+            Some(100),
+            Some("engram"),
+            Some("telemetry_semantics_cleanup_001"),
+            Some("memoryitem_orient"),
+        )
+        .await
+        .expect("scoped report should build");
+
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 2);
+    assert_eq!(report.feedback_trace_count, 1);
+    assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.feedback_records_per_trace, 1.0);
+    assert_eq!(report.memory_judgment_feedback_count, 1);
+    assert_eq!(report.memory_judgment_trace_count, 1);
+    assert_eq!(report.memory_judgment_trace_coverage, 0.5);
+    assert_eq!(report.outcome_feedback_count, 1);
+    assert_eq!(report.outcome_trace_count, 1);
+    assert_eq!(report.outcome_coverage, 0.5);
+    assert_eq!(report.external_session_feedback_count, 2);
+    assert_eq!(report.distinct_external_session_feedback_count, 1);
+    assert_eq!(report.unspecified_external_session_feedback_count, 0);
+
+    let intent_row = report
+        .intents
+        .iter()
+        .find(|row| row.intent == "implement_change")
+        .expect("implement_change row should exist");
+    assert_eq!(intent_row.trace_count, 2);
+    assert_eq!(intent_row.feedback_count, 2);
+    assert_eq!(intent_row.feedback_trace_count, 1);
+    assert_eq!(intent_row.feedback_coverage, 0.5);
+    assert_eq!(intent_row.feedback_records_per_trace, 1.0);
+    assert_eq!(intent_row.outcome_feedback_count, 1);
+    assert_eq!(intent_row.outcome_trace_count, 1);
+    assert_eq!(intent_row.outcome_coverage, 0.5);
+
+    let arm_row = report
+        .arms
+        .iter()
+        .find(|row| row.arm == "memoryitem_orient")
+        .expect("memoryitem_orient arm row should exist");
+    assert_eq!(arm_row.trace_count, 2);
+    assert_eq!(arm_row.feedback_count, 2);
+    assert_eq!(arm_row.feedback_trace_count, 1);
+    assert_eq!(arm_row.feedback_coverage, 0.5);
+    assert_eq!(arm_row.feedback_records_per_trace, 1.0);
+    assert_eq!(arm_row.outcome_feedback_count, 1);
+    assert_eq!(arm_row.outcome_trace_count, 1);
+    assert_eq!(arm_row.outcome_coverage, 0.5);
+
+    assert!(report
+        .recommendations
+        .iter()
+        .any(|recommendation| recommendation.contains("feedback_records_per_trace")));
+}
+
+#[tokio::test]
+async fn scoped_real_session_eval_applies_limit_after_scope_filters() {
+    let (telemetry, _) = setup_services().await;
+
+    let scenario_id = "scoped_eval_sampling_001";
+    let arm = "memoryitem_orient";
+    let mut in_scope_ids = Vec::new();
+
+    for offset in 1..=3 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_intent(Some(BrainHarnessIntent::ImplementChange))
+            .with_project(Some("engram".to_string()))
+            .with_scenario_id(Some(scenario_id.to_string()))
+            .with_arm(Some(arm.to_string()))
+            .with_query(Some(format!("older in-scope trace {offset}")));
+        trace.created_at = OffsetDateTime::from_unix_timestamp(1_700_000_000 + offset)
+            .expect("fixed test timestamp should be valid");
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("in-scope trace should be recorded");
+        in_scope_ids.push(trace.id);
+
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.task_success = Some(true);
+        telemetry
+            .submit_feedback(feedback)
+            .await
+            .expect("in-scope feedback should be accepted");
+    }
+
+    for offset in 10..=12 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_intent(Some(BrainHarnessIntent::ImplementChange))
+            .with_project(Some("other-project".to_string()))
+            .with_scenario_id(Some(scenario_id.to_string()))
+            .with_arm(Some(arm.to_string()))
+            .with_query(Some(format!("newer out-of-scope trace {offset}")));
+        trace.created_at = OffsetDateTime::from_unix_timestamp(1_700_000_000 + offset)
+            .expect("fixed test timestamp should be valid");
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("out-of-scope trace should be recorded");
+
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.task_success = Some(false);
+        telemetry
+            .submit_feedback(feedback)
+            .await
+            .expect("out-of-scope feedback should be accepted");
+    }
+
+    let scoped_traces = telemetry
+        .list_traces_scoped(Some(2), Some("engram"), Some(scenario_id), Some(arm), None)
+        .await
+        .expect("scoped traces should be listed");
+    assert_eq!(scoped_traces.len(), 2);
+    assert_eq!(scoped_traces[0].id, in_scope_ids[2]);
+    assert_eq!(scoped_traces[1].id, in_scope_ids[1]);
+
+    let report = telemetry
+        .real_session_eval_report_scoped(Some(2), Some("engram"), Some(scenario_id), Some(arm))
+        .await
+        .expect("scoped report should build");
+
+    assert_eq!(report.sample_limit, 2);
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 2);
+    assert_eq!(report.feedback_trace_count, 2);
+    assert_eq!(report.feedback_coverage, 1.0);
+    assert_eq!(report.task_success_count, 2);
+    assert_eq!(report.task_failure_count, 0);
+    assert_eq!(report.applied_filters.project.as_deref(), Some("engram"));
+    assert_eq!(
+        report.applied_filters.scenario_id.as_deref(),
+        Some(scenario_id)
+    );
+    assert_eq!(report.applied_filters.arm.as_deref(), Some(arm));
+}
+
+#[tokio::test]
+async fn real_session_eval_report_anchors_feedback_to_sampled_traces() {
+    let (telemetry, _) = setup_services().await;
+
+    let old_trace_with_new_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("old trace with newer feedback".to_string())),
+        )
+        .await
+        .expect("old trace should be recorded");
+    let another_old_trace_with_new_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("another old trace with newer feedback".to_string())),
+        )
+        .await
+        .expect("another old trace should be recorded");
+    let sampled_trace_with_feedback = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("sampled trace with older feedback".to_string())),
+        )
+        .await
+        .expect("sampled trace should be recorded");
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_query(Some("sampled trace without feedback".to_string())),
+        )
+        .await
+        .expect("second sampled trace should be recorded");
+
+    let mut sampled_feedback = AgentFeedback::new(sampled_trace_with_feedback.id);
+    sampled_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(sampled_feedback)
+        .await
+        .expect("sampled trace feedback should be accepted");
+
+    let mut old_feedback = AgentFeedback::new(old_trace_with_new_feedback.id);
+    old_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(old_feedback)
+        .await
+        .expect("old trace feedback should be accepted");
+
+    let mut another_old_feedback = AgentFeedback::new(another_old_trace_with_new_feedback.id);
+    another_old_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(another_old_feedback)
+        .await
+        .expect("another old trace feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(2))
+        .await
+        .expect("real-session report should build");
+
+    assert_eq!(report.sample_limit, 2);
+    assert_eq!(report.trace_count, 2);
+    assert_eq!(report.feedback_count, 1);
+    assert_eq!(report.feedback_trace_count, 1);
+    assert_eq!(report.feedback_coverage, 0.5);
+    assert_eq!(report.feedback_records_per_trace, 0.5);
+    assert_eq!(report.outcome_feedback_count, 1);
+    assert_eq!(report.outcome_trace_count, 1);
+    assert_eq!(report.outcome_coverage, 0.5);
+}
+
+#[tokio::test]
+async fn real_session_eval_default_sample_can_mask_recent_window_failure() {
+    let (telemetry, _) = setup_services().await;
+    let base = OffsetDateTime::now_utc();
+    let used_memory_id = engram_core::Id::new();
+    let intents = [
+        BrainHarnessIntent::PlanWork,
+        BrainHarnessIntent::ImplementChange,
+        BrainHarnessIntent::VerifyDecision,
+    ];
+
+    for index in 0..30 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_intent(Some(intents[index % intents.len()].clone()))
+            .with_project(Some("engram".to_string()))
+            .with_returned_memory_ids(vec![used_memory_id]);
+        trace.query = Some(format!("historical feedback-rich trace {index}"));
+        trace.created_at = base - Duration::seconds((100 + index) as i64);
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("historical trace should be recorded");
+
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.used_memory_ids = vec![used_memory_id];
+        feedback.task_success = Some(true);
+        feedback.preference_adhered = Some(true);
+        feedback.bad_memory_used = Some(false);
+        telemetry
+            .submit_feedback(feedback)
+            .await
+            .expect("historical feedback should be accepted");
+    }
+
+    for index in 0..50 {
+        let mut trace = BrainHarnessTrace::new(BrainHarnessOperation::Search)
+            .with_intent(Some(BrainHarnessIntent::PlanWork))
+            .with_project(Some("engram".to_string()))
+            .with_returned_memory_ids(vec![used_memory_id]);
+        trace.query = Some(format!("recent sparse-feedback trace {index}"));
+        trace.created_at = base + Duration::seconds(index as i64);
+        let trace = telemetry
+            .record_trace(trace)
+            .await
+            .expect("recent trace should be recorded");
+
+        if index < 20 {
+            let mut feedback = AgentFeedback::new(trace.id);
+            feedback.used_memory_ids = vec![used_memory_id];
+            feedback.task_success = Some(true);
+            feedback.preference_adhered = Some(true);
+            feedback.bad_memory_used = Some(false);
+            telemetry
+                .submit_feedback(feedback)
+                .await
+                .expect("recent feedback should be accepted");
+        }
+    }
+
+    let recent_report = telemetry
+        .real_session_eval_report(Some(50))
+        .await
+        .expect("recent-window report should build");
+    assert_eq!(recent_report.sample_limit, 50);
+    assert_eq!(recent_report.trace_count, 50);
+    assert_eq!(recent_report.feedback_trace_count, 20);
+    assert_eq!(recent_report.feedback_coverage, 0.4);
+    assert!(!recent_report.confidence_gate.passed);
+    assert!(recent_report
+        .confidence_gate
+        .reasons
+        .iter()
+        .any(|reason| reason.contains("feedback coverage")));
+
+    let default_report = telemetry
+        .real_session_eval_report(None)
+        .await
+        .expect("default report should build");
+    assert!(default_report.sample_limit > recent_report.sample_limit);
+    assert_eq!(default_report.trace_count, 80);
+    assert_eq!(default_report.feedback_trace_count, 50);
+    assert_eq!(default_report.feedback_coverage, 0.625);
+    assert!(default_report.confidence_gate.passed);
+}
+
+#[tokio::test]
+async fn real_session_eval_report_tracks_memory_judgment_attribution_gaps() {
+    let (telemetry, _) = setup_services().await;
+    let scenario_id = "bounded_autonomous_followthrough_006";
+    let arm = "memoryitem_orient";
+    let judged_memory_id = engram_core::Id::new();
+    let unjudged_memory_id = engram_core::Id::new();
+    let out_of_scope_memory_id = engram_core::Id::new();
+
+    let judged_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_memory_ids(vec![judged_memory_id]),
+        )
+        .await
+        .expect("judged trace should be recorded");
+    let unjudged_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_memory_ids(vec![unjudged_memory_id]),
+        )
+        .await
+        .expect("unjudged trace should be recorded");
+    let out_of_scope_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram-other".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_memory_ids(vec![out_of_scope_memory_id]),
+        )
+        .await
+        .expect("out-of-scope trace should be recorded");
+    let result_only_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::ImplementChange))
+                .with_project(Some("engram".to_string()))
+                .with_scenario_id(Some(scenario_id.to_string()))
+                .with_arm(Some(arm.to_string()))
+                .with_returned_result_ids(vec!["result-only".to_string()]),
+        )
+        .await
+        .expect("result-only trace should be recorded");
+
+    let mut judged_feedback = AgentFeedback::new(judged_trace.id);
+    judged_feedback.rejected_memory_ids = vec![judged_memory_id];
+    telemetry
+        .submit_feedback(judged_feedback)
+        .await
+        .expect("judged feedback should be accepted");
+
+    let mut unjudged_feedback = AgentFeedback::new(unjudged_trace.id);
+    unjudged_feedback.task_success = Some(true);
+    telemetry
+        .submit_feedback(unjudged_feedback)
+        .await
+        .expect("unjudged feedback should be accepted");
+
+    let mut out_of_scope_feedback = AgentFeedback::new(out_of_scope_trace.id);
+    out_of_scope_feedback.task_success = Some(false);
+    telemetry
+        .submit_feedback(out_of_scope_feedback)
+        .await
+        .expect("out-of-scope feedback should be accepted");
+
+    let mut result_only_feedback = AgentFeedback::new(result_only_trace.id);
+    result_only_feedback.used_result_ids = vec!["result-only".to_string()];
+    telemetry
+        .submit_feedback(result_only_feedback)
+        .await
+        .expect("result-only feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(100))
+        .await
+        .expect("real-session report should build");
+    assert_eq!(report.feedback_count, 4);
+    assert_eq!(report.memory_judgment_feedback_count, 1);
+    assert_eq!(report.memory_judgment_coverage, 0.25);
+    assert_eq!(report.unjudged_memory_feedback_count, 2);
+    assert!(report
+        .recommendations
+        .iter()
+        .any(|recommendation| recommendation.contains("memory attribution fields")));
+
+    let scoped_report = telemetry
+        .real_session_eval_report_scoped(Some(100), Some("engram"), Some(scenario_id), Some(arm))
+        .await
+        .expect("scoped real-session report should build");
+    assert_eq!(scoped_report.trace_count, 3);
+    assert_eq!(scoped_report.feedback_count, 3);
+    assert_eq!(scoped_report.memory_judgment_feedback_count, 1);
+    assert!((scoped_report.memory_judgment_coverage - (1.0_f32 / 3.0)).abs() < f32::EPSILON);
+    assert_eq!(scoped_report.unjudged_memory_feedback_count, 1);
+}
+
+#[tokio::test]
+async fn memory_judgment_trace_coverage_uses_distinct_eligible_traces() {
+    let (telemetry, _) = setup_services().await;
+    let surfaced_memory_id = engram_core::Id::new();
+    let first_search_memory_id = engram_core::Id::new();
+    let second_search_memory_id = engram_core::Id::new();
+
+    telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_returned_memory_ids(vec![surfaced_memory_id]),
+        )
+        .await
+        .expect("memory-bearing trace should be recorded");
+    let first_search_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_returned_result_ids(vec![first_search_memory_id.to_string()]),
+        )
+        .await
+        .expect("legacy search trace should be recorded");
+    let second_search_trace = telemetry
+        .record_trace(
+            BrainHarnessTrace::new(BrainHarnessOperation::Search)
+                .with_intent(Some(BrainHarnessIntent::PlanWork))
+                .with_project(Some("engram".to_string()))
+                .with_returned_result_ids(vec![second_search_memory_id.to_string()]),
+        )
+        .await
+        .expect("second legacy search trace should be recorded");
+
+    let mut first_feedback = AgentFeedback::new(first_search_trace.id);
+    first_feedback.used_memory_ids = vec![first_search_memory_id];
+    telemetry
+        .submit_feedback(first_feedback)
+        .await
+        .expect("first feedback should be accepted");
+
+    let mut second_feedback = AgentFeedback::new(second_search_trace.id);
+    second_feedback.rejected_memory_ids = vec![second_search_memory_id];
+    telemetry
+        .submit_feedback(second_feedback)
+        .await
+        .expect("second feedback should be accepted");
+
+    let report = telemetry
+        .real_session_eval_report(Some(100))
+        .await
+        .expect("real-session report should build");
+    assert_eq!(report.trace_count, 3);
+    assert_eq!(report.memory_judgment_trace_count, 2);
+    assert!((report.memory_judgment_trace_coverage - (2.0_f32 / 3.0)).abs() < f32::EPSILON);
+    assert!(report.memory_judgment_trace_coverage <= 1.0);
 }
 
 #[tokio::test]
@@ -523,6 +1039,34 @@ async fn mcp_telemetry_tool_records_trace_feedback_and_stats() {
 }
 
 #[tokio::test]
+async fn mcp_telemetry_tool_rejects_too_long_external_session_id() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("search".to_string());
+    trace_request.query = Some("validate external session length".to_string());
+    trace_request.external_session_id = Some("x".repeat(257));
+
+    let err = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect_err("too-long external_session_id should be rejected");
+    assert!(
+        err.contains("external_session_id must be 256 characters or fewer"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
 async fn mcp_telemetry_filters_traces_feedback_and_eval_by_scenario_and_arm() {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)
@@ -630,6 +1174,204 @@ async fn mcp_telemetry_filters_traces_feedback_and_eval_by_scenario_and_arm() {
 }
 
 #[tokio::test]
+async fn mcp_telemetry_list_traces_filters_by_intent() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut target_trace_id = String::new();
+
+    for (label, intent, project) in [
+        ("target", "follow_user_preference", "engram"),
+        ("other-intent", "plan_work", "engram"),
+        ("other-project", "follow_user_preference", "engram-other"),
+    ] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("search".to_string());
+        trace_request.intent = Some(intent.to_string());
+        trace_request.project = Some(project.to_string());
+        trace_request.query = Some(format!("{label} intent-filter telemetry"));
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+        if label == "target" {
+            target_trace_id = trace_id;
+        }
+    }
+
+    let mut list_traces_request = telemetry_request("list_traces");
+    list_traces_request.project = Some("engram".to_string());
+    list_traces_request.intent = Some("preference".to_string());
+    list_traces_request.limit = Some(1);
+    let list_traces_response = tools::telemetry_new(&state, list_traces_request)
+        .await
+        .expect("intent-filtered list_traces should work");
+    let list_traces_json = parse_json(&list_traces_response);
+    let traces = list_traces_json["traces"].as_array().unwrap();
+
+    assert_eq!(list_traces_json["count"], 1);
+    assert_eq!(traces[0]["id"].as_str(), Some(target_trace_id.as_str()));
+    assert_eq!(traces[0]["intent"], "follow_user_preference");
+    assert_eq!(traces[0]["project"], "engram");
+}
+
+#[tokio::test]
+async fn mcp_telemetry_list_actions_filter_by_project() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let scenario_id = "bounded_autonomous_followthrough_005";
+    let arm = "memoryitem_orient";
+    let mut target_trace_id = String::new();
+
+    for (label, project) in [("target", "engram"), ("other-project", "engram-other")] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("orient".to_string());
+        trace_request.intent = Some("implement_change".to_string());
+        trace_request.project = Some(project.to_string());
+        trace_request.scenario_id = Some(scenario_id.to_string());
+        trace_request.arm = Some(arm.to_string());
+        trace_request.query = Some(format!("{label} project-scoped telemetry"));
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+        if label == "target" {
+            target_trace_id = trace_id.clone();
+        }
+
+        let mut feedback_request = telemetry_request("submit_feedback");
+        feedback_request.trace_id = Some(trace_id);
+        feedback_request.task_success = Some(project == "engram");
+
+        tools::telemetry_new(&state, feedback_request)
+            .await
+            .expect("submit_feedback should work");
+    }
+
+    let mut list_traces_request = telemetry_request("list_traces");
+    list_traces_request.project = Some("engram".to_string());
+    list_traces_request.scenario_id = Some(scenario_id.to_string());
+    list_traces_request.arm = Some(arm.to_string());
+    let list_traces_response = tools::telemetry_new(&state, list_traces_request)
+        .await
+        .expect("project-filtered list_traces should work");
+    let list_traces_json = parse_json(&list_traces_response);
+    let traces = list_traces_json["traces"].as_array().unwrap();
+    assert_eq!(list_traces_json["count"], 1);
+    assert_eq!(traces[0]["id"].as_str(), Some(target_trace_id.as_str()));
+    assert_eq!(traces[0]["project"], "engram");
+
+    let mut list_feedback_request = telemetry_request("list_feedback");
+    list_feedback_request.project = Some("engram".to_string());
+    list_feedback_request.scenario_id = Some(scenario_id.to_string());
+    list_feedback_request.arm = Some(arm.to_string());
+    let list_feedback_response = tools::telemetry_new(&state, list_feedback_request)
+        .await
+        .expect("project-filtered list_feedback should work");
+    let list_feedback_json = parse_json(&list_feedback_response);
+    let feedback = list_feedback_json["feedback"].as_array().unwrap();
+    assert_eq!(list_feedback_json["count"], 1);
+    assert_eq!(
+        feedback[0]["trace_id"].as_str(),
+        Some(target_trace_id.as_str())
+    );
+}
+
+#[tokio::test]
+async fn mcp_list_feedback_applies_scope_before_limit() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let scenario_id = "scoped_feedback_limit";
+    let arm = "memoryitem_orient";
+    let mut target_new_trace_id = String::new();
+
+    for (label, project, note) in [
+        ("target-old", "engram", "target old feedback"),
+        ("target-new", "engram", "target new feedback"),
+        ("newer-noise", "engram-other", "out-of-scope feedback"),
+    ] {
+        let mut trace_request = telemetry_request("record_trace");
+        trace_request.operation = Some("orient".to_string());
+        trace_request.intent = Some("implement_change".to_string());
+        trace_request.project = Some(project.to_string());
+        trace_request.scenario_id = Some(scenario_id.to_string());
+        trace_request.arm = Some(arm.to_string());
+        trace_request.query = Some(format!("{label} scoped feedback"));
+
+        let trace_response = tools::telemetry_new(&state, trace_request)
+            .await
+            .expect("record_trace should work");
+        let trace_json = parse_json(&trace_response);
+        let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+        if label == "target-new" {
+            target_new_trace_id = trace_id.clone();
+        }
+
+        let mut feedback_request = telemetry_request("submit_feedback");
+        feedback_request.trace_id = Some(trace_id);
+        feedback_request.note = Some(note.to_string());
+
+        tools::telemetry_new(&state, feedback_request)
+            .await
+            .expect("submit_feedback should work");
+
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+    }
+
+    let mut list_feedback_request = telemetry_request("list_feedback");
+    list_feedback_request.project = Some("engram".to_string());
+    list_feedback_request.scenario_id = Some(scenario_id.to_string());
+    list_feedback_request.arm = Some(arm.to_string());
+    list_feedback_request.limit = Some(1);
+
+    let list_feedback_response = tools::telemetry_new(&state, list_feedback_request)
+        .await
+        .expect("project-filtered list_feedback should work");
+    let list_feedback_json = parse_json(&list_feedback_response);
+    let feedback = list_feedback_json["feedback"].as_array().unwrap();
+
+    assert_eq!(list_feedback_json["count"], 1);
+    assert_eq!(
+        feedback[0]["trace_id"].as_str(),
+        Some(target_new_trace_id.as_str())
+    );
+    assert_eq!(feedback[0]["note"], "target new feedback");
+}
+
+#[tokio::test]
 async fn mcp_real_session_eval_reports_applied_filters() {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)
@@ -644,18 +1386,21 @@ async fn mcp_real_session_eval_reports_applied_filters() {
     state.init_telemetry(telemetry).await;
 
     let target_project = "engram";
-    let other_project = "engram-other";
     let scenario_id = "bounded_autonomous_followthrough_004";
-    let arm = "no_memory_same_harness";
+    let arm = "memoryitem_orient";
 
-    for (project, task_success) in [(target_project, true), (other_project, false)] {
+    for (label, project, arm, task_success) in [
+        ("target", target_project, arm, true),
+        ("other-project", "engram-other", arm, false),
+        ("other-arm", target_project, "no_memory_same_harness", false),
+    ] {
         let mut trace_request = telemetry_request("record_trace");
-        trace_request.operation = Some("search".to_string());
+        trace_request.operation = Some("orient".to_string());
         trace_request.intent = Some("implement_change".to_string());
         trace_request.project = Some(project.to_string());
         trace_request.scenario_id = Some(scenario_id.to_string());
         trace_request.arm = Some(arm.to_string());
-        trace_request.query = Some(format!("{project} eval report"));
+        trace_request.query = Some(format!("{label} eval report"));
 
         let trace_response = tools::telemetry_new(&state, trace_request)
             .await
@@ -677,7 +1422,7 @@ async fn mcp_real_session_eval_reports_applied_filters() {
         .expect("unfiltered real_session_eval should work");
     let unfiltered_json = parse_json(&unfiltered_response);
     let unfiltered_report = &unfiltered_json["report"];
-    assert_eq!(unfiltered_report["trace_count"], 2);
+    assert_eq!(unfiltered_report["trace_count"], 3);
     assert!(unfiltered_report["applied_filters"]["project"].is_null());
     assert!(unfiltered_report["applied_filters"]["scenario_id"].is_null());
     assert!(unfiltered_report["applied_filters"]["arm"].is_null());
@@ -739,6 +1484,7 @@ async fn mcp_orient_tags_trace_with_scenario_and_arm() {
             arm: Some("memory_items".to_string()),
             include_recent_commits: Some(false),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await
@@ -859,4 +1605,160 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     assert_eq!(trace.arm.as_deref(), Some("memory_items"));
     assert_eq!(trace.query.as_deref(), Some("intent aware telemetry"));
     assert_eq!(trace.project.as_deref(), Some("engram"));
+    assert_eq!(trace.returned_memory_ids, vec![memory_item.id]);
+    assert!(trace
+        .returned_result_ids
+        .contains(&memory_item.id.to_string()));
+}
+
+#[tokio::test]
+async fn mcp_submit_feedback_warns_when_returned_memory_is_unattributed() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let returned_memory_id = engram_core::Id::new();
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("orient".to_string());
+    trace_request.intent = Some("implement_change".to_string());
+    trace_request.query = Some("recover sealed target".to_string());
+    trace_request.returned_memory_ids = vec![returned_memory_id.to_string()];
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id.clone());
+    feedback_request.task_success = Some(true);
+    feedback_request.note = Some("forgot to attribute used memory".to_string());
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    let warnings = feedback_json["warnings"]
+        .as_array()
+        .expect("warnings array should be present");
+    assert_eq!(warnings.len(), 1);
+    let warning = warnings[0].as_str().unwrap();
+    assert!(
+        warning.contains("used_memory_ids"),
+        "warning should reference used_memory_ids: {warning}"
+    );
+    assert!(
+        warning.contains("returned memory"),
+        "warning should describe the linked trace situation: {warning}"
+    );
+    assert_eq!(feedback_json["feedback"]["trace_id"], trace_id);
+
+    let mut attributed_request = telemetry_request("submit_feedback");
+    attributed_request.trace_id = Some(trace_id);
+    attributed_request.used_memory_ids = vec![returned_memory_id.to_string()];
+    attributed_request.task_success = Some(true);
+
+    let attributed_response = tools::telemetry_new(&state, attributed_request)
+        .await
+        .expect("attributed submit_feedback should work");
+    let attributed_json = parse_json(&attributed_response);
+    assert_eq!(
+        attributed_json["warnings"].as_array().unwrap().len(),
+        0,
+        "no warning when used_memory_ids is populated"
+    );
+}
+
+#[tokio::test]
+async fn mcp_submit_feedback_skips_warning_when_trace_returned_no_memory() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("search".to_string());
+    trace_request.intent = Some("answer_question".to_string());
+    trace_request.query = Some("no memory returned".to_string());
+    trace_request.returned_result_ids = vec!["result-1".to_string()];
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id);
+    feedback_request.used_result_ids = vec!["result-1".to_string()];
+    feedback_request.task_success = Some(true);
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    assert_eq!(
+        feedback_json["warnings"].as_array().unwrap().len(),
+        0,
+        "no warning when linked trace returned no memory IDs"
+    );
+}
+
+#[tokio::test]
+async fn mcp_submit_feedback_skips_warning_when_only_rejected_memory_is_set() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db);
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+
+    let returned_memory_id = engram_core::Id::new();
+    let mut trace_request = telemetry_request("record_trace");
+    trace_request.operation = Some("orient".to_string());
+    trace_request.intent = Some("implement_change".to_string());
+    trace_request.query = Some("memory judged not useful".to_string());
+    trace_request.returned_memory_ids = vec![returned_memory_id.to_string()];
+
+    let trace_response = tools::telemetry_new(&state, trace_request)
+        .await
+        .expect("record_trace should work");
+    let trace_json = parse_json(&trace_response);
+    let trace_id = trace_json["trace"]["id"].as_str().unwrap().to_string();
+
+    let mut feedback_request = telemetry_request("submit_feedback");
+    feedback_request.trace_id = Some(trace_id);
+    feedback_request.rejected_memory_ids = vec![returned_memory_id.to_string()];
+    feedback_request.task_success = Some(true);
+
+    let feedback_response = tools::telemetry_new(&state, feedback_request)
+        .await
+        .expect("submit_feedback should work");
+    let feedback_json = parse_json(&feedback_response);
+    assert_eq!(
+        feedback_json["warnings"].as_array().unwrap().len(),
+        0,
+        "no warning when rejected_memory_ids is populated"
+    );
 }

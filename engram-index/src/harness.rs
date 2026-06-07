@@ -633,30 +633,51 @@ impl HarnessService {
                     }
                 }
             }
-            "sessionend" => {
-                if write_durable {
-                    if let Some(service) = services.handoff {
-                        let content = format!(
-                            "# Claude Code Session-End Handoff\n\nSession: {}\nCWD: {}\nReason: {}\nTranscript: {}\n\n## Next Actions\n- On resume, call orient and inspect this handoff before acting.\n",
-                            event.session_id.as_deref().unwrap_or("unknown"),
-                            event.cwd.as_deref().unwrap_or("unknown"),
-                            event.reason.as_deref().unwrap_or("unknown"),
-                            event.transcript_path.as_deref().unwrap_or("unknown"),
-                        );
-                        match service
-                            .update(
-                                project.clone(),
-                                None,
-                                content,
-                                vec!["On resume, call orient and inspect this handoff.".to_string()],
-                                writer.clone(),
-                                false,
-                            )
-                            .await
-                        {
-                            Ok(update) => handoff_written = update.written,
-                            Err(error) => warnings.push(format!("handoff update failed: {error}")),
+            "stop" => {
+                if let Some(service) = services.obligations {
+                    let detection = service
+                        .detect(crate::obligation::ObligationDetectOptions {
+                            cwd: event.cwd.clone(),
+                            prompt: None,
+                            project: project.clone(),
+                            writer: writer.clone(),
+                            write: write_durable && !event.stop_hook_active,
+                            limit: Some(16),
+                        })
+                        .await;
+                    match detection {
+                        Ok(detection) => {
+                            obligations_written += detection.written.len();
+                            warnings.extend(detection.warnings);
                         }
+                        Err(error) => {
+                            warnings.push(format!("obligation detection failed: {error}"))
+                        }
+                    }
+                }
+            }
+            "sessionend" if write_durable => {
+                if let Some(service) = services.handoff {
+                    let content = format!(
+                        "# Claude Code Session-End Handoff\n\nSession: {}\nCWD: {}\nReason: {}\nTranscript: {}\n\n## Next Actions\n- On resume, call orient and inspect this handoff before acting.\n",
+                        event.session_id.as_deref().unwrap_or("unknown"),
+                        event.cwd.as_deref().unwrap_or("unknown"),
+                        event.reason.as_deref().unwrap_or("unknown"),
+                        event.transcript_path.as_deref().unwrap_or("unknown"),
+                    );
+                    match service
+                        .update(
+                            project.clone(),
+                            None,
+                            content,
+                            vec!["On resume, call orient and inspect this handoff.".to_string()],
+                            writer.clone(),
+                            false,
+                        )
+                        .await
+                    {
+                        Ok(update) => handoff_written = update.written,
+                        Err(error) => warnings.push(format!("handoff update failed: {error}")),
                     }
                 }
             }
@@ -664,8 +685,11 @@ impl HarnessService {
         }
 
         let open_obligations = if let Some(service) = services.obligations {
-            match service.doctor(Some(8)).await {
-                Ok(report) => report.open.len(),
+            match service
+                .list_open_for_context(project.as_deref(), event.cwd.as_deref())
+                .await
+            {
+                Ok(obligations) => obligations.len(),
                 Err(error) => {
                     warnings.push(format!("obligation doctor failed: {error}"));
                     0
@@ -932,7 +956,7 @@ fn hook_additional_context(
                 .to_string(),
         ),
         "stop" => lines.push(
-            "Before final response, check memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); resolve or explicitly skip open obligations without blocking the user, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, and missing_context for the relevant trace_id."
+            "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect, project=..., cwd=...) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
                 .to_string(),
         ),
         "precompact" | "postcompact" => lines.push(
@@ -1896,15 +1920,19 @@ Lifecycle contract:
 - At task/session start, call `orient` with the project, cwd, prompt, and harness.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, and `missing_context` when those outcomes or
-  gaps can be judged.
+  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before major decisions, call `memory(action=changes_since)` with the orientation cursor.
 - After non-obvious discoveries, record source-grounded memory or a session event.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Before final response, call `changes_since`; if relevant updates appeared, account for them.
-- Before final response, call `obligations(action=detect)` and `obligations(action=doctor)`;
-  resolve open obligations or report explicit skip reasons.
+- Before final response, call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`; resolve open obligations or report
+  explicit skip reasons.
 - Before context compaction, context transition, or any expected loss of conversation state,
   update `handoff` and record/commit compact durable memory for future sessions.
 - At session end, compile a handoff and create a knowledge commit candidate.
@@ -1923,7 +1951,10 @@ fn claude_resume_session_command() -> String {
 1. Call `orient` with the explicit project and current cwd.
 2. Read the returned context pack, ambiguities, and memory cursor.
 3. Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
-   outcome/gap fields before final response when memory quality can be judged.
+   outcome, gap, and attribution fields before final response when memory quality can be judged.
+   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
+   returned memory considered but not used. Include `stale_memory_ids` and
+   `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 4. If a rolling handoff exists, inspect `handoff(action=get)`.
 5. Check `memory(action=changes_since)` during the session before major decisions.
 6. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
@@ -1944,7 +1975,8 @@ fn claude_end_session_command() -> String {
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -1978,7 +2010,8 @@ CONTEXT="<engram_session_activation source=\"$SOURCE\" project=\"$PROJECT_NAME\"
 Engram is the durable Memory OS for this Claude Code session.
 Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, and agent=claude_code.
 Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
-Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, and missing_context before final response when those outcomes or gaps can be judged.
+Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids before final response when those outcomes or attribution judgments can be made.
+Use used_memory_ids for returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned memory influenced behavior.
 Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
 When the current method, plan, or next action should survive resume, use memory(action=capture_current_plan) with compact content and file/tool/manual-review evidence.
 Before context compaction or session end, update handoff and commit compact durable memory when useful.
@@ -2019,7 +2052,7 @@ fi
 cat <<'EOF'
 {{
   "continue": true,
-  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect), and obligations(action=doctor); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, and missing_context for relevant trace_id values when those outcomes or gaps can be judged; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
 }}
 EOF
 "#
@@ -2049,7 +2082,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty')
-WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "durable"')
+WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "nudge"')
 
 if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
   CWD="${CLAUDE_PROJECT_DIR:-}"
@@ -2170,15 +2203,25 @@ Workflow:
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, and `missing_context` when those outcomes or
-  gaps can be judged.
+  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
-  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
-  skip open obligations.
+- When you create or update a durable project document, call
+  `obligations(action=detect, write=true, project=..., cwd=...)` so the document disposition is
+  persisted instead of only observed. Resolve each document obligation by indexing it with
+  `docs(action=index)`, registering it with `knowledge(action=register)`, recording compact memory
+  with `memory(action=capture_current_plan)`, linking it in `handoff`, or explicitly skipping it
+  with a reason.
+- Before final response, run `obligations(action=detect, write=true, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`; resolve or explicitly skip open
+  obligations. If a document changes again after resolution, rerun detection so a fresh content
+  state gets its own disposition.
 - Before Codex context compaction or any expected context loss, update `handoff` and record or
   commit compact durable memory so the next Codex session can resume without the transcript.
 - For commit messages, check memory for user/project commit preferences first.
@@ -2200,11 +2243,15 @@ Steps:
 - Call `orient` before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
-  outcome/gap fields before final response when memory quality can be judged.
+  outcome, gap, and attribution fields before final response when memory quality can be judged.
+  Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
+  returned memory considered but not used. Include `stale_memory_ids` and
+  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
-- Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
-  response.
+- Poll `obligations(action=detect, write=true, project=..., cwd=...)` before final response so
+  changed durable documents become persisted obligations, then close them by indexing,
+  registering, recording compact memory, handoff-linking, or explicitly skipping with a reason.
 - Store compact, evidenced memory if the session discovered something future agents need.
 - Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
   guidance that should surface on the next resume.
@@ -2229,15 +2276,19 @@ Follow this soft lifecycle contract:
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, and `missing_context` when those outcomes or
-  gaps can be judged.
+  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
-  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
-  skip open obligations.
+- Use `obligations(action=detect, project=..., cwd=...)` when documents change, tools fail,
+  or source/design reading is needed; before final response, run
+  `obligations(action=doctor, project=..., cwd=...)` and resolve or explicitly skip open
+  obligations.
 - Before context compaction or any expected context loss, update `handoff` and record or commit
   compact durable memory for the next session.
 - For commit messages, check memory for user/project commit preferences first.
@@ -2263,7 +2314,10 @@ Steps:
 - Call the Engram MCP `orient` tool before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
-  outcome/gap fields before final response when memory quality can be judged.
+  outcome, gap, and attribution fields before final response when memory quality can be judged.
+  Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
+  returned memory considered but not used. Include `stale_memory_ids` and
+  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2290,7 +2344,8 @@ This command is invoked as `/engram:end-session`.
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -2313,8 +2368,11 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
   decisions, before final response, and during long sessions.
 - Keep returned `trace_id` values from `orient` or `search` and call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, and `missing_context` before final response
-  when those outcomes or gaps can be judged.
+  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` before final
+  response when those outcomes or attribution judgments can be made. Use `used_memory_ids` for
+  returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty
+  only when no returned memory influenced behavior.
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Gemini CLI, Claude Code, Codex, and other harnesses
   can be distinguished.
@@ -2352,15 +2410,19 @@ Workflow:
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, and `missing_context` when those outcomes or
-  gaps can be judged.
+  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
+  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
+  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
+  memory influenced behavior.
 - Before a major decision or final response, call `memory(action=changes_since)`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Use `obligations(action=detect)` when documents change, tools fail, or source/design reading
-  is needed; before final response, run `obligations(action=doctor)` and resolve or explicitly
-  skip open obligations.
+- Use `obligations(action=detect, project=..., cwd=...)` when documents change, tools fail,
+  or source/design reading is needed; before final response, run
+  `obligations(action=doctor, project=..., cwd=...)` and resolve or explicitly skip open
+  obligations.
 - Before context compaction or any expected context loss, update `handoff` and record or commit
   compact durable memory for the next session.
 - Use writer provenance with `writer_harness=cursor` when writing durable memory.
@@ -2387,7 +2449,10 @@ Steps:
 - Call the Engram MCP `orient` tool before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
-  outcome/gap fields before final response when memory quality can be judged.
+  outcome, gap, and attribution fields before final response when memory quality can be judged.
+  Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
+  returned memory considered but not used. Include `stale_memory_ids` and
+  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
 - Use `handoff(action=get)` when available.
 - Poll `memory(action=changes_since)` before major decisions and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
@@ -2415,7 +2480,8 @@ Use this skill when Cursor Agent is closing out a task or preparing a handoff.
 
 Before ending:
 - Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
+- Call `obligations(action=detect, project=..., cwd=...)` and
+  `obligations(action=doctor, project=..., cwd=...)`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -2436,8 +2502,11 @@ fn agents_snippet() -> String {
   decisions, before final response, and during long sessions.
 - Keep returned `trace_id` values from `orient` or `search` and call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, and `missing_context` before final response
-  when those outcomes or gaps can be judged.
+  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
+  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` before final
+  response when those outcomes or attribution judgments can be made. Use `used_memory_ids` for
+  returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty
+  only when no returned memory influenced behavior.
 - Record source-grounded decisions, preferences, rules, limitations, and non-obvious
   discoveries. Use writer provenance so Claude Code, Codex, and other harnesses can be
   distinguished.
@@ -2469,10 +2538,13 @@ Lifecycle:
 - after current method/plan/next-action changes: use `memory(action=capture_current_plan)` with
   compact content and evidence
 - before final response: call `changes_since` and distill if needed
-- before final response: detect obligations, run obligations doctor, and close or explicitly skip
-  open obligations
+- before final response: detect obligations with current project/cwd, run obligations doctor with
+  the same project/cwd scope, and close or explicitly skip open obligations
 - before final response: submit `telemetry(action=submit_feedback)` for relevant `trace_id`
-  values with outcome/gap fields when memory quality can be judged
+  values with outcome, gap, and attribution fields when memory quality can be judged; include
+  `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for returned
+  memory considered but not used; include `stale_memory_ids` and `wrong_scope_memory_ids` for
+  rejected memory specifically judged stale or out of scope
 - before context compaction/context loss: update handoff and persist compact durable memory
 - session end/handoff: compile handoff and knowledge commit candidate
 - commit workflows: consult memory for relevant preferences/rules
@@ -2703,6 +2775,17 @@ mod tests {
     }
 
     #[test]
+    fn render_claude_session_end_hook_defaults_missing_write_policy_to_nudge() {
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::ClaudeCode, Some("claude-session-end-hook"));
+        assert_eq!(adapters.len(), 1);
+        let contents = &adapters[0].contents;
+
+        assert!(contents.contains(r#".write_policy // "nudge""#));
+        assert!(!contents.contains(r#".write_policy // "durable""#));
+    }
+
+    #[test]
     fn render_adapter_mentions_commit_preferences() {
         let adapters = HarnessService::new()
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
@@ -2727,6 +2810,27 @@ mod tests {
             .contains("telemetry(action=submit_feedback)"));
         assert!(adapters[0].contents.contains("task_success"));
         assert!(adapters[0].contents.contains("missing_context"));
+        assert!(adapters[0].contents.contains("used_memory_ids"));
+        assert!(adapters[0].contents.contains("rejected_memory_ids"));
+        assert!(adapters[0].contents.contains("stale_memory_ids"));
+        assert!(adapters[0].contents.contains("wrong_scope_memory_ids"));
+    }
+
+    #[test]
+    fn render_codex_adapter_spells_out_document_lifecycle_disposition() {
+        let adapters = HarnessService::new()
+            .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
+        assert_eq!(adapters.len(), 1);
+        let contents = &adapters[0].contents;
+
+        assert!(contents.contains("obligations(action=detect, write=true"));
+        assert!(contents.contains("obligations(action=doctor, project=..., cwd=...)"));
+        assert!(contents.contains("docs(action=index)"));
+        assert!(contents.contains("knowledge(action=register)"));
+        assert!(contents.contains("memory(action=capture_current_plan)"));
+        assert!(contents.contains("explicitly skipping it"));
+        assert!(contents.contains("fresh content"));
+        assert!(contents.contains("state gets its own disposition"));
     }
 
     #[test]
@@ -2852,6 +2956,8 @@ mod tests {
             fs::read_to_string(root.path().join(".claude/hooks/engram-session-end.sh")).unwrap();
         assert!(session_end_hook.contains("daemon.port"));
         assert!(session_end_hook.contains("SessionEnd"));
+        assert!(session_end_hook.contains(r#".write_policy // "nudge""#));
+        assert!(!session_end_hook.contains(r#".write_policy // "durable""#));
 
         let status = service
             .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
@@ -2993,6 +3099,82 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hook_event_session_end_missing_write_policy_does_not_write_handoff() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "SessionEnd".to_string(),
+                    session_id: Some("claude-session-1".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    transcript_path: Some("/tmp/transcript.jsonl".to_string()),
+                    reason: Some("shutdown".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: None,
+                    obligations: None,
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!outcome.handoff_written);
+        assert!(outcome
+            .additional_context
+            .contains(r#"<engram_hook event="SessionEnd" write_policy="nudge">"#));
+        assert!(handoff
+            .get(Some("engram"), None)
+            .await
+            .unwrap()
+            .item
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn hook_event_session_end_explicit_durable_writes_handoff() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "SessionEnd".to_string(),
+                    session_id: Some("claude-session-1".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    transcript_path: Some("/tmp/transcript.jsonl".to_string()),
+                    reason: Some("shutdown".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: None,
+                    obligations: None,
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(outcome.handoff_written);
+        let handoff = handoff.get(Some("engram"), None).await.unwrap();
+        let item = handoff
+            .item
+            .expect("explicit durable SessionEnd should write");
+        assert!(item.content.contains("Claude Code Session-End Handoff"));
+        assert!(item.content.contains("claude-session-1"));
+    }
+
+    #[tokio::test]
     async fn hook_event_does_not_persist_generic_task_instruction_as_memory() {
         let config = engram_store::StoreConfig::memory();
         let db = engram_store::connect_and_init(&config).await.unwrap();
@@ -3108,6 +3290,86 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("open_obligations="));
+    }
+
+    #[tokio::test]
+    async fn hook_event_stop_detects_changed_document_obligations() {
+        let root = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .arg("init")
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        fs::create_dir_all(root.path().join("docs")).unwrap();
+        fs::write(root.path().join("docs/SESSION_FINDINGS.md"), "# Findings\n").unwrap();
+
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let memory = crate::memory::MemoryService::new(db.clone());
+        memory.init_schema().await.unwrap();
+        let obligations = crate::obligation::ObligationService::new(db.clone());
+        obligations.init_schema().await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+        let service = HarnessService::new();
+
+        let unrelated_outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("Implement the design and commit it.".to_string()),
+                    cwd: Some("/tmp/unrelated-project".to_string()),
+                    project: Some("unrelated-project".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(unrelated_outcome.obligations_written >= 1);
+
+        let outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "Stop".to_string(),
+                    cwd: Some(root.path().display().to_string()),
+                    project: Some("engram-stop-hook-smoke".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    stop_hook_active: false,
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.obligations_written, 1);
+        assert!(outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("obligations_written=1"));
+        assert!(outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("open_obligations=1"));
+
+        let doctor = obligations.doctor(None, None, Some(8)).await.unwrap();
+        assert!(doctor.open.len() > 1);
+        assert!(doctor
+            .open
+            .iter()
+            .any(|obligation| obligation.title.contains("docs/SESSION_FINDINGS.md")));
     }
 
     #[tokio::test]

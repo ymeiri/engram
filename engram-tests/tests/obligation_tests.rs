@@ -120,6 +120,7 @@ async fn orient_for_project(state: &ToolState, cwd: &str) -> Value {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -171,6 +172,210 @@ async fn test_mcp_obligations_detect_write_and_doctor() {
 }
 
 #[tokio::test]
+async fn test_mcp_obligations_doctor_scopes_to_project_and_cwd() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+    let docs_dir = repo.path().join("docs");
+    fs::create_dir_all(&docs_dir).expect("docs dir should be created");
+    fs::write(docs_dir.join("current.md"), "# Current\n").expect("doc should be written");
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "git_status",
+        "docs/current.md",
+        "Review current Engram note",
+    )
+    .await;
+    add_document_obligation(
+        &state,
+        "other-project",
+        "git_status",
+        "docs/current.md",
+        "Review other project note",
+    )
+    .await;
+
+    let mut doctor_request = request("doctor");
+    doctor_request.project = Some("engram".to_string());
+    doctor_request.cwd = Some(repo.path().display().to_string());
+    let doctor_response = tools::obligations_new(&state, doctor_request)
+        .await
+        .expect("scoped doctor should work");
+    let doctor = parse_json(&doctor_response);
+    let open = doctor["open"].as_array().unwrap();
+
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0]["title"], "Review current Engram note");
+    assert!(doctor["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|warning| warning
+            .as_str()
+            .unwrap()
+            .contains("Review current Engram note")));
+}
+
+#[tokio::test]
+async fn test_mcp_obligations_list_scopes_to_project_before_limit() {
+    let state = setup_tool_state().await;
+
+    add_document_obligation(
+        &state,
+        "engram",
+        "manual",
+        "docs/engram.md",
+        "Review Engram note",
+    )
+    .await;
+    add_document_obligation(
+        &state,
+        "dd-source",
+        "manual",
+        "docs/dd-source.md",
+        "Review dd-source note",
+    )
+    .await;
+
+    let mut list_request = request("list");
+    list_request.project = Some("engram".to_string());
+    list_request.limit = Some(1);
+    let list_response = tools::obligations_new(&state, list_request)
+        .await
+        .expect("scoped list should work");
+    let list = parse_json(&list_response);
+    let obligations = list.as_array().unwrap();
+
+    assert_eq!(obligations.len(), 1);
+    assert_eq!(obligations[0]["title"], "Review Engram note");
+    assert_eq!(
+        obligations[0]["scope"]["project_name"], "engram",
+        "list(project=engram) must not leak other project obligations"
+    );
+
+    let mut open_request = request("open");
+    open_request.project = Some("engram".to_string());
+    open_request.limit = Some(1);
+    let open_response = tools::obligations_new(&state, open_request)
+        .await
+        .expect("scoped open list should work");
+    let open = parse_json(&open_response);
+    let open_obligations = open.as_array().unwrap();
+
+    assert_eq!(open_obligations.len(), 1);
+    assert_eq!(open_obligations[0]["title"], "Review Engram note");
+    assert_eq!(open_obligations[0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
+async fn test_mcp_obligations_detect_is_content_idempotent_after_resolution() {
+    let state = setup_tool_state().await;
+    let repo = tempdir().expect("temp repo should be created");
+    init_git_repo(repo.path());
+    let docs_dir = repo.path().join("docs");
+    fs::create_dir_all(&docs_dir).expect("docs dir should be created");
+    let doc_path = docs_dir.join("report.md");
+    fs::write(&doc_path, "# Report\n").expect("doc should be written");
+
+    let detect = || {
+        let mut request = with_writer(request("detect"));
+        request.project = Some("engram".to_string());
+        request.cwd = Some(repo.path().display().to_string());
+        request.write = Some(true);
+        request
+    };
+
+    let first_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("first detect should work");
+    let first = parse_json(&first_response);
+    let first_written = first["written"].as_array().unwrap();
+    assert_eq!(first_written.len(), 1);
+    assert!(first_written[0]["evidence"][0]["summary"]
+        .as_str()
+        .unwrap()
+        .contains("document_content_fingerprint=git-sha1:"));
+    let first_id = first_written[0]["id"].as_str().unwrap().to_string();
+
+    let mut resolve = request("resolve");
+    resolve.id = Some(first_id);
+    resolve.resolution = Some("indexed_document".to_string());
+    resolve.summary = Some("Indexed the report.".to_string());
+    resolve.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "review:report-indexed".to_string(),
+        summary: Some("caller supplied resolution evidence".to_string()),
+        excerpt: None,
+    }];
+    let resolved_response = tools::obligations_new(&state, resolve)
+        .await
+        .expect("resolve should work");
+    let resolved = parse_json(&resolved_response);
+    let resolution_evidence = resolved["resolution"]["evidence"].as_array().unwrap();
+    assert!(resolution_evidence
+        .iter()
+        .any(|evidence| evidence["summary"].as_str().unwrap()
+            == "caller supplied resolution evidence"));
+    assert!(resolution_evidence
+        .iter()
+        .any(|evidence| evidence["summary"]
+            .as_str()
+            .unwrap()
+            .contains("document_content_fingerprint=git-sha1:")));
+
+    let same_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("same-content detect should work");
+    let same = parse_json(&same_response);
+    assert_eq!(same["written"].as_array().unwrap().len(), 0);
+    assert_eq!(same["skipped_existing"].as_array().unwrap().len(), 1);
+
+    fs::write(&doc_path, "# Report\n\nSecond edit.\n").expect("doc should be changed");
+    let changed_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("changed-content detect should work");
+    let changed = parse_json(&changed_response);
+    assert_eq!(changed["written"].as_array().unwrap().len(), 1);
+    assert_eq!(changed["skipped_existing"].as_array().unwrap().len(), 0);
+
+    let changed_id = changed["written"][0]["id"].as_str().unwrap().to_string();
+    let mut skip = request("skip");
+    skip.id = Some(changed_id);
+    skip.reason = Some("Report was reviewed and deferred.".to_string());
+    skip.actor = Some("agent".to_string());
+    skip.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "review:report-deferred".to_string(),
+        summary: Some("caller supplied skip evidence".to_string()),
+        excerpt: None,
+    }];
+    let skipped_response = tools::obligations_new(&state, skip)
+        .await
+        .expect("skip should work");
+    let skipped = parse_json(&skipped_response);
+    let skip_evidence = skipped["resolution"]["evidence"].as_array().unwrap();
+    assert!(skip_evidence
+        .iter()
+        .any(|evidence| evidence["summary"].as_str().unwrap() == "caller supplied skip evidence"));
+    assert!(skip_evidence.iter().any(|evidence| evidence["summary"]
+        .as_str()
+        .unwrap()
+        .contains("document_content_fingerprint=git-sha1:")));
+
+    let same_skipped_response = tools::obligations_new(&state, detect())
+        .await
+        .expect("same skipped content detect should work");
+    let same_skipped = parse_json(&same_skipped_response);
+    assert_eq!(same_skipped["written"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        same_skipped["skipped_existing"].as_array().unwrap().len(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn test_mcp_obligations_add_resolve_and_skip() {
     let state = setup_tool_state().await;
 
@@ -205,6 +410,12 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
     resolve.resolution = Some("indexed_document".to_string());
     resolve.summary = Some("Indexed the document.".to_string());
     resolve.actor = Some("agent".to_string());
+    resolve.evidence = vec![MemoryEvidenceRequest {
+        kind: "manual_review".to_string(),
+        target: "review:docs-example-indexed".to_string(),
+        summary: Some("resolver preserved this evidence".to_string()),
+        excerpt: Some("indexed docs/example.md".to_string()),
+    }];
     let resolve_response = tools::obligations_new(&state, resolve)
         .await
         .expect("resolve should work");
@@ -212,6 +423,22 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
     assert_eq!(resolved["id"], id);
     assert_eq!(resolved["status"], "resolved");
     assert_eq!(resolved["resolution"]["kind"], "indexed_document");
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["kind"],
+        "manual_review"
+    );
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["target"],
+        "review:docs-example-indexed"
+    );
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["summary"],
+        "resolver preserved this evidence"
+    );
+    assert_eq!(
+        resolved["resolution"]["evidence"][0]["excerpt"],
+        "indexed docs/example.md"
+    );
 
     let mut add_second = with_writer(request("add"));
     add_second.project = Some("engram".to_string());
@@ -230,14 +457,45 @@ async fn test_mcp_obligations_add_resolve_and_skip() {
         .to_string();
 
     let mut skip = request("skip");
-    skip.id = Some(second_id);
+    skip.id = Some(second_id.clone());
     skip.reason = Some("Failure was intentionally exercised by the test.".to_string());
+    skip.actor = Some("agent".to_string());
+    skip.evidence = vec![MemoryEvidenceRequest {
+        kind: "tool_call".to_string(),
+        target: "tool:test-failure".to_string(),
+        summary: Some("skip preserved this evidence".to_string()),
+        excerpt: Some("intentional failure path".to_string()),
+    }];
     let skip_response = tools::obligations_new(&state, skip)
         .await
         .expect("skip should work");
     let skipped = parse_json(&skip_response);
     assert_eq!(skipped["status"], "skipped");
     assert_eq!(skipped["resolution"]["kind"], "skipped_with_reason");
+    assert_eq!(skipped["resolution"]["evidence"][0]["kind"], "tool_call");
+    assert_eq!(
+        skipped["resolution"]["evidence"][0]["target"],
+        "tool:test-failure"
+    );
+    assert_eq!(
+        skipped["resolution"]["evidence"][0]["summary"],
+        "skip preserved this evidence"
+    );
+    assert_eq!(
+        skipped["resolution"]["evidence"][0]["excerpt"],
+        "intentional failure path"
+    );
+
+    let mut get = request("get");
+    get.id = Some(second_id);
+    let get_response = tools::obligations_new(&state, get)
+        .await
+        .expect("get should work");
+    let persisted = parse_json(&get_response);
+    assert_eq!(
+        persisted["obligation"]["resolution"]["evidence"][0]["summary"],
+        "skip preserved this evidence"
+    );
 }
 
 #[tokio::test]
@@ -275,6 +533,7 @@ async fn test_mcp_orient_surfaces_open_obligations() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await

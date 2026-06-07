@@ -15,7 +15,7 @@ use engram_core::obligation::{
     AgentObligationStatus, AgentObligationTrigger,
 };
 use engram_core::repository::ProjectRepositoryRole;
-use engram_core::search::SearchLayer;
+use engram_core::search::{SearchLayer, SearchResultSource};
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::telemetry::{
     AgentFeedback, BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace,
@@ -23,29 +23,42 @@ use engram_core::telemetry::{
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    CoordinationService, CurrentPlanCaptureInput, DigestExtractionOptions,
-    DigestExtractionReviewApplyOptions, DigestInventoryOptions, DigestService,
-    DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupPlan,
-    DocumentOrphanCleanupPlanOptions, DocumentOrphanQuarantineReviewApplyOptions,
-    DocumentOrphanQuarantineReviewOptions, DocumentOrphanQuarantineReviewPrioritizationOptions,
-    DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
-    DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
-    GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
-    HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
-    MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
-    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService,
-    ObservationPromotionInput, OrientInput, OrientationPacket, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
-    SessionService, TelemetryService, ToolIntelService, WorkService,
+    BrainLoop, BrainLoopItem, CoordinationService, CurrentPlanCaptureInput,
+    DigestExtractionOptions, DigestExtractionReviewApplyOptions, DigestInventoryOptions,
+    DigestService, DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions,
+    DocumentOrphanCleanupPlan, DocumentOrphanCleanupPlanOptions,
+    DocumentOrphanQuarantineReviewApplyOptions, DocumentOrphanQuarantineReviewOptions,
+    DocumentOrphanQuarantineReviewPrioritizationOptions, DocumentRecoveryOptions,
+    DocumentReindexAction, DocumentReindexExecutionOptions, DocumentReindexExecutionReport,
+    DocumentReindexPlan, DocumentService, EntityService, GraphService, HandoffService,
+    HarnessHookEvent, HarnessHookServices, HarnessInstallOptions, HarnessService,
+    HarnessSettingsTarget, KnowledgeService, LintOptions, LintService, MemoryChangesSinceOptions,
+    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, ObligationDetectOptions,
+    ObligationService, ObservationPromotionInput, OrientInput, OrientationPacket,
+    OrientationResolution, RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions,
+    RepositoryService, SearchOptions, SearchService, SessionService, TelemetryService,
+    ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 use std::path::Path;
-use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
+
+const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+const CLAUDE_CODE_SESSION_ID_ENV: &str = "CLAUDE_CODE_SESSION_ID";
+const CLAUDE_CODE_MARKER_ENV: &str = "CLAUDECODE";
+const CODEX_THREAD_ID_ENV: &str = "CODEX_THREAD_ID";
+const CODEX_SHELL_ENV: &str = "CODEX_SHELL";
+const CODEX_ORIGINATOR_ENV: &str = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
+const CODEX_BUNDLE_ID_ENV: &str = "__CFBundleIdentifier";
+const CLAUDE_CODE_EXTERNAL_SESSION_PREFIX: &str = "claude-code://sessions/";
+const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
+const MAX_CLAUDE_CODE_SESSION_ID_LEN: usize = 128;
+const MAX_CODEX_THREAD_ID_LEN: usize = 128;
 
 /// Shared state for MCP tools.
 pub struct ToolState {
@@ -79,6 +92,129 @@ pub struct ToolState {
     pub search_service: Arc<RwLock<Option<SearchService>>>,
     /// The brain harness telemetry service.
     pub telemetry_service: Arc<RwLock<Option<TelemetryService>>>,
+}
+
+fn normalize_external_session_id(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
+
+fn resolve_external_session_id(request_value: Option<String>) -> Option<String> {
+    resolve_external_session_id_with_envs(
+        request_value,
+        env::var(EXTERNAL_SESSION_ID_ENV).ok(),
+        env::var(CLAUDE_CODE_SESSION_ID_ENV).ok(),
+        claude_code_host_marker_from_env(),
+        env::var(CODEX_THREAD_ID_ENV).ok(),
+        codex_host_marker_from_env(),
+    )
+}
+
+#[cfg(test)]
+fn resolve_external_session_id_with_env(
+    request_value: Option<String>,
+    env_value: Option<String>,
+) -> Option<String> {
+    resolve_external_session_id_with_envs(request_value, env_value, None, false, None, false)
+}
+
+fn resolve_external_session_id_with_envs(
+    request_value: Option<String>,
+    env_value: Option<String>,
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
+    normalize_external_session_id(request_value)
+        .or_else(|| normalize_external_session_id(env_value))
+        .or_else(|| {
+            claude_code_session_external_session_id(
+                claude_code_session_id,
+                claude_code_host_detected,
+            )
+        })
+        .or_else(|| codex_thread_external_session_id(codex_thread_id, codex_host_detected))
+}
+
+fn claude_code_host_marker_from_env() -> bool {
+    claude_code_host_marker_present(env::var(CLAUDE_CODE_MARKER_ENV).ok())
+}
+
+fn claude_code_host_marker_present(claudecode_marker: Option<String>) -> bool {
+    normalize_external_session_id(claudecode_marker)
+        .map(|value| value == "1")
+        .unwrap_or(false)
+}
+
+fn codex_host_marker_from_env() -> bool {
+    codex_host_marker_present(
+        env::var(CODEX_SHELL_ENV).ok(),
+        env::var(CODEX_ORIGINATOR_ENV).ok(),
+        env::var(CODEX_BUNDLE_ID_ENV).ok(),
+    )
+}
+
+fn codex_host_marker_present(
+    codex_shell: Option<String>,
+    codex_originator: Option<String>,
+    bundle_id: Option<String>,
+) -> bool {
+    normalize_external_session_id(codex_shell).is_some()
+        || normalize_external_session_id(codex_originator)
+            .map(|value| value.to_ascii_lowercase().contains("codex"))
+            .unwrap_or(false)
+        || normalize_external_session_id(bundle_id)
+            .map(|value| value == "com.openai.codex")
+            .unwrap_or(false)
+}
+
+fn codex_thread_external_session_id(
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
+    // Codex Desktop exposes a host thread ID; require a Codex marker to avoid generic env leakage.
+    if !codex_host_detected {
+        return None;
+    }
+
+    let thread_id = safe_host_session_token(codex_thread_id, MAX_CODEX_THREAD_ID_LEN)?;
+
+    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
+}
+
+fn claude_code_session_external_session_id(
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
+) -> Option<String> {
+    // Claude Code exposes its session ID to MCP subprocesses; require its subprocess marker.
+    if !claude_code_host_detected {
+        return None;
+    }
+
+    let session_id =
+        safe_host_session_token(claude_code_session_id, MAX_CLAUDE_CODE_SESSION_ID_LEN)?;
+
+    Some(format!("{CLAUDE_CODE_EXTERNAL_SESSION_PREFIX}{session_id}"))
+}
+
+fn safe_host_session_token(value: Option<String>, max_len: usize) -> Option<String> {
+    let token = normalize_external_session_id(value)?;
+    if token.len() > max_len
+        || !token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return None;
+    }
+
+    Some(token)
 }
 
 impl ToolState {
@@ -3210,8 +3346,8 @@ pub struct SearchRequest {
     #[schemars(description = "Host/application session label for telemetry correlation")]
     pub external_session_id: Option<String>,
 
-    /// Project name for telemetry correlation.
-    #[schemars(description = "Project name for telemetry correlation")]
+    /// Project name for telemetry correlation and scoped memory filtering.
+    #[schemars(description = "Project name for telemetry correlation and scoped memory filtering")]
     pub project: Option<String>,
 
     /// Current working directory for repository-scoped memory filtering.
@@ -3291,6 +3427,12 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
         .map_err(|e| e.to_string())?;
 
     let returned_result_ids = results.iter().map(|result| result.id.clone()).collect();
+    let returned_memory_ids = results
+        .iter()
+        .filter(|result| result.source == SearchResultSource::Memory)
+        .filter_map(|result| Id::parse(&result.id).ok())
+        .collect();
+    let external_session_id = resolve_external_session_id(request.external_session_id.clone());
     let trace_id = record_optional_trace(
         state,
         BrainHarnessTrace::new(BrainHarnessOperation::Search)
@@ -3301,13 +3443,14 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
                     .map(|id| parse_id(id, "session ID"))
                     .transpose()?,
             )
-            .with_external_session_id(request.external_session_id.clone())
+            .with_external_session_id(external_session_id)
             .with_agent(request.agent.clone())
             .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
             .with_scenario_id(request.scenario_id.clone())
             .with_arm(request.arm.clone())
             .with_query(Some(request.query.clone()))
             .with_project(request.project.clone())
+            .with_returned_memory_ids(returned_memory_ids)
             .with_returned_result_ids(returned_result_ids)
             .with_latency_ms(started.elapsed().as_millis() as u64),
     )
@@ -3374,7 +3517,7 @@ pub struct TelemetryRequest {
     pub trace_id: Option<String>,
     /// Operation for record_trace: orient, search, changes_since, feedback.
     pub operation: Option<String>,
-    /// Intent for trace correlation: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
+    /// Intent for trace correlation and list_traces filtering: resume_session, answer_question, plan_work, implement_change, debug_error, verify_decision, follow_user_preference, prepare_handoff, review_memory.
     pub intent: Option<String>,
     /// Free-form controlled eval scenario identifier for record_trace and list/report filtering.
     pub scenario_id: Option<String>,
@@ -3459,9 +3602,10 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 .as_deref()
                 .map(BrainHarnessOperation::parse)
                 .ok_or("operation required for record_trace")?;
+            let external_session_id = resolve_external_session_id(request.external_session_id.clone());
             let mut trace = BrainHarnessTrace::new(operation)
                 .with_session(parse_optional_id(&request.session_id, "session ID")?)
-                .with_external_session_id(request.external_session_id.clone())
+                .with_external_session_id(external_session_id)
                 .with_agent(request.agent)
                 .with_intent(request.intent.as_deref().map(BrainHarnessIntent::parse))
                 .with_scenario_id(request.scenario_id)
@@ -3503,8 +3647,10 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             let traces = service
                 .list_traces_scoped(
                     request.limit,
+                    request.project.as_deref(),
                     request.scenario_id.as_deref(),
                     request.arm.as_deref(),
+                    request.intent.as_deref(),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
@@ -3521,7 +3667,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
             )?;
             let mut feedback = AgentFeedback::new(trace_id);
             feedback.session_id = parse_optional_id(&request.session_id, "session ID")?;
-            feedback.external_session_id = request.external_session_id;
+            feedback.external_session_id = normalize_external_session_id(request.external_session_id.clone());
             feedback.agent = request.agent;
             feedback.used_memory_ids = parse_id_vec(&request.used_memory_ids, "used memory ID")?;
             feedback.rejected_memory_ids =
@@ -3546,8 +3692,31 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 .submit_feedback(feedback)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({ "feedback": feedback }))
-                .map_err(|e| e.to_string())
+
+            let mut warnings: Vec<String> = Vec::new();
+            let has_memory_judgment = !feedback.used_memory_ids.is_empty()
+                || !feedback.rejected_memory_ids.is_empty()
+                || !feedback.stale_memory_ids.is_empty()
+                || !feedback.wrong_scope_memory_ids.is_empty();
+            if !has_memory_judgment {
+                if let Ok(Some(trace)) = service.get_trace(&trace_id).await {
+                    if !trace.returned_memory_ids.is_empty() {
+                        warnings.push(
+                            "Linked trace returned memory IDs but feedback included no memory \
+                             attribution. Populate used_memory_ids, rejected_memory_ids, \
+                             stale_memory_ids, or wrong_scope_memory_ids when returned memory \
+                             shaped or was considered for the result."
+                                .to_string(),
+                        );
+                    }
+                }
+            }
+
+            serde_json::to_string_pretty(&serde_json::json!({
+                "feedback": feedback,
+                "warnings": warnings,
+            }))
+            .map_err(|e| e.to_string())
         }
         "list_feedback" => {
             let feedback = if let Some(trace_id) = &request.trace_id {
@@ -3560,6 +3729,7 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 service
                     .list_feedback_scoped(
                         request.limit,
+                        request.project.as_deref(),
                         request.scenario_id.as_deref(),
                         request.arm.as_deref(),
                     )
@@ -7277,7 +7447,7 @@ fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, S
 // =============================================================================
 
 /// Request an orientation context packet for the current user prompt.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct OrientRequest {
     /// Current working directory, when known
     pub cwd: Option<String>,
@@ -7299,9 +7469,21 @@ pub struct OrientRequest {
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
     pub limit: Option<usize>,
+    /// Response shape: full (default) or lean for read-only/verification tasks
+    pub response_shape: Option<OrientResponseShape>,
 }
 
 const ORIENT_OPEN_OBLIGATION_LIMIT: usize = 5;
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OrientResponseShape {
+    /// Preserve the complete orientation packet.
+    #[default]
+    Full,
+    /// Return compact trace/cursor/Brain Loop guidance without duplicate raw memory payloads.
+    Lean,
+}
 
 #[derive(Debug, Clone, Serialize)]
 struct OrientResponse {
@@ -7309,6 +7491,43 @@ struct OrientResponse {
     packet: OrientationPacket,
     obligation_summary: OrientObligationSummary,
     open_obligations: Vec<OrientOpenObligation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct OrientLeanResponse {
+    response_shape: OrientResponseShape,
+    project: Option<String>,
+    cwd: Option<String>,
+    agent: Option<String>,
+    intent: Option<BrainHarnessIntent>,
+    trace_id: Option<Id>,
+    scope: String,
+    resolution: OrientationResolution,
+    memory_cursor: MemoryCursor,
+    hot_context_ids: Vec<Id>,
+    hot_context_items: Vec<LeanBrainLoopItem>,
+    used_memory_candidate_ids: Vec<Id>,
+    brain_loop: LeanBrainLoop,
+    recommended_actions: Vec<String>,
+    ambiguities: Vec<String>,
+    obligation_summary: OrientObligationSummary,
+    open_obligations: Vec<OrientOpenObligation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LeanBrainLoop {
+    compiled_context: String,
+    top_items: Vec<LeanBrainLoopItem>,
+    degraded: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LeanBrainLoopItem {
+    id: Id,
+    kind: MemoryKind,
+    title: String,
+    summary: String,
+    why_relevant: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -7331,12 +7550,6 @@ struct OrientOpenObligation {
     required_resolutions: Vec<String>,
 }
 
-enum OrientGitStatusTarget {
-    Present(String),
-    Missing,
-    Unavailable,
-}
-
 /// Build an orientation context packet.
 pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String, String> {
     debug!(
@@ -7344,8 +7557,10 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         request.project, request.cwd
     );
 
+    let response_shape = request.response_shape.unwrap_or_default();
     let cwd = request.cwd;
     let project = request.project;
+    let external_session_id = resolve_external_session_id(request.external_session_id.clone());
     let mut packet = {
         let service_guard = state.memory_service.read().await;
         let service = service_guard
@@ -7358,7 +7573,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
                 prompt: request.prompt,
                 project: project.clone(),
                 agent: request.agent,
-                external_session_id: request.external_session_id,
+                external_session_id,
                 intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
                 scenario_id: request.scenario_id,
                 arm: request.arm,
@@ -7372,12 +7587,21 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         orient_open_obligations(state, project.as_deref(), cwd.as_deref()).await?;
     apply_obligation_summary_to_packet(&mut packet, &obligation_summary, &open_obligations);
 
-    let response = OrientResponse {
-        packet,
-        obligation_summary,
-        open_obligations,
-    };
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    match response_shape {
+        OrientResponseShape::Full => {
+            let response = OrientResponse {
+                packet,
+                obligation_summary,
+                open_obligations,
+            };
+            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+        }
+        OrientResponseShape::Lean => {
+            let response =
+                OrientLeanResponse::from_packet(packet, obligation_summary, open_obligations);
+            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+        }
+    }
 }
 
 async fn orient_open_obligations(
@@ -7398,20 +7622,10 @@ async fn orient_open_obligations(
         ));
     };
 
-    let mut obligations = service
-        .list(Some(AgentObligationStatus::Open), None)
+    let obligations = service
+        .list_open_for_context(project, cwd)
         .await
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .filter(|obligation| obligation_applies_to_orient(obligation, project, cwd))
-        .filter(|obligation| obligation_is_current_for_orient(obligation, cwd))
-        .collect::<Vec<_>>();
-    obligations.sort_by(|left, right| {
-        right
-            .updated_at
-            .cmp(&left.updated_at)
-            .then_with(|| left.title.cmp(&right.title))
-    });
+        .map_err(|e| e.to_string())?;
     let has_more = obligations.len() > ORIENT_OPEN_OBLIGATION_LIMIT;
     let open_obligations = obligations
         .into_iter()
@@ -7442,120 +7656,6 @@ async fn orient_open_obligations(
     ))
 }
 
-fn obligation_applies_to_orient(
-    obligation: &AgentObligation,
-    project: Option<&str>,
-    cwd: Option<&str>,
-) -> bool {
-    match &obligation.scope {
-        MemoryScope::Global | MemoryScope::User => true,
-        MemoryScope::Project { project_name, .. } => {
-            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
-        }
-        MemoryScope::Task { project_name, .. } => project_name
-            .as_deref()
-            .zip(project)
-            .is_some_and(|(item_project, project)| item_project.eq_ignore_ascii_case(project)),
-        MemoryScope::Repository { local_path, .. } => {
-            let Some(cwd) = cwd else {
-                return false;
-            };
-            local_path
-                .as_deref()
-                .is_some_and(|local_path| Path::new(cwd).starts_with(Path::new(local_path)))
-        }
-        MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
-            false
-        }
-    }
-}
-
-fn obligation_is_current_for_orient(obligation: &AgentObligation, cwd: Option<&str>) -> bool {
-    if !is_git_status_document_obligation(obligation) {
-        return true;
-    }
-
-    let (Some(cwd), Some(target)) = (cwd, obligation.trigger.target.as_deref()) else {
-        return true;
-    };
-
-    match current_git_status_target(cwd, target) {
-        OrientGitStatusTarget::Present(status_line) => {
-            !is_untracked_root_instruction_file(&status_line, target)
-        }
-        OrientGitStatusTarget::Missing => false,
-        OrientGitStatusTarget::Unavailable => true,
-    }
-}
-
-fn is_git_status_document_obligation(obligation: &AgentObligation) -> bool {
-    obligation.kind == AgentObligationKind::DocumentDisposition
-        && obligation.trigger.kind == "git_status"
-}
-
-fn current_git_status_target(cwd: &str, target: &str) -> OrientGitStatusTarget {
-    let Ok(output) = Command::new("git")
-        .arg("-C")
-        .arg(cwd)
-        .arg("status")
-        .arg("--porcelain")
-        .arg("--untracked-files=all")
-        .arg("--")
-        .arg(target)
-        .output()
-    else {
-        return OrientGitStatusTarget::Unavailable;
-    };
-    if !output.status.success() {
-        return OrientGitStatusTarget::Unavailable;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout
-        .lines()
-        .find_map(|line| {
-            let path = parse_orient_git_status_path(line)?;
-            if path == target {
-                Some(line.to_string())
-            } else {
-                None
-            }
-        })
-        .map_or(
-            OrientGitStatusTarget::Missing,
-            OrientGitStatusTarget::Present,
-        )
-}
-
-fn parse_orient_git_status_path(line: &str) -> Option<String> {
-    if line.len() < 4 {
-        return None;
-    }
-    let raw = line[3..].trim();
-    let path = raw.split(" -> ").last().unwrap_or(raw).trim_matches('"');
-    if path.is_empty() {
-        None
-    } else {
-        Some(path.to_string())
-    }
-}
-
-fn is_untracked_root_instruction_file(status_line: &str, target: &str) -> bool {
-    status_line.starts_with("?? ") && is_root_instruction_file(target)
-}
-
-fn is_root_instruction_file(target: &str) -> bool {
-    let normalized = target.replace('\\', "/");
-    if normalized.contains('/') {
-        return false;
-    }
-
-    matches!(
-        normalized.to_ascii_lowercase().as_str(),
-        "agents.md" | "claude.md" | "gemini.md"
-    )
-}
-
 fn apply_obligation_summary_to_packet(
     packet: &mut OrientationPacket,
     summary: &OrientObligationSummary,
@@ -7571,6 +7671,64 @@ fn apply_obligation_summary_to_packet(
             "- {}: {}\n",
             obligation.title, obligation.description
         ));
+    }
+}
+
+impl OrientLeanResponse {
+    fn from_packet(
+        packet: OrientationPacket,
+        obligation_summary: OrientObligationSummary,
+        open_obligations: Vec<OrientOpenObligation>,
+    ) -> Self {
+        Self {
+            response_shape: OrientResponseShape::Lean,
+            project: packet.project,
+            cwd: packet.cwd,
+            agent: packet.agent,
+            intent: packet.intent,
+            trace_id: packet.trace_id,
+            scope: packet.scope,
+            resolution: packet.resolution,
+            memory_cursor: packet.memory_cursor,
+            hot_context_ids: packet.hot_context_ids,
+            hot_context_items: packet
+                .hot_context_items
+                .into_iter()
+                .map(LeanBrainLoopItem::from)
+                .collect(),
+            used_memory_candidate_ids: packet.used_memory_candidate_ids,
+            brain_loop: LeanBrainLoop::from(packet.brain_loop),
+            recommended_actions: packet.recommended_actions,
+            ambiguities: packet.ambiguities,
+            obligation_summary,
+            open_obligations,
+        }
+    }
+}
+
+impl From<BrainLoop> for LeanBrainLoop {
+    fn from(brain_loop: BrainLoop) -> Self {
+        Self {
+            compiled_context: brain_loop.compiled_context,
+            top_items: brain_loop
+                .top_items
+                .into_iter()
+                .map(LeanBrainLoopItem::from)
+                .collect(),
+            degraded: brain_loop.degraded,
+        }
+    }
+}
+
+impl From<BrainLoopItem> for LeanBrainLoopItem {
+    fn from(item: BrainLoopItem) -> Self {
+        Self {
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            summary: item.summary,
+            why_relevant: item.why_relevant,
+        }
     }
 }
 
@@ -8169,14 +8327,19 @@ pub async fn obligations_new(
                     .transpose()?
             };
             let obligations = service
-                .list(status, request.limit)
+                .list(
+                    status,
+                    request.project.as_deref(),
+                    request.cwd.as_deref(),
+                    request.limit,
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&obligations).map_err(|e| e.to_string())
         }
         "resolve" => {
             let id = parse_id(&required(&request.id, "id", "resolve")?, "obligation ID")?;
-            let resolution = AgentObligationResolution::new(
+            let mut resolution = AgentObligationResolution::new(
                 AgentObligationResolutionKind::parse(&required(
                     &request.resolution,
                     "resolution",
@@ -8185,6 +8348,9 @@ pub async fn obligations_new(
                 required(&request.summary, "summary", "resolve")?,
                 request.actor.as_deref().unwrap_or("agent"),
             );
+            for evidence in request.evidence {
+                resolution = resolution.with_evidence(parse_evidence(evidence)?);
+            }
             let obligation = service
                 .resolve(id, resolution)
                 .await
@@ -8193,19 +8359,27 @@ pub async fn obligations_new(
         }
         "skip" => {
             let id = parse_id(&required(&request.id, "id", "skip")?, "obligation ID")?;
+            let mut resolution = AgentObligationResolution::new(
+                AgentObligationResolutionKind::SkippedWithReason,
+                required(&request.reason, "reason", "skip")?,
+                request.actor.as_deref().unwrap_or("agent"),
+            );
+            for evidence in request.evidence {
+                resolution = resolution.with_evidence(parse_evidence(evidence)?);
+            }
             let obligation = service
-                .skip(
-                    id,
-                    required(&request.reason, "reason", "skip")?,
-                    request.actor.unwrap_or_else(|| "agent".to_string()),
-                )
+                .skip(id, resolution)
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
         }
         "doctor" => {
             let report = service
-                .doctor(request.limit)
+                .doctor(
+                    request.project.as_deref(),
+                    request.cwd.as_deref(),
+                    request.limit,
+                )
                 .await
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
@@ -8535,35 +8709,35 @@ pub struct MemoryRequestNew {
     #[serde(default)]
     pub tags: Vec<String>,
 
-    /// Scope type (for add): global, user, project, task, entity, repository, session, custom
-    #[schemars(description = "Scope type (required for add)")]
+    /// Scope type (for add or explicit list filtering): global, user, project, task, entity, repository, session, custom
+    #[schemars(description = "Scope type (required for add; optional filter for list)")]
     pub scope_type: Option<String>,
 
-    /// Project ID for project/task scope
+    /// Project ID for project/task scope or list filter
     pub project_id: Option<String>,
-    /// Project name for project/task scope
+    /// Project name for project/task scope or list filter
     pub project_name: Option<String>,
-    /// Task ID for task scope
+    /// Task ID for task scope or list filter
     pub task_id: Option<String>,
-    /// Task name for task scope
+    /// Task name for task scope or list filter
     pub task_name: Option<String>,
-    /// Entity ID for entity scope
+    /// Entity ID for entity scope or list filter
     pub entity_id: Option<String>,
-    /// Entity name for entity scope
+    /// Entity name for entity scope or list filter
     pub entity_name: Option<String>,
     /// Source entity name for promote_observation
     pub source_entity_name: Option<String>,
     /// Source observation key for promote_observation
     pub observation_key: Option<String>,
-    /// Repository ID for repository scope
+    /// Repository ID for repository scope or list filter
     pub repository_id: Option<String>,
-    /// Repository remote URL for repository scope
+    /// Repository remote URL for repository scope or list filter
     pub remote_url: Option<String>,
-    /// Local checkout path for repository scope
+    /// Local checkout path for repository scope or list filter
     pub local_path: Option<String>,
-    /// Session ID for session scope
+    /// Session ID for session scope or list filter
     pub scope_session_id: Option<String>,
-    /// Custom scope name
+    /// Custom scope name or list filter
     pub scope_name: Option<String>,
 
     /// Writer harness/interface: claude_code, codex, gemini_cli, chatgpt, cursor, or custom
@@ -8614,7 +8788,7 @@ pub struct MemoryRequestNew {
 
     /// Cursor commit ID (for changes_since)
     pub commit_id: Option<String>,
-    /// Cursor timestamp in RFC3339 format (required for changes_since)
+    /// Cursor timestamp in RFC3339 format (required for changes_since; use memory_cursor.timestamp)
     pub timestamp: Option<String>,
     /// Project name for changes_since relevance scoring.
     pub relevance_project: Option<String>,
@@ -8897,10 +9071,133 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .as_deref()
                 .map(parse_memory_status)
                 .transpose()?;
-            let items = service
-                .list_memory(status, request.limit)
+            let mut scope_request = request.clone();
+            if scope_request.scope_type.is_none() && scope_request.project_name.is_some() {
+                scope_request.scope_type = Some("project".to_string());
+            }
+            let scope_filter = if scope_request.scope_type.is_some() {
+                Some(parse_memory_scope(&scope_request)?)
+            } else {
+                None
+            };
+            let tags = request.tags;
+            let fetch_limit = if tags.is_empty() && scope_filter.is_none() {
+                request.limit
+            } else {
+                None
+            };
+            let mut items = service
+                .list_memory(status, fetch_limit)
                 .await
                 .map_err(|e| e.to_string())?;
+            if let Some(scope_filter) = &scope_filter {
+                items.retain(|item| match (scope_filter, &item.scope) {
+                    (MemoryScope::Global, MemoryScope::Global)
+                    | (MemoryScope::User, MemoryScope::User) => true,
+                    (
+                        MemoryScope::Project {
+                            project_id,
+                            project_name,
+                        },
+                        MemoryScope::Project {
+                            project_id: item_project_id,
+                            project_name: item_project_name,
+                        },
+                    ) => {
+                        project_id
+                            .as_ref()
+                            .map_or(true, |id| item_project_id.as_ref() == Some(id))
+                            && item_project_name.eq_ignore_ascii_case(project_name)
+                    }
+                    (
+                        MemoryScope::Task {
+                            project_id,
+                            project_name,
+                            task_id,
+                            task_name,
+                        },
+                        MemoryScope::Task {
+                            project_id: item_project_id,
+                            project_name: item_project_name,
+                            task_id: item_task_id,
+                            task_name: item_task_name,
+                        },
+                    ) => {
+                        project_id
+                            .as_ref()
+                            .map_or(true, |id| item_project_id.as_ref() == Some(id))
+                            && project_name.as_ref().map_or(true, |name| {
+                                item_project_name.as_ref().is_some_and(|item_name| {
+                                    item_name.eq_ignore_ascii_case(name)
+                                })
+                            })
+                            && task_id
+                                .as_ref()
+                                .map_or(true, |id| item_task_id.as_ref() == Some(id))
+                            && item_task_name.eq_ignore_ascii_case(task_name)
+                    }
+                    (
+                        MemoryScope::Entity {
+                            entity_id,
+                            entity_name,
+                        },
+                        MemoryScope::Entity {
+                            entity_id: item_entity_id,
+                            entity_name: item_entity_name,
+                        },
+                    ) => {
+                        entity_id
+                            .as_ref()
+                            .map_or(true, |id| item_entity_id.as_ref() == Some(id))
+                            && item_entity_name.eq_ignore_ascii_case(entity_name)
+                    }
+                    (
+                        MemoryScope::Repository {
+                            repository_id,
+                            remote_url,
+                            local_path,
+                        },
+                        MemoryScope::Repository {
+                            repository_id: item_repository_id,
+                            remote_url: item_remote_url,
+                            local_path: item_local_path,
+                        },
+                    ) => {
+                        repository_id
+                            .as_ref()
+                            .map_or(true, |id| item_repository_id.as_ref() == Some(id))
+                            && remote_url.as_ref().map_or(true, |url| {
+                                item_remote_url
+                                    .as_ref()
+                                    .is_some_and(|item_url| item_url.eq_ignore_ascii_case(url))
+                            })
+                            && local_path.as_ref().map_or(true, |path| {
+                                item_local_path.as_ref() == Some(path)
+                            })
+                    }
+                    (
+                        MemoryScope::Session { session_id },
+                        MemoryScope::Session {
+                            session_id: item_session_id,
+                        },
+                    ) => item_session_id == session_id,
+                    (MemoryScope::Custom { name }, MemoryScope::Custom { name: item_name }) => {
+                        item_name.eq_ignore_ascii_case(name)
+                    }
+                    _ => false,
+                });
+            }
+            if !tags.is_empty() {
+                items.retain(|item| {
+                    tags.iter()
+                        .all(|tag| item.tags.iter().any(|item_tag| item_tag == tag))
+                });
+            }
+            if fetch_limit.is_none() {
+                if let Some(limit) = request.limit {
+                    items.truncate(limit);
+                }
+            }
 
             serde_json::to_string_pretty(&serde_json::json!({
                 "count": items.len(),
@@ -9086,7 +9383,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         "changes_since" => {
-            let timestamp = parse_rfc3339(&required(&request.timestamp, "timestamp", "changes_since")?)?;
+            let timestamp = parse_rfc3339(&required_changes_since_timestamp(&request)?)?;
             let commit_id = request
                 .commit_id
                 .as_deref()
@@ -9115,7 +9412,9 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                         cwd: request.cwd.clone(),
                         query: request.query.clone(),
                         intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
-                        external_session_id: request.external_session_id.clone(),
+                        external_session_id: resolve_external_session_id(
+                            request.external_session_id.clone(),
+                        ),
                     },
                 )
                 .await
@@ -9335,6 +9634,34 @@ fn required(value: &Option<String>, field: &str, action: &str) -> Result<String,
         .clone()
         .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| format!("{field} required for {action}"))
+}
+
+fn required_changes_since_timestamp(request: &MemoryRequestNew) -> Result<String, String> {
+    if let Some(timestamp) = request
+        .timestamp
+        .clone()
+        .filter(|timestamp| !timestamp.trim().is_empty())
+    {
+        return Ok(timestamp);
+    }
+
+    if request
+        .commit_id
+        .as_deref()
+        .is_some_and(|commit_id| !commit_id.trim().is_empty())
+    {
+        return Err(
+            "timestamp required for changes_since; commit_id was provided, but changes_since also \
+             needs memory_cursor.timestamp because memory item updates are timestamp-based. Pass \
+             memory_cursor.timestamp from orient/cursor alongside memory_cursor.commit_id."
+                .to_string(),
+        );
+    }
+
+    Err(
+        "timestamp required for changes_since; pass memory_cursor.timestamp from orient/cursor."
+            .to_string(),
+    )
 }
 
 fn parse_id(value: &str, label: &str) -> Result<engram_core::id::Id, String> {
@@ -10443,7 +10770,7 @@ pub async fn docs_new(state: &ToolState, request: DocsRequestNew) -> Result<Stri
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&serde_json::json!({
                 "export": export,
-                "read_only": true,
+                "read_only": false,
                 "writes_generated_review_pages": true
             }))
             .map_err(|e| e.to_string())
@@ -10776,5 +11103,419 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
             "Unknown action: '{}'. Valid actions: log, recommend, stats, list, search",
             request.action
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use tokio::sync::Mutex;
+
+    static EXTERNAL_SESSION_ID_ENV_LOCK: Mutex<()> = Mutex::const_new(());
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: Option<&str>) -> Self {
+            let previous = env::var_os(key);
+            match value {
+                Some(value) => env::set_var(key, value),
+                None => env::remove_var(key),
+            }
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => env::set_var(self.key, value),
+                None => env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn external_session_id_request_value_wins_over_env() {
+        let resolved = resolve_external_session_id_with_env(
+            Some(" codex://threads/request ".to_string()),
+            Some("codex://threads/env".to_string()),
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/request"));
+    }
+
+    #[test]
+    fn external_session_id_env_applies_when_request_is_absent() {
+        let resolved =
+            resolve_external_session_id_with_env(None, Some(" codex://threads/env ".to_string()));
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
+    }
+
+    #[test]
+    fn external_session_id_request_wins_over_codex_thread_id() {
+        let resolved = resolve_external_session_id_with_envs(
+            Some(" codex://threads/request ".to_string()),
+            Some("codex://threads/env".to_string()),
+            Some("claude-session".to_string()),
+            true,
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/request"));
+    }
+
+    #[test]
+    fn external_session_id_env_wins_over_codex_thread_id() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            Some(" codex://threads/env ".to_string()),
+            Some("claude-session".to_string()),
+            true,
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_applies_with_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some(" claude-session_123 ".into()),
+            true,
+            None,
+            false,
+        );
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("claude-code://sessions/claude-session_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_requires_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("claude-session".to_string()),
+            false,
+            None,
+            false,
+        );
+
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_rejects_unsafe_values() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" \t\n ".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("session/one".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("x".repeat(MAX_CLAUDE_CODE_SESSION_ID_LEN + 1)),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_claude_code_session_id_wins_over_codex_thread_id() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("claude-session".to_string()),
+            true,
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("claude-code://sessions/claude-session")
+        );
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_applies_when_claude_code_id_is_invalid() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            Some("claude/session".to_string()),
+            true,
+            Some("codex-thread".to_string()),
+            true,
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/codex-thread"));
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_applies_with_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            None,
+            false,
+            Some(" codex-thread_123 ".into()),
+            true,
+        );
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("codex://threads/codex-thread_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_requires_host_marker() {
+        let resolved = resolve_external_session_id_with_envs(
+            None,
+            None,
+            None,
+            false,
+            Some("codex-thread".to_string()),
+            false,
+        );
+
+        assert_eq!(resolved, None);
+    }
+
+    #[test]
+    fn external_session_id_codex_thread_id_rejects_unsafe_values() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some(" \t\n ".to_string()),
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some("thread/one".to_string()),
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some("x".repeat(MAX_CODEX_THREAD_ID_LEN + 1)),
+                true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_codex_host_markers_detect_codex_only() {
+        assert!(codex_host_marker_present(Some("1".to_string()), None, None));
+        assert!(codex_host_marker_present(
+            None,
+            Some("Codex Desktop".to_string()),
+            None,
+        ));
+        assert!(codex_host_marker_present(
+            None,
+            None,
+            Some("com.openai.codex".to_string()),
+        ));
+        assert!(!codex_host_marker_present(
+            None,
+            Some("other host".to_string()),
+            Some("com.example.other".to_string()),
+        ));
+    }
+
+    #[test]
+    fn external_session_id_claude_code_host_marker_requires_documented_value() {
+        assert!(claude_code_host_marker_present(Some("1".to_string())));
+        assert!(!claude_code_host_marker_present(Some("true".to_string())));
+        assert!(!claude_code_host_marker_present(Some("0".to_string())));
+        assert!(!claude_code_host_marker_present(None));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn external_session_id_runtime_env_fallback_applies_when_request_is_absent() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
+        let _env = EnvGuard::set(
+            EXTERNAL_SESSION_ID_ENV,
+            Some(" codex://threads/runtime-env "),
+        );
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, None);
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, None);
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, None);
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, None);
+
+        let resolved = resolve_external_session_id(None);
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/runtime-env"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn external_session_id_runtime_claude_code_session_id_applies_when_guarded() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
+        let _engram_env = EnvGuard::set(EXTERNAL_SESSION_ID_ENV, None);
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, Some(" claude-123 "));
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, Some("1"));
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, Some("codex-thread"));
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, Some("1"));
+
+        let resolved = resolve_external_session_id(None);
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("claude-code://sessions/claude-123")
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn external_session_id_runtime_codex_thread_id_applies_when_guarded() {
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
+        let _engram_env = EnvGuard::set(EXTERNAL_SESSION_ID_ENV, None);
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, None);
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, None);
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, Some(" codex-thread_123 "));
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, Some("1"));
+
+        let resolved = resolve_external_session_id(None);
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("codex://threads/codex-thread_123")
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mcp_telemetry_record_trace_uses_runtime_env_when_request_is_absent() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config)
+            .await
+            .expect("failed to connect to in-memory store");
+        let telemetry = TelemetryService::new(db);
+        telemetry
+            .init_schema()
+            .await
+            .expect("failed to initialize telemetry schema");
+        let state = ToolState::new();
+        state.init_telemetry(telemetry).await;
+
+        let _lock = EXTERNAL_SESSION_ID_ENV_LOCK.lock().await;
+        let _env = EnvGuard::set(
+            EXTERNAL_SESSION_ID_ENV,
+            Some(" codex://threads/tool-runtime-env "),
+        );
+        let _claude_session = EnvGuard::set(CLAUDE_CODE_SESSION_ID_ENV, None);
+        let _claude_marker = EnvGuard::set(CLAUDE_CODE_MARKER_ENV, None);
+        let _codex_thread = EnvGuard::set(CODEX_THREAD_ID_ENV, None);
+        let _codex_shell = EnvGuard::set(CODEX_SHELL_ENV, None);
+
+        let response = telemetry_new(
+            &state,
+            TelemetryRequest {
+                action: "record_trace".to_string(),
+                trace_id: None,
+                operation: Some("search".to_string()),
+                intent: Some("answer_question".to_string()),
+                scenario_id: None,
+                arm: None,
+                query: Some("runtime env fallback".to_string()),
+                project: Some("engram".to_string()),
+                agent: Some("codex".to_string()),
+                session_id: None,
+                external_session_id: None,
+                returned_memory_ids: Vec::new(),
+                returned_result_ids: Vec::new(),
+                latency_ms: None,
+                warnings: Vec::new(),
+                used_memory_ids: Vec::new(),
+                rejected_memory_ids: Vec::new(),
+                used_result_ids: Vec::new(),
+                rejected_result_ids: Vec::new(),
+                stale_memory_ids: Vec::new(),
+                wrong_scope_memory_ids: Vec::new(),
+                missing_context: None,
+                usefulness_score: None,
+                correctness_score: None,
+                noise_score: None,
+                task_success: None,
+                preference_adhered: None,
+                repeated_context_questions: None,
+                bad_memory_used: None,
+                suggested_memory_changes: None,
+                note: None,
+                limit: None,
+            },
+        )
+        .await
+        .expect("record_trace should work");
+        let json: Value = serde_json::from_str(&response).expect("response should be valid JSON");
+
+        assert_eq!(
+            json["trace"]["external_session_id"],
+            "codex://threads/tool-runtime-env"
+        );
+    }
+
+    #[test]
+    fn external_session_id_whitespace_request_falls_back_to_env() {
+        let resolved = resolve_external_session_id_with_env(
+            Some(" \t\n ".to_string()),
+            Some("codex://threads/env".to_string()),
+        );
+
+        assert_eq!(resolved.as_deref(), Some("codex://threads/env"));
+    }
+
+    #[test]
+    fn external_session_id_whitespace_env_normalizes_to_none() {
+        let resolved = resolve_external_session_id_with_env(None, Some(" \t\n ".to_string()));
+
+        assert_eq!(resolved, None);
     }
 }

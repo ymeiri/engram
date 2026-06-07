@@ -3,7 +3,7 @@
 use engram_index::{EntityService, MemoryService};
 use engram_mcp::tools::{
     self, EntityObserveRequestNew, EntityRequestNew, MemoryChangeRequest, MemoryEvidenceRequest,
-    MemoryRequestNew, OrientRequest, ToolState, VaultRequest,
+    MemoryRequestNew, OrientRequest, OrientResponseShape, ToolState, VaultRequest,
 };
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
@@ -167,6 +167,405 @@ async fn test_mcp_memory_add_get_list() {
     let list_json = parse_json(&list_response);
     assert_eq!(list_json["count"], 1);
     assert_eq!(list_json["items"][0]["id"], id);
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_filters_by_tags_before_limit() {
+    let state = setup_tool_state().await;
+
+    let mut matching = with_writer(request("add"));
+    matching.kind = Some("decision".to_string());
+    matching.title = Some("Tagged current plan".to_string());
+    matching.content =
+        Some("This tagged item should be returned by tag-filtered list.".to_string());
+    matching.origin = Some("user_stated".to_string());
+    matching.scope_type = Some("project".to_string());
+    matching.project_name = Some("engram".to_string());
+    matching.tags = vec!["current-plan".to_string(), "brain-harness".to_string()];
+    matching.evidence = manual_review_evidence("Reviewed tagged list fixture.");
+    tools::memory_new(&state, matching)
+        .await
+        .expect("matching add should work");
+
+    let mut non_matching = with_writer(request("add"));
+    non_matching.kind = Some("project_fact".to_string());
+    non_matching.title = Some("Newer untagged fact".to_string());
+    non_matching.content = Some("This newer item should not satisfy the tag filter.".to_string());
+    non_matching.origin = Some("tool_result".to_string());
+    non_matching.scope_type = Some("project".to_string());
+    non_matching.project_name = Some("engram".to_string());
+    non_matching.tags = vec!["current-plan".to_string()];
+    non_matching.evidence = manual_review_evidence("Reviewed nonmatching tagged list fixture.");
+    tools::memory_new(&state, non_matching)
+        .await
+        .expect("non-matching add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.tags = vec!["current-plan".to_string(), "brain-harness".to_string()];
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["title"], "Tagged current plan");
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_filters_by_scope_before_limit() {
+    let state = setup_tool_state().await;
+
+    let mut matching = with_writer(request("add"));
+    matching.kind = Some("decision".to_string());
+    matching.title = Some("Engram current plan".to_string());
+    matching.content =
+        Some("This project-scoped Engram current plan should be returned.".to_string());
+    matching.origin = Some("tool_result".to_string());
+    matching.scope_type = Some("project".to_string());
+    matching.project_name = Some("engram".to_string());
+    matching.tags = vec!["current-plan".to_string()];
+    matching.evidence = manual_review_evidence("Reviewed scoped list matching fixture.");
+    tools::memory_new(&state, matching)
+        .await
+        .expect("matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("Voice layer current plan".to_string());
+    wrong_scope.content =
+        Some("This newer wrong-project current plan should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("voice-layer".to_string());
+    wrong_scope.tags = vec!["current-plan".to_string()];
+    wrong_scope.evidence = manual_review_evidence("Reviewed scoped list wrong-project fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.scope_type = Some("project".to_string());
+    list.project_name = Some("engram".to_string());
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["title"], "Engram current plan");
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_applies_limit_after_scope_filter() {
+    let state = setup_tool_state().await;
+
+    let mut older_matching = with_writer(request("add"));
+    older_matching.kind = Some("decision".to_string());
+    older_matching.title = Some("Older Engram scoped item".to_string());
+    older_matching.content = Some("This older matching item should be eligible.".to_string());
+    older_matching.origin = Some("tool_result".to_string());
+    older_matching.scope_type = Some("project".to_string());
+    older_matching.project_name = Some("engram".to_string());
+    older_matching.evidence = manual_review_evidence("Reviewed older scoped limit fixture.");
+    tools::memory_new(&state, older_matching)
+        .await
+        .expect("older matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut newer_matching = with_writer(request("add"));
+    newer_matching.kind = Some("decision".to_string());
+    newer_matching.title = Some("Newer Engram scoped item".to_string());
+    newer_matching.content = Some("This newer matching item should be eligible.".to_string());
+    newer_matching.origin = Some("tool_result".to_string());
+    newer_matching.scope_type = Some("project".to_string());
+    newer_matching.project_name = Some("engram".to_string());
+    newer_matching.evidence = manual_review_evidence("Reviewed newer scoped limit fixture.");
+    tools::memory_new(&state, newer_matching)
+        .await
+        .expect("newer matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("DD source scoped item".to_string());
+    wrong_scope.content = Some("This newer wrong-project item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("dd-source".to_string());
+    wrong_scope.evidence = manual_review_evidence("Reviewed wrong-scope limit fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.scope_type = Some("project".to_string());
+    list.project_name = Some("engram".to_string());
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_project_name_implies_project_scope_before_limit() {
+    let state = setup_tool_state().await;
+
+    let mut matching = with_writer(request("add"));
+    matching.kind = Some("decision".to_string());
+    matching.title = Some("Engram project-only current plan".to_string());
+    matching.content = Some("This project-scoped item should be returned.".to_string());
+    matching.origin = Some("tool_result".to_string());
+    matching.scope_type = Some("project".to_string());
+    matching.project_name = Some("engram".to_string());
+    matching.evidence = manual_review_evidence("Reviewed project-name-only list fixture.");
+    tools::memory_new(&state, matching)
+        .await
+        .expect("matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("DD source project-only current plan".to_string());
+    wrong_scope.content = Some("This newer wrong-project item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("dd-source".to_string());
+    wrong_scope.evidence =
+        manual_review_evidence("Reviewed project-name-only wrong-project fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(
+        list_json["items"][0]["title"],
+        "Engram project-only current plan"
+    );
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_project_name_scope_inference_filters_current_plan_tags() {
+    let state = setup_tool_state().await;
+
+    let mut matching = with_writer(request("add"));
+    matching.kind = Some("decision".to_string());
+    matching.title = Some("Engram tagged current plan".to_string());
+    matching.content =
+        Some("This tagged Engram project-scoped item should be returned.".to_string());
+    matching.origin = Some("tool_result".to_string());
+    matching.scope_type = Some("project".to_string());
+    matching.project_name = Some("engram".to_string());
+    matching.tags = vec!["current-plan".to_string()];
+    matching.evidence = manual_review_evidence("Reviewed project-name tag matching fixture.");
+    tools::memory_new(&state, matching)
+        .await
+        .expect("matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut untagged = with_writer(request("add"));
+    untagged.kind = Some("project_fact".to_string());
+    untagged.title = Some("Engram untagged project fact".to_string());
+    untagged.content =
+        Some("This same-project item should not satisfy the tag filter.".to_string());
+    untagged.origin = Some("tool_result".to_string());
+    untagged.scope_type = Some("project".to_string());
+    untagged.project_name = Some("engram".to_string());
+    untagged.evidence = manual_review_evidence("Reviewed project-name tag untagged fixture.");
+    tools::memory_new(&state, untagged)
+        .await
+        .expect("untagged add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("Voice layer tagged current plan".to_string());
+    wrong_scope.content =
+        Some("This newer wrong-project tagged item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("voice-layer".to_string());
+    wrong_scope.tags = vec!["current-plan".to_string()];
+    wrong_scope.evidence =
+        manual_review_evidence("Reviewed project-name tag wrong-project fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.tags = vec!["current-plan".to_string()];
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["title"], "Engram tagged current plan");
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_project_name_current_plan_tags_preserves_limit() {
+    let state = setup_tool_state().await;
+
+    for index in 0..6 {
+        let mut matching = with_writer(request("add"));
+        matching.kind = Some("decision".to_string());
+        matching.title = Some(format!("Engram tagged current plan {index}"));
+        matching.content =
+            Some("This Engram current-plan item should remain eligible.".to_string());
+        matching.origin = Some("tool_result".to_string());
+        matching.scope_type = Some("project".to_string());
+        matching.project_name = Some("engram".to_string());
+        matching.tags = vec!["current-plan".to_string()];
+        matching.evidence =
+            manual_review_evidence("Reviewed project-name tag limit matching fixture.");
+        tools::memory_new(&state, matching)
+            .await
+            .expect("matching add should work");
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("Voice layer tagged current plan".to_string());
+    wrong_scope.content =
+        Some("This newer wrong-project tagged item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("voice-layer".to_string());
+    wrong_scope.tags = vec!["current-plan".to_string()];
+    wrong_scope.evidence =
+        manual_review_evidence("Reviewed project-name tag limit wrong-project fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut untagged = with_writer(request("add"));
+    untagged.kind = Some("project_fact".to_string());
+    untagged.title = Some("Engram untagged project fact".to_string());
+    untagged.content =
+        Some("This same-project item should not satisfy the tag filter.".to_string());
+    untagged.origin = Some("tool_result".to_string());
+    untagged.scope_type = Some("project".to_string());
+    untagged.project_name = Some("engram".to_string());
+    untagged.evidence = manual_review_evidence("Reviewed project-name tag limit untagged fixture.");
+    tools::memory_new(&state, untagged)
+        .await
+        .expect("untagged add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.tags = vec!["current-plan".to_string()];
+    list.limit = Some(5);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 5);
+    for item in list_json["items"]
+        .as_array()
+        .expect("items should be an array")
+    {
+        assert_eq!(item["scope"]["project_name"], "engram");
+        assert!(item["tags"]
+            .as_array()
+            .expect("tags should be an array")
+            .iter()
+            .any(|tag| tag == "current-plan"));
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_memory_list_project_name_scope_inference_preserves_limit() {
+    let state = setup_tool_state().await;
+
+    let mut older_matching = with_writer(request("add"));
+    older_matching.kind = Some("decision".to_string());
+    older_matching.title = Some("Older Engram project-only item".to_string());
+    older_matching.content =
+        Some("This older matching item should be eligible after inferred scope.".to_string());
+    older_matching.origin = Some("tool_result".to_string());
+    older_matching.scope_type = Some("project".to_string());
+    older_matching.project_name = Some("engram".to_string());
+    older_matching.evidence = manual_review_evidence("Reviewed older project-only limit fixture.");
+    tools::memory_new(&state, older_matching)
+        .await
+        .expect("older matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut newer_matching = with_writer(request("add"));
+    newer_matching.kind = Some("decision".to_string());
+    newer_matching.title = Some("Newer Engram project-only item".to_string());
+    newer_matching.content =
+        Some("This newer matching item should be eligible after inferred scope.".to_string());
+    newer_matching.origin = Some("tool_result".to_string());
+    newer_matching.scope_type = Some("project".to_string());
+    newer_matching.project_name = Some("engram".to_string());
+    newer_matching.evidence = manual_review_evidence("Reviewed newer project-only limit fixture.");
+    tools::memory_new(&state, newer_matching)
+        .await
+        .expect("newer matching add should work");
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut wrong_scope = with_writer(request("add"));
+    wrong_scope.kind = Some("decision".to_string());
+    wrong_scope.title = Some("DD source project-only item".to_string());
+    wrong_scope.content = Some("This newer wrong-project item should not be returned.".to_string());
+    wrong_scope.origin = Some("tool_result".to_string());
+    wrong_scope.scope_type = Some("project".to_string());
+    wrong_scope.project_name = Some("dd-source".to_string());
+    wrong_scope.evidence = manual_review_evidence("Reviewed wrong-scope project-only fixture.");
+    tools::memory_new(&state, wrong_scope)
+        .await
+        .expect("wrong-scope add should work");
+
+    let mut list = request("list");
+    list.status_filter = Some("active".to_string());
+    list.project_name = Some("engram".to_string());
+    list.limit = Some(1);
+    let list_response = tools::memory_new(&state, list)
+        .await
+        .expect("list should work");
+    let list_json = parse_json(&list_response);
+
+    assert_eq!(list_json["count"], 1);
+    assert_eq!(list_json["items"][0]["scope"]["project_name"], "engram");
 }
 
 #[tokio::test]
@@ -355,6 +754,7 @@ async fn test_mcp_memory_promote_observation_surfaces_in_orient() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await
@@ -542,6 +942,23 @@ async fn test_mcp_memory_commit_and_changes_since() {
 }
 
 #[tokio::test]
+async fn test_mcp_memory_changes_since_commit_id_error_names_cursor_timestamp() {
+    let state = setup_tool_state().await;
+
+    let mut changes = request("changes_since");
+    changes.commit_id = Some("019e8304-b42e-7170-811f-b1a211ce18b8".to_string());
+
+    let error = tools::memory_new(&state, changes)
+        .await
+        .expect_err("changes_since should require cursor timestamp");
+
+    assert!(error.contains("timestamp required for changes_since"));
+    assert!(error.contains("commit_id was provided"));
+    assert!(error.contains("memory_cursor.timestamp"));
+    assert!(error.contains("memory_cursor.commit_id"));
+}
+
+#[tokio::test]
 async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
     let state = setup_tool_state().await;
 
@@ -591,6 +1008,7 @@ async fn test_mcp_memory_capture_current_plan_commits_and_orients() {
             arm: Some("capture_current_plan".to_string()),
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -912,6 +1330,7 @@ async fn test_mcp_orient_returns_context_packet() {
             arm: None,
             include_recent_commits: Some(true),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await
@@ -949,7 +1368,553 @@ async fn test_mcp_orient_returns_context_packet() {
         json["brain_loop"]["top_items"][0]["trust"]["memory_id"],
         json["active_decisions"][0]["id"]
     );
+    assert_eq!(
+        json["used_memory_candidate_ids"][0],
+        json["brain_loop"]["top_items"][0]["id"]
+    );
+    assert!(json["context_pack"]
+        .as_str()
+        .unwrap()
+        .contains("used_memory_candidate_ids"));
     assert!(json["memory_cursor"]["timestamp"].is_string());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_lean_response_shape_omits_duplicate_payloads() {
+    let state = setup_tool_state().await;
+
+    let mut add = with_writer(request("add"));
+    add.kind = Some("decision".to_string());
+    add.title = Some("Lean orient preserves Brain Loop signal".to_string());
+    add.content = Some(
+        "Verification tasks should use compact Brain Loop guidance without duplicated raw memory."
+            .to_string(),
+    );
+    add.origin = Some("user_stated".to_string());
+    add.scope_type = Some("project".to_string());
+    add.project_name = Some("engram".to_string());
+    add.evidence = manual_review_evidence("Lean orient test expects reviewed guidance.");
+    tools::memory_new(&state, add)
+        .await
+        .expect("add should work");
+
+    let full_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("verify current behavior".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("verify_decision".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("full orient should work");
+    let full_json = parse_json(&full_response);
+    assert!(full_json["context_pack"].is_string());
+    assert!(full_json["active_decisions"].is_array());
+    assert!(full_json["memory_metadata"].is_array());
+    assert!(full_json["brain_loop"]["top_items"][0]["trust"].is_object());
+
+    let lean_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("verify current behavior".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("verify_decision".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: Some(OrientResponseShape::Lean),
+        },
+    )
+    .await
+    .expect("lean orient should work");
+    let lean_json = parse_json(&lean_response);
+
+    assert_eq!(lean_json["response_shape"], "lean");
+    assert_eq!(lean_json["project"], "engram");
+    assert!(lean_json["trace_id"].is_string());
+    assert!(lean_json["memory_cursor"]["timestamp"].is_string());
+    assert_eq!(
+        lean_json["brain_loop"]["top_items"][0]["title"],
+        "Lean orient preserves Brain Loop signal"
+    );
+    assert_eq!(
+        lean_json["used_memory_candidate_ids"][0],
+        lean_json["brain_loop"]["top_items"][0]["id"]
+    );
+    assert_eq!(lean_json["obligation_summary"]["available"], false);
+    assert!(lean_json.get("context_pack").is_none());
+    assert!(lean_json.get("active_decisions").is_none());
+    assert!(lean_json.get("memory_metadata").is_none());
+    assert!(lean_json.get("recent_knowledge_commits").is_none());
+    assert!(lean_json["brain_loop"]["top_items"][0]
+        .get("trust")
+        .is_none());
+    assert!(lean_response.len() < full_response.len());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_prepare_handoff_lean_surfaces_current_plan_and_gates() {
+    let state = setup_tool_state().await;
+
+    let mut stale = with_writer(request("add"));
+    stale.kind = Some("decision".to_string());
+    stale.title = Some("Current plan after Codex document lifecycle follow-through".to_string());
+    stale.content = Some(
+        "Older repository-scoped current-plan guidance that should not lead a compact handoff."
+            .to_string(),
+    );
+    stale.origin = Some("tool_result".to_string());
+    stale.scope_type = Some("repository".to_string());
+    stale.local_path = Some("/Users/yuval.meiri/projects/engram".to_string());
+    stale.tags = vec!["current-plan".to_string()];
+    stale.evidence = manual_review_evidence("Stale repository current-plan fixture.");
+    let stale_response = tools::memory_new(&state, stale)
+        .await
+        .expect("stale current-plan add should work");
+    let stale_id = parse_json(&stale_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut latest = with_writer(request("add"));
+    latest.kind = Some("decision".to_string());
+    latest.title = Some("Current plan: fix prepare_handoff orientation".to_string());
+    latest.content = Some(
+        "Latest current plan: validate compact prepare_handoff orientation before any migration, \
+         lifecycle, hook, schema, public MCP, broad ranking, or payload change."
+            .to_string(),
+    );
+    latest.origin = Some("tool_result".to_string());
+    latest.scope_type = Some("project".to_string());
+    latest.project_name = Some("engram".to_string());
+    latest.tags = vec!["current-plan".to_string()];
+    latest.evidence = manual_review_evidence("Latest current-plan fixture.");
+    let latest_response = tools::memory_new(&state, latest)
+        .await
+        .expect("latest current-plan add should work");
+    let latest_id = parse_json(&latest_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut secondary = with_writer(request("add"));
+    secondary.kind = Some("decision".to_string());
+    secondary.title = Some("Mission-class PlanWork current-plan gap resolved narrowly".to_string());
+    secondary.content = Some(
+        "Earlier mission-class plan_work prompts now preserve current-plan continuity, but this \
+         implementation-history item is not the current handoff plan."
+            .to_string(),
+    );
+    secondary.origin = Some("tool_result".to_string());
+    secondary.scope_type = Some("project".to_string());
+    secondary.project_name = Some("engram".to_string());
+    secondary.evidence = manual_review_evidence("Secondary decision fixture.");
+    tools::memory_new(&state, secondary)
+        .await
+        .expect("secondary decision add should work");
+
+    let mut research_rule = with_writer(request("add"));
+    research_rule.kind = Some("rule".to_string());
+    research_rule.title = Some("Brain Harness work follows research method".to_string());
+    research_rule.content = Some(
+        "Brain Harness work uses explicit research questions, competing hypotheses, evidence \
+         levels, falsifiers, decision gates, and claim-ledger updates."
+            .to_string(),
+    );
+    research_rule.origin = Some("user_stated".to_string());
+    research_rule.scope_type = Some("project".to_string());
+    research_rule.project_name = Some("engram".to_string());
+    research_rule.evidence = manual_review_evidence("Research method rule fixture.");
+    tools::memory_new(&state, research_rule)
+        .await
+        .expect("research rule add should work");
+
+    let mut preference = with_writer(request("add"));
+    preference.kind = Some("preference".to_string());
+    preference.title =
+        Some("Software design philosophy: deep modules and evidence over confidence".to_string());
+    preference.content = Some(
+        "Prefer Ousterhout-style deep modules, low cognitive load, no unrequested features, and \
+         evidence over confidence."
+            .to_string(),
+    );
+    preference.origin = Some("user_stated".to_string());
+    preference.scope_type = Some("project".to_string());
+    preference.project_name = Some("engram".to_string());
+    preference.evidence = manual_review_evidence("Software design preference fixture.");
+    tools::memory_new(&state, preference)
+        .await
+        .expect("preference add should work");
+
+    let mut non_gate_noise = with_writer(request("add"));
+    non_gate_noise.kind = Some("limitation".to_string());
+    non_gate_noise.title =
+        Some("Non-gated calibration does not prove broad ranking quality".to_string());
+    non_gate_noise.content = Some(
+        "The non-gated continuation calibration fixes one prompt class but should not be treated \
+         as broad ranking proof."
+            .to_string(),
+    );
+    non_gate_noise.origin = Some("tool_result".to_string());
+    non_gate_noise.scope_type = Some("project".to_string());
+    non_gate_noise.project_name = Some("engram".to_string());
+    non_gate_noise.evidence = manual_review_evidence("Non-gated calibration noise fixture.");
+    tools::memory_new(&state, non_gate_noise)
+        .await
+        .expect("non-gated calibration noise add should work");
+
+    let mut m6_gate = with_writer(request("add"));
+    m6_gate.kind = Some("limitation".to_string());
+    m6_gate.title = Some("M6 migration approval gate remains explicit".to_string());
+    m6_gate.content = Some(
+        "Brain Harness handoff approval gates must say that M6 migration read-only inventory or \
+         review export needs explicit user-approved scope, and write apply, deletion, cleanup, or \
+         legacy simplification need reviewed candidates, dry-run evidence, rollback planning, and \
+         explicit approval."
+            .to_string(),
+    );
+    m6_gate.origin = Some("user_stated".to_string());
+    m6_gate.scope_type = Some("project".to_string());
+    m6_gate.project_name = Some("engram".to_string());
+    m6_gate.evidence = manual_review_evidence("M6 handoff gate fixture.");
+    let m6_response = tools::memory_new(&state, m6_gate)
+        .await
+        .expect("M6 gate add should work");
+    let m6_id = parse_json(&m6_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut harness_gate = with_writer(request("add"));
+    harness_gate.kind = Some("rule".to_string());
+    harness_gate.title = Some("Harness adapter and hook write approval gate".to_string());
+    harness_gate.content = Some(
+        "Brain Harness handoffs must preserve the harness-write gate: do not install or modify \
+         Claude Code, Codex, Gemini CLI, or Cursor adapters, settings, or hooks without explicit \
+         user approval."
+            .to_string(),
+    );
+    harness_gate.origin = Some("user_stated".to_string());
+    harness_gate.scope_type = Some("project".to_string());
+    harness_gate.project_name = Some("engram".to_string());
+    harness_gate.evidence = manual_review_evidence("Harness-write handoff gate fixture.");
+    let harness_response = tools::memory_new(&state, harness_gate)
+        .await
+        .expect("harness gate add should work");
+    let harness_id = parse_json(&harness_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(
+                "Prepare a compact Brain Harness handoff: current plan, approval gates, \
+                 evidence-quality state, and next non-gated work."
+                    .to_string(),
+            ),
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("prepare_handoff".to_string()),
+            scenario_id: Some("t35_prepare_handoff_gate_summary_20260527".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(10),
+            response_shape: Some(OrientResponseShape::Lean),
+        },
+    )
+    .await
+    .expect("prepare_handoff orient should work");
+    let json = parse_json(&response);
+    let top_ids = json["brain_loop"]["top_items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(json["response_shape"], "lean");
+    assert_eq!(top_ids.first(), Some(&latest_id));
+    assert!(top_ids.contains(&m6_id));
+    assert!(top_ids.contains(&harness_id));
+    assert!(!top_ids.contains(&stale_id));
+    assert!(json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|id| id.as_str() != Some(stale_id.as_str())));
+    assert!(json.get("context_pack").is_none());
+    assert!(json.get("active_decisions").is_none());
+    assert!(json["brain_loop"]["top_items"][0].get("trust").is_none());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_no_prompt_plan_work_surfaces_current_plan_at_project_boundary() {
+    let state = setup_tool_state().await;
+
+    let mut current_plan = with_writer(request("add"));
+    current_plan.kind = Some("decision".to_string());
+    current_plan.title = Some("Current plan: implement T146 no-prompt orientation".to_string());
+    current_plan.content = Some(
+        "Latest current plan: implement the narrow no-prompt PlanWork current-plan fix before \
+         any migration, schema, harness, public MCP, payload, lifecycle, or runtime change."
+            .to_string(),
+    );
+    current_plan.origin = Some("tool_result".to_string());
+    current_plan.scope_type = Some("project".to_string());
+    current_plan.project_name = Some("engram".to_string());
+    current_plan.tags = vec!["current-plan".to_string()];
+    current_plan.evidence = manual_review_evidence("T146 current-plan fixture.");
+    let current_plan_response = tools::memory_new(&state, current_plan)
+        .await
+        .expect("current-plan add should work");
+    let current_plan_id = parse_json(&current_plan_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+
+    let mut secondary = with_writer(request("add"));
+    secondary.kind = Some("decision".to_string());
+    secondary.title = Some("Secondary implementation note".to_string());
+    secondary.content =
+        Some("A later non-current decision should not displace the current plan.".to_string());
+    secondary.origin = Some("tool_result".to_string());
+    secondary.scope_type = Some("project".to_string());
+    secondary.project_name = Some("engram".to_string());
+    secondary.evidence = manual_review_evidence("Secondary no-prompt fixture.");
+    tools::memory_new(&state, secondary)
+        .await
+        .expect("secondary decision add should work");
+
+    let mut rule = with_writer(request("add"));
+    rule.kind = Some("rule".to_string());
+    rule.title = Some("Brain Harness changes stay narrow".to_string());
+    rule.content = Some(
+        "No-prompt orientation fixes should not expand orient payload shape, public MCP \
+         parameters, migration behavior, harness behavior, or storage schema."
+            .to_string(),
+    );
+    rule.origin = Some("user_stated".to_string());
+    rule.scope_type = Some("project".to_string());
+    rule.project_name = Some("engram".to_string());
+    rule.evidence = manual_review_evidence("No-prompt rule fixture.");
+    tools::memory_new(&state, rule)
+        .await
+        .expect("rule add should work");
+
+    let mut preference = with_writer(request("add"));
+    preference.kind = Some("preference".to_string());
+    preference.title = Some("Prefer evidence before ranking changes".to_string());
+    preference.content =
+        Some("Ranking behavior should change only with focused fixture evidence.".to_string());
+    preference.origin = Some("user_stated".to_string());
+    preference.scope_type = Some("project".to_string());
+    preference.project_name = Some("engram".to_string());
+    preference.evidence = manual_review_evidence("No-prompt preference fixture.");
+    tools::memory_new(&state, preference)
+        .await
+        .expect("preference add should work");
+
+    let full_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_project_boundary".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("no-prompt full orient should work");
+    let full_json = parse_json(&full_response);
+
+    assert_eq!(full_json["active_decisions"][0]["id"], current_plan_id);
+    assert_eq!(
+        full_json["brain_loop"]["top_items"][0]["id"],
+        current_plan_id
+    );
+    assert!(full_json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id.as_str() == Some(current_plan_id.as_str())));
+
+    let lean_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_project_boundary".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: Some(OrientResponseShape::Lean),
+        },
+    )
+    .await
+    .expect("no-prompt lean orient should work");
+    let lean_json = parse_json(&lean_response);
+
+    assert_eq!(lean_json["response_shape"], "lean");
+    assert_eq!(
+        lean_json["brain_loop"]["top_items"][0]["id"],
+        current_plan_id
+    );
+    assert!(lean_json.get("context_pack").is_none());
+    assert!(lean_json.get("active_decisions").is_none());
+    assert!(lean_json["brain_loop"]["top_items"][0]
+        .get("trust")
+        .is_none());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_no_prompt_plan_work_without_boundary_or_plan_does_not_synthesize_plan() {
+    let state = setup_tool_state().await;
+
+    let mut current_plan = with_writer(request("add"));
+    current_plan.kind = Some("decision".to_string());
+    current_plan.title = Some("Current plan: project-scoped only".to_string());
+    current_plan.content = Some(
+        "Project-scoped current plan should not appear in an unscoped orientation.".to_string(),
+    );
+    current_plan.origin = Some("tool_result".to_string());
+    current_plan.scope_type = Some("project".to_string());
+    current_plan.project_name = Some("engram".to_string());
+    current_plan.tags = vec!["current-plan".to_string()];
+    current_plan.evidence = manual_review_evidence("Unscoped current-plan guard fixture.");
+    let current_plan_response = tools::memory_new(&state, current_plan)
+        .await
+        .expect("current-plan add should work");
+    let current_plan_id = parse_json(&current_plan_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut global_rule = with_writer(request("add"));
+    global_rule.kind = Some("rule".to_string());
+    global_rule.title = Some("Global orientation rule".to_string());
+    global_rule.content =
+        Some("Global memory can appear when no project boundary is available.".to_string());
+    global_rule.origin = Some("user_stated".to_string());
+    global_rule.scope_type = Some("global".to_string());
+    global_rule.evidence = manual_review_evidence("Unscoped global rule fixture.");
+    let global_rule_response = tools::memory_new(&state, global_rule)
+        .await
+        .expect("global rule add should work");
+    let global_rule_id = parse_json(&global_rule_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let unscoped_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: None,
+            prompt: None,
+            project: None,
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_unscoped_guard".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("unscoped orient should work");
+    let unscoped_json = parse_json(&unscoped_response);
+
+    assert_eq!(
+        unscoped_json["brain_loop"]["top_items"][0]["id"],
+        global_rule_id
+    );
+    assert!(unscoped_json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|id| id.as_str() != Some(current_plan_id.as_str())));
+
+    let no_plan_state = setup_tool_state().await;
+    let mut scoped_rule = with_writer(request("add"));
+    scoped_rule.kind = Some("rule".to_string());
+    scoped_rule.title = Some("Scoped orientation rule".to_string());
+    scoped_rule.content = Some(
+        "No-prompt project orientation without current-plan memory should stay rule-led."
+            .to_string(),
+    );
+    scoped_rule.origin = Some("user_stated".to_string());
+    scoped_rule.scope_type = Some("project".to_string());
+    scoped_rule.project_name = Some("engram".to_string());
+    scoped_rule.evidence = manual_review_evidence("No-current-plan guard fixture.");
+    let scoped_rule_response = tools::memory_new(&no_plan_state, scoped_rule)
+        .await
+        .expect("scoped rule add should work");
+    let scoped_rule_id = parse_json(&scoped_rule_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let no_plan_response = tools::orient(
+        &no_plan_state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: Some("t146_no_prompt_plan_work_no_current_plan".to_string()),
+            arm: Some("fixture".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("no-current-plan orient should work");
+    let no_plan_json = parse_json(&no_plan_response);
+
+    assert_eq!(
+        no_plan_json["brain_loop"]["top_items"][0]["id"],
+        scoped_rule_id
+    );
+    assert!(no_plan_json["active_decisions"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -981,6 +1946,7 @@ async fn test_mcp_orient_routes_inferred_memory_to_review_needed() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -1036,6 +2002,27 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
         .await
         .expect("migration add should work");
 
+    let mut current_plan = with_writer(request("add"));
+    current_plan.kind = Some("decision".to_string());
+    current_plan.title = Some("Current plan: finish no-prompt orientation".to_string());
+    current_plan.content = Some(
+        "Latest current plan covers no-prompt PlanWork continuity and should not override a \
+         specific implementation prompt."
+            .to_string(),
+    );
+    current_plan.origin = Some("tool_result".to_string());
+    current_plan.scope_type = Some("project".to_string());
+    current_plan.project_name = Some("engram".to_string());
+    current_plan.tags = vec!["current-plan".to_string()];
+    current_plan.evidence = manual_review_evidence("Specific prompt guard fixture.");
+    let current_plan_response = tools::memory_new(&state, current_plan)
+        .await
+        .expect("current-plan add should work");
+    let current_plan_id = parse_json(&current_plan_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
     let throttling_response = tools::orient(
         &state,
         OrientRequest {
@@ -1049,6 +2036,7 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -1058,9 +2046,17 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
         throttling_json["active_decisions"][0]["title"],
         "Prefer token bucket throttling"
     );
+    assert_ne!(
+        throttling_json["active_decisions"][0]["id"],
+        current_plan_id
+    );
     assert_eq!(
         throttling_json["brain_loop"]["top_items"][0]["title"],
         "Prefer token bucket throttling"
+    );
+    assert_ne!(
+        throttling_json["brain_loop"]["top_items"][0]["id"],
+        current_plan_id
     );
 
     let migration_response = tools::orient(
@@ -1076,6 +2072,7 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
+            response_shape: None,
         },
     )
     .await
@@ -1088,5 +2085,102 @@ async fn test_mcp_orient_ranks_reviewed_decisions_by_prompt() {
     assert_eq!(
         migration_json["brain_loop"]["top_items"][0]["title"],
         "Prefer write-ahead schema migration"
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
+    let state = setup_tool_state().await;
+
+    let mut decision = with_writer(request("add"));
+    decision.kind = Some("decision".to_string());
+    decision.title = Some("Calibration run is active".to_string());
+    decision.content =
+        Some("Calibration update planning should stay scoped to the current run log.".to_string());
+    decision.origin = Some("user_stated".to_string());
+    decision.scope_type = Some("project".to_string());
+    decision.project_name = Some("engram".to_string());
+    decision.evidence = manual_review_evidence("Reviewed calibration decision.");
+    tools::memory_new(&state, decision)
+        .await
+        .expect("decision add should work");
+
+    let mut preference = with_writer(request("add"));
+    preference.kind = Some("preference".to_string());
+    preference.title = Some("Commit every meaningful Engram step".to_string());
+    preference.content = Some(
+        "When developing Engram, create a focused git commit after each meaningful implementation, validation, or documentation step. Keep unrelated user-owned files, such as AGENTS.md, out of those commits unless the user explicitly asks to include them.".to_string(),
+    );
+    preference.origin = Some("user_stated".to_string());
+    preference.scope_type = Some("project".to_string());
+    preference.project_name = Some("engram".to_string());
+    preference.evidence = manual_review_evidence("Reviewed commit-hygiene preference.");
+    let preference_response = tools::memory_new(&state, preference)
+        .await
+        .expect("preference add should work");
+    let preference_id = parse_json(&preference_response)["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(
+                "Prepare a small Engram doc-only calibration update plan. Include how you will handle unrelated files and when you will commit. Do not implement yet."
+                    .to_string(),
+            ),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("follow_user_preference".to_string()),
+            scenario_id: Some("claude_rescue_commit_hygiene_001".to_string()),
+            arm: Some("test_hot_context".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("orient should work");
+    let hot_ids_index = response
+        .find("\"hot_context_ids\"")
+        .expect("hot_context_ids should be top-level output");
+    let context_pack_index = response
+        .find("\"context_pack\"")
+        .expect("context_pack should be top-level output");
+    assert!(hot_ids_index < context_pack_index);
+    let json = parse_json(&response);
+    let context_pack = json["context_pack"].as_str().unwrap();
+    let hot_index = context_pack
+        .find("## Hot Context")
+        .expect("hot context should be present");
+    let preference_index = context_pack
+        .find("Commit every meaningful Engram step")
+        .expect("preference should appear in context pack");
+    let decisions_index = context_pack
+        .find("## Active Decisions")
+        .expect("decisions section should be present");
+
+    assert!(hot_index < preference_index);
+    assert!(preference_index < decisions_index);
+    assert_eq!(
+        json["hot_context_ids"][0].as_str(),
+        Some(preference_id.as_str())
+    );
+    assert_eq!(
+        json["hot_context_items"][0]["id"].as_str(),
+        Some(preference_id.as_str())
+    );
+    assert!(json["used_memory_candidate_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id.as_str() == Some(preference_id.as_str())));
+    assert!(context_pack.contains(&format!("Memory {preference_id}:")));
+    assert_eq!(
+        json["brain_loop"]["top_items"][0]["title"],
+        "Commit every meaningful Engram step"
     );
 }

@@ -8,7 +8,10 @@ use crate::digest::{
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions,
 };
 use crate::error::{IndexError, IndexResult};
-use crate::memory_ranker::{rank_memory_item, rank_memory_items, MemoryRankContext};
+use crate::memory_ranker::{
+    is_open_ended_plan_work_prompt, memory_scope_matches, rank_memory_item, rank_memory_items,
+    MemoryRankContext,
+};
 use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, MigrationReviewStatus, MigrationService,
@@ -23,8 +26,8 @@ use engram_core::entity::Observation;
 use engram_core::id::Id;
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange,
-    MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind, MemoryScope, MemoryStatus,
-    MemoryTrustMetadata, WriterProvenance,
+    MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope,
+    MemoryStatus, MemoryTrustMetadata, WriterProvenance,
 };
 use engram_core::repository::{
     MonorepoComponent, ProjectRepositoryLink, RecentGitCommit, RepositoryContext,
@@ -42,6 +45,7 @@ use tracing::info;
 
 const BRAIN_LOOP_TOP_ITEM_LIMIT: usize = 5;
 const BRAIN_LOOP_SUMMARY_CHAR_LIMIT: usize = 240;
+const ORIENT_HOT_CONTEXT_ITEM_LIMIT: usize = 3;
 const ORIENT_RECENT_GIT_COMMIT_LIMIT: usize = 5;
 const ORIENT_RECENT_GIT_COMMIT_PATH_LIMIT: usize = 8;
 const CURRENT_PLAN_TAG: &str = "current-plan";
@@ -341,6 +345,12 @@ pub struct OrientationPacket {
     pub repository_context: Option<RepositoryContext>,
     /// Memory cursor for later changes_since checks.
     pub memory_cursor: MemoryCursor,
+    /// Stable IDs for high-priority hot-context memory items.
+    pub hot_context_ids: Vec<Id>,
+    /// Compact hot-context memory items surfaced before the large context pack.
+    pub hot_context_items: Vec<BrainLoopItem>,
+    /// Memory IDs selected by orient as candidates for telemetry `used_memory_ids`.
+    pub used_memory_candidate_ids: Vec<Id>,
     /// Markdown context pack.
     pub context_pack: String,
     /// Brain Loop v1 projection generated from the scoped orient result.
@@ -821,6 +831,63 @@ impl MemoryService {
         Ok(self.repo.list_knowledge_commits(limit).await?)
     }
 
+    async fn list_commits_relevant_to_scope(
+        &self,
+        limit: Option<usize>,
+        project: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<KnowledgeCommit>> {
+        let mut commits = self.list_commits(None).await?;
+        if project.is_none() && cwd.is_none() {
+            if let Some(limit) = limit {
+                commits.truncate(limit);
+            }
+            return Ok(commits);
+        }
+
+        let context = MemoryRankContext::orientation(project, cwd, None);
+        let mut item_scope_cache = HashMap::new();
+        let mut scoped_commits = Vec::new();
+        for commit in commits {
+            if self
+                .knowledge_commit_matches_scope(&commit, context, &mut item_scope_cache)
+                .await?
+            {
+                scoped_commits.push(commit);
+                if limit.is_some_and(|limit| scoped_commits.len() == limit) {
+                    break;
+                }
+            }
+        }
+        Ok(scoped_commits)
+    }
+
+    async fn knowledge_commit_matches_scope(
+        &self,
+        commit: &KnowledgeCommit,
+        context: MemoryRankContext<'_>,
+        item_scope_cache: &mut HashMap<Id, bool>,
+    ) -> IndexResult<bool> {
+        for item_id in commit.changes.iter().filter_map(|change| change.item_id) {
+            let matches = if let Some(matches) = item_scope_cache.get(&item_id) {
+                *matches
+            } else {
+                let matches = self
+                    .repo
+                    .get_memory_item(&item_id)
+                    .await?
+                    .as_ref()
+                    .is_some_and(|item| memory_scope_matches(item, context));
+                item_scope_cache.insert(item_id, matches);
+                matches
+            };
+            if matches {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Aggregate memory records by writer provenance.
     pub async fn writer_stats(&self) -> IndexResult<Vec<MemoryWriterStat>> {
         let mut stats: std::collections::BTreeMap<(String, String, String, Option<String>), usize> =
@@ -1088,17 +1155,22 @@ impl MemoryService {
         if input.include_recent_commits {
             attach_recent_git_commits(&mut repository_context)?;
         }
-        let recent_commits = if input.include_recent_commits {
-            self.list_commits(Some(limit)).await?
-        } else {
-            Vec::new()
-        };
         let resolution = resolve_orientation_project(
             input.project.as_deref(),
             input.cwd.as_deref(),
             repository_context.as_ref(),
         );
         let effective_project = resolution.selected_project.as_deref();
+        let recent_commits = if input.include_recent_commits {
+            self.list_commits_relevant_to_scope(
+                Some(limit),
+                effective_project,
+                input.cwd.as_deref(),
+            )
+            .await?
+        } else {
+            Vec::new()
+        };
 
         let relevant_active = filter_relevant(
             active,
@@ -1106,8 +1178,14 @@ impl MemoryService {
             input.cwd.as_deref(),
             input.prompt.as_deref(),
         );
-        let relevant_active =
-            prioritize_current_plan_for_resume(relevant_active, input.intent.as_ref());
+        let has_task_boundary =
+            has_orientation_task_boundary(effective_project, input.cwd.as_deref());
+        let relevant_active = prioritize_current_plan_for_orientation(
+            relevant_active,
+            input.intent.as_ref(),
+            input.prompt.as_deref(),
+            has_task_boundary,
+        );
         let mut relevant_review = filter_relevant(
             review,
             effective_project,
@@ -1150,23 +1228,11 @@ impl MemoryService {
         }
 
         let scope = scope_label(effective_project, input.cwd.as_deref());
-        let context_pack = build_context_pack(ContextPackParts {
+        let context_pack_parts = ContextPackParts {
             scope: &scope,
             cursor: &cursor,
             resolution: &resolution,
             repository_context: repository_context.as_ref(),
-            decisions: &active_decisions,
-            rules: &active_rules,
-            preferences: &preferences,
-            limitations: &limitations,
-            review_needed: &relevant_review,
-            commits: &recent_commits,
-            ambiguities: &ambiguities,
-            recommended_actions: &recommended_actions,
-        });
-        let brain_loop = build_brain_loop(BrainLoopParts {
-            scope: &scope,
-            resolution: &resolution,
             project: effective_project,
             cwd: input.cwd.as_deref(),
             query: input.prompt.as_deref(),
@@ -1176,8 +1242,29 @@ impl MemoryService {
             preferences: &preferences,
             limitations: &limitations,
             review_needed: &relevant_review,
+            commits: &recent_commits,
+            ambiguities: &ambiguities,
+            recommended_actions: &recommended_actions,
+        };
+        let hot_context_items = build_hot_context_items(&context_pack_parts);
+        let hot_context_ids = hot_context_items.iter().map(|item| item.id).collect();
+        let brain_loop = build_brain_loop(BrainLoopParts {
+            scope: &scope,
+            resolution: &resolution,
+            project: effective_project,
+            cwd: input.cwd.as_deref(),
+            query: input.prompt.as_deref(),
+            intent: input.intent.as_ref(),
+            has_task_boundary,
+            decisions: &active_decisions,
+            rules: &active_rules,
+            preferences: &preferences,
+            limitations: &limitations,
+            review_needed: &relevant_review,
             ambiguities: &ambiguities,
         });
+        let used_memory_candidate_ids = used_memory_candidate_ids(&brain_loop, &hot_context_items);
+        let context_pack = build_context_pack(&context_pack_parts, &used_memory_candidate_ids);
 
         let returned_memory_ids = returned_orientation_memory_ids(&[
             &active_decisions,
@@ -1222,6 +1309,9 @@ impl MemoryService {
             resolution,
             repository_context,
             memory_cursor: cursor,
+            hot_context_ids,
+            hot_context_items,
+            used_memory_candidate_ids,
             context_pack,
             brain_loop,
             active_decisions,
@@ -1330,17 +1420,61 @@ fn filter_relevant(
         .collect()
 }
 
-fn prioritize_current_plan_for_resume(
+fn prioritize_current_plan_for_orientation(
     items: Vec<MemoryItem>,
     intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
+    has_task_boundary: bool,
 ) -> Vec<MemoryItem> {
-    if !matches!(intent, Some(BrainHarnessIntent::ResumeSession)) {
+    let suppress_older = matches!(
+        intent,
+        Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
+    );
+    let promote_latest = suppress_older
+        || should_prioritize_current_plan_for_plan_work(intent, query, has_task_boundary);
+    if !promote_latest {
         return items;
     }
 
+    prioritize_latest_current_plan(
+        items,
+        suppress_older,
+        matches!(intent, Some(BrainHarnessIntent::PrepareHandoff)),
+    )
+}
+
+fn should_prioritize_current_plan_for_plan_work(
+    intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
+    has_task_boundary: bool,
+) -> bool {
+    if !matches!(intent, Some(BrainHarnessIntent::PlanWork)) || !has_task_boundary {
+        return false;
+    }
+
+    match query.map(str::trim) {
+        None | Some("") => true,
+        Some(query) => is_open_ended_plan_work_prompt(query),
+    }
+}
+
+fn has_orientation_task_boundary(project: Option<&str>, cwd: Option<&str>) -> bool {
+    project.is_some_and(|project| !project.trim().is_empty())
+        || cwd.is_some_and(|cwd| !cwd.trim().is_empty())
+}
+
+fn prioritize_latest_current_plan(
+    items: Vec<MemoryItem>,
+    suppress_older: bool,
+    collapse_scopes: bool,
+) -> Vec<MemoryItem> {
     let mut latest_by_scope: HashMap<String, MemoryItem> = HashMap::new();
     for item in items.iter().filter(|item| is_current_plan_item(item)) {
-        let scope_key = current_plan_scope_key(&item.scope);
+        let scope_key = if collapse_scopes {
+            "handoff".to_string()
+        } else {
+            current_plan_scope_key(&item.scope)
+        };
         let should_replace = latest_by_scope
             .get(&scope_key)
             .map(|existing| {
@@ -1367,14 +1501,29 @@ fn prioritize_current_plan_for_resume(
     });
 
     let mut prioritized = latest_current_plans;
-    prioritized.extend(items.into_iter().filter(|item| !is_current_plan_item(item)));
+    if suppress_older {
+        prioritized.extend(items.into_iter().filter(|item| !is_current_plan_item(item)));
+    } else {
+        let latest_ids = prioritized
+            .iter()
+            .map(|item| item.id)
+            .collect::<HashSet<_>>();
+        prioritized.extend(
+            items
+                .into_iter()
+                .filter(|item| !latest_ids.contains(&item.id)),
+        );
+    }
     prioritized
 }
 
 fn is_current_plan_item(item: &MemoryItem) -> bool {
-    item.tags
-        .iter()
-        .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
+    item.status == MemoryStatus::Active
+        && matches!(item.kind, MemoryKind::Decision | MemoryKind::Rule)
+        && item
+            .tags
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case(CURRENT_PLAN_TAG))
 }
 
 fn current_plan_scope_key(scope: &MemoryScope) -> String {
@@ -1733,6 +1882,10 @@ struct ContextPackParts<'a> {
     cursor: &'a MemoryCursor,
     resolution: &'a OrientationResolution,
     repository_context: Option<&'a RepositoryContext>,
+    project: Option<&'a str>,
+    cwd: Option<&'a str>,
+    query: Option<&'a str>,
+    intent: Option<&'a BrainHarnessIntent>,
     decisions: &'a [MemoryItem],
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
@@ -1750,6 +1903,7 @@ struct BrainLoopParts<'a> {
     cwd: Option<&'a str>,
     query: Option<&'a str>,
     intent: Option<&'a BrainHarnessIntent>,
+    has_task_boundary: bool,
     decisions: &'a [MemoryItem],
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
@@ -1811,8 +1965,9 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
             score: 0.0,
         },
     ];
-    let resume_current_plan = matches!(parts.intent, Some(BrainHarnessIntent::ResumeSession))
-        && parts.decisions.first().is_some_and(is_current_plan_item);
+    let continuity_current_plan =
+        should_pin_current_plan_in_brain_loop(parts.intent, parts.query, parts.has_task_boundary)
+            && parts.decisions.first().is_some_and(is_current_plan_item);
     let follow_user_preference =
         matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference))
             && !parts.preferences.is_empty();
@@ -1828,14 +1983,14 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
                 .unwrap_or(0.0);
         }
     }
-    if resume_current_plan {
+    if continuity_current_plan {
         groups[3].score = f32::INFINITY;
     }
     if follow_user_preference {
         groups[1].score = f32::INFINITY;
     }
     if parts.query.is_some_and(|query| !query.trim().is_empty())
-        || resume_current_plan
+        || continuity_current_plan
         || follow_user_preference
     {
         groups.sort_by(|left, right| {
@@ -1866,6 +2021,25 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
     }
 }
 
+fn should_pin_current_plan_in_brain_loop(
+    intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
+    has_task_boundary: bool,
+) -> bool {
+    if matches!(
+        intent,
+        Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
+    ) {
+        return true;
+    }
+
+    if !matches!(intent, Some(BrainHarnessIntent::PlanWork)) || !has_task_boundary {
+        return false;
+    }
+
+    matches!(query.map(str::trim), None | Some(""))
+}
+
 fn brain_loop_item(item: &MemoryItem, reason: &str) -> BrainLoopItem {
     BrainLoopItem {
         id: item.id,
@@ -1875,6 +2049,19 @@ fn brain_loop_item(item: &MemoryItem, reason: &str) -> BrainLoopItem {
         trust: item.trust_metadata(),
         why_relevant: reason.to_string(),
     }
+}
+
+fn used_memory_candidate_ids(
+    brain_loop: &BrainLoop,
+    hot_context_items: &[BrainLoopItem],
+) -> Vec<Id> {
+    let mut ids = Vec::new();
+    for item in hot_context_items.iter().chain(&brain_loop.top_items) {
+        if !ids.contains(&item.id) {
+            ids.push(item.id);
+        }
+    }
+    ids
 }
 
 fn brain_loop_compiled_context(
@@ -1930,7 +2117,7 @@ fn compact_brain_loop_summary(content: &str) -> String {
     format!("{summary}...")
 }
 
-fn build_context_pack(parts: ContextPackParts<'_>) -> String {
+fn build_context_pack(parts: &ContextPackParts<'_>, used_memory_candidate_ids: &[Id]) -> String {
     let mut lines = vec![
         format!("# Context Pack: {}", parts.scope),
         String::new(),
@@ -1939,8 +2126,19 @@ fn build_context_pack(parts: ContextPackParts<'_>) -> String {
     if let Some(commit_id) = parts.cursor.commit_id {
         lines.push(format!("- Latest knowledge commit: {commit_id}"));
     }
+    if !used_memory_candidate_ids.is_empty() {
+        let ids = used_memory_candidate_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push(format!(
+            "- used_memory_candidate_ids: {ids}; submit the subset that shaped your answer in telemetry used_memory_ids."
+        ));
+    }
     append_resolution_section(&mut lines, parts.resolution);
     append_repository_section(&mut lines, parts.repository_context);
+    append_hot_context_section(&mut lines, parts);
     append_memory_section(&mut lines, "Active Decisions", parts.decisions);
     append_memory_section(&mut lines, "Active Rules", parts.rules);
     append_memory_section(&mut lines, "Preferences", parts.preferences);
@@ -1960,6 +2158,74 @@ fn build_context_pack(parts: ContextPackParts<'_>) -> String {
     append_string_section(&mut lines, "Recommended Actions", parts.recommended_actions);
     append_string_section(&mut lines, "Ambiguities", parts.ambiguities);
     lines.join("\n")
+}
+
+fn build_hot_context_items(parts: &ContextPackParts<'_>) -> Vec<BrainLoopItem> {
+    intent_matched_reviewed_preferences(parts)
+        .into_iter()
+        .map(|item| brain_loop_item(item, "Intent-matched reviewed preference for this request."))
+        .collect()
+}
+
+fn append_hot_context_section(lines: &mut Vec<String>, parts: &ContextPackParts<'_>) {
+    let hot_preferences = intent_matched_reviewed_preferences(parts);
+    if hot_preferences.is_empty() {
+        return;
+    }
+
+    lines.push(String::new());
+    lines.push("## Hot Context".to_string());
+    lines.push(
+        "- Intent-matched reviewed preferences. Read these before lower-priority memory."
+            .to_string(),
+    );
+    let ids = hot_preferences
+        .iter()
+        .map(|item| item.id.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    lines.push(format!(
+        "- Use these memory IDs in telemetry used_memory_ids when they shape behavior: {ids}"
+    ));
+    lines.push("### Reviewed Preferences".to_string());
+    for item in hot_preferences {
+        let metadata = item.trust_metadata();
+        lines.push(format!(
+            "- Memory {}: {}: {}",
+            item.id, item.title, item.content
+        ));
+        lines.push(format!(
+            "  - Trust: status={}, review_state={}, freshness={}, origin={}, confidence={:.2}, evidence_count={}, writer={}/{}",
+            metadata.status,
+            metadata.review_state,
+            metadata.freshness,
+            metadata.claim_origin,
+            metadata.confidence,
+            metadata.evidence_count,
+            metadata.writer.harness,
+            metadata.writer.model
+        ));
+    }
+}
+
+fn intent_matched_reviewed_preferences<'a>(parts: &ContextPackParts<'a>) -> Vec<&'a MemoryItem> {
+    if !matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference)) {
+        return Vec::new();
+    }
+
+    let has_query = parts.query.is_some_and(|query| !query.trim().is_empty());
+    let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
+    parts
+        .preferences
+        .iter()
+        .filter(|item| item.trust_metadata().review_state == MemoryReviewState::Reviewed)
+        .filter(|item| {
+            !has_query
+                || rank_memory_item((*item).clone(), context)
+                    .is_some_and(|ranked| ranked.components.text > 0.0)
+        })
+        .take(ORIENT_HOT_CONTEXT_ITEM_LIMIT)
+        .collect()
 }
 
 fn append_resolution_section(lines: &mut Vec<String>, resolution: &OrientationResolution) {
@@ -2731,6 +2997,72 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(active_engram_current_plans.len(), 1);
         assert_eq!(active_engram_current_plans[0].id, new.id);
+    }
+
+    #[tokio::test]
+    async fn capture_current_plan_does_not_supersede_non_guidance_current_plan_tags() {
+        let service = setup_service().await;
+
+        let old = service
+            .capture_current_plan(current_plan_input(
+                "engram",
+                "Old current plan",
+                "Resume from the old current plan.",
+            ))
+            .await
+            .unwrap()
+            .item;
+        let tagged_fact = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::ProjectFact,
+                    "Non-guidance fact with current-plan tag",
+                    "This fact records validation evidence and should not be replaced by \
+                     current-plan capture lifecycle.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_status(MemoryStatus::Active)
+                .with_tag(CURRENT_PLAN_TAG),
+            )
+            .await
+            .unwrap();
+
+        let mut input = current_plan_input(
+            "engram",
+            "New current plan",
+            "Resume from the new current plan.",
+        );
+        input.create_commit = true;
+        let capture = service.capture_current_plan(input).await.unwrap();
+        let new = capture.item;
+
+        assert!(new.supersedes.contains(&old.id));
+        assert!(!new.supersedes.contains(&tagged_fact.id));
+        let commit = capture
+            .commit
+            .expect("superseding current-plan capture should create a commit");
+        assert!(commit.changes.iter().any(|change| {
+            change.change_type == MemoryChangeType::Superseded && change.item_id == Some(old.id)
+        }));
+        assert!(!commit
+            .changes
+            .iter()
+            .any(|change| change.item_id == Some(tagged_fact.id)));
+        assert_eq!(
+            service.get_memory(&old.id).await.unwrap().unwrap().status,
+            MemoryStatus::Superseded
+        );
+        assert_eq!(
+            service
+                .get_memory(&tagged_fact.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active
+        );
     }
 
     #[tokio::test]
@@ -3510,6 +3842,16 @@ mod tests {
                 && item.title == "Global preference"
                 && item.trust.memory_id == item.id
         }));
+        assert_eq!(
+            packet.used_memory_candidate_ids,
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>()
+        );
+        assert!(packet.context_pack.contains("used_memory_candidate_ids"));
     }
 
     #[tokio::test]
@@ -3594,6 +3936,475 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn orient_prepare_handoff_prioritizes_latest_current_plan_and_keeps_gates() {
+        let service = setup_service().await;
+        let mut stale_repository_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan after Codex document lifecycle follow-through",
+            "Older repository-scoped current-plan guidance that should not lead a compact \
+             Brain Harness handoff.",
+            MemoryScope::repository(None, Some("/Users/yuval.meiri/projects/engram".to_string())),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            "stale-repository-current-plan",
+        ))
+        .with_tag(CURRENT_PLAN_TAG);
+        stale_repository_plan.updated_at = OffsetDateTime::now_utc() - time::Duration::days(2);
+        let stale_repository_plan = service.capture_memory(stale_repository_plan).await.unwrap();
+
+        let mut latest_plan = MemoryItem::new(
+            MemoryKind::Decision,
+            "Current plan: fix prepare_handoff orientation",
+            "Latest current plan: add a narrow prepare_handoff orientation fixture before any \
+             migration, lifecycle, hook, schema, public MCP, broad ranking, or payload change.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::ToolResult,
+            writer(),
+        )
+        .with_status(MemoryStatus::Active)
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            "latest-current-plan",
+        ))
+        .with_tag(CURRENT_PLAN_TAG);
+        latest_plan.updated_at = OffsetDateTime::now_utc();
+        let latest_plan = service.capture_memory(latest_plan).await.unwrap();
+
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Mission-class PlanWork current-plan gap resolved narrowly",
+                    "Earlier mission-class plan_work prompts now preserve current-plan continuity, \
+                     but this implementation-history item is not the current handoff plan.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "secondary-decision")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Brain Harness work follows research method",
+                    "Brain Harness work uses explicit research questions, competing hypotheses, \
+                     evidence levels, falsifiers, decision gates, and claim-ledger updates.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Preference,
+                    "Software design philosophy: deep modules and evidence over confidence",
+                    "Prefer Ousterhout-style deep modules, low cognitive load, no unrequested \
+                     features, and evidence over confidence.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "Non-gated calibration does not prove broad ranking quality",
+                    "The non-gated continuation calibration fixes one prompt class but should not \
+                     be treated as broad ranking proof.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::ToolCall,
+                    "calibration-noise",
+                )),
+            )
+            .await
+            .unwrap();
+
+        let m6_gate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "M6 migration approval gate remains explicit",
+                    "Brain Harness handoff approval gates must say that M6 migration read-only \
+                     inventory or review export needs explicit user-approved scope, and write \
+                     apply, deletion, cleanup, or legacy simplification need reviewed candidates, \
+                     dry-run evidence, rollback planning, and explicit approval.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        let harness_gate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Harness adapter and hook write approval gate",
+                    "Brain Harness handoffs must preserve the harness-write gate: do not install \
+                     or modify Claude Code, Codex, Gemini CLI, or Cursor adapters, settings, or \
+                     hooks without explicit user approval.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+                prompt: Some(
+                    "Prepare a compact Brain Harness handoff: current plan, approval gates, \
+                     evidence-quality state, and next non-gated work."
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::PrepareHandoff),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet.active_decisions.first().map(|item| item.id),
+            Some(latest_plan.id)
+        );
+        assert!(
+            !packet
+                .active_decisions
+                .iter()
+                .any(|item| item.id == stale_repository_plan.id),
+            "handoff should not present stale repository-scoped current-plan guidance as current"
+        );
+        assert_eq!(
+            packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(latest_plan.id)
+        );
+        let top_titles = packet
+            .brain_loop
+            .top_items
+            .iter()
+            .map(|item| item.title.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .any(|item| item.id == m6_gate.id),
+            "expected M6 gate in {top_titles:?}"
+        );
+        assert!(
+            packet
+                .brain_loop
+                .top_items
+                .iter()
+                .any(|item| item.id == harness_gate.id),
+            "expected harness gate in {top_titles:?}"
+        );
+        assert_eq!(
+            service
+                .get_memory(&stale_repository_plan.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active,
+            "handoff orientation should not mutate stale memory lifecycle"
+        );
+    }
+
+    #[tokio::test]
+    async fn orient_mission_prompt_diagnostic_distinguishes_intent_from_ranking() {
+        let service = setup_service().await;
+        let current_plan = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Current plan after lean orient real verification smoke",
+                    "Lean orient passed a real read-only verification smoke. Next step: add a \
+                     deterministic diagnostic fixture before changing ranking, migration, hooks, \
+                     or the orient payload.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_status(MemoryStatus::Active)
+                .with_confidence(0.95)
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::ToolCall,
+                    "latest-current-plan",
+                ))
+                .with_tag(CURRENT_PLAN_TAG),
+            )
+            .await
+            .unwrap();
+
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Brain Harness work follows research method",
+                    "Engram Brain Harness work toward a production-quality Brain OS must use \
+                     explicit research questions, competing hypotheses, evidence gates, and \
+                     claim-ledger updates.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Preference,
+                    "Commit every meaningful Engram step",
+                    "When developing Engram, commit each meaningful validated step and keep \
+                     unrelated user-owned files out of the commit.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Limitation,
+                    "Mission-class Brain OS prompt can miss latest current-plan memory",
+                    "A broad prompt to complete Engram into a production-quality Brain OS can \
+                     surface older Brain Harness guidance before the latest current-plan item.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "mission-gap")),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Current plan after Codex document lifecycle follow-through",
+                    "The next product-facing Brain Harness slice completed document lifecycle \
+                     follow-through for Codex while working toward Engram as a Brain OS.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::ToolResult,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::GitCommit,
+                    "document-lifecycle-follow-through",
+                )),
+            )
+            .await
+            .unwrap();
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Review mission prompt policy before changing ranking",
+                    "Inferred mission-class Brain OS planning policy should stay review-needed \
+                     until a diagnostic fixture distinguishes caller intent from ranker behavior.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::AgentInferred,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "mission-gap")),
+            )
+            .await
+            .unwrap();
+
+        let explicit_next_step = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "What is the current plan / next step for Engram? Continue from where we \
+                     left off."
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::PlanWork),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            explicit_next_step
+                .active_decisions
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id)
+        );
+        assert_eq!(
+            explicit_next_step
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id)
+        );
+
+        let mission_prompt =
+            "Complete Engram into a production-quality Brain OS / brain harness for AI agents.";
+        let plan_work_mission = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(mission_prompt.to_string()),
+                intent: Some(BrainHarnessIntent::PlanWork),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(plan_work_mission.intent, Some(BrainHarnessIntent::PlanWork));
+        assert_eq!(
+            plan_work_mission
+                .active_decisions
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id),
+            "mission-class PlanWork should promote the latest current plan within decisions"
+        );
+        assert!(
+            plan_work_mission
+                .used_memory_candidate_ids
+                .contains(&current_plan.id),
+            "mission-class PlanWork should include the latest current plan in used candidates"
+        );
+        assert_ne!(
+            plan_work_mission
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id),
+            "PlanWork should not use the ResumeSession brain-loop pin"
+        );
+
+        let resume_mission = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(mission_prompt.to_string()),
+                intent: Some(BrainHarnessIntent::ResumeSession),
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            resume_mission.active_decisions.first().map(|item| item.id),
+            Some(current_plan.id)
+        );
+        assert_eq!(
+            resume_mission
+                .brain_loop
+                .top_items
+                .first()
+                .map(|item| item.id),
+            Some(current_plan.id)
+        );
+    }
+
+    #[test]
+    fn open_ended_plan_work_prompt_detection_stays_narrow() {
+        assert!(is_open_ended_plan_work_prompt(
+            "Complete Engram into a production-quality Brain OS / brain harness for AI agents."
+        ));
+        assert!(is_open_ended_plan_work_prompt(
+            "Continue from where we left off and move forward."
+        ));
+        assert!(!is_open_ended_plan_work_prompt("plan schema migration"));
+        assert!(!is_open_ended_plan_work_prompt(
+            "implement request throttling"
+        ));
+    }
+
+    #[tokio::test]
+    async fn orient_recent_knowledge_commits_respect_explicit_project_scope() {
+        let service = setup_service().await;
+
+        let mut engram_plan = current_plan_input(
+            "engram",
+            "Engram scope-noise plan",
+            "Investigate Engram orientation scope noise before larger ranking claims.",
+        );
+        engram_plan.create_commit = true;
+        let engram_capture = service.capture_current_plan(engram_plan).await.unwrap();
+        let engram_commit = engram_capture
+            .commit
+            .expect("Engram current plan should create a commit");
+
+        let mut voice_layer_plan = current_plan_input(
+            "voice-layer",
+            "Voice Layer calibration plan",
+            "Run a fresh Claude calibration for the voice-layer project.",
+        );
+        voice_layer_plan.create_commit = true;
+        let voice_layer_capture = service
+            .capture_current_plan(voice_layer_plan)
+            .await
+            .unwrap();
+        let voice_layer_commit = voice_layer_capture
+            .commit
+            .expect("voice-layer current plan should create a commit");
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some("How should we proceed with Engram after BAF006?".to_string()),
+                include_recent_commits: true,
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        let commit_ids = packet
+            .recent_knowledge_commits
+            .iter()
+            .map(|commit| commit.id)
+            .collect::<Vec<_>>();
+        assert!(commit_ids.contains(&engram_commit.id));
+        assert!(!commit_ids.contains(&voice_layer_commit.id));
+        assert!(!packet
+            .context_pack
+            .contains("Capture current plan: Voice Layer calibration plan"));
+        assert!(!packet
+            .active_decisions
+            .iter()
+            .any(|item| item.id == voice_layer_capture.item.id));
+    }
+
+    #[tokio::test]
     async fn orient_brain_loop_prioritizes_preference_for_follow_preference_intent() {
         let service = setup_service().await;
         let preference = service
@@ -3644,6 +4455,11 @@ mod tests {
 
         assert_eq!(
             packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(preference.id)
+        );
+        assert_eq!(packet.hot_context_ids, vec![preference.id]);
+        assert_eq!(
+            packet.hot_context_items.first().map(|item| item.id),
             Some(preference.id)
         );
     }

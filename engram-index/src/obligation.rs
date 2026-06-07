@@ -11,9 +11,11 @@ use engram_core::obligation::{
 use engram_core::Id;
 use engram_store::{Db, ObligationRepo};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+const DOCUMENT_FINGERPRINT_PREFIX: &str = "document_content_fingerprint=git-sha1:";
 
 /// Options for detecting obligations from session cues.
 #[derive(Debug, Clone)]
@@ -41,7 +43,8 @@ pub struct ObligationDetection {
     pub candidates: Vec<AgentObligation>,
     /// Obligations written during this run.
     pub written: Vec<AgentObligation>,
-    /// Candidate obligations skipped because an equivalent open obligation exists.
+    /// Candidate obligations skipped because an equivalent open obligation exists
+    /// or the same document content was already resolved or skipped.
     pub skipped_existing: Vec<AgentObligation>,
     /// Non-fatal warnings.
     pub warnings: Vec<String>,
@@ -92,9 +95,48 @@ impl ObligationService {
     pub async fn list(
         &self,
         status: Option<AgentObligationStatus>,
+        project: Option<&str>,
+        cwd: Option<&str>,
         limit: Option<usize>,
     ) -> IndexResult<Vec<AgentObligation>> {
-        Ok(self.repo.list_obligations(status, limit).await?)
+        if project.is_none() && cwd.is_none() {
+            return Ok(self.repo.list_obligations(status, limit).await?);
+        }
+
+        let mut obligations = self
+            .repo
+            .list_obligations(status, None)
+            .await?
+            .into_iter()
+            .filter(|obligation| obligation_applies_to_context(obligation, project, cwd))
+            .collect::<Vec<_>>();
+        if let Some(limit) = limit {
+            obligations.truncate(limit);
+        }
+        Ok(obligations)
+    }
+
+    /// List open obligations that apply to the current project/cwd context.
+    pub async fn list_open_for_context(
+        &self,
+        project: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<AgentObligation>> {
+        let mut obligations = self
+            .repo
+            .list_obligations(Some(AgentObligationStatus::Open), None)
+            .await?
+            .into_iter()
+            .filter(|obligation| obligation_applies_to_context(obligation, project, cwd))
+            .filter(|obligation| obligation_is_current_for_context(obligation, cwd))
+            .collect::<Vec<_>>();
+        obligations.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.title.cmp(&right.title))
+        });
+        Ok(obligations)
     }
 
     /// Detect obligations from the current task/worktree.
@@ -138,9 +180,15 @@ impl ObligationService {
                 .await?;
             let mut existing_keys: HashSet<_> =
                 existing.iter().map(AgentObligation::dedupe_key).collect();
+            let closed_document_fingerprints =
+                self.closed_document_fingerprints_by_dedupe_key().await?;
 
             for candidate in candidates.iter().cloned() {
                 if existing_keys.contains(&candidate.dedupe_key()) {
+                    skipped_existing.push(candidate);
+                    continue;
+                }
+                if closed_document_fingerprints_match(&candidate, &closed_document_fingerprints) {
                     skipped_existing.push(candidate);
                     continue;
                 }
@@ -170,7 +218,7 @@ impl ObligationService {
             .get_obligation(&id)
             .await?
             .ok_or_else(|| IndexError::NotFound(format!("obligation {id}")))?;
-        obligation.resolve(resolution);
+        obligation.resolve(with_current_document_fingerprint(&obligation, resolution));
         self.repo.save_obligation(&obligation).await?;
         Ok(obligation)
     }
@@ -179,25 +227,35 @@ impl ObligationService {
     pub async fn skip(
         &self,
         id: Id,
-        reason: impl Into<String>,
-        actor: impl Into<String>,
+        resolution: AgentObligationResolution,
     ) -> IndexResult<AgentObligation> {
         let mut obligation = self
             .repo
             .get_obligation(&id)
             .await?
             .ok_or_else(|| IndexError::NotFound(format!("obligation {id}")))?;
-        obligation.skip(reason, actor);
+        obligation.skip_with_resolution(with_current_document_fingerprint(&obligation, resolution));
         self.repo.save_obligation(&obligation).await?;
         Ok(obligation)
     }
 
     /// Return open-obligation diagnostics.
-    pub async fn doctor(&self, limit: Option<usize>) -> IndexResult<ObligationDoctorReport> {
-        let open = self
-            .repo
-            .list_obligations(Some(AgentObligationStatus::Open), limit)
-            .await?;
+    pub async fn doctor(
+        &self,
+        project: Option<&str>,
+        cwd: Option<&str>,
+        limit: Option<usize>,
+    ) -> IndexResult<ObligationDoctorReport> {
+        let mut open = if project.is_some() || cwd.is_some() {
+            self.list_open_for_context(project, cwd).await?
+        } else {
+            self.repo
+                .list_obligations(Some(AgentObligationStatus::Open), None)
+                .await?
+        };
+        if let Some(limit) = limit {
+            open.truncate(limit);
+        }
         let warnings = open
             .iter()
             .map(|obligation| {
@@ -208,6 +266,34 @@ impl ObligationService {
             })
             .collect();
         Ok(ObligationDoctorReport { open, warnings })
+    }
+
+    async fn closed_document_fingerprints_by_dedupe_key(
+        &self,
+    ) -> IndexResult<HashMap<String, HashSet<String>>> {
+        let resolved = self
+            .repo
+            .list_obligations(Some(AgentObligationStatus::Resolved), None)
+            .await?;
+        let skipped = self
+            .repo
+            .list_obligations(Some(AgentObligationStatus::Skipped), None)
+            .await?;
+        let mut fingerprints_by_key: HashMap<String, HashSet<String>> = HashMap::new();
+
+        for obligation in resolved.into_iter().chain(skipped) {
+            if !is_git_status_document_obligation(&obligation) {
+                continue;
+            }
+            if let Some(fingerprint) = resolution_document_fingerprint(&obligation) {
+                fingerprints_by_key
+                    .entry(obligation.dedupe_key())
+                    .or_default()
+                    .insert(fingerprint);
+            }
+        }
+
+        Ok(fingerprints_by_key)
     }
 }
 
@@ -221,6 +307,126 @@ fn obligation_scope(project: Option<&str>, cwd: Option<&str>) -> MemoryScope {
     } else {
         MemoryScope::Global
     }
+}
+
+fn obligation_applies_to_context(
+    obligation: &AgentObligation,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match &obligation.scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project { project_name, .. } => {
+            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
+        }
+        MemoryScope::Task { project_name, .. } => project_name
+            .as_deref()
+            .zip(project)
+            .is_some_and(|(item_project, project)| item_project.eq_ignore_ascii_case(project)),
+        MemoryScope::Repository { local_path, .. } => {
+            let Some(cwd) = cwd else {
+                return false;
+            };
+            local_path
+                .as_deref()
+                .is_some_and(|local_path| Path::new(cwd).starts_with(Path::new(local_path)))
+        }
+        MemoryScope::Custom { name } => cwd.is_some_and(|cwd| name == &format!("cwd:{cwd}")),
+        MemoryScope::Entity { .. } | MemoryScope::Session { .. } => false,
+    }
+}
+
+fn obligation_is_current_for_context(obligation: &AgentObligation, cwd: Option<&str>) -> bool {
+    if !is_git_status_document_obligation(obligation) {
+        return true;
+    }
+
+    let (Some(cwd), Some(target)) = (cwd, obligation.trigger.target.as_deref()) else {
+        return true;
+    };
+
+    match current_git_status_target(cwd, target) {
+        GitStatusTarget::Present(status_line) => {
+            !is_untracked_root_instruction_file(&status_line, target)
+        }
+        GitStatusTarget::Missing => false,
+        GitStatusTarget::Unavailable => true,
+    }
+}
+
+fn is_git_status_document_obligation(obligation: &AgentObligation) -> bool {
+    obligation.kind == AgentObligationKind::DocumentDisposition
+        && obligation.trigger.kind == "git_status"
+}
+
+fn closed_document_fingerprints_match(
+    candidate: &AgentObligation,
+    closed_document_fingerprints: &HashMap<String, HashSet<String>>,
+) -> bool {
+    if !is_git_status_document_obligation(candidate) {
+        return false;
+    }
+
+    let Some(candidate_fingerprint) = obligation_document_fingerprint(candidate) else {
+        return false;
+    };
+
+    closed_document_fingerprints
+        .get(&candidate.dedupe_key())
+        .is_some_and(|fingerprints| fingerprints.contains(&candidate_fingerprint))
+}
+
+enum GitStatusTarget {
+    Present(String),
+    Missing,
+    Unavailable,
+}
+
+fn current_git_status_target(cwd: &str, target: &str) -> GitStatusTarget {
+    let Ok(output) = Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .arg("status")
+        .arg("--porcelain")
+        .arg("--untracked-files=all")
+        .arg("--")
+        .arg(target)
+        .output()
+    else {
+        return GitStatusTarget::Unavailable;
+    };
+    if !output.status.success() {
+        return GitStatusTarget::Unavailable;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find_map(|line| {
+            let path = parse_git_status_path(line)?;
+            if path == target {
+                Some(line.to_string())
+            } else {
+                None
+            }
+        })
+        .map_or(GitStatusTarget::Missing, GitStatusTarget::Present)
+}
+
+fn is_untracked_root_instruction_file(status_line: &str, target: &str) -> bool {
+    status_line.starts_with("?? ") && is_root_instruction_file(target)
+}
+
+fn is_root_instruction_file(target: &str) -> bool {
+    let normalized = target.replace('\\', "/");
+    if normalized.contains('/') {
+        return false;
+    }
+
+    matches!(
+        normalized.to_ascii_lowercase().as_str(),
+        "agents.md" | "claude.md" | "gemini.md"
+    )
 }
 
 fn detect_document_obligations(
@@ -244,6 +450,9 @@ fn detect_document_obligations(
     let mut obligations = Vec::new();
     for line in stdout.lines() {
         if let Some(path) = parse_git_status_path(line) {
+            if is_untracked_root_instruction_file(line, &path) {
+                continue;
+            }
             if is_durable_doc_path(&path) {
                 obligations.push(document_obligation(
                     cwd,
@@ -299,6 +508,11 @@ fn document_obligation(
     writer: WriterProvenance,
 ) -> AgentObligation {
     let absolute = absolutize(cwd, path);
+    let mut file_evidence = EvidenceRef::new(EvidenceKind::File, absolute.to_string_lossy());
+    if let Some(fingerprint) = document_fingerprint(&absolute) {
+        file_evidence =
+            file_evidence.with_summary(format!("{DOCUMENT_FINGERPRINT_PREFIX}{fingerprint}"));
+    }
     AgentObligation::new(
         AgentObligationKind::DocumentDisposition,
         format!("Resolve document memory status for {path}"),
@@ -313,9 +527,82 @@ fn document_obligation(
     .with_required_resolution(AgentObligationResolutionKind::KnowledgeRegistered)
     .with_required_resolution(AgentObligationResolutionKind::HandoffLinked)
     .with_required_resolution(AgentObligationResolutionKind::SkippedWithReason)
-    .with_evidence(EvidenceRef::new(EvidenceKind::File, absolute.to_string_lossy()))
+    .with_evidence(file_evidence)
     .with_tag("document")
     .with_tag("agent-native")
+}
+
+fn with_current_document_fingerprint(
+    obligation: &AgentObligation,
+    mut resolution: AgentObligationResolution,
+) -> AgentObligationResolution {
+    if let Some(evidence) = current_document_fingerprint_evidence(obligation) {
+        resolution.evidence.push(evidence);
+    }
+    resolution
+}
+
+fn current_document_fingerprint_evidence(obligation: &AgentObligation) -> Option<EvidenceRef> {
+    if !is_git_status_document_obligation(obligation) {
+        return None;
+    }
+    let target = document_file_evidence_target(obligation)?;
+    let fingerprint = document_fingerprint(Path::new(&target))?;
+    Some(
+        EvidenceRef::new(EvidenceKind::File, target)
+            .with_summary(format!("{DOCUMENT_FINGERPRINT_PREFIX}{fingerprint}")),
+    )
+}
+
+fn document_file_evidence_target(obligation: &AgentObligation) -> Option<String> {
+    obligation.evidence.iter().find_map(|evidence| {
+        if matches!(&evidence.kind, EvidenceKind::File) {
+            Some(evidence.target.clone())
+        } else {
+            None
+        }
+    })
+}
+
+fn obligation_document_fingerprint(obligation: &AgentObligation) -> Option<String> {
+    obligation
+        .evidence
+        .iter()
+        .find_map(evidence_document_fingerprint)
+}
+
+fn resolution_document_fingerprint(obligation: &AgentObligation) -> Option<String> {
+    obligation
+        .resolution
+        .as_ref()?
+        .evidence
+        .iter()
+        .find_map(evidence_document_fingerprint)
+}
+
+fn evidence_document_fingerprint(evidence: &EvidenceRef) -> Option<String> {
+    if !matches!(&evidence.kind, EvidenceKind::File) {
+        return None;
+    }
+    evidence
+        .summary
+        .as_deref()?
+        .strip_prefix(DOCUMENT_FINGERPRINT_PREFIX)
+        .map(ToString::to_string)
+}
+
+fn document_fingerprint(path: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .arg("hash-object")
+        .arg("--")
+        .arg(path)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let fingerprint = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!fingerprint.is_empty()).then_some(fingerprint)
 }
 
 fn detect_prompt_obligations(
@@ -385,17 +672,7 @@ fn detect_prompt_obligations(
         );
     }
 
-    if contains_any(
-        &lower,
-        &[
-            "failed tool",
-            "tool call failed",
-            "wrong parameter",
-            "wrong parameters",
-            "invalid parameter",
-            "schema",
-        ],
-    ) {
+    if has_tool_failure_cue(&lower) {
         obligations.push(
             AgentObligation::new(
                 AgentObligationKind::ToolFailureRecovery,
@@ -443,6 +720,23 @@ fn detect_prompt_obligations(
     }
 
     obligations
+}
+
+fn has_tool_failure_cue(prompt: &str) -> bool {
+    contains_any(
+        prompt,
+        &[
+            "failed tool",
+            "tool failed",
+            "tool call failed",
+            "wrong parameter",
+            "wrong parameters",
+            "invalid parameter",
+            "tool schema",
+            "schema error",
+            "schema/help",
+        ],
+    )
 }
 
 fn contains_any(haystack: &str, needles: &[&str]) -> bool {
@@ -539,6 +833,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prompt_detection_ignores_bare_schema_as_tool_failure() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let service = ObligationService::new(db);
+        service.init_schema().await.unwrap();
+
+        let result = service
+            .detect(ObligationDetectOptions {
+                cwd: None,
+                prompt: Some(
+                    "Failure hypothesis: avoid schema changes unless evidence justifies them."
+                        .to_string(),
+                ),
+                project: Some("engram".to_string()),
+                writer: writer(),
+                write: false,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(!result
+            .candidates
+            .iter()
+            .any(|obligation| obligation.kind == AgentObligationKind::ToolFailureRecovery));
+    }
+
+    #[tokio::test]
     async fn git_status_detects_document_obligation() {
         let dir = tempfile::tempdir().unwrap();
         Command::new("git")
@@ -574,6 +896,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn git_status_ignores_untracked_root_instruction_file() {
+        let dir = tempfile::tempdir().unwrap();
+        Command::new("git")
+            .arg("init")
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        fs::write(dir.path().join("AGENTS.md"), "# Local instructions\n").unwrap();
+
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let service = ObligationService::new(db);
+        service.init_schema().await.unwrap();
+
+        let result = service
+            .detect(ObligationDetectOptions {
+                cwd: Some(dir.path().display().to_string()),
+                prompt: None,
+                project: Some("engram".to_string()),
+                writer: writer(),
+                write: false,
+                limit: None,
+            })
+            .await
+            .unwrap();
+
+        assert!(result.candidates.is_empty());
+    }
+
+    #[tokio::test]
     async fn write_detection_skips_duplicate_open_obligation() {
         let dir = tempfile::tempdir().unwrap();
         Command::new("git")
@@ -603,5 +955,75 @@ mod tests {
         assert_eq!(first.written.len(), 1);
         assert_eq!(second.written.len(), 0);
         assert_eq!(second.skipped_existing.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn write_detection_is_idempotent_for_closed_document_content() {
+        let dir = tempfile::tempdir().unwrap();
+        Command::new("git")
+            .arg("init")
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        fs::create_dir_all(dir.path().join("docs")).unwrap();
+        let doc_path = dir.path().join("docs/report.md");
+        fs::write(&doc_path, "# Report\n").unwrap();
+
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let service = ObligationService::new(db);
+        service.init_schema().await.unwrap();
+
+        let options = || ObligationDetectOptions {
+            cwd: Some(dir.path().display().to_string()),
+            prompt: None,
+            project: Some("engram".to_string()),
+            writer: writer(),
+            write: true,
+            limit: None,
+        };
+
+        let first = service.detect(options()).await.unwrap();
+        assert_eq!(first.written.len(), 1);
+        assert!(obligation_document_fingerprint(&first.written[0]).is_some());
+
+        let resolved = service
+            .resolve(
+                first.written[0].id,
+                AgentObligationResolution::new(
+                    AgentObligationResolutionKind::IndexedDocument,
+                    "Indexed report.",
+                    "agent",
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(resolution_document_fingerprint(&resolved).is_some());
+
+        let same_content = service.detect(options()).await.unwrap();
+        assert_eq!(same_content.written.len(), 0);
+        assert_eq!(same_content.skipped_existing.len(), 1);
+
+        fs::write(&doc_path, "# Report\n\nSecond edit.\n").unwrap();
+        let changed_content = service.detect(options()).await.unwrap();
+        assert_eq!(changed_content.written.len(), 1);
+        assert_eq!(changed_content.skipped_existing.len(), 0);
+
+        let skipped = service
+            .skip(
+                changed_content.written[0].id,
+                AgentObligationResolution::new(
+                    AgentObligationResolutionKind::SkippedWithReason,
+                    "Document already recorded elsewhere.",
+                    "agent",
+                ),
+            )
+            .await
+            .unwrap();
+        assert!(resolution_document_fingerprint(&skipped).is_some());
+
+        let same_skipped_content = service.detect(options()).await.unwrap();
+        assert_eq!(same_skipped_content.written.len(), 0);
+        assert_eq!(same_skipped_content.skipped_existing.len(), 1);
     }
 }

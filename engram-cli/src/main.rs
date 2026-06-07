@@ -57,6 +57,18 @@ use time::OffsetDateTime;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+const EXTERNAL_SESSION_ID_ENV: &str = "ENGRAM_EXTERNAL_SESSION_ID";
+const CLAUDE_CODE_SESSION_ID_ENV: &str = "CLAUDE_CODE_SESSION_ID";
+const CLAUDE_CODE_MARKER_ENV: &str = "CLAUDECODE";
+const CODEX_THREAD_ID_ENV: &str = "CODEX_THREAD_ID";
+const CODEX_SHELL_ENV: &str = "CODEX_SHELL";
+const CODEX_ORIGINATOR_ENV: &str = "CODEX_INTERNAL_ORIGINATOR_OVERRIDE";
+const CODEX_BUNDLE_ID_ENV: &str = "__CFBundleIdentifier";
+const CLAUDE_CODE_EXTERNAL_SESSION_PREFIX: &str = "claude-code://sessions/";
+const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
+const MAX_CLAUDE_CODE_SESSION_ID_LEN: usize = 128;
+const MAX_CODEX_THREAD_ID_LEN: usize = 128;
+
 /// engram - Personal Knowledge Augmentation System for AI coding agents
 #[derive(Parser)]
 #[command(name = "engram")]
@@ -81,11 +93,11 @@ enum Commands {
 
     /// Start the MCP server
     Serve {
-        /// Use in-memory storage (for testing)
+        /// Use in-memory storage in --http daemon mode (for testing)
         #[arg(long)]
         memory: bool,
 
-        /// Connect to remote SurrealDB server (e.g., ws://localhost:8000)
+        /// Connect to remote SurrealDB server in --http daemon mode (e.g., ws://localhost:8000)
         /// Enables concurrent access from multiple engram sessions
         #[arg(long)]
         remote: Option<String>,
@@ -102,7 +114,7 @@ enum Commands {
         #[arg(long)]
         http: bool,
 
-        /// Port to listen on (default: auto-select from 8765-8774)
+        /// Port to listen on in --http mode (default: 8765)
         #[arg(long)]
         port: Option<u16>,
 
@@ -504,6 +516,11 @@ enum Commands {
         /// Agent or harness name
         #[arg(long)]
         agent: Option<String>,
+
+        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID,
+        /// guarded CLAUDE_CODE_SESSION_ID, then guarded CODEX_THREAD_ID
+        #[arg(long)]
+        external_session_id: Option<String>,
 
         /// Include recent knowledge commits in the orientation packet
         #[arg(long)]
@@ -1635,20 +1652,20 @@ enum MemoryCommands {
         json: bool,
     },
 
-    /// Print a Memory OS cursor for later changes_since calls
+    /// Print a Memory OS cursor for later changes-since calls
     Cursor {
         /// Print cursor as JSON
         #[arg(long)]
         json: bool,
     },
 
-    /// List memory and knowledge commits written after a cursor
+    /// List memory and knowledge commits written after memory_cursor.timestamp
     ChangesSince {
-        /// Cursor timestamp in RFC3339 format
+        /// Cursor timestamp from orient memory_cursor.timestamp or `engram memory cursor`
         #[arg(long)]
         timestamp: String,
 
-        /// Cursor commit ID, when known
+        /// Cursor commit ID from memory_cursor.commit_id, when known; timestamp is still required
         #[arg(long)]
         commit_id: Option<String>,
 
@@ -1683,6 +1700,11 @@ enum MemoryCommands {
         /// Prompt/query for relevance scoring
         #[arg(long)]
         query: Option<String>,
+
+        /// Host conversation/session label for telemetry; falls back to ENGRAM_EXTERNAL_SESSION_ID,
+        /// guarded CLAUDE_CODE_SESSION_ID, then guarded CODEX_THREAD_ID
+        #[arg(long)]
+        external_session_id: Option<String>,
 
         /// Print changes as JSON
         #[arg(long)]
@@ -2889,11 +2911,171 @@ fn extract_mcp_tool_json_text(response: serde_json::Value) -> Result<serde_json:
         .map_err(|error| anyhow::anyhow!("daemon MCP tool response was not JSON: {}", error))
 }
 
+fn validate_serve_options(
+    memory: bool,
+    remote: Option<&str>,
+    username: Option<&str>,
+    password: Option<&str>,
+    http: bool,
+    port: Option<u16>,
+) -> Result<()> {
+    if memory && remote.is_some() {
+        anyhow::bail!("--memory and --remote cannot be used together");
+    }
+    if remote.is_none() && (username.is_some() || password.is_some()) {
+        anyhow::bail!("--username and --password require --remote");
+    }
+    if !http {
+        if memory {
+            anyhow::bail!(
+                "--memory is only honored with --http; use `engram serve --http --memory` \
+                 or omit --memory for the default persistent stdio proxy"
+            );
+        }
+        if remote.is_some() || username.is_some() || password.is_some() {
+            anyhow::bail!(
+                "--remote/--username/--password are only honored with --http; use \
+                 `engram serve --http --remote ...` or omit them for the default stdio proxy"
+            );
+        }
+        if port.is_some() {
+            anyhow::bail!(
+                "--port is only honored with --http; omit it for the default stdio proxy"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
     cwd.map(std::path::PathBuf::from)
         .map(Ok)
         .unwrap_or_else(std::env::current_dir)
         .map_err(Into::into)
+}
+
+fn external_session_id_from_cli(cli_value: Option<String>) -> Option<String> {
+    resolve_external_session_id_with_envs(
+        cli_value,
+        std::env::var(EXTERNAL_SESSION_ID_ENV).ok(),
+        std::env::var(CLAUDE_CODE_SESSION_ID_ENV).ok(),
+        claude_code_host_marker_from_env(),
+        std::env::var(CODEX_THREAD_ID_ENV).ok(),
+        codex_host_marker_from_env(),
+    )
+}
+
+#[cfg(test)]
+fn resolve_external_session_id(
+    cli_value: Option<String>,
+    env_value: Option<String>,
+) -> Option<String> {
+    resolve_external_session_id_with_envs(cli_value, env_value, None, false, None, false)
+}
+
+fn resolve_external_session_id_with_envs(
+    cli_value: Option<String>,
+    env_value: Option<String>,
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
+    match cli_value {
+        Some(value) => normalize_external_session_id(Some(value)),
+        None => normalize_external_session_id(env_value)
+            .or_else(|| {
+                claude_code_session_external_session_id(
+                    claude_code_session_id,
+                    claude_code_host_detected,
+                )
+            })
+            .or_else(|| codex_thread_external_session_id(codex_thread_id, codex_host_detected)),
+    }
+}
+
+fn normalize_external_session_id(value: Option<String>) -> Option<String> {
+    let value = value?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn claude_code_host_marker_from_env() -> bool {
+    claude_code_host_marker_present(std::env::var(CLAUDE_CODE_MARKER_ENV).ok())
+}
+
+fn claude_code_host_marker_present(claudecode_marker: Option<String>) -> bool {
+    normalize_external_session_id(claudecode_marker)
+        .map(|value| value == "1")
+        .unwrap_or(false)
+}
+
+fn codex_host_marker_from_env() -> bool {
+    codex_host_marker_present(
+        std::env::var(CODEX_SHELL_ENV).ok(),
+        std::env::var(CODEX_ORIGINATOR_ENV).ok(),
+        std::env::var(CODEX_BUNDLE_ID_ENV).ok(),
+    )
+}
+
+fn codex_host_marker_present(
+    codex_shell: Option<String>,
+    codex_originator: Option<String>,
+    bundle_id: Option<String>,
+) -> bool {
+    normalize_external_session_id(codex_shell).is_some()
+        || normalize_external_session_id(codex_originator)
+            .map(|value| value.to_ascii_lowercase().contains("codex"))
+            .unwrap_or(false)
+        || normalize_external_session_id(bundle_id)
+            .map(|value| value == "com.openai.codex")
+            .unwrap_or(false)
+}
+
+fn codex_thread_external_session_id(
+    codex_thread_id: Option<String>,
+    codex_host_detected: bool,
+) -> Option<String> {
+    // Codex Desktop exposes a host thread ID; require a Codex marker to avoid generic env leakage.
+    if !codex_host_detected {
+        return None;
+    }
+
+    let thread_id = safe_host_session_token(codex_thread_id, MAX_CODEX_THREAD_ID_LEN)?;
+
+    Some(format!("{CODEX_THREAD_EXTERNAL_SESSION_PREFIX}{thread_id}"))
+}
+
+fn claude_code_session_external_session_id(
+    claude_code_session_id: Option<String>,
+    claude_code_host_detected: bool,
+) -> Option<String> {
+    // Claude Code exposes its session ID to MCP/Bash subprocesses; require its subprocess marker.
+    if !claude_code_host_detected {
+        return None;
+    }
+
+    let session_id =
+        safe_host_session_token(claude_code_session_id, MAX_CLAUDE_CODE_SESSION_ID_LEN)?;
+
+    Some(format!("{CLAUDE_CODE_EXTERNAL_SESSION_PREFIX}{session_id}"))
+}
+
+fn safe_host_session_token(value: Option<String>, max_len: usize) -> Option<String> {
+    let token = normalize_external_session_id(value)?;
+    if token.len() > max_len
+        || !token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return None;
+    }
+
+    Some(token)
 }
 
 fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
@@ -2904,8 +3086,13 @@ fn parse_optional_repo_id(repo_id: Option<&str>) -> Result<Option<Id>> {
 }
 
 fn parse_rfc3339_timestamp(value: &str) -> Result<OffsetDateTime> {
-    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
-        .map_err(|e| anyhow::anyhow!("Invalid RFC3339 timestamp: {}", e))
+    OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).map_err(|e| {
+        anyhow::anyhow!(
+            "Invalid RFC3339 timestamp: {}. Pass memory_cursor.timestamp from orient or \
+                 `engram memory cursor`.",
+            e
+        )
+    })
 }
 
 fn format_rfc3339_timestamp(value: OffsetDateTime) -> Result<String> {
@@ -5418,6 +5605,15 @@ async fn main() -> Result<()> {
             port,
             project,
         } => {
+            validate_serve_options(
+                memory,
+                remote.as_deref(),
+                username.as_deref(),
+                password.as_deref(),
+                http,
+                port,
+            )?;
+
             // If http mode is requested, run the HTTP server directly (daemon mode)
             if http {
                 // Determine storage configuration
@@ -7661,6 +7857,7 @@ async fn main() -> Result<()> {
             cwd,
             prompt,
             agent,
+            external_session_id,
             include_recent_commits,
             limit,
             store_project,
@@ -7679,7 +7876,7 @@ async fn main() -> Result<()> {
                     prompt,
                     project,
                     agent,
-                    external_session_id: None,
+                    external_session_id: external_session_id_from_cli(external_session_id),
                     intent: None,
                     scenario_id: None,
                     arm: None,
@@ -8160,7 +8357,7 @@ async fn main() -> Result<()> {
                                 .ok_or_else(|| anyhow::anyhow!("Invalid status: {}", value))
                         })
                         .transpose()?;
-                    let obligations = service.list(status, limit).await?;
+                    let obligations = service.list(status, None, None, limit).await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&obligations)?);
                     } else {
@@ -8168,7 +8365,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 ObligationCommands::Doctor { limit, json } => {
-                    let report = service.doctor(limit).await?;
+                    let report = service.doctor(None, None, limit).await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -8204,7 +8401,12 @@ async fn main() -> Result<()> {
                 } => {
                     let id = Id::parse(&id)
                         .map_err(|e| anyhow::anyhow!("Invalid obligation ID: {}", e))?;
-                    let obligation = service.skip(id, reason, actor).await?;
+                    let resolution = AgentObligationResolution::new(
+                        AgentObligationResolutionKind::SkippedWithReason,
+                        reason,
+                        actor,
+                    );
+                    let obligation = service.skip(id, resolution).await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&obligation)?);
                     } else {
@@ -8281,6 +8483,7 @@ async fn main() -> Result<()> {
                     relevance_project,
                     cwd,
                     query,
+                    external_session_id,
                     json,
                 } => {
                     let timestamp = parse_rfc3339_timestamp(&timestamp)?;
@@ -8310,7 +8513,9 @@ async fn main() -> Result<()> {
                                 cwd,
                                 query,
                                 intent: None,
-                                external_session_id: None,
+                                external_session_id: external_session_id_from_cli(
+                                    external_session_id,
+                                ),
                             },
                         )
                         .await?;
@@ -9054,4 +9259,405 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_rfc3339_timestamp_error_names_cursor_timestamp() {
+        let error = parse_rfc3339_timestamp("not-a-timestamp")
+            .expect_err("invalid timestamp should fail")
+            .to_string();
+
+        assert!(error.contains("Invalid RFC3339 timestamp"));
+        assert!(error.contains("memory_cursor.timestamp"));
+        assert!(error.contains("engram memory cursor"));
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_flag_before_env() {
+        assert_eq!(
+            resolve_external_session_id(
+                Some(" codex://threads/cli ".to_string()),
+                Some("codex://threads/env".to_string()),
+            )
+            .as_deref(),
+            Some("codex://threads/cli")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_env_when_flag_omitted() {
+        assert_eq!(
+            resolve_external_session_id(None, Some(" codex://threads/env ".to_string())).as_deref(),
+            Some("codex://threads/env")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_flag_before_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                Some(" codex://threads/cli ".to_string()),
+                None,
+                Some("claude-session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/cli")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_env_before_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                Some(" codex://threads/env ".to_string()),
+                Some("claude-session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/env")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_claude_code_session_id_when_guarded() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" claude-session_123 ".to_string()),
+                true,
+                None,
+                false,
+            )
+            .as_deref(),
+            Some("claude-code://sessions/claude-session_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unguarded_claude_code_session_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("claude-session".to_string()),
+                false,
+                None,
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unsafe_claude_code_session_ids() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some(" \t\n ".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("session/one".to_string()),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("x".repeat(MAX_CLAUDE_CODE_SESSION_ID_LEN + 1)),
+                true,
+                None,
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_claude_code_session_id_before_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("claude-session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("claude-code://sessions/claude-session")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_codex_thread_id_when_claude_code_id_is_invalid() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                Some("claude/session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/codex-thread")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_uses_codex_thread_id_when_guarded() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some(" codex-thread_123 ".to_string()),
+                true,
+            )
+            .as_deref(),
+            Some("codex://threads/codex-thread_123")
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unguarded_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some("codex-thread".to_string()),
+                false,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_rejects_unsafe_codex_thread_ids() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some(" \t\n ".to_string()),
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some("thread/one".to_string()),
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                None,
+                None,
+                None,
+                false,
+                Some("x".repeat(MAX_CODEX_THREAD_ID_LEN + 1)),
+                true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_whitespace_flag_does_not_use_codex_thread_id() {
+        assert_eq!(
+            resolve_external_session_id_with_envs(
+                Some("   ".to_string()),
+                None,
+                Some("claude-session".to_string()),
+                true,
+                Some("codex-thread".to_string()),
+                true,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn external_session_id_resolution_detects_codex_host_markers() {
+        assert!(codex_host_marker_present(Some("1".to_string()), None, None));
+        assert!(codex_host_marker_present(
+            None,
+            Some("Codex Desktop".to_string()),
+            None,
+        ));
+        assert!(codex_host_marker_present(
+            None,
+            None,
+            Some("com.openai.codex".to_string()),
+        ));
+        assert!(!codex_host_marker_present(
+            None,
+            Some("other host".to_string()),
+            Some("com.example.other".to_string()),
+        ));
+    }
+
+    #[test]
+    fn external_session_id_resolution_detects_claude_code_host_marker() {
+        assert!(claude_code_host_marker_present(Some("1".to_string())));
+        assert!(!claude_code_host_marker_present(Some("true".to_string())));
+        assert!(!claude_code_host_marker_present(Some("0".to_string())));
+        assert!(!claude_code_host_marker_present(None));
+    }
+
+    #[test]
+    fn external_session_id_resolution_treats_whitespace_as_unset() {
+        assert_eq!(
+            resolve_external_session_id(Some("   ".to_string()), Some("env".to_string())),
+            None
+        );
+        assert_eq!(
+            resolve_external_session_id(None, Some("   ".to_string())),
+            None
+        );
+    }
+
+    #[test]
+    fn orient_parses_external_session_id_flag() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "orient",
+            "--external-session-id",
+            "codex://threads/orient-cli",
+        ])
+        .expect("orient command should parse");
+
+        match cli.command {
+            Commands::Orient {
+                external_session_id,
+                ..
+            } => assert_eq!(
+                external_session_id.as_deref(),
+                Some("codex://threads/orient-cli")
+            ),
+            _ => panic!("expected orient command"),
+        }
+    }
+
+    #[test]
+    fn memory_changes_since_parses_external_session_id_flag() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "memory",
+            "changes-since",
+            "--timestamp",
+            "2026-06-04T05:00:00Z",
+            "--external-session-id",
+            "codex://threads/changes-cli",
+        ])
+        .expect("memory changes-since command should parse");
+
+        match cli.command {
+            Commands::Memory { command, .. } => match command {
+                MemoryCommands::ChangesSince {
+                    external_session_id,
+                    ..
+                } => assert_eq!(
+                    external_session_id.as_deref(),
+                    Some("codex://threads/changes-cli")
+                ),
+                _ => panic!("expected changes-since command"),
+            },
+            _ => panic!("expected memory command"),
+        }
+    }
+
+    #[test]
+    fn serve_stdio_rejects_http_only_storage_flags() {
+        let err = validate_serve_options(true, None, None, None, false, None).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--memory is only honored with --http"));
+
+        let err = validate_serve_options(
+            false,
+            Some("ws://localhost:8000"),
+            Some("root"),
+            Some("root"),
+            false,
+            None,
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--remote/--username/--password are only honored with --http"));
+
+        let err = validate_serve_options(false, None, None, None, false, Some(8766)).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--port is only honored with --http"));
+    }
+
+    #[test]
+    fn serve_http_accepts_storage_flags() {
+        validate_serve_options(true, None, None, None, true, Some(8766))
+            .expect("--http --memory should be valid");
+        validate_serve_options(
+            false,
+            Some("ws://localhost:8000"),
+            Some("root"),
+            Some("root"),
+            true,
+            Some(8766),
+        )
+        .expect("--http --remote with credentials should be valid");
+    }
+
+    #[test]
+    fn serve_rejects_conflicting_or_dangling_storage_credentials() {
+        let err = validate_serve_options(
+            true,
+            Some("ws://localhost:8000"),
+            Some("root"),
+            Some("root"),
+            true,
+            None,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("--memory and --remote"));
+
+        let err = validate_serve_options(false, None, Some("root"), None, true, None).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("--username and --password require --remote"));
+    }
 }

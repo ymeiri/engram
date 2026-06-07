@@ -172,6 +172,7 @@ async fn test_mcp_repo_detect_component_link_context_and_orient() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(10),
+            response_shape: None,
         },
     )
     .await

@@ -10,7 +10,8 @@
       "mcp__engram__obligations",
       "mcp__engram__vault",
       "mcp__engram__digest",
-      "mcp__engram__repo"
+      "mcp__engram__repo",
+      "mcp__engram__telemetry"
     ]
   },
   "hooks": {
