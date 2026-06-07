@@ -1,6 +1,6 @@
 # Engram Brain Harness Architecture
 
-Status: Draft RFC with Brain Loop v1, beta release metadata, runtime-refresh gates, and
+Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh, and
 research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
@@ -710,6 +710,15 @@ Harness and migration checkpoint, current through 2026-06-06:
   `obligations(action=doctor, project=..., cwd=...)`, while the installed global Codex skill and
   installed global binary render path still show the older unscoped `obligations(action=doctor)`
   until an approved runtime/adapters refresh is performed.
+- T305 executes the local/Codex installed-runtime refresh for the `0.2.0-beta.1` candidate under
+  the standing Engram-scoped `/goal` authorization. The installed binary now reports
+  `engram 0.2.0-beta.1` with hash
+  `99bf7b9f680435ebaa7aa59a4c9c60e7ee477163c798694c13f86e516551eff5`; the Codex
+  memory-session skill was the only generated adapter rewritten; Codex harness status is
+  `ready=true`; the global daemon restarted on port `8765` as PID `65155` with its text segment
+  mapped to the new installed binary inode; and live Codex MCP `orient` recovered with trace
+  `019ea054-61fa-79d2-96e7-8f0780f82b82`. Already-open host sessions may still need to reload
+  instructions, and this does not prove native Claude/effective-hook/host-label/multi-host parity.
 
 Research checkpoint, current through 2026-05-27:
 

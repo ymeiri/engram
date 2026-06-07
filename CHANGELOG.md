@@ -28,14 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Scoped Memory OS search and final-response obligation guidance so project/cwd context is not
   lost in the supported local/Codex beta path.
+- Refreshed the installed local `engram` binary, Codex generated adapter, and global daemon from the
+  beta candidate so installed local/Codex guidance matches source.
 - CI checkout runtime drift by moving workflow checkout steps to `actions/checkout@v5`.
 
 ### Known Limitations
 - Native Claude prompt-bearing proof, effective-hook visibility, live Claude host-label proof,
   direct legacy deprecation/deletion, broad lifecycle cleanup, and full multi-host parity are not
   part of this beta gate.
-- Installed local harness adapters can drift from source-rendered adapters until the runtime and
-  adapters are refreshed from the beta commit.
+- Already-open agent UI sessions may need a fresh session or tool reload before they pick up the
+  refreshed installed Codex skill text.
 
 ### Added
 - MCP setup guide for Claude Code, Cursor, and Windsurf (`docs/MCP_SETUP.md`)

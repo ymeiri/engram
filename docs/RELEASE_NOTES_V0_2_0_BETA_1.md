@@ -37,17 +37,24 @@ Before tagging this beta, the candidate commit must have:
 - a focused local/Codex smoke confirming current source-rendered harness guidance,
 - canonical generated vault status count-aligned,
 - `obligations(action=doctor, project=engram, cwd=/Users/yuval.meiri/projects/engram)` clean,
-- a refreshed installed runtime/adapters check, or an explicit release note that the source-rendered
-  adapter is current while installed local adapters still need refresh.
+- a refreshed installed runtime/adapters check.
 
-## Current Installation Caveat
+## Current Installation Status
 
-Source-rendered Codex harness guidance includes scoped final-response obligation checks:
+T305 refreshed the installed local binary, generated Codex adapter, and global daemon from the
+`0.2.0-beta.1` candidate. The installed binary now reports:
+
+```text
+engram 0.2.0-beta.1
+```
+
+The installed Codex harness is `Ready: true`, and both source-rendered and installed Codex harness
+guidance include scoped final-response obligation checks:
 
 ```text
 obligations(action=doctor, project=..., cwd=...)
 ```
 
-The currently installed local Codex skill may still render the older unscoped form until the
-runtime and adapters are refreshed from this beta commit. Do not claim installed-runtime parity
-until that refresh and smoke test are completed.
+Already-open agent UI sessions may still need a fresh session or tool reload before they ingest the
+updated skill text. This does not change the beta deferrals for native Claude, effective hooks,
+host labels, or full multi-host parity.
