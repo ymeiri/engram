@@ -788,6 +788,15 @@ Harness and migration checkpoint, current through 2026-06-07:
   `019e162e-7f15-7da0-9450-ac98f63062c0`. Post-archive lint no longer
   returns those IDs in the sampled findings and advances to
   `019e1681-c15b-7642-ab66-3fd846b72cb1`.
+- T321 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+  successor `memory(get)`, and `graph(around)` review proved direct active successors:
+  `019e1681-c15b-7642-ab66-3fd846b72cb1`,
+  `019e168a-eecf-7d42-a52c-80037535fcf2`,
+  `019e169d-b3c0-7962-b74b-645f1957b7b8`,
+  `019e176d-f41a-7bb3-b22f-65d7b1bff9e6`, and
+  `019e179d-f906-7063-b00c-3c879ca83e1c`. Post-archive lint no longer
+  returns those IDs in the sampled findings and advances to
+  `019e17da-5dc1-7b30-a440-f980f16bfefb`.
 
 Research checkpoint, current through 2026-05-27:
 
@@ -3072,7 +3081,17 @@ Proceed in this order from the current checkpoint:
      `019e162e-7f15-7da0-9450-ac98f63062c0`. It does not authorize broad
      `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
      writes, PR-ready, merge, tag, publish, or release actions.
-188. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
+188. Treat T321 as an exact lifecycle archive batch, not broad lifecycle cleanup. T321 archives
+     exactly five active rolling handoffs after per-target `memory(get)`, successor `memory(get)`,
+     and `graph(around)` review proved direct active successors:
+     `019e1681-c15b-7642-ab66-3fd846b72cb1`,
+     `019e168a-eecf-7d42-a52c-80037535fcf2`,
+     `019e169d-b3c0-7962-b74b-645f1957b7b8`,
+     `019e176d-f41a-7bb3-b22f-65d7b1bff9e6`, and
+     `019e179d-f906-7063-b00c-3c879ca83e1c`. It does not authorize broad
+     `lint apply_safe`, direct legacy deletion, ranking changes, native Claude execution, harness
+     writes, PR-ready, merge, tag, publish, or release actions.
+189. Treat T301 as an exact lifecycle archive batch, not broad lifecycle cleanup. T301 archives
      exactly five active rolling handoffs after per-target `memory(get)`, direct successor fetch,
      and `graph(around)` review proved direct incoming `supersedes` edges:
      `019dfd38-fc3d-7352-83a6-c9bbd16349ea`,
