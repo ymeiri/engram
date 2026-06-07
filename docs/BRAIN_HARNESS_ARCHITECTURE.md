@@ -1,7 +1,8 @@
 # Engram Brain Harness Architecture
 
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
-snippet-only Claude Code adapter repair, exact lifecycle maintenance, and research-method checkpoints
+snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
+exact lifecycle maintenance, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -131,7 +132,11 @@ Harness and migration checkpoint, current through 2026-06-07:
   before T333. T313 records a docs-only approval packet for the exact generated-adapter repair and
   identifies `--settings-target snippet-only` as the preferred T314 path to avoid `settings.json`
   mutation unless settings writes are separately approved. T333 later executes that snippet-only
-  path and makes Claude Code status/doctor report `ready=true` without settings mutation. T284
+  path and makes Claude Code status/doctor report `ready=true` without settings mutation. T334
+  reruns the native-Claude/effective-hook/host-label preflight after T333: path, target, version,
+  hash, daemon, obligations, vault, and harness readiness now match, but live native Claude
+  processes on `ttys001` and `ttys005` still make attribution ambiguous, so no native Claude
+  session was launched. T284
   records a read-only
   deferral of broad residual lifecycle cleanup
   and direct legacy deprecation/deletion after a limit-truncated lint sample. T285 fixes the first
@@ -782,6 +787,12 @@ Harness and migration checkpoint, current through 2026-06-07:
   launch native Claude, run `/hooks`, mutate settings, change repo files, or prove native Claude
   prompt-bearing behavior, effective-hook visibility, live host labels, hosted CI, or production
   parity.
+- T334 performs the first post-repair native-Claude/effective-hook/host-label preflight. It
+  confirms the `2.1.168` Claude path, target, version, SHA-256, daemon, obligations, canonical
+  vault status, generated adapter hashes, and Claude Code harness `ready=true` state, then
+  hard-stops before launch because native Claude CLI PIDs `60453` on `ttys001` and `311` on
+  `ttys005` make new-session attribution ambiguous. T334 does not run `/hooks`, execute T312,
+  execute T269/T270, signal processes, mutate settings/adapters, or prove production parity.
 - T317 validates PR #3 head `78f14d0bebd980070a4fcb8d1f259be47517c704` locally with the CI
   workflow commands: `cargo fmt --all --check`, `git diff --check`, `cargo check --all-targets`,
   `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and
@@ -3310,6 +3321,11 @@ Proceed in this order from the current checkpoint:
      native Claude prompt-bearing behavior, effective-hook visibility, live host labels, hosted CI,
      or production parity from the adapter repair; future settings writes still require separate
      approval.
+190. Treat T334 as post-repair native-Claude preflight evidence, not native Claude validation. It
+     proves generated-adapter drift is no longer blocking the preflight and installed Claude Code
+     harness status/doctor are `ready=true`, but it hard-stopped before launch because ambient
+     native Claude processes still make attribution ambiguous. T269 also remains stale as-is for
+     the current `2.1.168` runtime because its packet baseline is `2.1.161`.
 
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important

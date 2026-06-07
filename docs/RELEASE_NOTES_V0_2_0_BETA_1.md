@@ -125,3 +125,16 @@ The write updated exactly the three generated Claude Code adapters, left `settin
 
 This closes generated-adapter drift only. It still does not prove native Claude prompt-bearing
 execution, effective-hook visibility, live host labels, or full production parity.
+
+## Native Claude Post-Repair Preflight
+
+T334 reruns the native-Claude/effective-hook/host-label preflight after the T333 adapter repair.
+The Claude `2.1.168` path, target, SHA-256, installed daemon, obligations doctor, canonical vault
+status, generated adapter hashes, snippet-only dry-run, and Claude Code harness readiness now
+match the expected state. The preflight still hard-stops before launching native Claude because
+existing native Claude CLI sessions are live on `ttys001` and `ttys005`, making attribution
+ambiguous for a new prompt-bearing run.
+
+This narrows the remaining production-hardening gap: adapter drift is closed, but native Claude
+prompt-bearing proof, effective-hook visibility, and live host labels remain deferred from the
+initial beta.
