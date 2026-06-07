@@ -55,17 +55,21 @@ and billing/spending-limit annotations. That external account gate does not cont
 validation, but the normal exact-head hosted-CI release proof is still missing until Actions can run
 on the head intended for release or the release owner explicitly accepts the local fallback.
 
-T321 advanced the draft PR #3 head to `22bd01ccc0276ba41d846ef368ab950869a83da5` through
+T329 advanced the draft PR #3 head to `fe46d0a73d39e3309b149703dda4c108da91fc02` through
 docs-only release evidence plus exact lifecycle archive records. Local validation for that head
-passed `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`, and cached diff
-checks. Hosted GitHub Actions run `27092233443` on the same head again failed before workflow steps
-ran with the same billing/spending-limit annotations. Treat this as the current hosted-CI blocker.
+passed `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`, canonical vault
+compile with zero skipped files, and cached diff checks. Hosted GitHub Actions run `27096981016`
+on the same head again failed before workflow steps ran with the same billing/spending-limit
+annotations. Treat this as the current hosted-CI blocker.
 
-Fresh AI Council review after T321 places the initial local/Codex beta at about `90-93%` ready while
-hosted CI is externally blocked, or about `95%` ready if the release owner explicitly accepts local
-validation as the beta fallback. This is not a production/GA readiness claim; production readiness
-remains materially lower because native Claude proof, effective hooks, host-label proof, host
-parity, telemetry completeness, and operational hardening remain open.
+Fresh AI Council review after T329 places the initial local/Codex beta at about `88-92%` ready while
+hosted CI is externally blocked and local fallback evidence is accepted, or about `95%` ready once
+GitHub Actions billing is fixed and exact-head checks pass or the release owner explicitly accepts
+local validation as the beta fallback. T330 also records a current-head local/Codex smoke with lean
+`orient`, obligations doctor, vault status/compile, lint-sample evidence, and bounded M6
+inventory/temp-export/status/dry-run-apply evidence. This is not a production/GA readiness claim;
+production readiness remains materially lower because native Claude proof, effective hooks,
+host-label proof, host parity, telemetry completeness, and operational hardening remain open.
 
 ## Current Installation Status
 

@@ -3,6 +3,11 @@
 Date: 2026-06-07
 Status: completed docs-only release-readiness refresh
 
+Supersession note: this packet records the T322 point-in-time state. T330 is the current
+release-facing evidence packet after PR #3 advanced to
+`fe46d0a73d39e3309b149703dda4c108da91fc02` and hosted run `27096981016` remained externally
+billing/spending-limit blocked before workflow steps.
+
 ## Question
 
 After T321 and the fresh AI Council MVP assessment, what is the current beta-readiness state for

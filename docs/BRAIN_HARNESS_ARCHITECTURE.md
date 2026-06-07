@@ -867,6 +867,18 @@ Harness and migration checkpoint, current through 2026-06-07:
   `019e7ce8-1b0b-7922-aa07-3cb161e36601`. Post-archive lint no longer
   returns those IDs in the sampled findings and advances to
   `019e7cf7-560c-70e2-bbeb-3448f4637055`.
+- T330 records current-head local/Codex beta smoke evidence for PR #3 head
+  `fe46d0a73d39e3309b149703dda4c108da91fc02`. Lean `orient` trace
+  `019ea2c1-439c-7e30-b5f9-b9cb6e641b48` returned the scoped project,
+  memory cursor, used-memory candidates, Brain Loop guidance, and empty obligation summary;
+  obligations doctor was clean; canonical vault status was count-aligned at 2,519 generated files
+  with zero user files; canonical vault compile wrote zero skipped files; scoped M6 inventory found
+  69 candidates and returned 5; temp review export wrote six generated files with zero skipped
+  files; review status reported five no-decision files and `ready_to_apply=false`; dry-run apply
+  planned and wrote zero items; and hosted CI run `27096981016` remains externally blocked before
+  workflow steps by GitHub Actions billing/spending-limit annotations. T330 does not execute M6
+  write apply, broad lifecycle cleanup, adapter repair, native Claude, PR-ready, merge, tag,
+  publish, or release actions.
 
 Research checkpoint, current through 2026-05-27:
 
