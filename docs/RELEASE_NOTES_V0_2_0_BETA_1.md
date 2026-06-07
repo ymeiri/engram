@@ -43,12 +43,14 @@ Before tagging this beta, the candidate commit must have:
 - `obligations(action=doctor, project=engram, cwd=/Users/yuval.meiri/projects/engram)` clean,
 - a refreshed installed runtime/adapters check.
 
-Current PR #3 head `8f228ecacd436fb4f6c0078e59fb385eacc800eb` has strong local validation:
-`cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-index harness::tests`,
-`cargo clippy --all-targets -- -D warnings`, and full `cargo test` all pass. Hosted CI run
-`27090842423` failed before running workflow steps because GitHub Actions reported an account
+Recent phase-1 local evidence is strong: T315 code commit
+`8f228ecacd436fb4f6c0078e59fb385eacc800eb` passes `cargo fmt --all --check`,
+`git diff --check`, `cargo test -p engram-index harness::tests`,
+`cargo clippy --all-targets -- -D warnings`, and full `cargo test`. Hosted CI runs on the T315
+code/evidence heads failed before running workflow steps because GitHub Actions reported an account
 billing/spending-limit block. That external account gate does not contradict the local validation,
-but it means the normal exact-head hosted-CI release proof is still missing until Actions can rerun.
+but the normal exact-head hosted-CI release proof is still missing until Actions can rerun on the
+head intended for release.
 
 ## Current Installation Status
 

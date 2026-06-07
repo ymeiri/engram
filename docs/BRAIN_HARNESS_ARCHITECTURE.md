@@ -768,9 +768,9 @@ Harness and migration checkpoint, current through 2026-06-07:
 - T315 adds focused source-level safety evidence for that safer path. The new harness test proves
   that `HarnessSettingsTarget::SnippetOnly` can repair generated Claude Code adapters while leaving
   existing `settings.json`, `settings.local.json`, and `engram-settings-snippet.json` unchanged.
-  Local validation passes on head `8f228ecacd436fb4f6c0078e59fb385eacc800eb`; hosted PR CI run
-  `27090842423` is externally blocked before job steps by GitHub Actions billing/spending-limit
-  annotations. T315 does not execute T314 or mutate real user harness files.
+  Local validation passes on code commit `8f228ecacd436fb4f6c0078e59fb385eacc800eb`; hosted PR CI
+  runs on the T315 code/evidence heads are externally blocked before job steps by GitHub Actions
+  billing/spending-limit annotations. T315 does not execute T314 or mutate real user harness files.
 
 Research checkpoint, current through 2026-05-27:
 
