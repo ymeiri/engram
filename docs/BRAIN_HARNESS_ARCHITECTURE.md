@@ -134,7 +134,8 @@ Harness and migration checkpoint, current through 2026-06-06:
   T287 hardens the CI workflow by moving all five `actions/checkout@v4` steps to
   `actions/checkout@v5` after the latest PR CI run warned that checkout v4 uses the deprecated
   Node.js 20 action runtime. Fresh PR CI run `27062763355` passed Check, Format, Docs, Clippy, and
-  Test on the T287 head `eb2882f77ace0036af0d415a2f871d82388fb49d`.
+  Test on the T287 head `eb2882f77ace0036af0d415a2f871d82388fb49d`; PR readiness remained
+  separate until T302 merged PR #2.
   T288 then archives exactly five superseded rolling handoffs after `memory(get)` and
   `graph(around)` review proved direct incoming `supersedes` edges:
   `019dd5cd-a403-7b53-9010-47bd94bba51a`,
@@ -562,7 +563,7 @@ Harness and migration checkpoint, current through 2026-06-06:
   Clippy and serialized test validation passing before the CI-specific disk follow-up.
 - T286 closes that remote CI recheck for the T285 fix head. Run `27059846266` completed
   successfully on `54c12eb20eefe1f69f162d9151b66868c120a70d`; Check, Format, Docs, Clippy, and
-  Test all passed. PR readiness/review follow-up remains separate.
+  Test all passed. PR readiness/review follow-up remained separate until T302 merged PR #2.
 - T287 hardens PR CI action runtime usage after run `27061750059` surfaced GitHub annotations for
   `actions/checkout@v4` using Node.js 20. All five checkout steps now use `actions/checkout@v5`.
 - The fresh T287 PR CI run `27062763355` passed Check, Format, Docs, Clippy, and Test on
@@ -685,6 +686,14 @@ Harness and migration checkpoint, current through 2026-06-06:
   `019e9f46-9a46-7fe1-a061-711e5a221863` and rolling handoff
   `019e9f46-c1d4-7220-98de-baefc5bd043e`; follow-up `orient` trace
   `019e9f46-d254-7003-8fc2-6b1dbd18cdcf` returned the T299 current plan first.
+- T302 resolves the phase-0 beta PR and opens phase-1 production hardening. PR #2 was marked ready
+  and merged into `main` as merge commit `71fd746402c7d63f8b5aa758bc2011796819b5f6` after
+  exact-head CI run `27077943994` passed on head
+  `93bc2428a452edf9c19322e9a63b7b1c757b52f2`. The workspace is now on
+  `yuval.meiri/memory-os-phase1` from `origin/main`; root `AGENTS.md` remains user-owned and
+  untracked. A fresh native Claude preflight still found live `claude` processes on `ttys001` and
+  `ttys005`, so the T282 prompt-bearing packet remains blocked by attribution ambiguity and no
+  native Claude prompt was launched.
 
 Research checkpoint, current through 2026-05-27:
 
