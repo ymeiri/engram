@@ -3100,6 +3100,69 @@ mod tests {
     }
 
     #[test]
+    fn claude_install_snippet_only_repairs_adapters_without_rewriting_existing_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let claude_dir = root.path().join(".claude");
+        let commands_dir = claude_dir.join("commands");
+        fs::create_dir_all(&commands_dir).unwrap();
+
+        let settings_path = claude_dir.join("settings.json");
+        let local_settings_path = claude_dir.join("settings.local.json");
+        let snippet_path = claude_dir.join("engram-settings-snippet.json");
+        let stale_command_path = commands_dir.join("engram-memory-session.md");
+        let settings_contents = r#"{"permissions":{"allow":["mcp__engram__search"]}}"#;
+        let local_settings_contents = r#"{"hooks":{"Stop":[{"hooks":[]}]}}"#;
+        let user_snippet_contents = r#"{"user":"owned"}"#;
+        fs::write(&settings_path, settings_contents).unwrap();
+        fs::write(&local_settings_path, local_settings_contents).unwrap();
+        fs::write(&snippet_path, user_snippet_contents).unwrap();
+        fs::write(&stale_command_path, format!("{MARKER_MD}\nstale adapter\n")).unwrap();
+
+        let report = HarnessService::new()
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::SnippetOnly,
+                },
+            )
+            .unwrap();
+
+        assert!(report
+            .written
+            .iter()
+            .any(|file| file.path == stale_command_path.display().to_string()));
+        assert!(report
+            .written
+            .iter()
+            .all(|file| !file.path.ends_with("settings.json")
+                && !file.path.ends_with("settings.local.json")
+                && !file.path.ends_with("engram-settings-snippet.json")));
+        assert!(report
+            .skipped
+            .iter()
+            .any(|file| file.name == "claude-settings-merge"
+                && file.message.contains("snippet-only")));
+        assert_eq!(
+            fs::read_to_string(&settings_path).unwrap(),
+            settings_contents
+        );
+        assert_eq!(
+            fs::read_to_string(&local_settings_path).unwrap(),
+            local_settings_contents
+        );
+        assert_eq!(
+            fs::read_to_string(&snippet_path).unwrap(),
+            user_snippet_contents
+        );
+        assert!(fs::read_to_string(&stale_command_path)
+            .unwrap()
+            .contains("obligations(action=detect, project=..., cwd=...)"));
+    }
+
+    #[test]
     fn status_warns_when_claude_hook_files_are_installed_but_settings_missing() {
         let root = tempfile::tempdir().unwrap();
         let service = HarnessService::new();
