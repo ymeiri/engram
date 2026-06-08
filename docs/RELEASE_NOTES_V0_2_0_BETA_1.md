@@ -867,3 +867,15 @@ longer appear in `coord(list)`. T386 changes session lifecycle/coordination stat
 not delete session events, run broad `lint apply_safe`, mutate M6, change source behavior, accept
 hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
 host labels, clean unrelated coordination-only rows, or make the system production/GA ready.
+
+T387 removes the remaining Engram-project coordination-only orphan rows after T386. The exact
+rows were `019e683b-1560-7361-b535-53b012e04aa5`,
+`d238eb81-870e-4da7-8e5d-381014f151b0`, and
+`d96b3edb-f8ac-4d45-b644-92be32d0eae4`: all had empty components, null current_file, stale
+June 1 heartbeats, and no durable session record from `session(get)`. Source inspection confirmed
+`coord.unregister` deletes only the ephemeral `active_session` row, and the row contents are
+preserved in `docs/BRAIN_HARNESS_T387_EXACT_COORD_ORPHAN_CLEANUP_2026-06-08.md`. Post-cleanup
+`coord(list, project="engram")` returns `count=0`, project-scoped lint remains empty, and scoped
+obligations doctor remains clean. T387 does not delete session events, run broad `lint apply_safe`,
+mutate M6, change source behavior, accept hosted-CI fallback, mark PR #3 ready, merge, tag,
+publish, launch native Claude, prove hooks or host labels, or make the system production/GA ready.
