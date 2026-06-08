@@ -808,3 +808,17 @@ finding, and obligations doctor is clean. T380 is exact lifecycle hygiene only; 
 data, run broad `lint apply_safe`, run M6 write-apply, change source behavior, change ranking or
 `orient`, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude,
 prove effective hooks, prove live host labels, or change the beta scope.
+
+T383 restores the current sampled telemetry confidence signal after the 50-trace project window
+regressed to `21/50` feedback records (`42%`). Four judgeable recent traces were scored:
+current continuation orient `019ea8a5-f60b-76c2-9e53-016980300077`, T382 orient
+`019ea884-8d3b-7f92-9433-2c3b35159208`, T382 `changes_since`
+`019ea886-d4a6-7890-ac40-b1f3f52baf2d`, and T380 post-archive search
+`019ea83c-150b-7011-998f-54f61ba618d4`. Fresh
+`telemetry(action="real_session_eval", project="engram", limit=50)` now passes at `25/50`
+feedback records (`50%`) with zero task failures, zero bad-memory-used, zero stale-memory, and
+zero wrong-scope-memory outcomes. The 20-trace window also passes at `10/20` feedback records
+(`50%`) with the same clean outcome counters. T383 changes no source behavior, telemetry formula,
+or release scope; it does not accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
+run M6, run lifecycle cleanup, launch native Claude, prove hooks or host labels, or make the system
+production/GA ready.
