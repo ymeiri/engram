@@ -507,6 +507,45 @@ async fn test_mcp_tools_list_lint_schema_exposes_project_filter() {
 }
 
 #[tokio::test]
+async fn test_mcp_tools_list_obligations_schema_exposes_scope_filters() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let obligations = tools
+        .iter()
+        .find(|tool| tool["name"] == "obligations")
+        .expect("tools/list should expose obligations");
+    let properties = obligations["inputSchema"]["properties"]
+        .as_object()
+        .expect("obligations input schema should expose properties");
+
+    assert_eq!(
+        properties["project"]["description"],
+        "Optional project scope for detect, add, list, open, and doctor."
+    );
+    assert_eq!(
+        properties["cwd"]["description"],
+        "Current working directory for detect/list/open/doctor scoping."
+    );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
 async fn test_two_sessions_share_entity_state() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
 

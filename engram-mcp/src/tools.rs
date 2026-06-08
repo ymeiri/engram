@@ -8193,11 +8193,13 @@ pub struct ObligationRequest {
     /// Action: detect, add, get, list, open, resolve, skip, doctor
     #[schemars(description = "Action: detect, add, get, list, open, resolve, skip, doctor")]
     pub action: String,
-    /// Current working directory for detect.
+    /// Current working directory for detect/list/open/doctor scoping.
+    #[schemars(description = "Current working directory for detect/list/open/doctor scoping.")]
     pub cwd: Option<String>,
     /// Prompt/task text for detect.
     pub prompt: Option<String>,
-    /// Project scope.
+    /// Optional project scope for detect, add, list, open, and doctor.
+    #[schemars(description = "Optional project scope for detect, add, list, open, and doctor.")]
     pub project: Option<String>,
     /// Maximum obligations to return or create.
     pub limit: Option<usize>,
@@ -11155,6 +11157,24 @@ mod tests {
         assert_eq!(
             properties["project"]["description"],
             "Optional project scope to lint."
+        );
+    }
+
+    #[test]
+    fn obligation_request_schema_exposes_scope_filters() {
+        let schema = schemars::schema_for!(ObligationRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("ObligationRequest schema should have properties");
+
+        assert_eq!(
+            properties["project"]["description"],
+            "Optional project scope for detect, add, list, open, and doctor."
+        );
+        assert_eq!(
+            properties["cwd"]["description"],
+            "Current working directory for detect/list/open/doctor scoping."
         );
     }
 

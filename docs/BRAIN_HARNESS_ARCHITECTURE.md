@@ -4,7 +4,7 @@ Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime r
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
-research-method checkpoints
+scoped obligation MCP metadata, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -859,6 +859,11 @@ Harness and migration checkpoint, current through 2026-06-07:
   execution. Installed hash `ae45c01ab2a4c5046508e916a7c381655a71611f223fd8fc7989392cd3879f79`
   proves the local/Codex beta binary has the flag plumbing; the daemon did not need a restart
   because the server-side obligation tool already supported these filters.
+- T360 makes the scoped obligation MCP contract discoverable through `tools/list`. The public
+  `obligations` input schema now describes `project` as the scope for detect/add/list/open/doctor
+  and `cwd` as the working-directory scope for detect/list/open/doctor. Installed hash
+  `ff16b90be46e54d089ce66e5b360630449bffc9f874da031beb10884f994756b` is running as daemon PID
+  `48118`, and live `tools/list` exposes the updated descriptions.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

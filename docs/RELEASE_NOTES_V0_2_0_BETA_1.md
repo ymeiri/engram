@@ -520,3 +520,33 @@ returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
 T359 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
 beta scope.
+
+T360 hardens public MCP metadata for scoped obligation health checks. `ObligationRequest.project`
+now explicitly describes its supported detect/add/list/open/doctor scope, and
+`ObligationRequest.cwd` now explicitly describes detect/list/open/doctor scoping. This matches the
+runtime MCP behavior and the T359 CLI flags, so agents reading `tools/list` can discover the scoped
+obligation list/doctor path without guessing.
+
+Focused validation passed `cargo test -p engram-mcp obligation_request_schema_exposes_scope_filters`,
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_obligations_schema_exposes_scope_filters`,
+`cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-mcp`, and
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list`.
+
+`cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` refreshed the installed
+CLI hash from `ae45c01ab2a4c5046508e916a7c381655a71611f223fd8fc7989392cd3879f79` to
+`ff16b90be46e54d089ce66e5b360630449bffc9f874da031beb10884f994756b`; `engram --version`
+continues to report `engram 0.2.0-beta.1`. The live global daemon was restarted onto that binary
+as PID `48118` on port `8765`, `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`, and a live `tools/list` smoke
+confirmed the obligations schema exposes:
+`project = "Optional project scope for detect, add, list, open, and doctor."` and
+`cwd = "Current working directory for detect/list/open/doctor scoping."`.
+
+Final exact-head validation passed `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh`.
+The package smoke verified the release tarball checksum, installed the package into a temporary
+prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged HTTP `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+T360 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
+beta scope.
