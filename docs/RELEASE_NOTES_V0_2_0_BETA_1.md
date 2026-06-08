@@ -390,3 +390,20 @@ restarted during this validation.
 
 T354 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, or change the supported beta scope.
+
+T355 restarts the live global daemon onto the refreshed T354 installed binary. Before restart,
+`engram daemon status` reported PID `92750`, spawned by `/Users/yuval.meiri/.local/bin/engram`,
+with spawn version `0.2.0-beta.1`. After `engram daemon stop`, the first `engram daemon start`
+attempt exited before readiness because the daemon log reported a transient RocksDB
+`~/.engram/data/LOCK` conflict. A follow-up status check reported no running daemon, and the
+retry succeeded.
+
+The refreshed live daemon now reports PID `64693` on port `8765`, spawned by
+`/Users/yuval.meiri/.local/bin/engram`, with spawn version `0.2.0-beta.1` and installed hash
+`a47edffa8c8ed955a311adac85033ce8a28235c37007b5149ea81a8ffeb456de`. `GET /health`
+returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`, and a live MCP
+`orient(response_shape="lean")` smoke for the current MVP-status prompt returned trace
+`019ea620-b1be-7dc1-a022-15f49badddf6`.
+
+T355 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, or change the supported beta scope.
