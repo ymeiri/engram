@@ -8428,3 +8428,19 @@ Focused service and MCP harness tests, fmt, check, clippy, release build, daemon
 dist checksum validation passed. T376 does not install or mutate hooks/adapters, enforce lifecycle,
 archive memory, run `lint apply_safe`, mutate M6, change ranking/`orient`, launch native Claude,
 mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T377 structured MCP tool report note:
+`docs/BRAIN_HARNESS_T377_STRUCTURED_MCP_TOOL_REPORT_2026-06-08.md` records source and
+installed-runtime hardening for machine-readable harness MCP tool availability state.
+`HarnessStatusReport` now includes an `mcp_tools` object with `checked`, `required_tools`,
+`observed_tools`, `missing_tools`, and `message`, while preserving compatibility
+`missing_mcp_tools`. This distinguishes "not checked" from "checked and complete" without warning
+or empty-list inference. Focused service and MCP harness tests, fmt, check, clippy, release build,
+daemon restart, `/health`, live installed JSON/text `harness doctor`, and dist checksum validation
+passed. Live MCP `harness(status)` with an observed tool list missing `telemetry` returned
+`mcp_tools.checked=true`, `missing_tools=["telemetry"]`, compatibility
+`missing_mcp_tools=["telemetry"]`, and `ready=false`; the installed CLI does not expose an
+observed-tool flag, so the checked path was not validated through CLI text flags. T377 does not
+install or mutate hooks/adapters, enforce lifecycle, archive memory, run `lint apply_safe`, mutate
+M6, change ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change
+beta scope.

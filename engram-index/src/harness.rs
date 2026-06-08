@@ -8,8 +8,8 @@ use crate::error::{IndexError, IndexResult};
 use engram_core::harness::{
     HarnessAdapterCheck, HarnessAdapterKind, HarnessAdapterSpec, HarnessAdapterStatus,
     HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleReport,
-    HarnessLifecycleTrigger, HarnessPolicy, HarnessRenderedAdapter, HarnessSettingsCheck,
-    HarnessStatusReport,
+    HarnessLifecycleTrigger, HarnessMcpToolReport, HarnessPolicy, HarnessRenderedAdapter,
+    HarnessSettingsCheck, HarnessStatusReport,
 };
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
@@ -204,15 +204,31 @@ impl HarnessService {
             .iter()
             .map(|adapter| check_adapter(&root, adapter))
             .collect::<IndexResult<_>>()?;
+        let mcp_tools_checked = !observed_mcp_tools.is_empty();
         let missing_mcp_tools: Vec<String> = policy
             .required_mcp_tools
             .iter()
             .filter(|tool| {
-                !observed_mcp_tools.is_empty()
-                    && !observed_mcp_tools.iter().any(|name| name == *tool)
+                mcp_tools_checked && !observed_mcp_tools.iter().any(|name| name == *tool)
             })
             .cloned()
             .collect();
+        let mcp_tools = HarnessMcpToolReport {
+            checked: mcp_tools_checked,
+            required_tools: policy.required_mcp_tools.clone(),
+            observed_tools: observed_mcp_tools.to_vec(),
+            missing_tools: missing_mcp_tools.clone(),
+            message: if !mcp_tools_checked {
+                "MCP tool availability was not checked; provide observed_mcp_tools to verify the required tool set.".to_string()
+            } else if missing_mcp_tools.is_empty() {
+                "All required MCP tools were observed.".to_string()
+            } else {
+                format!(
+                    "Missing required MCP tools: {}.",
+                    missing_mcp_tools.join(", ")
+                )
+            },
+        };
 
         let mut warnings = Vec::new();
         for check in &adapters {
@@ -282,6 +298,7 @@ impl HarnessService {
             policy,
             adapters,
             missing_mcp_tools,
+            mcp_tools,
             settings,
             warnings,
             ready,
@@ -2715,6 +2732,45 @@ mod tests {
         assert!(lifecycle_warning.contains("before_final_obligations"));
         assert!(lifecycle_warning.contains("session_end_handoff"));
         assert!(lifecycle_warning.contains("commit_workflow_consult_memory"));
+    }
+
+    #[test]
+    fn status_distinguishes_unchecked_from_missing_mcp_tools() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install(HarnessKind::Codex, Some(root.path()), true)
+            .unwrap();
+
+        let unchecked = service
+            .status(HarnessKind::Codex, Some(root.path()), &[])
+            .unwrap();
+        assert!(unchecked.ready);
+        assert!(!unchecked.mcp_tools.checked);
+        assert!(unchecked.mcp_tools.missing_tools.is_empty());
+        assert!(unchecked.missing_mcp_tools.is_empty());
+
+        let observed_without_telemetry = vec![
+            "orient".to_string(),
+            "memory".to_string(),
+            "harness".to_string(),
+            "lint".to_string(),
+            "graph".to_string(),
+            "handoff".to_string(),
+            "obligations".to_string(),
+            "vault".to_string(),
+        ];
+        let checked = service
+            .status(
+                HarnessKind::Codex,
+                Some(root.path()),
+                &observed_without_telemetry,
+            )
+            .unwrap();
+        assert!(!checked.ready);
+        assert!(checked.mcp_tools.checked);
+        assert_eq!(checked.mcp_tools.missing_tools, vec!["telemetry"]);
+        assert_eq!(checked.missing_mcp_tools, vec!["telemetry"]);
     }
 
     #[test]

@@ -5,7 +5,8 @@ snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
-exact stale Claude-harness and orient-contract memory cleanup, and research-method checkpoints
+exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
+tool reports, and research-method checkpoints
 Date: 2026-06-08
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3571,3 +3572,10 @@ knowledge and improve agent behavior.
      and message machine-readable for agents and release checks, but lifecycle compliance remains
      advisory and no hooks/adapters, M6/lifecycle state, native-Claude proof, release, merge, tag,
      or publish gate is closed.
+204. Treat T377 as structured MCP-tool-reporting hardening, not proof that every active client has
+     the required tool set. `HarnessStatusReport.mcp_tools` distinguishes unchecked MCP tool
+     availability from checked complete or checked missing states, while compatibility
+     `missing_mcp_tools` remains. A report with `mcp_tools.checked=false` must not be interpreted
+     as "all tools observed"; callers must supply observed tool names to make that claim. T377
+     does not mutate hooks/adapters, enforce lifecycle, change ranking/`orient`, prove
+     native-Claude behavior, close hosted CI, or perform release, merge, tag, or publish actions.

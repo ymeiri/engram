@@ -3612,6 +3612,21 @@ fn print_harness_status(report: &HarnessStatusReport) {
             .join(", ");
         println!("  Advisory triggers: {triggers}");
     }
+    if report.mcp_tools.checked {
+        if report.mcp_tools.missing_tools.is_empty() {
+            println!("MCP tools: checked, all required tools observed");
+        } else {
+            println!(
+                "MCP tools: checked, missing {}",
+                report.mcp_tools.missing_tools.join(", ")
+            );
+        }
+    } else {
+        println!(
+            "MCP tools: not checked ({} required)",
+            report.mcp_tools.required_tools.len()
+        );
+    }
     println!("Adapters:");
     for adapter in &report.adapters {
         let marker = match adapter.status {

@@ -767,3 +767,16 @@ release build, live installed runtime validation, daemon restart, `/health`, liv
 structured evidence only; it does not install or mutate hooks/adapters, enforce lifecycle behavior,
 run lifecycle cleanup or M6, launch native Claude, mark PR #3 ready, merge, tag, publish, or change
 the beta scope.
+
+T377 makes MCP tool availability state machine-readable in harness reports. `HarnessStatusReport`
+now includes an `mcp_tools` object with `checked`, `required_tools`, `observed_tools`,
+`missing_tools`, and `message`, while preserving the compatibility `missing_mcp_tools` field. This
+removes the ambiguity where `missing_mcp_tools=[]` could mean either "all required tools were
+observed" or "no observed tool list was supplied." The CLI text output now states whether MCP tools
+were checked, checked complete, or checked with missing tool names. Focused service and MCP harness
+tests, fmt, check, clippy, release build, daemon restart, `/health`, live installed JSON/text
+`harness doctor`, live MCP checked missing-tool status, and dist checksum validation passed. The
+installed CLI does not expose an observed-tool flag, so the checked path was not validated through
+CLI text flags. T377 improves structured evidence only; it does not install or mutate
+hooks/adapters, enforce lifecycle behavior, run lifecycle cleanup or M6, launch native Claude, mark
+PR #3 ready, merge, tag, publish, or change the beta scope.

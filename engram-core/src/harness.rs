@@ -186,6 +186,21 @@ pub struct HarnessLifecycleReport {
     pub message: String,
 }
 
+/// Structured MCP tool availability state for a harness report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessMcpToolReport {
+    /// Whether observed MCP tool names were supplied by the caller.
+    pub checked: bool,
+    /// Required MCP tools from the harness policy.
+    pub required_tools: Vec<String>,
+    /// Observed MCP tool names supplied by the caller.
+    pub observed_tools: Vec<String>,
+    /// Required MCP tools that were not observed when `checked` is true.
+    pub missing_tools: Vec<String>,
+    /// Human-readable summary.
+    pub message: String,
+}
+
 /// Harness status/doctor report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HarnessStatusReport {
@@ -199,6 +214,8 @@ pub struct HarnessStatusReport {
     pub adapters: Vec<HarnessAdapterCheck>,
     /// Missing required MCP tools, if the caller provided observed tool names.
     pub missing_mcp_tools: Vec<String>,
+    /// Structured MCP tool availability state.
+    pub mcp_tools: HarnessMcpToolReport,
     /// Settings checks for harness-specific configuration files.
     pub settings: Vec<HarnessSettingsCheck>,
     /// Structured lifecycle compliance state.
