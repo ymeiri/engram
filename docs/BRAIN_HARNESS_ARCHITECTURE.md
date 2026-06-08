@@ -3584,3 +3584,9 @@ knowledge and improve agent behavior.
      `--observed-mcp-tool` flags and pass them to the existing status/doctor service. This lets
      local release scripts verify checked MCP tool state through the CLI, but it does not prove
      active client configuration unless the supplied observed-tool list is fresh and complete.
+206. Treat T390 as deterministic ranking hardening, not broad ranking proof. `ungated`,
+     `un-gated`, `not gated`, and `not a gate` are continuation gate-negation vocabulary like
+     `non-gated`; they must not satisfy substring gate checks merely because they contain
+     `gated` or `gate`. Explicit modal gate actions such as "should we proceed with migration
+     apply" still trigger gate mode. T390 does not close hosted CI, native-Claude, effective-hook,
+     live-host-label, M6, lifecycle, release, or production/GA gates.

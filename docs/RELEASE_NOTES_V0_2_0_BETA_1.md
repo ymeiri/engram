@@ -891,3 +891,17 @@ confirming `engram 0.2.0-beta.1`, and verifying packaged HTTP `/health` returned
 evidence only; it does not accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
 launch native Claude, prove hooks or host labels, mutate M6, or make the system production/GA
 ready.
+
+T390 hardens deterministic memory ranking for `ungated`, `un-gated`, and `not gated`
+continuation wording. These variants now share the same continuation gate-negation normalization as
+`non-gated` / `non gated`, so an M6 continuation prompt does not accidentally match the `gated`
+substring and promote migration-gate context. Explicit modal gate prompts such as "should we
+proceed with migration apply" still trigger gate guidance. Focused ranker and search regression
+tests, formatter check, `cargo check -p engram-index`, focused clippy, and `git diff --check`
+passed. Exact-worktree `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` also
+passed; the package smoke rebuilt the release archive, verified the checksum, installed the
+packaged binary into a temporary prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged
+HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. T390
+changes only deterministic ranking query classification; it does not accept the hosted-CI fallback,
+mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6,
+or make the system production/GA ready.

@@ -392,7 +392,7 @@ fn promote_approval_gate_items_for_gate_query(
     let Some(query) = context.query.map(str::to_lowercase) else {
         return;
     };
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query);
     if !query.contains("approval gate") || !asks_for_decision_gate(&query) {
         return;
     }
@@ -634,10 +634,7 @@ fn asks_for_decision_gate(query: &str) -> bool {
     // approval request. Explicit action or permission terms still keep gate guidance first.
     // Approval-gate wording inside a continuation prompt is context unless the query is asking
     // for a gate/handoff summary. Bare "approval" is not a gate request.
-    let query = query
-        .to_ascii_lowercase()
-        .replace("non-gated", "")
-        .replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query.to_ascii_lowercase());
     if has_modal_gate_action(&query) {
         return true;
     }
@@ -860,7 +857,7 @@ fn asks_for_explicit_migration_apply_gate(query: Option<&str>) -> bool {
     let Some(query) = query.map(str::to_lowercase) else {
         return false;
     };
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query);
     let mentions_migration = ["migration", "m6"].iter().any(|term| query.contains(term));
     let asks_apply_or_permission = [
         "apply", "proceed", "approve", "approval", "approved", "allowed", "allow", "run",
@@ -883,7 +880,7 @@ fn asks_for_contextual_migration_gate_with_current_plan(context: MemoryRankConte
     let Some(query) = context.query.map(str::to_lowercase) else {
         return false;
     };
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query);
 
     has_migration_gate_domain(&query) && has_contextual_gate_mention(&query)
 }
@@ -984,7 +981,7 @@ fn has_migration_apply_gate_detail(value: &str) -> bool {
 }
 
 fn has_contextual_gate_mention(value: &str) -> bool {
-    let value = value.replace("non-gated", "").replace("non gated", "");
+    let value = remove_continuation_gate_negations(value);
     ["approval gate", "review-gated", "gate", "gated"]
         .iter()
         .any(|term| value.contains(term))
@@ -1056,7 +1053,7 @@ fn memory_review_rank(review_state: MemoryReviewState) -> u8 {
 }
 
 fn has_gate_language(value: &str) -> bool {
-    let value = value.replace("non-gated", "").replace("non gated", "");
+    let value = remove_continuation_gate_negations(value);
     [
         "review-gated",
         "gate",
@@ -1070,6 +1067,16 @@ fn has_gate_language(value: &str) -> bool {
     ]
     .iter()
     .any(|term| value.contains(term))
+}
+
+fn remove_continuation_gate_negations(value: &str) -> String {
+    value
+        .replace("non-gated", "")
+        .replace("non gated", "")
+        .replace("un-gated", "")
+        .replace("ungated", "")
+        .replace("not gated", "")
+        .replace("not a gate", "")
 }
 
 fn canonical_or_original(path: &Path) -> std::path::PathBuf {
@@ -1195,6 +1202,46 @@ mod tests {
         assert!(!asks_for_decision_gate(
             "current plan next step M6 gate context and non-gated work"
         ));
+    }
+
+    #[test]
+    fn ungated_continuation_words_do_not_create_gate_context() {
+        for query in [
+            "current plan next ungated Brain Harness feedback confidence M6",
+            "current plan next un-gated Brain Harness feedback confidence M6",
+            "current plan next not gated Brain Harness feedback confidence M6",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(!asks_for_decision_gate(query), "{query}");
+            assert!(
+                !asks_for_contextual_migration_gate_with_current_plan(context),
+                "{query}"
+            );
+            assert!(!has_contextual_gate_mention(query), "{query}");
+            assert!(!has_gate_language(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn explicit_gate_actions_survive_ungated_wording() {
+        for query in [
+            "next ungated step, should we proceed with migration apply?",
+            "next not gated step, should we run M6 write apply?",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(asks_for_decision_gate(query), "{query}");
+            assert!(!should_promote_current_plan(context), "{query}");
+        }
     }
 
     #[test]
