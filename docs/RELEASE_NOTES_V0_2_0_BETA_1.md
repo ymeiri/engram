@@ -666,3 +666,12 @@ T366 narrows the initial beta gate to either restored exact-head hosted CI or ex
 release-owner acceptance of this local CI plus package/install fallback, followed by marking PR #3
 ready, merging, tagging, and publishing. It does not mark PR #3 ready, merge, tag, publish, close
 hosted CI, run native Claude, prove hooks or host labels, or change production/GA readiness.
+
+T367 refreshes the native Claude prompt-bearing, effective-hook, and live host-label preflight
+after T366. Fresh read-only process inventory no longer shows an active native `claude` CLI
+process, so the T363 attribution hard stop is cleared for the native CLI process class. Claude
+Code `2.1.168`, the resolved SHA-256, installed Engram `0.2.0-beta.1`, daemon health, harness
+status/doctor `ready=true`, snippet-only no-write dry-run, canonical vault status, and scoped
+obligations doctor all match the preflight contract. Ambient Claude-family helper processes still
+exist and must be listed in any future execution report. T367 does not launch native Claude or run
+`/hooks`; T312, T335, and T270 remain default-deny until exact approval names the intended packet.

@@ -908,6 +908,12 @@ Harness and migration checkpoint, current through 2026-06-08:
   install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`. This narrows the initial
   beta gate to release-owner fallback acceptance or restored hosted CI, then mark PR #3 ready,
   merge, tag, and publish. It does not close hosted CI or prove production/GA host parity.
+- T367 refreshes the native-Claude/effective-hook/live-host-label preflight after T366. The
+  previous active native `claude` CLI attribution blocker is absent, while Claude path/version/hash,
+  Engram daemon, harness status/doctor, snippet-only dry-run, canonical vault, and obligations
+  checks match. Ambient Claude-family helper processes remain and must be accounted for in any
+  future proof run. T312/T335/T270 are now attribution-ready from the native CLI process standpoint
+  but still require exact approval before any native launch, prompt, `/hooks`, or host-label proof.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
