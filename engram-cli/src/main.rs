@@ -3598,6 +3598,20 @@ fn print_harness_status(report: &HarnessStatusReport) {
     println!("Harness: {}", report.harness);
     println!("Root:    {}", report.root);
     println!("Ready:   {}", report.ready);
+    println!(
+        "Lifecycle: soft_contract={}, enforced={}",
+        report.lifecycle.soft_contract, report.lifecycle.enforced
+    );
+    if !report.lifecycle.advisory_triggers.is_empty() {
+        let triggers = report
+            .lifecycle
+            .advisory_triggers
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!("  Advisory triggers: {triggers}");
+    }
     println!("Adapters:");
     for adapter in &report.adapters {
         let marker = match adapter.status {

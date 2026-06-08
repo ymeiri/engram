@@ -7,8 +7,9 @@
 use crate::error::{IndexError, IndexResult};
 use engram_core::harness::{
     HarnessAdapterCheck, HarnessAdapterKind, HarnessAdapterSpec, HarnessAdapterStatus,
-    HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleTrigger, HarnessPolicy,
-    HarnessRenderedAdapter, HarnessSettingsCheck, HarnessStatusReport,
+    HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleReport,
+    HarnessLifecycleTrigger, HarnessPolicy, HarnessRenderedAdapter, HarnessSettingsCheck,
+    HarnessStatusReport,
 };
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
@@ -267,6 +268,17 @@ impl HarnessService {
         Ok(HarnessStatusReport {
             harness,
             root: root.display().to_string(),
+            lifecycle: HarnessLifecycleReport {
+                soft_contract: policy.soft_contract,
+                enforced: !policy.soft_contract,
+                advisory_triggers: policy.lifecycle_triggers.clone(),
+                message: if policy.soft_contract {
+                    "Lifecycle compliance is advisory; agents should follow the listed triggers."
+                        .to_string()
+                } else {
+                    "Lifecycle compliance is enforced by the harness.".to_string()
+                },
+            },
             policy,
             adapters,
             missing_mcp_tools,
@@ -286,8 +298,8 @@ impl HarnessService {
         let mut report = self.status(harness, root, observed_mcp_tools)?;
         if report.ready {
             let triggers = report
-                .policy
-                .lifecycle_triggers
+                .lifecycle
+                .advisory_triggers
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()
@@ -2679,6 +2691,21 @@ mod tests {
             .unwrap();
 
         assert!(report.ready);
+        assert!(report.lifecycle.soft_contract);
+        assert!(!report.lifecycle.enforced);
+        assert_eq!(
+            report.lifecycle.advisory_triggers,
+            vec![
+                HarnessLifecycleTrigger::TaskStartOrient,
+                HarnessLifecycleTrigger::BeforeMajorDecisionChangesSince,
+                HarnessLifecycleTrigger::AfterDiscoveryRecord,
+                HarnessLifecycleTrigger::BeforeFinalChangesSince,
+                HarnessLifecycleTrigger::BeforeFinalObligations,
+                HarnessLifecycleTrigger::BeforeContextCompactionSave,
+                HarnessLifecycleTrigger::SessionEndHandoff,
+                HarnessLifecycleTrigger::CommitWorkflowConsultMemory,
+            ]
+        );
         let lifecycle_warning = report
             .warnings
             .iter()

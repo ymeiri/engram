@@ -3566,3 +3566,8 @@ knowledge and improve agent behavior.
      compliance remains soft and agent-followed; no hooks/adapters are installed or mutated, no
      `lint apply_safe` or M6 action is authorized, and no native-Claude, release, merge, tag, or
      publish gate is closed.
+203. Treat T376 as structured lifecycle-reporting hardening, not lifecycle enforcement.
+     `HarnessStatusReport.lifecycle` makes the soft contract, enforcement flag, advisory triggers,
+     and message machine-readable for agents and release checks, but lifecycle compliance remains
+     advisory and no hooks/adapters, M6/lifecycle state, native-Claude proof, release, merge, tag,
+     or publish gate is closed.

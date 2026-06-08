@@ -756,3 +756,14 @@ check, clippy, release build, live installed runtime validation, daemon restart,
 existing dist checksum pass. T375 improves production-gate evidence quality only; it does not
 install or mutate hooks/adapters, enforce lifecycle behavior, run lifecycle cleanup or M6, launch
 native Claude, mark PR #3 ready, merge, tag, publish, or change the beta scope.
+
+T376 makes lifecycle state machine-readable in harness reports. `HarnessStatusReport` now includes
+a `lifecycle` object with `soft_contract=true`, `enforced=false`, the advisory trigger list, and a
+summary message; the CLI text output also prints the lifecycle contract before adapter checks. This
+lets agents and release checks inspect adapter readiness separately from advisory lifecycle
+compliance without parsing warning text. Focused service and MCP harness tests, fmt, check, clippy,
+release build, live installed runtime validation, daemon restart, `/health`, live JSON/text
+`harness doctor`, live JSON `harness status`, and the existing dist checksum pass. T376 improves
+structured evidence only; it does not install or mutate hooks/adapters, enforce lifecycle behavior,
+run lifecycle cleanup or M6, launch native Claude, mark PR #3 ready, merge, tag, publish, or change
+the beta scope.

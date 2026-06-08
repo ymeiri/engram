@@ -173,6 +173,19 @@ pub struct HarnessPolicy {
     pub adapters: Vec<HarnessAdapterSpec>,
 }
 
+/// Structured lifecycle compliance state for a harness report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HarnessLifecycleReport {
+    /// Whether lifecycle enforcement is advisory rather than blocking.
+    pub soft_contract: bool,
+    /// Whether Engram enforces lifecycle compliance as a hard runtime gate.
+    pub enforced: bool,
+    /// Lifecycle triggers that agents should follow when enforcement is advisory.
+    pub advisory_triggers: Vec<HarnessLifecycleTrigger>,
+    /// Human-readable summary.
+    pub message: String,
+}
+
 /// Harness status/doctor report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HarnessStatusReport {
@@ -188,6 +201,8 @@ pub struct HarnessStatusReport {
     pub missing_mcp_tools: Vec<String>,
     /// Settings checks for harness-specific configuration files.
     pub settings: Vec<HarnessSettingsCheck>,
+    /// Structured lifecycle compliance state.
+    pub lifecycle: HarnessLifecycleReport,
     /// Soft warnings for incomplete lifecycle integration.
     pub warnings: Vec<String>,
     /// True when every required adapter, MCP tool, and settings entry is present.

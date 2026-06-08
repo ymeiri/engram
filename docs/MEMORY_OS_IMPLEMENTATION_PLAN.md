@@ -8417,3 +8417,14 @@ daemon restart, `/health`, live installed `harness doctor`, live installed `harn
 dist checksum validation passed. T375 does not install or mutate hooks/adapters, enforce lifecycle,
 archive memory, run `lint apply_safe`, mutate M6, change ranking/`orient`, launch native Claude,
 mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T376 structured lifecycle report note:
+`docs/BRAIN_HARNESS_T376_STRUCTURED_LIFECYCLE_REPORT_2026-06-08.md` records source and
+installed-runtime hardening for machine-readable harness lifecycle state. `HarnessStatusReport`
+now includes a `lifecycle` object with `soft_contract`, `enforced`, `advisory_triggers`, and
+`message`, and text CLI status/doctor output prints the lifecycle contract before adapter checks.
+Focused service and MCP harness tests, fmt, check, clippy, release build, daemon restart,
+`/health`, live installed JSON/text `harness doctor`, live installed JSON `harness status`, and
+dist checksum validation passed. T376 does not install or mutate hooks/adapters, enforce lifecycle,
+archive memory, run `lint apply_safe`, mutate M6, change ranking/`orient`, launch native Claude,
+mark PR #3 ready, merge, tag, publish, or change beta scope.

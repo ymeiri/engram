@@ -5,6 +5,7 @@ use engram_index::{HandoffService, MemoryService, ObligationService};
 use engram_mcp::tools::{self, HandoffRequest, HarnessRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
+use tempfile::tempdir;
 
 async fn setup_tool_state() -> ToolState {
     setup_tool_state_with_memory().await.0
@@ -150,6 +151,45 @@ async fn test_mcp_harness_render_adapter_mentions_feedback_trace_id() {
     assert!(contents.contains("rejected_memory_ids"));
     assert!(contents.contains("stale_memory_ids"));
     assert!(contents.contains("wrong_scope_memory_ids"));
+}
+
+#[tokio::test]
+async fn test_mcp_harness_doctor_returns_structured_lifecycle_report() {
+    let state = ToolState::new();
+    let root = tempdir().expect("tempdir should be created");
+
+    let mut install = request("install");
+    install.harness = Some("codex".to_string());
+    install.root = Some(root.path().display().to_string());
+    install.write = Some(true);
+    tools::harness_new(&state, install)
+        .await
+        .expect("install should work");
+
+    let mut doctor = request("doctor");
+    doctor.harness = Some("codex".to_string());
+    doctor.root = Some(root.path().display().to_string());
+    let response = tools::harness_new(&state, doctor)
+        .await
+        .expect("doctor should work");
+    let json = parse_json(&response);
+
+    assert_eq!(json["ready"], true);
+    assert_eq!(json["lifecycle"]["soft_contract"], true);
+    assert_eq!(json["lifecycle"]["enforced"], false);
+    let triggers = json["lifecycle"]["advisory_triggers"]
+        .as_array()
+        .expect("advisory_triggers should be an array");
+    assert!(triggers
+        .iter()
+        .any(|trigger| trigger.as_str() == Some("task_start_orient")));
+    assert!(triggers
+        .iter()
+        .any(|trigger| trigger.as_str() == Some("before_final_obligations")));
+    assert!(json["lifecycle"]["message"]
+        .as_str()
+        .expect("lifecycle message should be a string")
+        .contains("advisory"));
 }
 
 #[tokio::test]
