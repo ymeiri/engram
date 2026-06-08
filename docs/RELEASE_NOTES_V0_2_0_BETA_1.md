@@ -1,6 +1,6 @@
 # Engram v0.2.0-beta.1 Release Notes
 
-Release date: 2026-06-07
+Release date: TBD
 Status: Pre-release candidate
 
 ## Supported Beta Path
@@ -331,3 +331,29 @@ execution with `steps: []` and account billing/spending-limit annotations. The r
 is therefore explicit release-owner fallback acceptance or restored exact-head hosted CI. T347 does
 not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove hooks or host
 labels, or change the supported beta scope.
+
+T350 closes the first-user onboarding gap on PR #3 head
+`54d01eb71e2020960fa62c0d6b72a05b5c00aee4`. README and these release notes now show source
+install steps that put `engram` on `PATH` before `engram init` or `engram serve`, plus published
+tarball download, checksum, install, and expected-version commands. That head passed
+`./scripts/local-ci.sh`, `./scripts/package-release.sh`, checksum verification, packaged release
+note inspection, and a manual isolated package install/health smoke.
+
+T351 adds `./scripts/package-install-smoke.sh` so the install proof is repeatable instead of
+manual. T351 package-smoke candidate head `4d05f6fc2f4fb4c6309c431c083ea55540c32380` passed
+`./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh`. The smoke builds the package,
+verifies the checksum, extracts the archive, checks required packaged files, installs the packaged
+binary into a temporary prefix, confirms `PATH` resolution and `engram 0.2.0-beta.1`, starts the
+packaged binary with `engram serve --http --memory`, and verifies `/health` returns
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+Hosted GitHub Actions run `27114219090` on `4d05f6f` still failed before workflow-step execution:
+Check, Test, Format, Clippy, and Docs all report `steps: []`; the sampled Check annotation says
+recent account payments failed or the spending limit must be increased. Fresh AI Council consensus
+on 2026-06-08 gives a conservative release-management estimate of about `92%` complete until
+release-owner approval, ready/merge/tag/publish, and a practical local/Codex beta readiness of
+`98-99%` if the release owner accepts exact-head local CI plus package/install validation as the
+hosted-CI fallback.
+
+T351 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, or change the supported beta scope.
