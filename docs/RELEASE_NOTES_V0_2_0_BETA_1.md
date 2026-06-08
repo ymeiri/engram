@@ -597,3 +597,20 @@ schema descriptions.
 T362 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, mutate lifecycle state, change orientation ranking, or change the supported
 beta scope.
+
+T363 refreshes the native Claude prompt-bearing, effective-hook, and live host-label preflight after
+T362. The read-only assertions still match: Claude Code resolves to
+`/Users/yuval.meiri/.local/share/claude/versions/2.1.168`, reports `2.1.168 (Claude Code)`, and
+has SHA-256 `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`; Claude Code
+harness status/doctor report `ready=true`; snippet-only install dry-run plans no writes; daemon PID
+`47577` is healthy; canonical vault status is count-aligned at `2651` generated files with zero
+user files; scoped obligations doctor is clean.
+
+T363 hard-stops before native execution because process inventory shows an active native `claude`
+process on `ttys004` (`PID 34797`). That process makes a new single-session native transcript
+ambiguous for T312 prompt-bearing proof, T335 `/hooks` effective-hook proof, and T270 live
+host-label proof.
+
+T363 does not launch native Claude, send prompts, run `/hooks`, signal processes, mutate settings
+or adapters, mark PR #3 ready, merge, tag, publish, close hosted CI, or change the supported beta
+scope.

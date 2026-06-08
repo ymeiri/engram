@@ -4,7 +4,8 @@ Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime r
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
-scoped obligation/telemetry/orient MCP metadata, and research-method checkpoints
+scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
+and research-method checkpoints
 Date: 2026-06-08
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -878,6 +879,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   `77a08e895614bea3b02816e67bafd64087ea0634f4b0ca58b8199a9ef7855633` is running as daemon PID
   `47577`, and live `tools/list` exposes the updated descriptions. This is public-contract
   metadata only; it does not change orientation ranking or memory selection semantics.
+- T363 refreshes the native-Claude/effective-hook/live-host-label preflight after T362. Claude Code
+  still resolves to `2.1.168` with SHA-256
+  `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`, Claude Code harness
+  status/doctor are `ready=true`, snippet-only install dry-run plans no writes, daemon/vault/
+  obligations checks are healthy, but active native `claude` PID `34797` on `ttys004` still makes
+  new-session transcript attribution ambiguous. This is read-only gate evidence; it does not launch
+  native Claude, run `/hooks`, or prove host parity.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
