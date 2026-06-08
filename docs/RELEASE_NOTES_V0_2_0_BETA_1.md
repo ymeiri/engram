@@ -407,3 +407,24 @@ returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`, and a li
 
 T355 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, or change the supported beta scope.
+
+T356 reruns the read-only native-Claude/effective-hook/host-label preflight after the T355 live
+daemon refresh. The branch is synchronized with its upstream, and `origin/main...HEAD` is `0 48`,
+so the earlier divergent-branches pull hint is not current for `yuval.meiri/memory-os-phase1`.
+PR #3 remains draft at `6a561863154d7b3fabc0e176d3105ed1f0dedd7a`; hosted run
+`27122932006` still fails all five jobs before workflow-step execution with `steps: []`.
+
+The Claude binary preflight still matches the T312/T335/T340 baseline:
+`/Users/yuval.meiri/.local/bin/claude`, version `2.1.168 (Claude Code)`, SHA-256
+`377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`. Claude Code
+`harness status` and `harness doctor` report `ready=true`; snippet-only install dry-run reports
+`planned=[]`; the global daemon remains PID `64693` from `/Users/yuval.meiri/.local/bin/engram`
+with spawn version `0.2.0-beta.1`; `/health` returns
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`; canonical vault status is
+count-aligned at `2628` generated files; and obligations doctor is clean.
+
+The preflight still hard-stops before launching native Claude because native Claude CLI sessions
+remain live as PID `60453` on `ttys001` and PID `311` on `ttys005`, making new-session attribution
+ambiguous. T356 does not launch native Claude, run `/hooks`, signal processes, mutate settings or
+adapters, prove prompt-bearing behavior, prove effective-hook visibility, prove live host labels,
+close hosted CI, or change the supported beta scope.
