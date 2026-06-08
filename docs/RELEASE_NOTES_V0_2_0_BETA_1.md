@@ -714,3 +714,14 @@ HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta
 Hosted run `27141590404` on T370 head `4249855bee0fe4b33a9bd343d7750ce7a8da368f` still fails all
 jobs before workflow-step execution with `steps=[]`, so the remaining beta gate stays explicit
 release-owner local-fallback acceptance or restored exact-head hosted CI green.
+
+T372 refreshes current PR #3 and native-Claude production-gate evidence after T371. Current hosted
+run `27142919365` targets head `3cf0e3d453fe4f02a0e1019bcf79fe8779e72cde` and still fails Docs,
+Clippy, Test, Format, and Check before workflow-step execution with `steps=[]`. Claude Code
+`2.1.168`, SHA-256 `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`,
+installed Engram daemon `0.2.0-beta.1`, harness status/doctor `ready=true`, clean obligations, and
+canonical vault counts match the expected preflight state. A live native `claude` PID `34797` on
+`ttys004` still blocks unambiguous T312 prompt-bearing proof, T335 `/hooks` effective-hook proof,
+and T270 live host-label proof. T372 is read-only for runtime state and does not launch native
+Claude, run `/hooks`, signal processes, mutate settings or adapters, mark PR #3 ready, merge, tag,
+publish, or change the beta scope.

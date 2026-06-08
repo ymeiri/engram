@@ -8373,3 +8373,15 @@ after the T370 telemetry evidence commit moved PR #3 to
 `27141590404` still fails before workflow-step execution with `steps=[]`. T371 refreshes the local
 fallback proof; the beta gate remains release-owner fallback acceptance or restored hosted CI green
 followed by ready/merge/tag/publish mechanics.
+
+T372 native Claude preflight and CI refresh note:
+`docs/BRAIN_HARNESS_T372_NATIVE_CLAUDE_PREFLIGHT_AND_CI_REFRESH_2026-06-08.md` refreshes the
+current hosted-CI and production-gate evidence after T371. Current PR #3 hosted run `27142919365`
+targets head `3cf0e3d453fe4f02a0e1019bcf79fe8779e72cde` and still fails Docs, Clippy, Test,
+Format, and Check before workflow-step execution with `steps=[]`. Installed Claude Code `2.1.168`,
+installed Engram daemon `0.2.0-beta.1`, harness status/doctor `ready=true`, obligations doctor,
+and canonical vault counts match the expected read-only preflight state. Native `claude` PID
+`34797` is still live on `ttys004`, so T312 prompt-bearing proof, T335 `/hooks` effective-hook
+proof, and T270 live host-label proof remain blocked by attribution ambiguity. T372 does not
+launch native Claude, run `/hooks`, signal processes, mutate settings/adapters, run M6, run
+`lint apply_safe`, mark PR #3 ready, merge, tag, publish, or change beta scope.

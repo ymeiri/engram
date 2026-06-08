@@ -935,6 +935,13 @@ Harness and migration checkpoint, current through 2026-06-08:
   `27141590404` on T370 head still fails before workflow-step execution with `steps=[]`. The beta
   gate remains release-owner local-fallback acceptance or restored hosted CI, followed by
   ready/merge/tag/publish mechanics.
+- T372 refreshes current hosted-CI and native-Claude production-gate evidence after T371. Hosted
+  run `27142919365` targets head `3cf0e3d453fe4f02a0e1019bcf79fe8779e72cde` and still fails before
+  workflow-step execution with `steps=[]`; Claude Code `2.1.168`, installed Engram
+  `0.2.0-beta.1`, harness status/doctor, obligations doctor, and canonical vault counts match the
+  expected read-only preflight state; native `claude` PID `34797` remains live on `ttys004`, so
+  T312 prompt-bearing proof, T335 effective-hook proof, and T270 live host-label proof remain
+  blocked by attribution ambiguity.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
@@ -3527,3 +3534,12 @@ knowledge and improve agent behavior.
      `27138579667` remains externally blocked before workflow-step execution with `steps=[]`.
      Remaining beta mechanics still require explicit release-owner fallback acceptance or restored
      hosted CI, then ready/merge/tag/publish.
+199. Treat T372 as current production-gate preflight and hosted-CI refresh, not behavioral Claude
+     validation. Current hosted run `27142919365` targets T371 head
+     `3cf0e3d453fe4f02a0e1019bcf79fe8779e72cde` and still fails before workflow-step execution
+     with `steps=[]`. Claude Code `2.1.168`, installed Engram daemon `0.2.0-beta.1`, harness
+     status/doctor `ready=true`, obligations doctor, and canonical vault counts match the expected
+     read-only preflight state. Native `claude` PID `34797` remains live on `ttys004`, so T312
+     prompt-bearing proof, T335 effective-hook proof, and T270 live host-label proof remain blocked
+     by attribution ambiguity until that process exits naturally or the user approves an exact
+     process/session action and a fresh preflight passes.
