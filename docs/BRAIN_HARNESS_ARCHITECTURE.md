@@ -924,6 +924,12 @@ Harness and migration checkpoint, current through 2026-06-08:
   now release-owner local-fallback acceptance or restored exact-head hosted CI, followed by
   ready/merge/tag/publish mechanics. This does not prove native Claude, effective hooks, live host
   labels, telemetry completeness, M6 write-apply, or production/GA readiness.
+- T370 refreshes the sampled telemetry confidence gate from real recent traces. The 50-trace
+  project-scoped report moved from a failing `13/50` (`26%`) baseline to a passing `26/50` (`52%`)
+  after feedback was added only for judgeable traces; the 20-trace window passes at `18/20`
+  (`90%`). Treat this as point-in-time retrieval-feedback evidence only. It does not authorize
+  M6 write-apply, lifecycle cleanup, native Claude, effective hooks, live host labels, or
+  production/GA readiness.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

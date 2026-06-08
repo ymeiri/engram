@@ -8355,3 +8355,12 @@ workflow-step execution with `steps=[]`. T369 narrows the beta gate to release-o
 acceptance or restored exact-head hosted CI, followed by ready/merge/tag/publish mechanics. It does
 not close native Claude, effective-hook, live host-label, 50-trace telemetry, M6 write-apply,
 hosted-CI, release-approval, or production/GA gates.
+
+T370 telemetry confidence refresh note:
+`docs/BRAIN_HARNESS_T370_TELEMETRY_CONFIDENCE_REFRESH_2026-06-08.md` records a point-in-time
+real-session telemetry catch-up. The 50-trace report failed at `13/50` feedback records (`26%`
+coverage), improved to `19/50` (`38%`) after initial feedback, and passed at `26/50` (`52%`) after
+feedback was added only for judgeable traces. The 20-trace window passed at `18/20` (`90%`).
+T370 strengthens sampled retrieval-feedback evidence, but it does not authorize M6 write-apply,
+lifecycle cleanup, native Claude, effective hooks, live host labels, hosted CI, release approval,
+or production/GA readiness.

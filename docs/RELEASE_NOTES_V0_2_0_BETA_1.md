@@ -696,3 +696,11 @@ Hosted run `27138579667` on T368 head `8dad84e37b6bc033904319c675683345c7b60972`
 jobs before workflow-step execution with `steps=[]`, so the remaining beta gate is explicit
 release-owner acceptance of the local fallback or restored exact-head hosted CI green, followed by
 ready/merge/tag/publish mechanics.
+
+T370 refreshes real-session telemetry confidence for the Brain Harness evidence trail. The
+50-trace project-scoped report first failed at `13/50` feedback records (`26%` coverage), then
+improved to `19/50` (`38%`) after the initial feedback catch-up, and finally passed at `26/50`
+(`52%`) after feedback was added only for judgeable recent traces. The 20-trace window now passes
+at `18/20` (`90%`). This strengthens sampled retrieval-feedback evidence, but it is not beta
+release approval and does not authorize M6 write-apply, lifecycle cleanup, native Claude,
+effective hooks, live host labels, or production/GA readiness.
