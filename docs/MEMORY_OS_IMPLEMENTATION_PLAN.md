@@ -8364,3 +8364,12 @@ feedback was added only for judgeable traces. The 20-trace window passed at `18/
 T370 strengthens sampled retrieval-feedback evidence, but it does not authorize M6 write-apply,
 lifecycle cleanup, native Claude, effective hooks, live host labels, hosted CI, release approval,
 or production/GA readiness.
+
+T371 exact-head validation after T370 note:
+`docs/BRAIN_HARNESS_T371_EXACT_HEAD_VALIDATION_AFTER_T370_2026-06-08.md` records local validation
+after the T370 telemetry evidence commit moved PR #3 to
+`4249855bee0fe4b33a9bd343d7750ce7a8da368f`. `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh` passed for the current candidate tree, while hosted run
+`27141590404` still fails before workflow-step execution with `steps=[]`. T371 refreshes the local
+fallback proof; the beta gate remains release-owner fallback acceptance or restored hosted CI green
+followed by ready/merge/tag/publish mechanics.

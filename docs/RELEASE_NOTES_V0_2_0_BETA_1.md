@@ -704,3 +704,13 @@ improved to `19/50` (`38%`) after the initial feedback catch-up, and finally pas
 at `18/20` (`90%`). This strengthens sampled retrieval-feedback evidence, but it is not beta
 release approval and does not authorize M6 write-apply, lifecycle cleanup, native Claude,
 effective hooks, live host labels, or production/GA readiness.
+
+T371 refreshes local validation after T370 moved the PR head. `./scripts/local-ci.sh` passed on the
+current candidate tree, covering whitespace diff check, rustfmt, check, clippy, serialized tests,
+and docs. `./scripts/package-install-smoke.sh` also passed, rebuilding the release package,
+verifying the tarball checksum, installing the packaged binary into a temporary prefix, confirming
+`engram 0.2.0-beta.1`, starting packaged `engram serve --http --memory`, and verifying packaged
+HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+Hosted run `27141590404` on T370 head `4249855bee0fe4b33a9bd343d7750ce7a8da368f` still fails all
+jobs before workflow-step execution with `steps=[]`, so the remaining beta gate stays explicit
+release-owner local-fallback acceptance or restored exact-head hosted CI green.

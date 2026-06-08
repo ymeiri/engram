@@ -930,6 +930,11 @@ Harness and migration checkpoint, current through 2026-06-08:
   (`90%`). Treat this as point-in-time retrieval-feedback evidence only. It does not authorize
   M6 write-apply, lifecycle cleanup, native Claude, effective hooks, live host labels, or
   production/GA readiness.
+- T371 refreshes exact-head local validation after T370. `./scripts/local-ci.sh` and
+  `./scripts/package-install-smoke.sh` pass for the current candidate tree, while hosted run
+  `27141590404` on T370 head still fails before workflow-step execution with `steps=[]`. The beta
+  gate remains release-owner local-fallback acceptance or restored hosted CI, followed by
+  ready/merge/tag/publish mechanics.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
