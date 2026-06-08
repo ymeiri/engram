@@ -483,3 +483,40 @@ as PID `36562` on port `8765`, and an installed-daemon `tools/list` smoke return
 T358 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
 beta scope.
+
+T359 hardens scoped obligation health checks in the CLI. `engram obligations list` and
+`engram obligations doctor` now accept `--scope-project` and `--cwd`, matching the existing MCP
+`project`/`cwd` filters for obligation list and doctor actions. The daemon-backed CLI path serializes
+those filters into `tools/call`; the direct-store fallback path passes them to
+`ObligationService::list` and `ObligationService::doctor`. Unscoped list/doctor behavior remains
+unchanged, and top-level `engram obligations --project <name>` continues to act as the default
+project scope.
+
+Focused validation passed `cargo test -p engram-cli obligation_daemon_arguments`,
+`cargo check -p engram-cli`, `cargo fmt --all --check`, `git diff --check`, and
+`cargo test -p engram-tests --test obligation_tests`. Source CLI help exposes the new flags for
+both commands. Source daemon-backed smokes for scoped `doctor` and `list` passed, and isolated
+`--data-dir` smokes covered the direct-store fallback path.
+
+`cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` refreshed the installed
+CLI hash from `62c9955925f74fba706ad466416033cc0bdbc211cf0443a373d4e5925760589a` to
+`ae45c01ab2a4c5046508e916a7c381655a71611f223fd8fc7989392cd3879f79`; `engram --version`
+continues to report `engram 0.2.0-beta.1`. Installed daemon-backed smokes passed:
+`engram obligations doctor --scope-project engram --cwd /Users/yuval.meiri/projects/engram --limit 3 --json`
+returned `{"open":[],"warnings":[]}`, and
+`engram obligations list --scope-project engram --cwd /Users/yuval.meiri/projects/engram --status open --limit 3 --json`
+returned `[]`.
+
+Final exact-head validation passed the local CI-equivalent steps (`git diff --check`,
+`cargo fmt --all --check`, `cargo check --all-targets`,
+`cargo clippy --all-targets -- -D warnings`, serialized `cargo test --all-targets --jobs 1`, and
+`cargo doc --no-deps`) plus `./scripts/package-install-smoke.sh`. The first `./scripts/local-ci.sh`
+run completed through check and clippy before its test step stalled in `rustc` with no CPU activity;
+the stalled process was terminated, and the same serialized test step plus docs step were rerun
+directly and passed. The package smoke verified the release tarball checksum, installed the package
+into a temporary prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged HTTP `/health`
+returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+T359 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
+beta scope.

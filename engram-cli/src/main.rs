@@ -2426,6 +2426,14 @@ enum ObligationCommands {
         #[arg(long)]
         status: Option<String>,
 
+        /// Project scope filter
+        #[arg(long)]
+        scope_project: Option<String>,
+
+        /// Current working directory scope filter
+        #[arg(long)]
+        cwd: Option<String>,
+
         /// Maximum obligations to print
         #[arg(short, long)]
         limit: Option<usize>,
@@ -2437,6 +2445,14 @@ enum ObligationCommands {
 
     /// Run obligation doctor checks
     Doctor {
+        /// Project scope filter
+        #[arg(long)]
+        scope_project: Option<String>,
+
+        /// Current working directory scope filter
+        #[arg(long)]
+        cwd: Option<String>,
+
         /// Maximum open obligations to inspect
         #[arg(short, long)]
         limit: Option<usize>,
@@ -3116,13 +3132,46 @@ fn obligation_daemon_arguments(
             );
             map.insert("model".to_string(), serde_json::json!(model));
         }
-        ObligationCommands::List { status, limit, .. } => {
+        ObligationCommands::List {
+            status,
+            scope_project,
+            cwd,
+            limit,
+            ..
+        } => {
             map.insert("action".to_string(), serde_json::json!("list"));
             insert_optional_string(&mut map, "status", status);
+            insert_optional_string(
+                &mut map,
+                "project",
+                &scope_project
+                    .clone()
+                    .or_else(|| store_project.map(str::to_string)),
+            );
+            if cwd.is_some() {
+                let cwd = cwd_or_current(cwd.clone())?.display().to_string();
+                map.insert("cwd".to_string(), serde_json::json!(cwd));
+            }
             insert_optional_usize(&mut map, "limit", *limit);
         }
-        ObligationCommands::Doctor { limit, .. } => {
+        ObligationCommands::Doctor {
+            scope_project,
+            cwd,
+            limit,
+            ..
+        } => {
             map.insert("action".to_string(), serde_json::json!("doctor"));
+            insert_optional_string(
+                &mut map,
+                "project",
+                &scope_project
+                    .clone()
+                    .or_else(|| store_project.map(str::to_string)),
+            );
+            if cwd.is_some() {
+                let cwd = cwd_or_current(cwd.clone())?.display().to_string();
+                map.insert("cwd".to_string(), serde_json::json!(cwd));
+            }
             insert_optional_usize(&mut map, "limit", *limit);
         }
         ObligationCommands::Resolve {
@@ -8847,6 +8896,8 @@ async fn main() -> Result<()> {
                 }
                 ObligationCommands::List {
                     status,
+                    scope_project,
+                    cwd,
                     limit,
                     json,
                 } => {
@@ -8857,15 +8908,36 @@ async fn main() -> Result<()> {
                                 .ok_or_else(|| anyhow::anyhow!("Invalid status: {}", value))
                         })
                         .transpose()?;
-                    let obligations = service.list(status, None, None, limit).await?;
+                    let cwd = if cwd.is_some() {
+                        Some(cwd_or_current(cwd)?.display().to_string())
+                    } else {
+                        None
+                    };
+                    let project_scope = scope_project.or(project);
+                    let obligations = service
+                        .list(status, project_scope.as_deref(), cwd.as_deref(), limit)
+                        .await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&obligations)?);
                     } else {
                         print_obligation_list(&obligations);
                     }
                 }
-                ObligationCommands::Doctor { limit, json } => {
-                    let report = service.doctor(None, None, limit).await?;
+                ObligationCommands::Doctor {
+                    scope_project,
+                    cwd,
+                    limit,
+                    json,
+                } => {
+                    let cwd = if cwd.is_some() {
+                        Some(cwd_or_current(cwd)?.display().to_string())
+                    } else {
+                        None
+                    };
+                    let project_scope = scope_project.or(project);
+                    let report = service
+                        .doctor(project_scope.as_deref(), cwd.as_deref(), limit)
+                        .await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -9827,6 +9899,46 @@ mod tests {
             args["required_resolutions"],
             serde_json::json!(["source_read"])
         );
+    }
+
+    #[test]
+    fn obligation_daemon_arguments_scope_list_with_store_project() {
+        let args = obligation_daemon_arguments(
+            Some("engram"),
+            &ObligationCommands::List {
+                status: Some("open".to_string()),
+                scope_project: None,
+                cwd: None,
+                limit: Some(3),
+                json: true,
+            },
+        )
+        .expect("obligation list args");
+
+        assert_eq!(args["action"], serde_json::json!("list"));
+        assert_eq!(args["status"], serde_json::json!("open"));
+        assert_eq!(args["project"], serde_json::json!("engram"));
+        assert!(args.get("cwd").is_none());
+        assert_eq!(args["limit"], serde_json::json!(3));
+    }
+
+    #[test]
+    fn obligation_daemon_arguments_scope_doctor_with_explicit_project_and_cwd() {
+        let args = obligation_daemon_arguments(
+            Some("store-project"),
+            &ObligationCommands::Doctor {
+                scope_project: Some("engram".to_string()),
+                cwd: Some("/tmp/engram".to_string()),
+                limit: Some(5),
+                json: true,
+            },
+        )
+        .expect("obligation doctor args");
+
+        assert_eq!(args["action"], serde_json::json!("doctor"));
+        assert_eq!(args["project"], serde_json::json!("engram"));
+        assert_eq!(args["cwd"], serde_json::json!("/tmp/engram"));
+        assert_eq!(args["limit"], serde_json::json!(5));
     }
 
     #[test]
