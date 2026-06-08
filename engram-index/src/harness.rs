@@ -285,9 +285,16 @@ impl HarnessService {
     ) -> IndexResult<HarnessStatusReport> {
         let mut report = self.status(harness, root, observed_mcp_tools)?;
         if report.ready {
+            let triggers = report
+                .policy
+                .lifecycle_triggers
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             report
                 .warnings
-                .push("Harness adapter files are present; lifecycle compliance is still soft and depends on the agent following the policy.".to_string());
+                .push(format!("Harness adapter files are present; lifecycle compliance is still soft and depends on the agent following the policy. Advisory triggers: {triggers}."));
         } else {
             report.warnings.push(
                 "Harness is not fully installed; agents may still use Engram manually through MCP."
@@ -2657,6 +2664,30 @@ mod tests {
         assert!(report.dry_run);
         assert!(report.written.is_empty());
         assert!(!root.path().join(".codex").exists());
+    }
+
+    #[test]
+    fn doctor_names_soft_lifecycle_triggers_when_ready() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install(HarnessKind::Codex, Some(root.path()), true)
+            .unwrap();
+
+        let report = service
+            .doctor(HarnessKind::Codex, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(report.ready);
+        let lifecycle_warning = report
+            .warnings
+            .iter()
+            .find(|warning| warning.contains("Advisory triggers:"))
+            .expect("ready doctor should name advisory lifecycle triggers");
+        assert!(lifecycle_warning.contains("task_start_orient"));
+        assert!(lifecycle_warning.contains("before_final_obligations"));
+        assert!(lifecycle_warning.contains("session_end_handoff"));
+        assert!(lifecycle_warning.contains("commit_workflow_consult_memory"));
     }
 
     #[test]

@@ -744,3 +744,15 @@ installed `engram lint run --scope-project engram --limit 20 --json` showed stal
 messages with project, agent, `started_at`, and `age_hours`. T374 does not run `lint apply_safe`,
 archive sessions or memory, mutate M6, change `orient`, launch native Claude, mark PR #3 ready,
 merge, tag, publish, or change the beta scope.
+
+T375 makes ready harness-doctor lifecycle evidence more actionable. When
+`engram harness doctor` reports a ready harness, the soft lifecycle warning now names the exact
+advisory trigger set from the policy: `task_start_orient`,
+`before_major_decision_changes_since`, `after_discovery_record`,
+`before_final_changes_since`, `before_final_obligations`,
+`before_context_compaction_save`, `session_end_handoff`, and
+`commit_workflow_consult_memory`. Focused harness unit tests, MCP harness integration tests, fmt,
+check, clippy, release build, live installed runtime validation, daemon restart, `/health`, and the
+existing dist checksum pass. T375 improves production-gate evidence quality only; it does not
+install or mutate hooks/adapters, enforce lifecycle behavior, run lifecycle cleanup or M6, launch
+native Claude, mark PR #3 ready, merge, tag, publish, or change the beta scope.

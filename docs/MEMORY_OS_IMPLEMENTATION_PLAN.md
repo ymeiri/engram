@@ -8406,3 +8406,14 @@ runtime adoption for T373. Before install, `/Users/yuval.meiri/.local/bin/engram
 project, agent, `started_at`, and `age_hours`. T374 closes installed-runtime drift for that lint
 context only. It does not archive sessions or memory, run `lint apply_safe`, mutate M6, change
 ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T375 harness doctor lifecycle trigger context note:
+`docs/BRAIN_HARNESS_T375_HARNESS_DOCTOR_LIFECYCLE_TRIGGER_CONTEXT_2026-06-08.md` records source
+and installed-runtime hardening for ready harness-doctor warnings. `doctor` now includes the
+canonical policy trigger names in its soft lifecycle warning, so release and production-gate reports
+can see which lifecycle steps remain advisory without inferring them from the full policy object.
+Focused harness unit tests, MCP harness integration tests, fmt, check, clippy, release build,
+daemon restart, `/health`, live installed `harness doctor`, live installed `harness status`, and
+dist checksum validation passed. T375 does not install or mutate hooks/adapters, enforce lifecycle,
+archive memory, run `lint apply_safe`, mutate M6, change ranking/`orient`, launch native Claude,
+mark PR #3 ready, merge, tag, publish, or change beta scope.

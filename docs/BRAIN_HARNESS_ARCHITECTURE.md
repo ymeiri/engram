@@ -3561,3 +3561,8 @@ knowledge and improve agent behavior.
      binary that emits enriched stale-session context, but no lifecycle cleanup, M6 mutation,
      ranking/`orient` change, native Claude execution, release, merge, tag, or publish action was
      performed.
+202. Treat T375 as lifecycle-evidence hardening, not lifecycle enforcement. Ready harness-doctor
+     reports now name the advisory lifecycle triggers from the canonical policy, but lifecycle
+     compliance remains soft and agent-followed; no hooks/adapters are installed or mutated, no
+     `lint apply_safe` or M6 action is authorized, and no native-Claude, release, merge, tag, or
+     publish gate is closed.
