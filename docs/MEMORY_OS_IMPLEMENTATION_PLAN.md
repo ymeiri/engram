@@ -8385,3 +8385,12 @@ and canonical vault counts match the expected read-only preflight state. Native 
 proof, and T270 live host-label proof remain blocked by attribution ambiguity. T372 does not
 launch native Claude, run `/hooks`, signal processes, mutate settings/adapters, run M6, run
 `lint apply_safe`, mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T373 stale session lint context note:
+`docs/BRAIN_HARNESS_T373_STALE_SESSION_LINT_CONTEXT_2026-06-08.md` records a source hardening
+slice in `engram-index/src/lint.rs`: `stale_active_session` findings now include project, agent,
+RFC3339 `started_at`, and `age_hours` while preserving `safe_action=none`. This makes lifecycle
+review less ambiguous without ending sessions, archiving memory, running `lint apply_safe`, mutating
+M6, changing ranking/`orient`, launching native Claude, or changing release scope. Focused lint
+unit tests, public lint integration tests, fmt, check, clippy, local CI, and package/install smoke
+pass for the T373 candidate.

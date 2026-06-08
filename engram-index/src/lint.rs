@@ -159,17 +159,29 @@ impl LintService {
             .list_sessions(Some(&SessionStatus::Active), None, project, None)
             .await?;
         let stale_before = OffsetDateTime::now_utc() - Duration::days(1);
+        let now = OffsetDateTime::now_utc();
         for session in sessions
             .into_iter()
             .filter(|session| session.started_at < stale_before)
         {
+            let age_hours = (now - session.started_at).whole_hours();
+            let project = session.project.as_deref().unwrap_or("unknown");
+            let agent = session.agent.as_deref().unwrap_or("unknown");
+            let started_at = session
+                .started_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_else(|_| session.started_at.to_string());
             findings.push(
                 LintFinding::new(
                     format!("stale-active-session:{}", session.id),
                     LintRule::StaleActiveSession,
                     LintSeverity::Warning,
                     "Active session appears stale",
-                    "Session has been active for more than one day; consider ending or abandoning it.",
+                    format!(
+                        "Session has been active for more than one day \
+                         (project: {project}, agent: {agent}, started_at: {started_at}, \
+                         age_hours: {age_hours}); consider ending or abandoning it."
+                    ),
                 )
                 .with_session(session.id),
             );
@@ -976,7 +988,9 @@ mod tests {
             .await
             .unwrap();
 
-        let mut engram_session = engram_core::session::Session::new().with_project("engram");
+        let mut engram_session = engram_core::session::Session::new()
+            .with_project("engram")
+            .with_agent("codex");
         engram_session.started_at = OffsetDateTime::now_utc() - Duration::days(2);
         let mut other_session = engram_core::session::Session::new().with_project("other-project");
         other_session.started_at = OffsetDateTime::now_utc() - Duration::days(2);
@@ -1024,6 +1038,10 @@ mod tests {
         assert!(report.findings.iter().any(|finding| {
             finding.rule == LintRule::StaleActiveSession
                 && finding.session_id == Some(engram_session.id)
+                && finding.message.contains("project: engram")
+                && finding.message.contains("agent: codex")
+                && finding.message.contains("started_at:")
+                && finding.message.contains("age_hours:")
         }));
         assert!(!report
             .findings

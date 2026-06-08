@@ -942,6 +942,10 @@ Harness and migration checkpoint, current through 2026-06-08:
   expected read-only preflight state; native `claude` PID `34797` remains live on `ttys004`, so
   T312 prompt-bearing proof, T335 effective-hook proof, and T270 live host-label proof remain
   blocked by attribution ambiguity.
+- T373 enriches `stale_active_session` lint findings with project, agent, RFC3339 `started_at`,
+  and `age_hours` while preserving `safe_action=none`. This improves lifecycle review safety
+  without ending sessions, archiving memory, running `lint apply_safe`, mutating M6, changing
+  ranking/`orient`, launching native Claude, or changing release scope.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
@@ -3543,3 +3547,7 @@ knowledge and improve agent behavior.
      prompt-bearing proof, T335 effective-hook proof, and T270 live host-label proof remain blocked
      by attribution ambiguity until that process exits naturally or the user approves an exact
      process/session action and a fresh preflight passes.
+200. Treat T373 as lint actionability hardening, not lifecycle cleanup. Stale active-session
+     findings now carry enough project/agent/start/age context for safer review, but they still
+     expose no automatic safe action and do not end sessions, archive memory, run `lint apply_safe`,
+     mutate M6, change ranking/`orient`, or close production/GA gates.

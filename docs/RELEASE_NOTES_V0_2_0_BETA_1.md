@@ -725,3 +725,11 @@ canonical vault counts match the expected preflight state. A live native `claude
 and T270 live host-label proof. T372 is read-only for runtime state and does not launch native
 Claude, run `/hooks`, signal processes, mutate settings or adapters, mark PR #3 ready, merge, tag,
 publish, or change the beta scope.
+
+T373 makes stale active-session lint findings more actionable for production lifecycle review.
+`engram-index/src/lint.rs` now includes project, agent, RFC3339 `started_at`, and `age_hours` in
+each `stale_active_session` finding while preserving `safe_action=none`. This improves cleanup
+review safety without ending sessions, archiving memory, running `lint apply_safe`, mutating M6,
+changing ranking/`orient`, launching native Claude, or changing release scope. Focused lint tests,
+public lint integration tests, fmt, check, clippy, local CI, and package/install smoke pass for the
+T373 candidate.
