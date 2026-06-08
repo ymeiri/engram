@@ -790,3 +790,11 @@ behavior. Focused CLI parse/check/clippy validation passed; the rebuilt installe
 passed. T378 improves release/operator evidence only; it does not install or mutate hooks/adapters,
 enforce lifecycle behavior, run lifecycle cleanup or M6, launch native Claude, mark PR #3 ready,
 merge, tag, publish, or change the beta scope.
+
+T379 refreshes the implementation-plan completion matrix after T378 closeout. The current matrix
+now names PR #3 head `c876374db987252f4ad7ed88885ab55f30860b8a`, exact-head local CI plus
+package-install smoke evidence, hosted run `27153053722` with `steps=0` on every job, and the
+current native-Claude attribution blocker. T379 is a docs-only freshness correction; it does not
+mark PR #3 ready, merge, tag, publish, accept hosted-CI fallback, close hosted CI, run native
+Claude, prove effective hooks or live host labels, run lifecycle cleanup, mutate M6, or change the
+beta scope.
