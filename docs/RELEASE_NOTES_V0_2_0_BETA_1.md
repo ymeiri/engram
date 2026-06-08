@@ -798,3 +798,13 @@ current native-Claude attribution blocker. T379 is a docs-only freshness correct
 mark PR #3 ready, merge, tag, publish, accept hosted-CI fallback, close hosted CI, run native
 Claude, prove effective hooks or live host labels, run lifecycle cleanup, mutate M6, or change the
 beta scope.
+
+T380 archives exactly the stale active M6 checkpoint MemoryItem
+`019dd35d-1a48-7103-b0e2-390225f8b418` after T278 made its active
+`Memory OS completion is paused at migration review gate` guidance stale for the current review
+batch. Post-archive `memory(get)` reports `status=archived`, current T278 search no longer returns
+that checkpoint in active memory results, project-scoped lint no longer reports its stale-feedback
+finding, and obligations doctor is clean. T380 is exact lifecycle hygiene only; it does not delete
+data, run broad `lint apply_safe`, run M6 write-apply, change source behavior, change ranking or
+`orient`, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude,
+prove effective hooks, prove live host labels, or change the beta scope.
