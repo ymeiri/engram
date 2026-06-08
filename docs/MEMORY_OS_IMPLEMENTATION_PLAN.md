@@ -8394,3 +8394,15 @@ review less ambiguous without ending sessions, archiving memory, running `lint a
 M6, changing ranking/`orient`, launching native Claude, or changing release scope. Focused lint
 unit tests, public lint integration tests, fmt, check, clippy, local CI, and package/install smoke
 pass for the T373 candidate.
+
+T374 installed stale session lint runtime note:
+`docs/BRAIN_HARNESS_T374_INSTALLED_STALE_SESSION_LINT_RUNTIME_2026-06-08.md` records installed
+runtime adoption for T373. Before install, `/Users/yuval.meiri/.local/bin/engram` and
+`./target/release/engram` both reported `0.2.0-beta.1` but had different SHA-256 hashes. After
+`cargo build --release` and installing the rebuilt binary, both paths hash to
+`2446fe249b0b24745f47fafd356eec62fde2ca585b16c4f865f56d5e7c4c6a6c`; the daemon restarted on PID
+`30394`; HTTP `/health` returned ok; and installed
+`engram lint run --scope-project engram --limit 20 --json` showed stale-session messages with
+project, agent, `started_at`, and `age_hours`. T374 closes installed-runtime drift for that lint
+context only. It does not archive sessions or memory, run `lint apply_safe`, mutate M6, change
+ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change beta scope.

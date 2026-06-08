@@ -733,3 +733,14 @@ review safety without ending sessions, archiving memory, running `lint apply_saf
 changing ranking/`orient`, launching native Claude, or changing release scope. Focused lint tests,
 public lint integration tests, fmt, check, clippy, local CI, and package/install smoke pass for the
 T373 candidate.
+
+T374 installs the T373 source behavior into the live local/Codex runtime. Before install,
+`/Users/yuval.meiri/.local/bin/engram` and `./target/release/engram` both reported
+`0.2.0-beta.1` but had different SHA-256 hashes. After `cargo build --release` and installing the
+fresh binary, both paths hash to
+`2446fe249b0b24745f47fafd356eec62fde2ca585b16c4f865f56d5e7c4c6a6c`; the daemon was restarted on
+PID `30394`, `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`, and
+installed `engram lint run --scope-project engram --limit 20 --json` showed stale active-session
+messages with project, agent, `started_at`, and `age_hours`. T374 does not run `lint apply_safe`,
+archive sessions or memory, mutate M6, change `orient`, launch native Claude, mark PR #3 ready,
+merge, tag, publish, or change the beta scope.

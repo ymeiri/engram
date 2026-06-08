@@ -946,6 +946,12 @@ Harness and migration checkpoint, current through 2026-06-08:
   and `age_hours` while preserving `safe_action=none`. This improves lifecycle review safety
   without ending sessions, archiving memory, running `lint apply_safe`, mutating M6, changing
   ranking/`orient`, launching native Claude, or changing release scope.
+- T374 installs that lint context into the live local/Codex runtime. After `cargo build --release`
+  and installing `/Users/yuval.meiri/.local/bin/engram`, the installed and repository release
+  binaries hash to `2446fe249b0b24745f47fafd356eec62fde2ca585b16c4f865f56d5e7c4c6a6c`; the daemon
+  restarted on PID `30394`; `/health` returned ok; and installed `engram lint run --scope-project
+  engram --limit 20 --json` showed project, agent, `started_at`, and `age_hours` in live stale
+  active-session findings. This closes installed-runtime drift for T373 only.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
@@ -3551,3 +3557,7 @@ knowledge and improve agent behavior.
      findings now carry enough project/agent/start/age context for safer review, but they still
      expose no automatic safe action and do not end sessions, archive memory, run `lint apply_safe`,
      mutate M6, change ranking/`orient`, or close production/GA gates.
+201. Treat T374 as installed-runtime adoption for T373 only. The local daemon now runs the rebuilt
+     binary that emits enriched stale-session context, but no lifecycle cleanup, M6 mutation,
+     ranking/`orient` change, native Claude execution, release, merge, tag, or publish action was
+     performed.
