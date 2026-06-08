@@ -822,3 +822,17 @@ zero wrong-scope-memory outcomes. The 20-trace window also passes at `10/20` fee
 or release scope; it does not accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
 run M6, run lifecycle cleanup, launch native Claude, prove hooks or host labels, or make the system
 production/GA ready.
+
+T384 archives exactly five stale active MemoryItems that project-scoped lint reported as
+`feedback_stale_active_memory`: `019dd080-612a-7540-a028-42991c20ef1b`,
+`019dd083-e014-74f1-95e5-b1eef478e894`, `019dd3a8-138d-7453-9991-d724f96a128f`,
+`019dd3e4-9143-7721-9bff-b3fb505c8859`, and
+`019e68a7-3375-7943-8ef0-dc0dde64c8bd`. The targets were April/May runtime,
+implementation-plan, readiness, gap, and direct-search live-smoke snapshots now superseded by
+current T337-T383 evidence. Post-archive project-scoped lint no longer reports those five stale
+active-memory findings; the remaining sample is missing-evidence and stale-session debt with
+`safe_action="none"`. Vault status remains aligned at `2749/2749`, and scoped obligations doctor
+is clean. T384 preserves history and changes lifecycle state only; it does not delete data, run
+broad `lint apply_safe`, end sessions, mutate M6, change ranking or `orient`, accept hosted-CI
+fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels,
+or make the system production/GA ready.
