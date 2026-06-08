@@ -3,7 +3,7 @@
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
-beta-scope consensus refresh, and research-method checkpoints
+beta-scope consensus refresh, CLI daemon admin routing, and research-method checkpoints
 Date: 2026-06-07
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -841,6 +841,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   fresh installed MCP smoke proved `tools/list` exposes `lint.project` and `tools/call` accepts
   `project=engram`. T337 is installed-runtime adoption only; it does not run `lint apply_safe`,
   mutate memory, or prove lifecycle cleanup.
+- T357 routes common installed CLI admin commands through the healthy daemon when no explicit
+  `--data-dir` is supplied. This lets `engram lint`, `engram obligations`, and `engram vault`
+  work during normal daemon-backed beta operation instead of colliding with
+  `~/.engram/data/LOCK`; explicit data-dir commands and no-daemon fallback still use direct
+  RocksDB access. The T357 head passed full `./scripts/local-ci.sh` and
+  `./scripts/package-install-smoke.sh`, including release tarball checksum verification,
+  temporary-prefix install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

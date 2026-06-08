@@ -428,3 +428,34 @@ remain live as PID `60453` on `ttys001` and PID `311` on `ttys005`, making new-s
 ambiguous. T356 does not launch native Claude, run `/hooks`, signal processes, mutate settings or
 adapters, prove prompt-bearing behavior, prove effective-hook visibility, prove live host labels,
 close hosted CI, or change the supported beta scope.
+
+## CLI Daemon Admin Routing
+
+T357 hardens local beta administration while the daemon owns the store. `engram lint`,
+`engram obligations`, and `engram vault` now prefer the healthy global or project daemon when no
+explicit `--data-dir` is supplied, using the existing one-shot MCP proxy path. Explicit data-dir
+commands still use direct RocksDB access, and the direct path remains the fallback when no matching
+daemon is healthy.
+
+This fixes the practical lock failure observed when running installed CLI health checks while the
+global daemon held `~/.engram/data/LOCK`. Focused validation passed `cargo fmt --all --check`,
+`git diff --check`, `cargo check -p engram-cli`, and `cargo test -p engram-cli`. Live source-binary
+and installed-path smokes proved `lint run --scope-project engram`, `vault status`, and
+`obligations doctor --limit 3` return daemon-backed output instead of the lock error while daemon
+PID `64693` remains running.
+
+The same T357 head also passed `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh`. The package smoke rebuilt
+`engram-0.2.0-beta.1-aarch64-apple-darwin.tar.gz`, verified its checksum, installed the packaged
+binary into a temporary prefix, confirmed `engram 0.2.0-beta.1`, started packaged
+`engram serve --http --memory`, and verified `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+`cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` refreshed the installed
+CLI hash from `a47edffa8c8ed955a311adac85033ce8a28235c37007b5149ea81a8ffeb456de` to
+`fa91efbd228683dae608881f5828bdc1ffe55b67376e414653f8ac8eb92ba8c9`; `engram --version`
+continues to report `engram 0.2.0-beta.1`.
+
+T357 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
+beta scope.
