@@ -10,6 +10,7 @@ host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
+embed_cache_dir="${ENGRAM_EMBED_CACHE_DIR:-$repo_root/.fastembed_cache}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-install-smoke.XXXXXX")"
 server_pid=""
 
@@ -84,7 +85,7 @@ if [[ ! -x "$package_dir/engram" ]]; then
     exit 1
 fi
 
-mkdir -p "$work_dir/prefix/bin" "$work_dir/home" "$work_dir/data"
+mkdir -p "$work_dir/prefix/bin" "$work_dir/home" "$work_dir/data" "$embed_cache_dir"
 run_step "install binary in temp prefix" install -m 755 "$package_dir/engram" "$work_dir/prefix/bin/engram"
 
 export PATH="$work_dir/prefix/bin:$PATH"
@@ -111,11 +112,12 @@ server_log="$work_dir/server.log"
 health_json="$work_dir/health.json"
 
 printf '\n==> start packaged HTTP server\n'
-cd "$repo_root"
-# Reuse the repo-root fastembed cache while keeping Engram data isolated.
+# Reuse the warmed fastembed cache while keeping Engram data and cwd isolated.
 env \
+    -u HF_HOME \
     HOME="$work_dir/home" \
     ENGRAM_DATA_DIR="$work_dir/data" \
+    ENGRAM_EMBED_CACHE_DIR="$embed_cache_dir" \
     engram serve --http --memory --port "$port" >"$server_log" 2>&1 &
 server_pid=$!
 

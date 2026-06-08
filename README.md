@@ -239,6 +239,10 @@ cargo fmt
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 
+Embedding model files are cached under `~/.engram/cache/fastembed` by default. Set
+`ENGRAM_EMBED_CACHE_DIR` to use a pre-warmed or shared cache; upstream `FASTEMBED_CACHE_DIR` and
+`HF_HOME` are also honored.
+
 ## Technology
 
 | Component | Choice | Why |

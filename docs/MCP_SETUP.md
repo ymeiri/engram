@@ -122,3 +122,4 @@ If engram is working, the agent recalls your OAuth decision from step 1.
 |----------|---------|-------------|
 | `RUST_LOG` | `info` | Log level (`debug`, `info`, `warn`, `error`) |
 | `ENGRAM_DATA_DIR` | `~/.engram` | Override default data directory |
+| `ENGRAM_EMBED_CACHE_DIR` | `~/.engram/cache/fastembed` | Override embedding model cache directory |

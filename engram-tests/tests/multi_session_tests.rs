@@ -43,6 +43,18 @@ fn engram_bin() -> PathBuf {
     ENGRAM_BIN.get_or_init(resolve_engram_bin).clone()
 }
 
+fn test_embed_cache_dir() -> PathBuf {
+    for key in ["ENGRAM_EMBED_CACHE_DIR", "FASTEMBED_CACHE_DIR"] {
+        if let Some(path) = std::env::var_os(key).filter(|value| !value.as_os_str().is_empty()) {
+            return PathBuf::from(path);
+        }
+    }
+
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".fastembed_cache")
+}
+
 fn resolve_engram_bin() -> PathBuf {
     // Use env var if set (for CI), otherwise find relative to workspace
     if let Ok(path) = std::env::var("ENGRAM_BIN") {
@@ -96,6 +108,7 @@ impl TestDaemon {
         let child = Command::new(engram_bin())
             .args(["serve", "--http", "--port", &port.to_string(), "--memory"])
             .env("ENGRAM_DATA_DIR", data_dir.path())
+            .env("ENGRAM_EMBED_CACHE_DIR", test_embed_cache_dir())
             .env("RUST_LOG", "warn")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

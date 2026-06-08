@@ -56,7 +56,9 @@ plus SHA-256 checksum under ignored `dist/`.
 The local install-smoke command is `./scripts/package-install-smoke.sh`. It builds the package,
 verifies the checksum, extracts the archive, installs the packaged binary into a temporary prefix,
 confirms `PATH` resolution and `engram --version`, starts the packaged binary with
-`engram serve --http --memory`, and verifies `/health`.
+`engram serve --http --memory`, and verifies `/health`. The smoke starts the server from the
+temporary install workspace and sets `ENGRAM_EMBED_CACHE_DIR` explicitly, so package validation no
+longer relies on the repository root as the process cwd for embedding model cache discovery.
 
 ## Beta Install Quickstart
 
@@ -356,4 +358,20 @@ release-owner approval, ready/merge/tag/publish, and a practical local/Codex bet
 hosted-CI fallback.
 
 T351 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, or change the supported beta scope.
+
+T353 makes embedding model cache discovery deterministic for beta installs. `EmbedConfig::default`
+now uses `~/.engram/cache/fastembed` by default, accepts `ENGRAM_EMBED_CACHE_DIR` as the
+Engram-specific override, and preserves upstream `FASTEMBED_CACHE_DIR` compatibility. `HF_HOME`
+still remains an upstream Hugging Face override when set. The package install smoke now starts the
+packaged binary from the temporary install workspace with `ENGRAM_EMBED_CACHE_DIR` set explicitly,
+so `/health` validation no longer depends on repository-root cwd.
+
+T353 validation passed `cargo test -p engram-embed config::tests`,
+`cargo test -p engram-tests --test multi_session_tests`, `./scripts/package-install-smoke.sh`, and
+`./scripts/local-ci.sh`. The first full local CI attempt exposed that isolated multi-session test
+daemons also needed an explicit stable cache path; the test daemon helper now sets
+`ENGRAM_EMBED_CACHE_DIR` to the configured cache override or package-local `.fastembed_cache`.
+
+T353 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, or change the supported beta scope.
