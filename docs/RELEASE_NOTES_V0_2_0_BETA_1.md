@@ -879,3 +879,15 @@ preserved in `docs/BRAIN_HARNESS_T387_EXACT_COORD_ORPHAN_CLEANUP_2026-06-08.md`.
 obligations doctor remains clean. T387 does not delete session events, run broad `lint apply_safe`,
 mutate M6, change source behavior, accept hosted-CI fallback, mark PR #3 ready, merge, tag,
 publish, launch native Claude, prove hooks or host labels, or make the system production/GA ready.
+
+T388 refreshes exact-head release validation after T384-T387 lifecycle/evidence/session/coordination
+cleanup. `./scripts/local-ci.sh` passed on the T388 head, covering `git diff --check`,
+`cargo fmt --all --check`, `cargo check --all-targets`,
+`cargo clippy --all-targets -- -D warnings`, CI-like `cargo test --all-targets --jobs 1`, and
+`cargo doc --no-deps`. `./scripts/package-install-smoke.sh` also passed, rebuilding the release
+package, verifying the checksum, installing the packaged binary into a temporary prefix,
+confirming `engram 0.2.0-beta.1`, and verifying packaged HTTP `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. T388 refreshes local release
+evidence only; it does not accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
+launch native Claude, prove hooks or host labels, mutate M6, or make the system production/GA
+ready.
