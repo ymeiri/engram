@@ -375,3 +375,18 @@ daemons also needed an explicit stable cache path; the test daemon helper now se
 
 T353 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, or change the supported beta scope.
+
+T354 refreshes the installed local binary after T353. `cargo install --path engram-cli --force
+--root /Users/yuval.meiri/.local` replaced the previous installed hash
+`e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5` with
+`a47edffa8c8ed955a311adac85033ce8a28235c37007b5149ea81a8ffeb456de`, while
+`/Users/yuval.meiri/.local/bin/engram --version` still reports `engram 0.2.0-beta.1`.
+
+An isolated installed-runtime smoke started `/Users/yuval.meiri/.local/bin/engram serve --http
+--memory` from a temporary workspace with temp `HOME`, temp `ENGRAM_DATA_DIR`, and explicit
+`ENGRAM_EMBED_CACHE_DIR` pointing at the warmed repo cache. `GET /health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. The existing global daemon was not
+restarted during this validation.
+
+T354 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, or change the supported beta scope.
