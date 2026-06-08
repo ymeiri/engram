@@ -5,7 +5,7 @@ snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
-and research-method checkpoints
+exact stale Claude-harness memory cleanup, and research-method checkpoints
 Date: 2026-06-08
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -95,7 +95,7 @@ Implementation checkpoint, 2026-05-06:
   `changes_since` remain specialist paths until their signal quality and scoped retrieval behavior
   are proven.
 
-Harness and migration checkpoint, current through 2026-06-07:
+Harness and migration checkpoint, current through 2026-06-08:
 
 - Supported local/Codex beta harness readiness remains validated for the current MVP path.
   T333 closes the Claude Code generated-adapter drift recorded by T311/T312/T313: the installed
@@ -886,6 +886,13 @@ Harness and migration checkpoint, current through 2026-06-07:
   obligations checks are healthy, but active native `claude` PID `34797` on `ttys004` still makes
   new-session transcript attribution ambiguous. This is read-only gate evidence; it does not launch
   native Claude, run `/hooks`, or prove host parity.
+- T364 archives two exact stale, evidence-less active Claude-harness memories after fresh
+  `memory(get)`, `graph(around)`, project-scoped lint, and direct-search checks:
+  `019dd4e3-bcec-7c02-9174-ba0ac0380d45` and
+  `019dd509-46f2-71c0-aff7-ebe777810825`. Newer evidenced records such as T333/T340/T363 now carry
+  the current bounded Claude-harness state, and post-archive project-scoped lint no longer reports
+  those two IDs. This is exact lifecycle cleanup only; native Claude prompt-bearing behavior,
+  effective-hook visibility, live host labels, hosted CI, and broad lifecycle cleanup remain open.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

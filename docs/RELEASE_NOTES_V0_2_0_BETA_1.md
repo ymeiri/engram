@@ -614,3 +614,21 @@ host-label proof.
 T363 does not launch native Claude, send prompts, run `/hooks`, signal processes, mutate settings
 or adapters, mark PR #3 ready, merge, tag, publish, close hosted CI, or change the supported beta
 scope.
+
+T364 performs exact lifecycle cleanup for two stale, evidence-less Claude-harness MemoryItems:
+`019dd4e3-bcec-7c02-9174-ba0ac0380d45` (`Claude Code native hook harness implemented`) and
+`019dd509-46f2-71c0-aff7-ebe777810825` (`Claude Code Engram-native harness activated`). Fresh
+`memory(get)` checks showed both were active with empty evidence; `graph(around, depth=1)` showed
+only project scope; and project-scoped lint flagged them as stale-feedback/missing-evidence active
+memory. Both were archived with explicit reasons because newer evidenced T333/T340/T363 records now
+carry the current Claude-harness state: generated adapter drift is closed, while native Claude
+prompt-bearing behavior, effective-hook visibility, and live host labels remain unproved.
+
+Post-archive validation confirmed both IDs are `status=archived`, live daemon project-scoped
+`lint(action=run, project=engram, limit=30)` returned `archived_targets_present=[]`, and direct
+search for the old activation titles now surfaces active evidenced successor/limitation records
+first.
+
+T364 does not change source code, launch native Claude, run `/hooks`, signal processes, mutate
+settings or adapters, run broad `lint apply_safe`, delete data, mark PR #3 ready, merge, tag,
+publish, close hosted CI, or change the supported beta scope.
