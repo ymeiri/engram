@@ -853,3 +853,17 @@ doctor is clean. T385 changes Memory OS lifecycle/evidence state only; it does n
 cleanup, end sessions, mutate M6, change ranking or `orient`, accept hosted-CI fallback, mark PR #3
 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, or make the system
 production/GA ready.
+
+T386 closes exactly five project-scoped stale active-session lint findings while preserving durable
+session history. The completed session records are
+`019dd063-ee4f-7943-8409-0450bac3a724`,
+`019e7d38-68d7-7652-b62f-3e8e635253ae`,
+`019e7e6e-73e2-7e72-9351-da62e69686af`,
+`019e8470-5d37-7db0-ac21-1725184849e7`, and
+`019e990f-e4fb-7a02-a840-77a38dceab3e`. Matching stale coordination rows with empty
+components/current_file were unregistered for all but `019e7d38`, which had no coordination row.
+Post-cleanup project-scoped lint returns no findings, and the targeted coordination rows no
+longer appear in `coord(list)`. T386 changes session lifecycle/coordination state only; it does
+not delete session events, run broad `lint apply_safe`, mutate M6, change source behavior, accept
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
+host labels, clean unrelated coordination-only rows, or make the system production/GA ready.
