@@ -3525,7 +3525,10 @@ pub struct TelemetryRequest {
     pub arm: Option<String>,
     /// Query, prompt, or short operation context.
     pub query: Option<String>,
-    /// Project scope.
+    /// Project scope for trace recording and scoped telemetry reports.
+    #[schemars(
+        description = "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
+    )]
     pub project: Option<String>,
     /// Agent or harness label.
     pub agent: Option<String>,
@@ -11175,6 +11178,20 @@ mod tests {
         assert_eq!(
             properties["cwd"]["description"],
             "Current working directory for detect/list/open/doctor scoping."
+        );
+    }
+
+    #[test]
+    fn telemetry_request_schema_exposes_project_filter() {
+        let schema = schemars::schema_for!(TelemetryRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("TelemetryRequest schema should have properties");
+
+        assert_eq!(
+            properties["project"]["description"],
+            "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
         );
     }
 

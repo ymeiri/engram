@@ -550,3 +550,28 @@ prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged HTTP `/health` re
 T360 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
 beta scope.
+
+T361 hardens public MCP metadata for project-scoped telemetry reports. `TelemetryRequest.project`
+now explicitly describes its support for `record_trace`, `list_traces`, `list_feedback`,
+`stats_by_intent`, and `real_session_eval`. This matches the runtime telemetry behavior, so agents
+reading `tools/list` can discover the project-filtered telemetry/eval path without guessing.
+
+Focused validation passed
+`cargo test -p engram-mcp telemetry_request_schema_exposes_project_filter` and
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_telemetry_schema_exposes_project_filter`.
+Broader validation passed `cargo fmt --all --check`, `git diff --check`, `cargo test -p
+engram-mcp`, `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list`,
+`./scripts/local-ci.sh`, and `./scripts/package-install-smoke.sh`.
+
+`cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` refreshed the installed
+CLI hash from `ff16b90be46e54d089ce66e5b360630449bffc9f874da031beb10884f994756b` to
+`6c278872d2f71a5ce96fba3e1777b3cc2f4690e6d6c9caf74df093fb4fd7e49a`; `engram --version`
+continues to report `engram 0.2.0-beta.1`. The live global daemon was restarted onto that binary
+as PID `2865` on port `8765`, `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`, and a live `tools/list` smoke
+confirmed the telemetry schema exposes
+`project = "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."`.
+
+T361 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, mutate lifecycle state, change telemetry filtering semantics, or change the
+supported beta scope.
