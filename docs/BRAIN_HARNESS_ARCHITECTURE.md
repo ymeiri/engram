@@ -914,6 +914,16 @@ Harness and migration checkpoint, current through 2026-06-08:
   checks match. Ambient Claude-family helper processes remain and must be accounted for in any
   future proof run. T312/T335/T270 are now attribution-ready from the native CLI process standpoint
   but still require exact approval before any native launch, prompt, `/hooks`, or host-label proof.
+- T368 supersedes T367's attribution-clear native CLI process result. Fresh process inventory shows
+  native `claude` PID `34797` live again on `ttys004`, so T312/T335/T270 are not executable until
+  the process exits naturally or the user gives exact approval for process action and a fresh
+  preflight passes.
+- T369 refreshes the exact-head local beta validation after T368. `./scripts/local-ci.sh` and
+  `./scripts/package-install-smoke.sh` pass for the current PR #3 candidate tree, while hosted run
+  `27138579667` still fails before workflow-step execution with `steps=[]`. The scoped beta gate is
+  now release-owner local-fallback acceptance or restored exact-head hosted CI, followed by
+  ready/merge/tag/publish mechanics. This does not prove native Claude, effective hooks, live host
+  labels, telemetry completeness, M6 write-apply, or production/GA readiness.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
@@ -3500,3 +3510,9 @@ knowledge and improve agent behavior.
      shows native `claude` PID `34797` still live on `ttys004`, so T312 prompt-bearing proof, T335
      effective-hook proof, and T270 live host-label proof are not currently executable. T368 does
      not launch native Claude, run `/hooks`, signal processes, or change the scoped beta path.
+198. Treat T369 as exact-head local beta validation for the scoped local/Codex path, not release
+     approval or production/GA completion. `./scripts/local-ci.sh` and
+     `./scripts/package-install-smoke.sh` pass for the current PR #3 candidate tree; hosted run
+     `27138579667` remains externally blocked before workflow-step execution with `steps=[]`.
+     Remaining beta mechanics still require explicit release-owner fallback acceptance or restored
+     hosted CI, then ready/merge/tag/publish.

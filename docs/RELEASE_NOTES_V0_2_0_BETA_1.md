@@ -683,3 +683,16 @@ hard-stops T312 prompt-bearing proof, T335 `/hooks` effective-hook proof, and T2
 host-label proof until it exits naturally or the user gives exact approval for a process action
 and a fresh preflight passes. T368 is read-only and does not launch native Claude, run `/hooks`,
 signal the process, mark PR #3 ready, merge, tag, publish, or change the beta scope.
+
+T369 refreshes exact-head local beta validation after T368. `./scripts/local-ci.sh` passed on the
+current PR #3 candidate, covering `git diff --check`, `cargo fmt --all --check`,
+`cargo check --all-targets`, `cargo clippy --all-targets -- -D warnings`,
+CI-like `cargo test --all-targets --jobs 1`, and `cargo doc --no-deps`.
+`./scripts/package-install-smoke.sh` also passed, rebuilding the release package, verifying the
+tarball checksum, installing the packaged binary into a temporary prefix, confirming
+`engram 0.2.0-beta.1`, starting packaged `engram serve --http --memory`, and verifying packaged
+HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+Hosted run `27138579667` on T368 head `8dad84e37b6bc033904319c675683345c7b60972` still fails all
+jobs before workflow-step execution with `steps=[]`, so the remaining beta gate is explicit
+release-owner acceptance of the local fallback or restored exact-head hosted CI green, followed by
+ready/merge/tag/publish mechanics.
