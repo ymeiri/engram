@@ -651,3 +651,18 @@ evidenced current-plan/beta-scope records first.
 T365 does not change source code, run broad `lint apply_safe`, delete data, mark PR #3 ready,
 merge, tag, publish, close hosted CI, run native Claude, prove hooks or host labels, or change the
 supported beta scope.
+
+T366 refreshes local beta acceptance evidence for PR #3 while hosted GitHub Actions remains
+externally blocked. The local CI-equivalent command set passed: `git diff --check`,
+`cargo fmt --all --check`, `cargo check --all-targets`,
+`CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1`,
+`cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`.
+`./scripts/package-install-smoke.sh` also passed, rebuilding the release package, verifying the
+tarball checksum, installing the packaged binary into a temporary prefix, confirming
+`engram 0.2.0-beta.1`, and verifying packaged HTTP `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+T366 narrows the initial beta gate to either restored exact-head hosted CI or explicit
+release-owner acceptance of this local CI plus package/install fallback, followed by marking PR #3
+ready, merging, tagging, and publishing. It does not mark PR #3 ready, merge, tag, publish, close
+hosted CI, run native Claude, prove hooks or host labels, or change production/GA readiness.

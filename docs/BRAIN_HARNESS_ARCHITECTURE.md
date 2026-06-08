@@ -900,6 +900,14 @@ Harness and migration checkpoint, current through 2026-06-08:
   records now outrank that historical guidance, and post-archive project-scoped lint no longer
   reports those two IDs. This is exact lifecycle cleanup only; it does not prove production/GA
   readiness, native Claude parity, hosted CI, direct legacy deletion, or broad lifecycle cleanup.
+- T366 refreshes the local beta acceptance proof for PR #3. Local CI-equivalent validation passes
+  `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`,
+  `cargo test --all-targets --jobs 1` with CI-like test env,
+  `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`;
+  `./scripts/package-install-smoke.sh` verifies the release tarball checksum, temporary-prefix
+  install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`. This narrows the initial
+  beta gate to release-owner fallback acceptance or restored hosted CI, then mark PR #3 ready,
+  merge, tag, and publish. It does not close hosted CI or prove production/GA host parity.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for
