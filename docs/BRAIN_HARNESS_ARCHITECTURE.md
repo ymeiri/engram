@@ -5,7 +5,7 @@ snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
-exact stale Claude-harness memory cleanup, and research-method checkpoints
+exact stale Claude-harness and orient-contract memory cleanup, and research-method checkpoints
 Date: 2026-06-08
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -893,6 +893,13 @@ Harness and migration checkpoint, current through 2026-06-08:
   the current bounded Claude-harness state, and post-archive project-scoped lint no longer reports
   those two IDs. This is exact lifecycle cleanup only; native Claude prompt-bearing behavior,
   effective-hook visibility, live host labels, hosted CI, and broad lifecycle cleanup remain open.
+- T365 archives two exact stale, evidence-less May 6 orient-contract/architecture memories after
+  fresh `memory(get)`, `graph(around)`, project-scoped lint, and direct-search checks:
+  `019dfed3-519d-7f01-8c46-c9245ba0045b` and
+  `019dfed5-1875-7110-b355-8d1060e6d04a`. Current evidenced T364 current-plan and beta-scope
+  records now outrank that historical guidance, and post-archive project-scoped lint no longer
+  reports those two IDs. This is exact lifecycle cleanup only; it does not prove production/GA
+  readiness, native Claude parity, hosted CI, direct legacy deletion, or broad lifecycle cleanup.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

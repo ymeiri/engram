@@ -632,3 +632,22 @@ first.
 T364 does not change source code, launch native Claude, run `/hooks`, signal processes, mutate
 settings or adapters, run broad `lint apply_safe`, delete data, mark PR #3 ready, merge, tag,
 publish, close hosted CI, or change the supported beta scope.
+
+T365 performs exact lifecycle cleanup for two stale, evidence-less May 6 orient-contract and
+architecture checkpoint MemoryItems: `019dfed3-519d-7f01-8c46-c9245ba0045b`
+(`AI Council and Claude next-step synthesis after orient contract`) and
+`019dfed5-1875-7110-b355-8d1060e6d04a`
+(`Brain Harness Architecture synced after orient contract checkpoint`). Fresh `memory(get)` checks
+showed both were active with empty evidence; `graph(around, depth=1)` showed only project scope; and
+project-scoped lint flagged both as stale-feedback/missing-evidence active memory. Both records were
+archived with explicit reasons because their May 6 next-step/checkpoint guidance is historical, not
+current.
+
+Post-archive validation confirmed both IDs are `status=archived`, live daemon project-scoped
+`lint(action=run, project=engram, limit=40)` returned `archived_targets_present=[]` and reduced the
+returned finding count from `20` to `16`, and direct search for the old titles still returns active
+evidenced current-plan/beta-scope records first.
+
+T365 does not change source code, run broad `lint apply_safe`, delete data, mark PR #3 ready,
+merge, tag, publish, close hosted CI, run native Claude, prove hooks or host labels, or change the
+supported beta scope.
