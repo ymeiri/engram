@@ -8444,3 +8444,16 @@ observed-tool flag, so the checked path was not validated through CLI text flags
 install or mutate hooks/adapters, enforce lifecycle, archive memory, run `lint apply_safe`, mutate
 M6, change ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change
 beta scope.
+
+T378 CLI observed MCP tool flags note:
+`docs/BRAIN_HARNESS_T378_CLI_OBSERVED_MCP_TOOL_FLAGS_2026-06-08.md` records source hardening for
+release/operator checks. `engram harness status` and `engram harness doctor` now accept repeatable
+`--observed-mcp-tool <TOOL>` flags and pass those names into the T377 structured
+`mcp_tools.checked` path. Omitting the flag preserves unchecked behavior. Focused CLI parse
+validation, `cargo fmt --all --check`, `cargo test -p engram-cli`, `cargo check -p engram-cli`,
+and `cargo clippy -p engram-cli -- -D warnings` passed. The rebuilt installed binary hash is
+`d7e17ae33bdfd48c84fd24070b1d10b17a284c0e31993e7a9b190c7450180b34`, daemon PID `39185` is healthy,
+and installed CLI checked-complete plus checked-missing smokes passed. T378 does not install or
+mutate hooks/adapters, enforce lifecycle, archive memory, run `lint apply_safe`, mutate M6, change
+ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change beta
+scope.

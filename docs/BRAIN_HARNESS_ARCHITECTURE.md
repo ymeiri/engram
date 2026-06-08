@@ -6,7 +6,7 @@ effective-hook successor packet, project-scoped lint, exact lifecycle maintenanc
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
 exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
-tool reports, and research-method checkpoints
+tool reports, CLI observed MCP tool checks, and research-method checkpoints
 Date: 2026-06-08
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3579,3 +3579,8 @@ knowledge and improve agent behavior.
      as "all tools observed"; callers must supply observed tool names to make that claim. T377
      does not mutate hooks/adapters, enforce lifecycle, change ranking/`orient`, prove
      native-Claude behavior, close hosted CI, or perform release, merge, tag, or publish actions.
+205. Treat T378 as CLI observability for the T377 MCP-tool check, not new harness semantics.
+     `engram harness status` and `engram harness doctor` can now accept repeatable
+     `--observed-mcp-tool` flags and pass them to the existing status/doctor service. This lets
+     local release scripts verify checked MCP tool state through the CLI, but it does not prove
+     active client configuration unless the supplied observed-tool list is fresh and complete.

@@ -780,3 +780,13 @@ installed CLI does not expose an observed-tool flag, so the checked path was not
 CLI text flags. T377 improves structured evidence only; it does not install or mutate
 hooks/adapters, enforce lifecycle behavior, run lifecycle cleanup or M6, launch native Claude, mark
 PR #3 ready, merge, tag, publish, or change the beta scope.
+
+T378 exposes the T377 checked MCP tool path through the CLI. `engram harness status` and
+`engram harness doctor` now accept repeatable `--observed-mcp-tool <TOOL>` flags and pass those
+names into the same status/doctor service used by MCP. Omitting the flag preserves the unchecked
+behavior. Focused CLI parse/check/clippy validation passed; the rebuilt installed binary hash is
+`d7e17ae33bdfd48c84fd24070b1d10b17a284c0e31993e7a9b190c7450180b34`, the daemon restarted on PID
+`39185`, `/health` returned ok, and installed CLI checked-complete plus checked-missing smokes
+passed. T378 improves release/operator evidence only; it does not install or mutate hooks/adapters,
+enforce lifecycle behavior, run lifecycle cleanup or M6, launch native Claude, mark PR #3 ready,
+merge, tag, publish, or change the beta scope.

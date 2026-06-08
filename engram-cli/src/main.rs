@@ -1960,6 +1960,10 @@ enum HarnessCommands {
         #[arg(long)]
         root: Option<String>,
 
+        /// MCP tool name observed by the client; repeat to verify required tools
+        #[arg(long = "observed-mcp-tool", value_name = "TOOL")]
+        observed_mcp_tools: Vec<String>,
+
         /// Print report as JSON
         #[arg(long)]
         json: bool,
@@ -1974,6 +1978,10 @@ enum HarnessCommands {
         /// Install root, defaults to home directory
         #[arg(long)]
         root: Option<String>,
+
+        /// MCP tool name observed by the client; repeat to verify required tools
+        #[arg(long = "observed-mcp-tool", value_name = "TOOL")]
+        observed_mcp_tools: Vec<String>,
 
         /// Print report as JSON
         #[arg(long)]
@@ -8449,12 +8457,13 @@ async fn main() -> Result<()> {
                 HarnessCommands::Status {
                     harness,
                     root,
+                    observed_mcp_tools,
                     json,
                 } => {
                     let report = service.status(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
-                        &[],
+                        &observed_mcp_tools,
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -8465,12 +8474,13 @@ async fn main() -> Result<()> {
                 HarnessCommands::Doctor {
                     harness,
                     root,
+                    observed_mcp_tools,
                     json,
                 } => {
                     let report = service.doctor(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
-                        &[],
+                        &observed_mcp_tools,
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -10303,6 +10313,35 @@ mod tests {
                 _ => panic!("expected changes-since command"),
             },
             _ => panic!("expected memory command"),
+        }
+    }
+
+    #[test]
+    fn harness_status_parses_observed_mcp_tool_flags() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "harness",
+            "status",
+            "--harness",
+            "codex",
+            "--observed-mcp-tool",
+            "orient",
+            "--observed-mcp-tool",
+            "telemetry",
+            "--json",
+        ])
+        .expect("harness status command should parse observed MCP tools");
+
+        match cli.command {
+            Commands::Harness { command } => match command {
+                HarnessCommands::Status {
+                    observed_mcp_tools, ..
+                } => {
+                    assert_eq!(observed_mcp_tools, vec!["orient", "telemetry"]);
+                }
+                _ => panic!("expected status command"),
+            },
+            _ => panic!("expected harness command"),
         }
     }
 
