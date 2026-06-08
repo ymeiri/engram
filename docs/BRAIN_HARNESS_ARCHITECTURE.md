@@ -3494,3 +3494,9 @@ Proceed in this order from the current checkpoint:
 Do not begin large deletion, broad legacy simplification, or direct legacy deprecation beyond the
 T278 current-data review-batch apply until evidence shows the active MemoryItems preserve important
 knowledge and improve agent behavior.
+
+197. Treat T368 as a native-Claude attribution regression hard stop, not native Claude validation.
+     T367's attribution-clear result was point-in-time evidence only. Fresh T368 process inventory
+     shows native `claude` PID `34797` still live on `ttys004`, so T312 prompt-bearing proof, T335
+     effective-hook proof, and T270 live host-label proof are not currently executable. T368 does
+     not launch native Claude, run `/hooks`, signal processes, or change the scoped beta path.

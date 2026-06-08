@@ -8334,3 +8334,13 @@ lifecycle archive/apply_safe, deletion/cleanup/rollback, schema/storage/index/do
 MCP/ranking/`orient` changes, native Claude, Claude Bridge writes, harness install/settings/hooks/
 adapters, remote publication, and user-owned-file edits. T267 does not initialize the canonical
 vault and does not complete the Brain Harness goal.
+
+T368 native Claude attribution regression note:
+`docs/BRAIN_HARNESS_T368_NATIVE_CLAUDE_PREFLIGHT_ATTRIBUTION_REGRESSION_2026-06-08.md` records a
+fresh read-only native-Claude/effective-hook/live-host-label preflight after T367. T367's
+attribution-clear state was point-in-time only. Current process inventory shows native `claude`
+PID `34797` live on `ttys004`, which reintroduces the attribution hard stop for T312
+prompt-bearing proof, T335 `/hooks` effective-hook proof, and T270 live host-label proof. T368
+does not launch native Claude, run `/hooks`, signal the process, mutate harness settings/adapters,
+change source behavior, mark PR #3 ready, merge, tag, publish, or change the local/Codex beta
+scope.

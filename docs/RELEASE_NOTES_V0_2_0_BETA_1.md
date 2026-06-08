@@ -675,3 +675,11 @@ status/doctor `ready=true`, snippet-only no-write dry-run, canonical vault statu
 obligations doctor all match the preflight contract. Ambient Claude-family helper processes still
 exist and must be listed in any future execution report. T367 does not launch native Claude or run
 `/hooks`; T312, T335, and T270 remain default-deny until exact approval names the intended packet.
+
+T368 reruns the same native-Claude/effective-hook/live-host-label preflight and finds that the
+T367 attribution-clear state is no longer current. A live native `claude` CLI process is present
+again on `ttys004` as PID `34797`, started on 2026-06-08 at 11:49:15 local time. That process
+hard-stops T312 prompt-bearing proof, T335 `/hooks` effective-hook proof, and T270 live
+host-label proof until it exits naturally or the user gives exact approval for a process action
+and a fresh preflight passes. T368 is read-only and does not launch native Claude, run `/hooks`,
+signal the process, mark PR #3 ready, merge, tag, publish, or change the beta scope.
