@@ -836,3 +836,20 @@ is clean. T384 preserves history and changes lifecycle state only; it does not d
 broad `lint apply_safe`, end sessions, mutate M6, change ranking or `orient`, accept hosted-CI
 fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels,
 or make the system production/GA ready.
+
+T385 replaces or archives the next five project-scoped missing-evidence MemoryItems. Three useful
+implementation facts now have evidenced active successors: digest extraction apply
+`019ea8e5-d8ba-7623-abb0-b4151504ad14`, orient contract checkpoint
+`019ea8e6-19b0-7353-bc93-7124bfea5b61`, and real-session telemetry eval
+`019ea8e6-59e6-7980-9a97-e08ab77073be`. Their old evidence-less records
+`019dcaa6-0223-73a2-9fe4-76b61ff14faa`,
+`019dfecb-16ca-71c2-b391-e3c216601590`, and
+`019dfee0-90f8-7a61-a548-c2bddefcf897` are superseded. The stale global rolling handoff
+`019dddbe-d369-7523-ac91-9bfeb016463b` and stale May 6 installed-runtime snapshot
+`019dfee6-c83a-7c02-a3ed-78fc9e80329b` are archived. Post-change project-scoped lint starts at
+stale active-session warnings with `safe_action="none"`, canonical vault status is aligned at
+`2756/2756` after KnowledgeCommit `019ea8e8-f0ee-7f91-b78b-5b96060b9f0a`, and scoped obligations
+doctor is clean. T385 changes Memory OS lifecycle/evidence state only; it does not run broad
+cleanup, end sessions, mutate M6, change ranking or `orient`, accept hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, launch native Claude, prove hooks or host labels, or make the system
+production/GA ready.
