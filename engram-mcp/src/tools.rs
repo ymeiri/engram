@@ -7452,11 +7452,17 @@ fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, S
 /// Request an orientation context packet for the current user prompt.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct OrientRequest {
-    /// Current working directory, when known
+    /// Current working directory for repository/project resolution and scoped memory selection.
+    #[schemars(
+        description = "Current working directory for repository/project resolution and scoped memory selection."
+    )]
     pub cwd: Option<String>,
     /// Current user prompt or task request
     pub prompt: Option<String>,
-    /// Explicit project name, when known
+    /// Explicit project name for project resolution and project-scoped memory selection.
+    #[schemars(
+        description = "Explicit project name for project resolution and project-scoped memory selection."
+    )]
     pub project: Option<String>,
     /// Agent/harness name
     pub agent: Option<String>,
@@ -7472,7 +7478,10 @@ pub struct OrientRequest {
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
     pub limit: Option<usize>,
-    /// Response shape: full (default) or lean for read-only/verification tasks
+    /// Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance.
+    #[schemars(
+        description = "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+    )]
     pub response_shape: Option<OrientResponseShape>,
 }
 
@@ -11192,6 +11201,28 @@ mod tests {
         assert_eq!(
             properties["project"]["description"],
             "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
+        );
+    }
+
+    #[test]
+    fn orient_request_schema_exposes_context_contract() {
+        let schema = schemars::schema_for!(OrientRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("OrientRequest schema should have properties");
+
+        assert_eq!(
+            properties["cwd"]["description"],
+            "Current working directory for repository/project resolution and scoped memory selection."
+        );
+        assert_eq!(
+            properties["project"]["description"],
+            "Explicit project name for project resolution and project-scoped memory selection."
+        );
+        assert_eq!(
+            properties["response_shape"]["description"],
+            "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
         );
     }
 

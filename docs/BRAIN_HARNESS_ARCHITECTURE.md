@@ -4,7 +4,7 @@ Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime r
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
-scoped obligation/telemetry MCP metadata, and research-method checkpoints
+scoped obligation/telemetry/orient MCP metadata, and research-method checkpoints
 Date: 2026-06-08
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -870,6 +870,14 @@ Harness and migration checkpoint, current through 2026-06-07:
   `6c278872d2f71a5ce96fba3e1777b3cc2f4690e6d6c9caf74df093fb4fd7e49a` is running as daemon PID
   `2865`, and live `tools/list` exposes the updated description. This is public-contract metadata
   only; it does not change telemetry filtering semantics or scoring formulas.
+- T362 makes the core `orient` context contract discoverable through `tools/list`. The public
+  `orient` input schema now describes `cwd` as repository/project resolution plus scoped memory
+  selection, `project` as explicit project resolution plus project-scoped memory selection, and
+  `response_shape` as the full or lean Brain Loop response contract. Exact-head local CI and
+  package/install smoke passed, installed runtime hash
+  `77a08e895614bea3b02816e67bafd64087ea0634f4b0ca58b8199a9ef7855633` is running as daemon PID
+  `47577`, and live `tools/list` exposes the updated descriptions. This is public-contract
+  metadata only; it does not change orientation ranking or memory selection semantics.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

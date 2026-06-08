@@ -575,3 +575,25 @@ confirmed the telemetry schema exposes
 T361 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, mutate lifecycle state, change telemetry filtering semantics, or change the
 supported beta scope.
+
+T362 hardens public MCP metadata for the core `orient` Brain Loop entrypoint. `OrientRequest.cwd`
+now explicitly describes repository/project resolution and scoped memory selection,
+`OrientRequest.project` describes project resolution and project-scoped memory selection, and
+`OrientRequest.response_shape` describes the full/lean response shape contract for compact
+trace/cursor/Brain Loop guidance.
+
+Focused validation passed
+`cargo test -p engram-mcp orient_request_schema_exposes_context_contract` and
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_orient_schema_exposes_context_contract`.
+Broader validation passed `cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-mcp`,
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list`, and
+`./scripts/local-ci.sh`. `./scripts/package-install-smoke.sh` rebuilt the release package, verified
+the checksum, installed the packaged binary in a temporary prefix, reported `engram 0.2.0-beta.1`,
+and verified packaged HTTP `/health`. The installed runtime hash is
+`77a08e895614bea3b02816e67bafd64087ea0634f4b0ca58b8199a9ef7855633`; the live daemon was
+restarted as PID `47577`; an installed-daemon `tools/list` smoke confirmed the three `orient`
+schema descriptions.
+
+T362 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, mutate lifecycle state, change orientation ranking, or change the supported
+beta scope.

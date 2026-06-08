@@ -581,6 +581,49 @@ async fn test_mcp_tools_list_telemetry_schema_exposes_project_filter() {
 }
 
 #[tokio::test]
+async fn test_mcp_tools_list_orient_schema_exposes_context_contract() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let orient = tools
+        .iter()
+        .find(|tool| tool["name"] == "orient")
+        .expect("tools/list should expose orient");
+    let properties = orient["inputSchema"]["properties"]
+        .as_object()
+        .expect("orient input schema should expose properties");
+
+    assert_eq!(
+        properties["cwd"]["description"],
+        "Current working directory for repository/project resolution and scoped memory selection."
+    );
+    assert_eq!(
+        properties["project"]["description"],
+        "Explicit project name for project resolution and project-scoped memory selection."
+    );
+    assert_eq!(
+        properties["response_shape"]["description"],
+        "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+    );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
 async fn test_two_sessions_share_entity_state() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
 
