@@ -471,6 +471,42 @@ async fn test_mcp_initialize_returns_capabilities() {
 }
 
 #[tokio::test]
+async fn test_mcp_tools_list_lint_schema_exposes_project_filter() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let lint = tools
+        .iter()
+        .find(|tool| tool["name"] == "lint")
+        .expect("tools/list should expose lint");
+    let properties = lint["inputSchema"]["properties"]
+        .as_object()
+        .expect("lint input schema should expose properties");
+
+    assert!(properties.contains_key("project"));
+    assert_eq!(
+        properties["project"]["description"],
+        "Optional project scope to lint."
+    );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
 async fn test_two_sessions_share_entity_state() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
 

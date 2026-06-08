@@ -7949,6 +7949,7 @@ pub struct LintRequest {
     #[schemars(description = "Action: run, list, apply_safe")]
     pub action: String,
     /// Optional project scope to lint.
+    #[schemars(description = "Optional project scope to lint.")]
     pub project: Option<String>,
     /// Optional Memory OS vault root to scan.
     pub vault_path: Option<String>,
@@ -11140,6 +11141,21 @@ mod tests {
                 None => env::remove_var(self.key),
             }
         }
+    }
+
+    #[test]
+    fn lint_request_schema_exposes_project_filter() {
+        let schema = schemars::schema_for!(LintRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("LintRequest schema should have properties");
+
+        assert!(properties.contains_key("project"));
+        assert_eq!(
+            properties["project"]["description"],
+            "Optional project scope to lint."
+        );
     }
 
     #[test]

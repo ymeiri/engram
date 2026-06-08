@@ -848,6 +848,10 @@ Harness and migration checkpoint, current through 2026-06-07:
   RocksDB access. The T357 head passed full `./scripts/local-ci.sh` and
   `./scripts/package-install-smoke.sh`, including release tarball checksum verification,
   temporary-prefix install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`.
+- T358 makes project-scoped lint discoverable in the public MCP contract. `LintRequest.project`
+  now has explicit schema metadata, source HTTP `tools/list` has a regression for
+  `lint.inputSchema.properties.project`, and the refreshed live daemon PID `36562` exposes the
+  `project` field from the installed binary.
 - T338 makes rolling handoff updates evidence-backed. Live project-scoped lint after T337 flagged
   the active T337 handoff as missing evidence; source now attaches scoped `EvidenceKind::ToolCall`
   evidence to every `HandoffService::update` item and preserves session-event evidence for

@@ -459,3 +459,27 @@ continues to report `engram 0.2.0-beta.1`.
 T357 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
 hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
 beta scope.
+
+## Lint Project Schema Exposure
+
+T358 hardens the public MCP metadata for project-scoped lint. `LintRequest.project` now has an
+explicit schema description, and the test suite guards both the generated request schema and the
+HTTP daemon `tools/list` response so `lint.inputSchema.properties.project` remains visible to agent
+callers.
+
+Focused validation passed `cargo fmt --all --check`, `git diff --check`,
+`cargo test -p engram-mcp lint_request_schema_exposes_project_filter`, `cargo test -p engram-mcp`,
+`cargo test -p engram-tests --test lint_tests test_mcp_lint_project_filter_excludes_unrelated_project_memory`,
+and
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_lint_schema_exposes_project_filter`.
+
+`cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` refreshed the installed
+CLI hash from `fa91efbd228683dae608881f5828bdc1ffe55b67376e414653f8ac8eb92ba8c9` to
+`62c9955925f74fba706ad466416033cc0bdbc211cf0443a373d4e5925760589a`; `engram --version`
+continues to report `engram 0.2.0-beta.1`. The live global daemon was restarted onto that binary
+as PID `36562` on port `8765`, and an installed-daemon `tools/list` smoke returned `true` for
+`lint.inputSchema.properties.project.description == "Optional project scope to lint."`.
+
+T358 does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove
+hooks or host labels, mutate lifecycle state, run broad `lint apply_safe`, or change the supported
+beta scope.
