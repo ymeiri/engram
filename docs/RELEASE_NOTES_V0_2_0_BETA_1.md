@@ -1052,3 +1052,12 @@ that blocker clears. T400 also recompiled the canonical vault back to `2814/2814
 after a new MemoryItem write. T400 does not launch native Claude, run `/hooks`, signal processes,
 accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle
 cleanup, or make Engram production/GA ready.
+
+T401 adds machine-readable `--json` output to `./scripts/native-claude-gate-preflight.sh` and
+corrects the T400 tracked evidence head to the pushed commit
+`197ddc67c4bf65baad838919e7b992af31593539`. JSON mode exposes `gate_state`, branch/upstream/head
+state, tracked/untracked source state, Claude path/version/hash, daemon state, harness status and
+doctor summaries, snippet-only dry-run state, obligations, vault state, native Claude processes,
+blockers, and explicit non-action flags. Strict JSON mode still exits `2` while blocked. T401 does
+not launch native Claude, run `/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

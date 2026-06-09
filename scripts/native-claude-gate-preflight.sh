@@ -13,6 +13,7 @@ engram_bin="${ENGRAM_BIN:-/Users/yuval.meiri/.local/bin/engram}"
 vault_path="${ENGRAM_VAULT_PATH:-/Users/yuval.meiri/.engram/vault}"
 require_ready=0
 allow_worktree_changes=0
+json_output=0
 
 usage() {
     cat <<'USAGE'
@@ -24,6 +25,7 @@ live host-label production gates.
 Options:
   --require-ready             Exit non-zero unless the gate is ready to execute
   --allow-worktree-changes    Allow tracked or extra untracked source changes
+  --json                      Emit machine-readable JSON instead of text
   -h, --help                  Show this help
 
 Environment overrides:
@@ -68,6 +70,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --allow-worktree-changes)
             allow_worktree_changes=1
+            shift
+            ;;
+        --json)
+            json_output=1
             shift
             ;;
         -h | --help)
@@ -202,42 +208,124 @@ else
     gate_state="ready"
 fi
 
-printf 'Native Claude production gate preflight:\n'
-printf '  gate_state: %s\n' "$gate_state"
-printf '  branch: %s\n' "$branch"
-printf '  upstream: %s (ahead=%s behind=%s)\n' "${upstream:-<none>}" "$ahead_count" "$behind_count"
-printf '  head: %s\n' "$head_sha"
-printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
-printf '  extra_untracked_files_present: %s\n' "$([[ -n "$extra_untracked_files" ]] && printf true || printf false)"
-printf '  claude_bin: %s\n' "$expected_claude_bin"
-printf '  claude_target: %s\n' "$claude_target"
-printf '  claude_version: %s\n' "$claude_version"
-printf '  claude_sha256: %s\n' "$claude_sha256"
-printf '  engram_bin: %s\n' "$engram_bin"
-printf '  daemon: %s\n' "$(tr '\n' ';' <"$daemon_status" | sed 's/; */; /g')"
-printf '  harness_status: %s\n' "$(print_json_summary "$harness_status_json" '{ready,warnings}')"
-printf '  harness_doctor: %s\n' "$(print_json_summary "$harness_doctor_json" '{ready,warnings}')"
-printf '  snippet_only_dry_run: %s\n' "$(print_json_summary "$harness_install_json" '{planned,warnings}')"
-printf '  obligations: %s\n' "$(print_json_summary "$obligations_json" '{open,warnings}')"
-printf '  vault: %s\n' \
-    "$(print_json_summary "$vault_json" '{initialized,total_file_count,generated_file_count,user_file_count,expected_generated_file_count}')"
-printf '  native_claude_processes_present: %s\n' "$([[ -n "$native_processes" ]] && printf true || printf false)"
-printf '  claude_family_process_count: %s\n' "$claude_family_process_count"
+if [[ "$json_output" == "1" ]]; then
+    blockers_json="$(jq -R -s 'split("\n") | map(select(length > 0))' "$blockers_file")"
+    extra_untracked_json="$(
+        printf '%s\n' "$extra_untracked_files" |
+            jq -R -s 'split("\n") | map(select(length > 0))'
+    )"
+    native_processes_json="$(
+        printf '%s\n' "$native_processes" |
+            jq -R -s 'split("\n") | map(select(length > 0))'
+    )"
+    daemon_text="$(cat "$daemon_status")"
+    harness_status_summary="$(print_json_summary "$harness_status_json" '{ready,warnings}')"
+    harness_doctor_summary="$(print_json_summary "$harness_doctor_json" '{ready,warnings}')"
+    snippet_only_summary="$(print_json_summary "$harness_install_json" '{planned,warnings}')"
+    obligations_summary="$(print_json_summary "$obligations_json" '{open,warnings}')"
+    vault_summary="$(
+        print_json_summary "$vault_json" \
+            '{initialized,total_file_count,generated_file_count,user_file_count,expected_generated_file_count}'
+    )"
 
-if [[ -n "$native_processes" ]]; then
-    printf '  native_claude_processes:\n'
-    printf '%s\n' "$native_processes" | sed 's/^/    /'
+    jq -n \
+        --arg gate_state "$gate_state" \
+        --arg branch "$branch" \
+        --arg upstream "${upstream:-}" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg claude_bin "$expected_claude_bin" \
+        --arg claude_target "$claude_target" \
+        --arg claude_version "$claude_version" \
+        --arg claude_sha256 "$claude_sha256" \
+        --arg engram_bin "$engram_bin" \
+        --arg daemon "$daemon_text" \
+        --arg family_count "$claude_family_process_count" \
+        --argjson extra_untracked "$extra_untracked_json" \
+        --argjson harness_status "$harness_status_summary" \
+        --argjson harness_doctor "$harness_doctor_summary" \
+        --argjson snippet_only "$snippet_only_summary" \
+        --argjson obligations "$obligations_summary" \
+        --argjson vault "$vault_summary" \
+        --argjson native_processes "$native_processes_json" \
+        --argjson blockers "$blockers_json" \
+        '{
+            gate_state: $gate_state,
+            branch: $branch,
+            upstream: {
+                name: (if $upstream == "" then null else $upstream end),
+                ahead: $ahead,
+                behind: $behind
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            extra_untracked_files: $extra_untracked,
+            claude: {
+                bin: $claude_bin,
+                target: $claude_target,
+                version: $claude_version,
+                sha256: $claude_sha256
+            },
+            engram: {
+                bin: $engram_bin,
+                daemon_status: $daemon
+            },
+            harness_status: $harness_status,
+            harness_doctor: $harness_doctor,
+            snippet_only_dry_run: $snippet_only,
+            obligations: $obligations,
+            vault: $vault,
+            native_claude_processes_present: ($native_processes | length > 0),
+            native_claude_processes: $native_processes,
+            claude_family_process_count: ($family_count | tonumber),
+            blockers: $blockers,
+            actions_performed: {
+                native_claude_launch: false,
+                hooks_command: false,
+                process_signals: false,
+                release_actions: false
+            }
+        }'
+else
+    printf 'Native Claude production gate preflight:\n'
+    printf '  gate_state: %s\n' "$gate_state"
+    printf '  branch: %s\n' "$branch"
+    printf '  upstream: %s (ahead=%s behind=%s)\n' "${upstream:-<none>}" "$ahead_count" "$behind_count"
+    printf '  head: %s\n' "$head_sha"
+    printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
+    printf '  extra_untracked_files_present: %s\n' "$([[ -n "$extra_untracked_files" ]] && printf true || printf false)"
+    printf '  claude_bin: %s\n' "$expected_claude_bin"
+    printf '  claude_target: %s\n' "$claude_target"
+    printf '  claude_version: %s\n' "$claude_version"
+    printf '  claude_sha256: %s\n' "$claude_sha256"
+    printf '  engram_bin: %s\n' "$engram_bin"
+    printf '  daemon: %s\n' "$(tr '\n' ';' <"$daemon_status" | sed 's/; */; /g')"
+    printf '  harness_status: %s\n' "$(print_json_summary "$harness_status_json" '{ready,warnings}')"
+    printf '  harness_doctor: %s\n' "$(print_json_summary "$harness_doctor_json" '{ready,warnings}')"
+    printf '  snippet_only_dry_run: %s\n' "$(print_json_summary "$harness_install_json" '{planned,warnings}')"
+    printf '  obligations: %s\n' "$(print_json_summary "$obligations_json" '{open,warnings}')"
+    printf '  vault: %s\n' \
+        "$(print_json_summary "$vault_json" '{initialized,total_file_count,generated_file_count,user_file_count,expected_generated_file_count}')"
+    printf '  native_claude_processes_present: %s\n' "$([[ -n "$native_processes" ]] && printf true || printf false)"
+    printf '  claude_family_process_count: %s\n' "$claude_family_process_count"
+
+    if [[ -n "$native_processes" ]]; then
+        printf '  native_claude_processes:\n'
+        printf '%s\n' "$native_processes" | sed 's/^/    /'
+    fi
+
+    if [[ -s "$blockers_file" ]]; then
+        printf '  blockers:\n'
+        sed 's/^/    - /' "$blockers_file"
+    fi
+
+    printf '  native_claude_launch_performed: false\n'
+    printf '  hooks_command_performed: false\n'
+    printf '  process_signals_performed: false\n'
+    printf '  release_actions_performed: false\n'
 fi
-
-if [[ -s "$blockers_file" ]]; then
-    printf '  blockers:\n'
-    sed 's/^/    - /' "$blockers_file"
-fi
-
-printf '  native_claude_launch_performed: false\n'
-printf '  hooks_command_performed: false\n'
-printf '  process_signals_performed: false\n'
-printf '  release_actions_performed: false\n'
 
 if [[ "$gate_state" != "ready" && "$require_ready" == "1" ]]; then
     exit 2

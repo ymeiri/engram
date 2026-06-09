@@ -44,7 +44,7 @@ The fresh preflight baseline is:
 ```text
 branch: yuval.meiri/memory-os-phase1
 upstream: origin/yuval.meiri/memory-os-phase1 (ahead=0 behind=0)
-head: b233f6601fbbaacaf1169ced93a31459f0f6f039
+head: 197ddc67c4bf65baad838919e7b992af31593539
 claude_bin: /Users/yuval.meiri/.local/bin/claude
 claude_target: /Users/yuval.meiri/.local/share/claude/versions/2.1.169
 claude_version: 2.1.169 (Claude Code)
@@ -88,6 +88,12 @@ running:
 
 ```bash
 scripts/native-claude-gate-preflight.sh --require-ready
+```
+
+T401 later added machine-readable output:
+
+```bash
+scripts/native-claude-gate-preflight.sh --json
 ```
 
 During development, `--allow-worktree-changes` permits tracked or extra untracked source changes

@@ -8584,3 +8584,14 @@ mode classifies the current state as `blocked`; strict `--require-ready` mode ex
 `2814/2814` generated files after a new MemoryItem write. T400 does not launch native Claude, run
 `/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
 mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T401 native Claude preflight JSON note:
+`docs/BRAIN_HARNESS_T401_NATIVE_CLAUDE_PREFLIGHT_JSON_2026-06-09.md` records structured-output
+hardening for the native Claude production gate. `./scripts/native-claude-gate-preflight.sh --json`
+now emits gate state, branch/upstream/head state, source cleanliness, Claude path/version/hash,
+daemon state, harness status/doctor summaries, snippet-only dry-run state, obligations, vault
+state, native Claude process inventory, blockers, and explicit non-action flags. Strict JSON mode
+preserves fail-closed behavior and exits `2` while blocked. T401 also corrects the T400 tracked
+evidence head to pushed commit `197ddc67c4bf65baad838919e7b992af31593539`. T401 does not launch
+native Claude, run `/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3 ready,
+merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
