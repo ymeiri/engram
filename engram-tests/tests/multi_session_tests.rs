@@ -43,6 +43,18 @@ fn engram_bin() -> PathBuf {
     ENGRAM_BIN.get_or_init(resolve_engram_bin).clone()
 }
 
+fn test_embed_cache_dir() -> PathBuf {
+    for key in ["ENGRAM_EMBED_CACHE_DIR", "FASTEMBED_CACHE_DIR"] {
+        if let Some(path) = std::env::var_os(key).filter(|value| !value.as_os_str().is_empty()) {
+            return PathBuf::from(path);
+        }
+    }
+
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".fastembed_cache")
+}
+
 fn resolve_engram_bin() -> PathBuf {
     // Use env var if set (for CI), otherwise find relative to workspace
     if let Ok(path) = std::env::var("ENGRAM_BIN") {
@@ -96,6 +108,7 @@ impl TestDaemon {
         let child = Command::new(engram_bin())
             .args(["serve", "--http", "--port", &port.to_string(), "--memory"])
             .env("ENGRAM_DATA_DIR", data_dir.path())
+            .env("ENGRAM_EMBED_CACHE_DIR", test_embed_cache_dir())
             .env("RUST_LOG", "warn")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -453,6 +466,159 @@ async fn test_mcp_initialize_returns_capabilities() {
     // Verify capabilities include tools
     let result = &response["result"];
     assert!(result["capabilities"]["tools"].is_object());
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
+async fn test_mcp_tools_list_lint_schema_exposes_project_filter() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let lint = tools
+        .iter()
+        .find(|tool| tool["name"] == "lint")
+        .expect("tools/list should expose lint");
+    let properties = lint["inputSchema"]["properties"]
+        .as_object()
+        .expect("lint input schema should expose properties");
+
+    assert!(properties.contains_key("project"));
+    assert_eq!(
+        properties["project"]["description"],
+        "Optional project scope to lint."
+    );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
+async fn test_mcp_tools_list_obligations_schema_exposes_scope_filters() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let obligations = tools
+        .iter()
+        .find(|tool| tool["name"] == "obligations")
+        .expect("tools/list should expose obligations");
+    let properties = obligations["inputSchema"]["properties"]
+        .as_object()
+        .expect("obligations input schema should expose properties");
+
+    assert_eq!(
+        properties["project"]["description"],
+        "Optional project scope for detect, add, list, open, and doctor."
+    );
+    assert_eq!(
+        properties["cwd"]["description"],
+        "Current working directory for detect/list/open/doctor scoping."
+    );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
+async fn test_mcp_tools_list_telemetry_schema_exposes_project_filter() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let telemetry = tools
+        .iter()
+        .find(|tool| tool["name"] == "telemetry")
+        .expect("tools/list should expose telemetry");
+    let properties = telemetry["inputSchema"]["properties"]
+        .as_object()
+        .expect("telemetry input schema should expose properties");
+
+    assert_eq!(
+        properties["project"]["description"],
+        "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
+    );
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
+async fn test_mcp_tools_list_orient_schema_exposes_context_contract() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    });
+    let response = client
+        .send_request(request)
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+    let orient = tools
+        .iter()
+        .find(|tool| tool["name"] == "orient")
+        .expect("tools/list should expose orient");
+    let properties = orient["inputSchema"]["properties"]
+        .as_object()
+        .expect("orient input schema should expose properties");
+
+    assert_eq!(
+        properties["cwd"]["description"],
+        "Current working directory for repository/project resolution and scoped memory selection."
+    );
+    assert_eq!(
+        properties["project"]["description"],
+        "Explicit project name for project resolution and project-scoped memory selection."
+    );
+    assert_eq!(
+        properties["response_shape"]["description"],
+        "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+    );
 
     daemon.stop().await.expect("Failed to stop daemon");
 }

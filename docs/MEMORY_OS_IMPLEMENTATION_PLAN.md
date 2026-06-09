@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-06-06
+Last Updated: 2026-06-09
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -871,12 +871,25 @@ prompt-bearing scope and keeping T269 effective-hook visibility and T270 live ho
 separate. T282 does not launch native Claude.
 T283 runs the T282 fresh preflight and hard-stops before launch because two live native Claude
 processes were already present, making a new single-session transcript attribution ambiguous.
-Current read-only
-`harness(action="doctor")` evidence reports `ready=true` for generic, Claude Code, Codex, Gemini
-CLI, and Cursor. Generated local adapter readiness is validated, while behavioral caveats remain:
-lifecycle compliance is soft, Claude Code settings are split and retain extra legacy permissions,
-`/hooks` effective-hook visibility did not produce a usable report in T179, prompt-bearing native
-Claude behavior is unproved, and host labels remain only partially adopted. T262 adds a guarded
+T312 records a docs-only successor packet for the observed Claude Code `2.1.168` target and
+SHA-256 after T311 proves the T282 `2.1.163` packet is stale. At T312/T313 time, Claude Code
+`harness(action="doctor")` evidence reported `ready=false` because generated adapters drifted from
+current policy. T333 later closes that generated-adapter drift and installed Claude Code
+status/doctor now report `ready=true`. Supported local/Codex beta readiness remains validated,
+while behavioral caveats remain: lifecycle compliance is soft, Claude Code settings are split and
+retain extra legacy permissions, `/hooks` effective-hook visibility did not produce a usable report
+in T179, prompt-bearing native Claude behavior is unproved, and host labels remain only partially
+adopted.
+T313 records a docs-only Claude Code adapter-drift repair approval packet. It captures the exact
+three generated adapter diffs, records that default `harness install --harness claude-code --json`
+would also plan a `settings.json` merge, and identifies
+`harness install --harness claude-code --settings-target snippet-only --write --json` as the
+preferred T314 command if the user explicitly approves the three adapter writes. T313 does not write
+adapters, hooks, settings, repo files outside the documentation update, or runtime state. T333 later
+executes that T314 snippet-only command, updates exactly the three generated adapters, leaves
+settings/snippet hashes unchanged, and makes installed Claude Code status/doctor report
+`ready=true`.
+T262 adds a guarded
 source-level Codex Desktop `CODEX_THREAD_ID` fallback for CLI/MCP trace-producing paths, and T263
 installed and live-validated that source in Codex Desktop. T264 adds a source-level Claude Code
 `CLAUDE_CODE_SESSION_ID` fallback after explicit and `ENGRAM_EXTERNAL_SESSION_ID` labels and before
@@ -1092,8 +1105,10 @@ T299 records the beta-scope consensus after AI Council and eight read-only subag
 `feedback_coverage=0.35` value was a telemetry coverage sample, not beta readiness. Initial beta
 readiness is the supported local/Codex Brain Loop path, while native Claude prompt-bearing proof,
 effective-hook proof, live host labels, direct legacy cleanup, exhaustive lifecycle cleanup,
-rustdoc/OIDC/Vault/native-Claude auth debugging, full multi-host parity, and new feature work are
-deferred from beta. T299 fixes concrete beta-contract issues: generated Codex/generic closeout
+OIDC/Vault/native-Claude auth debugging, broad `lint apply_safe`, exhaustive telemetry
+completeness, full multi-host parity, and new feature work are deferred from beta. T306 later
+closed the current Rustdoc warning set; future Rustdoc polish remains production hardening, not an
+initial-beta gate. T299 fixes concrete beta-contract issues: generated Codex/generic closeout
 guidance now scopes `obligations(action=doctor, project=..., cwd=...)`, MCP `search.project`
 schema text now says it also drives scoped memory filtering, default stdio/proxy `engram serve`
 rejects `--memory`/`--remote`/credentials/`--port` instead of silently using persistent storage,
@@ -1122,33 +1137,601 @@ fetch, and `graph(around)` review:
 projection was refreshed. T301 does not authorize broad `lint apply_safe`, direct legacy
 deletion/deprecation, ranking changes, native-Claude execution, PR readiness, or production-complete
 Brain Harness parity.
+T302 resolves the phase-0 beta release branch state and starts phase 1. PR #2 was marked ready and
+merged into `main` as merge commit `71fd746402c7d63f8b5aa758bc2011796819b5f6` after exact-head
+CI run `27077943994` passed Check, Format, Docs, Clippy, and Test on head
+`93bc2428a452edf9c19322e9a63b7b1c757b52f2`. The local workspace was moved to
+`yuval.meiri/memory-os-phase1` from `origin/main`; root `AGENTS.md` remains user-owned and
+untracked. The canonical vault was recompiled before the merge metadata update and status was
+count-aligned at `2386` generated files, `0` user files, and
+`expected_generated_file_count=2386`. A fresh native Claude prompt-bearing preflight still stopped
+before launch because live native Claude CLI sessions on `ttys001` and `ttys005` make T282
+single-session attribution ambiguous. No native Claude prompt was launched and no user Claude
+process was signaled.
 
-Current T301 matrix snapshot:
+T303 executes the next exact lifecycle batch under the same default-deny boundary. It archives
+exactly five active `project:dd-source` rolling handoffs after per-target `memory(get)`, direct
+successor fetch, and `graph(around)` review:
+`019e01a0-5d8c-76f3-b537-935a53207cc0`,
+`019e01d6-adc4-7971-aca3-c663b2be52c5`,
+`019e01db-1e53-7c23-b6c0-b4ba8d58b0bc`,
+`019e01f2-cfa4-7de0-b073-3bc1926e5c3c`, and
+`019e01f4-5fd7-77c2-8491-2f66a2eebda1`. Post-archive lint advances to
+`019e02b0-22ab-72c0-8105-1e7909dd4279` as the next sampled candidate. T303 does not authorize
+broad `lint apply_safe`, direct legacy deletion/deprecation, ranking changes, native-Claude
+execution, effective-hook validation, host-label proof, or production-complete Brain Harness
+parity.
+
+T304 prepares beta release metadata and records the installed-runtime refresh gate. It moves the
+workspace release metadata to `0.2.0-beta.1`, adds pre-release notes, tightens README/MCP setup
+host-scope caveats, and records that source-rendered Codex guidance includes scoped final-response
+`obligations(action=doctor, project=..., cwd=...)` while the installed global Codex skill and
+installed global binary render path still emit the older unscoped `obligations(action=doctor)`.
+T304 does not install/adopt adapters, replace `/Users/yuval.meiri/.local/bin/engram`, restart a
+daemon, mark PR #3 ready, merge, tag, publish a release, or claim native Claude/effective-hook/live
+host-label parity.
+
+T305 closes that installed-runtime/adapters drift for the local/Codex beta path. Using the standing
+Engram-scoped `/goal` authorization, Codex installed `engram-cli v0.2.0-beta.1` to
+`/Users/yuval.meiri/.local/bin/engram`, updated exactly the generated Codex memory-session skill,
+and restarted the global daemon on port `8765`. The installed binary hash is
+`99bf7b9f680435ebaa7aa59a4c9c60e7ee477163c798694c13f86e516551eff5`; the refreshed daemon PID is
+`65155`; installed and source Codex harness status both report `Ready: true`; installed render and
+the installed skill file both contain
+`obligations(action=doctor, project=..., cwd=...)`; and live Codex MCP recovered with lean `orient`
+trace `019ea054-61fa-79d2-96e7-8f0780f82b82`. Direct installed-CLI `orient` against the default
+global RocksDB store still fails while the daemon owns the lock, which is expected; an isolated
+data-dir smoke produced trace `019ea053-7511-7e92-b2df-df4ac1a26883`. T305 does not launch native
+Claude, prove effective-hook visibility or host labels, mark PR #3 ready, merge, tag, or claim full
+multi-host parity.
+
+T306 closes a narrow Docs CI hardening issue. Local `cargo doc --no-deps` initially emitted three
+`rustdoc::invalid_html_tags` warnings because graph node examples such as `memory:<uuid>` and
+`memory:<id>` were parsed as HTML tags in Rustdoc comments. T306 marks those examples as inline code
+in `engram-core/src/graph.rs`, `engram-mcp/src/tools.rs`, and `engram-cli/src/main.rs`. Local
+`cargo doc --no-deps`, `cargo fmt --all --check`, and `git diff --check` pass after the change. This
+does not change graph behavior, MCP request/response structure, installed runtime, harness adapters,
+release approval, native Claude, effective-hook visibility, host labels, M6, or lifecycle state.
+
+T307 closes a narrow read-only Claude harness diagnostics gap. `HarnessService::status` now warns
+when generated `SessionStart` or `SessionEnd` hook files are installed but the matching required
+Claude settings registration is missing, making the difference between file installation and
+effective hook configuration explicit. Validation passed `cargo fmt --all --check`,
+`cargo test -p engram-index status_warns_when_claude_hook_files_are_installed_but_settings_missing`,
+`cargo test -p engram-index harness::tests`, and
+`cargo test -p engram-tests --test harness_tests`. T307 does not run native Claude, edit settings,
+install adapters, change hook behavior, mutate lifecycle/M6 state, or close native
+Claude/effective-hook/host-label gates.
+
+T308 closes the beta-scope wording gap after fresh AI Council and read-only fan-out review. PR #3
+and release-facing docs now explicitly define the initial beta as the local/Codex Brain Loop MVP and
+defer production/GA work. Exact-head CI run `27085706164` passes Format, Docs, Check, Clippy, and
+Test on head `8b86961cbbec7211a445aafe9c8edcc7c7d1624d`. PR #3 remains draft/open/clean; release
+mechanics still require explicit approval.
+
+T309 adds daemon spawn provenance as a first-class production-hardening diagnostic. When a daemon
+starts, Engram now writes spawn metadata beside the daemon pid/port files: executable path, package
+version, PID, and port. `engram daemon status` prints this metadata when available, prints the
+current CLI path, and warns if the daemon was spawned by a different executable path, a different
+version, or metadata that no longer matches the pid/port files. Older daemons without metadata keep
+working and report metadata unavailable instead of failing. This removes one repeated manual
+runtime-drift inspection step without restarting the daemon, installing binaries, changing MCP
+schema/proxy behavior, running native Claude, mutating lifecycle state, or closing host-parity
+gates.
+
+T312 records the Claude Code `2.1.168` successor packet after a read-only preflight found target
+hash `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`, live native Claude CLI
+processes on `ttys001` and `ttys005`, and Claude Code harness `ready=false` because generated
+adapters drift from current policy. T312 is docs-only: it does not launch native Claude, run
+`/hooks`, repair adapters, change settings, mutate lifecycle/M6/vault state, or validate
+compatibility.
+
+T313 records the exact generated-adapter drift repair approval packet for Claude Code. It is
+docs-only and does not execute the repair. Fresh dry-run evidence shows the default install target
+would plan the three adapter updates plus a `settings.json` merge, while
+`--settings-target snippet-only` plans only the three generated-adapter updates and skips settings
+mutation. Future T314 must use explicit user approval before running the `snippet-only --write`
+repair command.
+
+T333 later closes the generated-adapter drift recorded by T312/T313. It repairs exactly the three
+generated Claude Code adapters via the T314 `snippet-only --write` path, leaves settings/snippet
+hashes unchanged, and makes installed Claude Code harness status/doctor report `ready=true`. It
+does not execute native Claude, run `/hooks`, or prove prompt-bearing/effective-hook/host-label
+behavior.
+
+T315 adds source-level safety coverage for the T314 path later executed by T333. Commit
+`8f228ecacd436fb4f6c0078e59fb385eacc800eb` adds a focused harness test proving that
+`HarnessSettingsTarget::SnippetOnly` repairs a generated Claude Code adapter while preserving
+existing `settings.json`, `settings.local.json`, and `engram-settings-snippet.json` byte-for-byte.
+Local validation on that code commit passed `cargo fmt --all --check`, `git diff --check`,
+`cargo test -p engram-index harness::tests`, `cargo clippy --all-targets -- -D warnings`, and full
+`cargo test`. PR #3 hosted CI runs on the T315 code/evidence heads failed before workflow steps
+because GitHub Actions reported an account billing/spending-limit block, so exact-head hosted CI
+remains externally blocked rather than code-failed.
+
+T317 then ran a full local CI-equivalent fallback on PR #3 head
+`78f14d0bebd980070a4fcb8d1f259be47517c704`: `cargo fmt --all --check`,
+`git diff --check`, `cargo check --all-targets`, `cargo clippy --all-targets -- -D warnings`,
+`cargo test --all-targets --jobs 1`, and `cargo doc --no-deps` all passed. T318 reran hosted
+GitHub Actions run `27091138284`; attempt 2 still failed before runner assignment with zero steps,
+`runner_id=0`, empty runner fields, and billing/spending-limit annotations. This confirms the
+hosted CI gate is external/account-level. It does not mark PR #3 ready or accept the local fallback
+as release approval.
+
+T320 archives exactly five active rolling handoffs after per-target `memory(get)` and
+`graph(around)` review proved direct incoming supersedes edges:
+`019e1612-f863-7f63-bacb-a6d03ddf1f7c`,
+`019e1614-5134-7f32-9ffc-a6d7567f6f7a`,
+`019e1618-d7b9-77c1-b795-d2ded5233a7c`,
+`019e162b-a94f-7c53-87c0-969e35c8cc6a`, and
+`019e162e-7f15-7da0-9450-ac98f63062c0`. KnowledgeCommit
+`019ea1f5-c385-7111-8a1b-6133a87b0c01` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e1681-c15b-7642-ab66-3fd846b72cb1`.
+
+T321 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e1681-c15b-7642-ab66-3fd846b72cb1`,
+`019e168a-eecf-7d42-a52c-80037535fcf2`,
+`019e169d-b3c0-7962-b74b-645f1957b7b8`,
+`019e176d-f41a-7bb3-b22f-65d7b1bff9e6`, and
+`019e179d-f906-7063-b00c-3c879ca83e1c`. KnowledgeCommit
+`019ea1fd-1070-7913-bb27-9d703bc58439` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e17da-5dc1-7b30-a440-f980f16bfefb`.
+
+T322 refreshes release-facing readiness for current PR #3 head
+`22bd01ccc0276ba41d846ef368ab950869a83da5`. Fresh state shows the branch synced with upstream,
+only user-owned root `AGENTS.md` untracked, local validation passed for the docs/lifecycle head,
+and hosted GitHub Actions run `27092233443` blocked before workflow steps by account
+billing/spending-limit annotations. Fresh AI Council consensus keeps initial MVP beta readiness at
+about `90-93%` while hosted CI is externally blocked, or about `95%` if the release owner accepts
+local validation as the beta fallback; this does not change the materially lower production/GA
+readiness assessment.
+
+T323 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e17da-5dc1-7b30-a440-f980f16bfefb`,
+`019e17dd-0e7c-7773-8fa9-df8196d3c474`,
+`019e17ea-e7f6-7c30-8635-1ad43345ee70`,
+`019e17eb-00d7-7230-9257-a8188bee6811`, and
+`019e1825-056e-7ac3-a5f0-053e4703afef`. KnowledgeCommit
+`019ea209-45d3-7ba0-bb5d-330790b4cf99` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e1837-6d1c-7772-a026-4b2fd41c3490`.
+
+T324 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e1837-6d1c-7772-a026-4b2fd41c3490`,
+`019e184e-4c03-7531-9c2b-e7374cd58007`,
+`019e187c-6314-7d40-a213-c7a94409c80c`,
+`019e1b0e-2222-7421-8aed-0b8e01b66561`, and
+`019e1b3b-0e99-7593-bc91-9191019fcfeb`. KnowledgeCommit
+`019ea28a-171a-7fc3-bee5-beb62bfc48a6` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e1b88-1f4e-7dd3-b187-50853b034819`.
+
+T325 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e1b88-1f4e-7dd3-b187-50853b034819`,
+`019e1c16-e287-72e1-8e69-6d6026cd39bb`,
+`019e1c1b-7ce7-7e41-b436-57825899f151`,
+`019e1c47-6680-7651-abbd-83060f3126ef`, and
+`019e1c51-d266-7fd3-a327-d89f544967cb`. KnowledgeCommit
+`019ea292-d32f-7901-9183-d99527315d22` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e1d0a-bcb2-79b0-8eca-a624c0229de2`.
+
+T326 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e1d0a-bcb2-79b0-8eca-a624c0229de2`,
+`019e1d29-a03c-7110-a58b-0aea4a6b7f05`,
+`019e1d3c-eb00-7eb0-90f9-fa7944557b90`,
+`019e1d3f-51c7-7050-8108-b667120b7514`, and
+`019e1d51-b545-7d71-9584-b008c448ad2e`. KnowledgeCommit
+`019ea29c-85ae-7ff3-bba9-d8ea85453f75` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e1d56-4fff-7dc3-822c-383132c57a25`.
+
+T327 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e1d56-4fff-7dc3-822c-383132c57a25`,
+`019e2088-da67-7d23-9e43-3082d9157208`,
+`019e212b-a519-7341-9524-4a028685580b`,
+`019e212e-d7d4-75d1-962d-219413f93d4f`, and
+`019e5daf-f50b-7a22-82a3-5d62ffe9a8bb`. KnowledgeCommit
+`019ea2a4-9491-7021-ab93-968f0ef6281d` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e5db0-070d-7211-acb0-a69f5b575c5d`.
+
+T328 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e5db0-070d-7211-acb0-a69f5b575c5d`,
+`019e6993-6d69-78e1-a29d-93a61e2a6413`,
+`019e6994-a7b5-7530-9b74-483d48709d13`,
+`019e6995-67c0-7221-8922-1cad83d54229`, and
+`019e6995-ff6d-7db0-84bc-06475ffe4fa1`. KnowledgeCommit
+`019ea2ae-78ee-7900-86ff-ffc19b8bc33c` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e6997-984b-7cd0-9c3f-6b08cf5959d6`.
+
+T329 archives exactly five more active rolling handoffs after per-target `memory(get)`,
+successor `memory(get)`, and `graph(around)` review proved direct active successors:
+`019e6997-984b-7cd0-9c3f-6b08cf5959d6`,
+`019e6a47-b8a9-7382-8f7f-62a3dbd0dce5`,
+`019e7cd4-d927-7322-9354-f8b8d054c099`,
+`019e7ce0-b1a0-7d63-baac-d04ba7029b43`, and
+`019e7ce8-1b0b-7922-aa07-3cb161e36601`. KnowledgeCommit
+`019ea2b7-45d7-7c00-9adc-8d6387525d20` records the exact archive batch. Post-archive
+lint with `limit=10` no longer returns those IDs and advances to
+`019e7cf7-560c-70e2-bbeb-3448f4637055`.
+
+T330 records current-head local/Codex beta smoke evidence for PR #3 head
+`fe46d0a73d39e3309b149703dda4c108da91fc02`. Lean `orient` trace
+`019ea2c1-439c-7e30-b5f9-b9cb6e641b48` returned the scoped project, memory
+cursor, used-memory candidates, Brain Loop guidance, and empty obligation summary; obligations
+doctor was clean; canonical vault status was count-aligned at 2,519 generated files with zero user
+files; canonical vault compile wrote zero skipped files; scoped M6 inventory found 69 candidates
+and returned 5; temp review export wrote six generated files with zero skipped files; review status
+reported five no-decision files and `ready_to_apply=false`; dry-run apply planned and wrote zero
+items; and hosted CI run `27096981016` remains externally blocked before workflow steps by GitHub
+Actions billing/spending-limit annotations.
+T331 archives exactly five more active rolling handoffs after per-target `memory(get)`, successor
+fetch, and `graph(around)` review proved direct successors:
+`019e7cf7-560c-70e2-bbeb-3448f4637055`,
+`019e7d27-32d6-7200-944c-ef5945436f8c`,
+`019e7d28-add4-70e3-a55c-453f8fe8695d`,
+`019e7d29-0f3c-7961-9588-c1adbe4628af`, and
+`019e7da0-d384-7b12-b43a-d7188b1a8c38`. Post-archive lint no longer returns those IDs in the
+sampled findings and advances to `019e7db8-de1e-7251-87ba-fea21bed17f7`. T331 does not run broad
+`lint apply_safe`, archive non-target IDs, execute M6 write apply, adapter repair, native Claude,
+PR-ready, merge, tag, publish, or release actions.
+T332 archives the next single active rolling handoff after per-target `memory(get)`, successor
+fetch, and `graph(around)` review proved the direct successor:
+`019e7db8-de1e-7251-87ba-fea21bed17f7` is superseded by
+`019e844c-6a05-7a10-858b-5212d117a4bb`. Post-archive lint no longer returns the T332 target ID
+in the first ten sampled findings and reports only stale-feedback review signals in that bounded
+sample. T332 does not run broad `lint apply_safe`, archive non-target IDs, execute M6 write apply,
+adapter repair, native Claude, PR-ready, merge, tag, publish, or release actions.
+T333 executes the prepared T314 Claude Code adapter-repair contract with the installed CLI
+`snippet-only --write` path. Fresh preflight matched the T313 current/expected hashes and planned
+only the three generated-adapter writes. Postflight proves the three adapter hashes now match the
+expected generated contents, `engram-stop-nudge.sh` remains executable, settings/snippet hashes are
+unchanged, the snippet-only dry-run reports `planned=[]`, and Claude Code harness status/doctor now
+report `ready=true`. T333 does not run native Claude, run `/hooks`, mutate settings, mark PR-ready,
+merge, tag, publish, release, or prove prompt-bearing/effective-hook/host-label parity.
+
+T334 runs the first post-T333 native-Claude/effective-hook/host-label preflight. It confirms the
+Claude `2.1.168` path, target, version, SHA-256, daemon, obligations doctor, canonical vault
+status, generated-adapter hashes, snippet-only dry-run `planned=[]`, and Claude Code harness
+`ready=true` state. It hard-stops before native launch because already-running native Claude CLI
+processes on `ttys001` and `ttys005` still make attribution ambiguous. T334 does not execute
+T312/T269/T270, run `/hooks`, signal processes, mutate settings/adapters, or prove production
+parity.
+
+T335 records a docs-only T269 successor packet for the observed Claude Code `2.1.168` runtime. It
+updates the future effective-hook visibility preflight baseline from T269's stale `2.1.161` target
+to the T334-observed `2.1.168` path/version/hash, but it preserves the one-`/hooks` transcript
+observation contract, T197-style bounded cleanup, T312/T270 separation, and T334 no-launch
+attribution blocker. T335 does not execute native Claude, run `/hooks`, mutate settings/adapters,
+or prove effective-hook visibility.
+
+T336 adds optional project-scoped lint for Memory OS health checks. The new `LintOptions.project`,
+MCP `lint(project=...)`, and CLI `lint run --scope-project ...` path filters project-bound memory,
+stale sessions, and open obligations while preserving unscoped lint as the default and keeping
+global/user memory visible. T336 does not run `lint apply_safe`, archive memory, mutate
+obligations, change `orient`, or claim lifecycle cleanup.
+
+T337 refreshes the installed local/Codex runtime for the T336 source. Installing the current
+`engram-cli` to `/Users/yuval.meiri/.local/bin/engram` changed the installed binary hash from
+`01b171ec654da95ea5b1f8363bc109e3069c0ff78bdb38581a202e472f9fd09b` to
+`b775efa0946862eba8d4d8993bb946f0926372d8a3fe9bbfea98ea38e786e7c2`; restarting the daemon
+produced PID `57356` from the installed path; installed CLI help exposes `--scope-project`; and a
+fresh installed MCP smoke showed `lint.project` in `tools/list` and accepted a `tools/call` lint
+request with `project=engram`. T337 is installed-runtime adoption for T336 only. It does not run
+`lint apply_safe`, mutate memory, or close lifecycle cleanup.
+
+T338 fixes the rolling handoff evidence contract. Live project-scoped lint after T337 showed the
+newest active rolling handoff missing evidence. `HandoffService::update` now attaches scoped
+tool-call evidence to global, project, and session handoff updates, while session handoffs retain
+their existing session-event evidence. Installing the T338 source produced binary hash
+`e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5`; after daemon restart, active
+handoff `019ea34a-c3ac-74d0-ae42-52cd6adcb610` carried
+`handoff(action=update,project=engram)` evidence and installed project-scoped lint did not flag it.
+T338 does not perform broad historical handoff cleanup.
+
+T339 refreshes the durable canonical generated vault after the latest Memory OS writes. Preflight
+vault status showed the vault was initialized and generated-only but stale by two generated files:
+`generated_file_count=2566`, `user_file_count=0`, and `expected_generated_file_count=2568`.
+`vault(action=compile, vault_path="/Users/yuval.meiri/.engram/vault")` wrote generated files with
+`files_skipped=[]`; postflight status returned `generated_file_count=2568`, `user_file_count=0`,
+and `expected_generated_file_count=2568`. T339 is generated-vault maintenance only.
+
+T340 reruns the native-Claude/effective-hook/live-host-label preflight after T339. Current PR head
+`6d0467e933a880f9039fd943b34848c2ca93f069` is synced with upstream, tracked diff is empty, Claude
+Code `2.1.168` path/target/hash still match, Claude Code harness status/doctor report
+`ready=true`, snippet-only install dry-run reports `planned=[]`, daemon PID `92750` is running from
+the installed `0.2.0-beta.1` runtime, obligations doctor is clean, and the canonical vault is
+count-aligned at `2573` generated files with zero user files. The preflight still hard-stops before
+native launch because live native Claude CLI sessions remain on `ttys001` and `ttys005`, making
+new-session attribution ambiguous. T340 is read-only preflight evidence only.
+
+T341 validates PR #3 head `2fa5b577bda8ab6141e0f7272736044d441a7e88` with the full local
+CI-equivalent workflow after hosted GitHub Actions run `27101388242` again failed all five jobs
+before workflow-step execution with `steps: []`. Local `git diff --check`,
+`cargo check --all-targets`, `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test
+--all-targets --jobs 1`, `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`,
+and `cargo doc --no-deps` all pass on the exact head. Fresh AI Council consensus says the scoped
+local/Codex MVP beta is shippable if the release owner explicitly accepts this local-validation
+fallback while hosted CI is externally account-blocked. T341 does not mark PR #3 ready, merge, tag,
+publish, close hosted CI, run native Claude, or prove production/GA parity.
+
+T343 refreshes the beta-scope consensus for current PR #3 head
+`966dc00d5248ac342b156974b5392700706f3139`. The PR body records T342 exact-head local
+CI-equivalent validation on that head, and hosted run `27101972733` failed all five jobs before
+workflow-step execution with `steps: []`. Fresh AI Council consensus says the scoped local/Codex MVP
+beta is about `95-98%` ready before release mechanics if the release owner accepts local validation
+as fallback. The remaining beta gate is either explicit release-owner fallback acceptance or
+restored exact-head hosted CI.
+
+T345 adds `./scripts/local-ci.sh` as the single exact-head local CI-equivalent fallback command.
+T346 adds `./scripts/package-release.sh` as the local pre-publish package command. T348 refreshes
+the release artifact notes so packaged `RELEASE_NOTES.md` no longer lists packaging as open and now
+contains the T345/T346/T347 proof. PR #3 head
+`5e1b9aca9cad97602a18adfbcb2920f42da9859a` passes `./scripts/local-ci.sh` and
+`./scripts/package-release.sh`; hosted run `27103454287` still fails before workflow-step execution
+with `steps: []` and billing/spending-limit annotations.
+
+T350 closes the first-user onboarding docs gap on PR #3 head
+`54d01eb71e2020960fa62c0d6b72a05b5c00aee4`: README and release notes now include source install
+steps that put `engram` on `PATH` before first use, plus published tarball download, checksum,
+install, and expected-version commands. That head passed `./scripts/local-ci.sh`,
+`./scripts/package-release.sh`, checksum verification, packaged release-note inspection, and a
+manual isolated package install/health smoke.
+
+T351 makes the package install proof repeatable. T351 package-smoke candidate head
+`4d05f6fc2f4fb4c6309c431c083ea55540c32380` adds `./scripts/package-install-smoke.sh`, which
+builds the package, verifies the checksum, extracts the archive, checks required packaged files,
+installs the packaged binary into a temporary prefix, confirms `PATH` resolution and
+`engram 0.2.0-beta.1`, starts `engram serve --http --memory`, and verifies `/health` returns
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. That T351 candidate passed
+`./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh`. Hosted run `27114219090` still
+failed before workflow-step execution with `steps: []` and account billing/spending-limit
+annotation. Fresh AI Council consensus on 2026-06-08 gives a conservative release-management
+estimate of about `92%` complete until release-owner approval/ready/merge/tag/publish, and
+`98-99%` practical local/Codex beta readiness if the release owner accepts exact-head local CI plus
+package/install validation as fallback while hosted CI is externally blocked.
+
+T353 removes cwd-sensitive embedding cache discovery from the packaged beta path. `EmbedConfig`
+now defaults model caching to `~/.engram/cache/fastembed`, supports `ENGRAM_EMBED_CACHE_DIR` as the
+Engram-specific override, and preserves upstream `FASTEMBED_CACHE_DIR` compatibility. The package
+install smoke sets `ENGRAM_EMBED_CACHE_DIR` explicitly and starts the packaged binary from the
+temporary install workspace, so `/health` validation no longer depends on running from the
+repository root to find `.fastembed_cache`. `HF_HOME` remains an upstream Hugging Face override
+when set. Validation passed `cargo test -p engram-embed config::tests`,
+`cargo test -p engram-tests --test multi_session_tests`, `./scripts/package-install-smoke.sh`, and
+`./scripts/local-ci.sh`; the first full local CI attempt exposed the isolated multi-session daemon
+cold-cache timeout, which the explicit test cache path now fixes.
+
+T354 refreshes the installed local binary after T353 without touching harness adapters or
+restarting the live global daemon. `cargo install --path engram-cli --force --root
+/Users/yuval.meiri/.local` replaced installed hash
+`e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5` with
+`a47edffa8c8ed955a311adac85033ce8a28235c37007b5149ea81a8ffeb456de`, and
+`/Users/yuval.meiri/.local/bin/engram --version` still reports `engram 0.2.0-beta.1`. An isolated
+installed-runtime smoke started the refreshed binary from a temporary workspace with temp `HOME`,
+temp `ENGRAM_DATA_DIR`, and explicit `ENGRAM_EMBED_CACHE_DIR`; `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+T355 restarts the live global daemon onto the refreshed T354 installed binary. Before restart,
+daemon status reported PID `92750`, spawned by `/Users/yuval.meiri/.local/bin/engram`, with spawn
+version `0.2.0-beta.1`. After `engram daemon stop`, the first `engram daemon start` attempt exited
+before readiness because the daemon log reported a transient RocksDB `~/.engram/data/LOCK`
+conflict. A follow-up status check reported no running daemon, and the retry succeeded. The live
+daemon now reports PID `64693` on port `8765`, spawned by `/Users/yuval.meiri/.local/bin/engram`,
+with spawn version `0.2.0-beta.1`; `/health` returns
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`, and live MCP
+`orient(response_shape="lean")` returned trace `019ea620-b1be-7dc1-a022-15f49badddf6` for the
+current MVP-status prompt.
+
+T356 reruns the read-only native-Claude/effective-hook/live-host-label preflight after the T355
+daemon refresh. Branch/upstream status is synchronized at `0 0`, `origin/main...HEAD` is `0 48`,
+and PR #3 remains draft at `6a561863154d7b3fabc0e176d3105ed1f0dedd7a`; hosted run
+`27122932006` still fails all five jobs before workflow-step execution with `steps: []`. Claude
+still resolves to `/Users/yuval.meiri/.local/bin/claude`, version `2.1.168 (Claude Code)`, with
+SHA-256 `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`. Claude Code
+`harness status` and `harness doctor` report `ready=true`; snippet-only install dry-run reports
+`planned=[]`; daemon PID `64693` is running from `/Users/yuval.meiri/.local/bin/engram` with spawn
+version `0.2.0-beta.1`; `/health` returns
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`; canonical vault status is
+count-aligned at `2628` generated files; obligations doctor is clean; and worktree ownership review
+kept the user-owned untracked root `AGENTS.md` unstaged.
+
+T356 hard-stops before native launch because live native Claude CLI processes remain as PID `60453`
+on `ttys001` and PID `311` on `ttys005`, so a new prompt-bearing run would still have ambiguous
+attribution. T356 is read-only preflight evidence only: it does not launch native Claude, run
+`/hooks`, signal processes, mutate settings/adapters, or prove prompt-bearing/effective-hook/live
+host-label behavior.
+
+T357 hardens the daemon-backed local beta CLI admin path. `engram lint`, `engram obligations`, and
+`engram vault` now prefer a healthy global or project daemon through the existing one-shot MCP
+proxy helper when no explicit `--data-dir` is supplied; direct RocksDB access remains the fallback
+when no matching daemon is healthy and remains mandatory for explicit data-dir commands. This
+closes the observed installed CLI `~/.engram/data/LOCK` failure for common health checks while the
+global daemon owns the store. Validation passed `cargo fmt --all --check`, `git diff --check`,
+`cargo check -p engram-cli`, `cargo test -p engram-cli`, source-binary smokes for `lint` and
+`vault`, installed-path smokes for `lint`, `vault`, and `obligations doctor --limit 3`, and
+installed CLI hash refresh to
+`fa91efbd228683dae608881f5828bdc1ffe55b67376e414653f8ac8eb92ba8c9`. T357 does not restart the
+global daemon, change daemon MCP behavior, mutate lifecycle state, run broad `lint apply_safe`,
+close hosted CI, run native Claude, or prove effective-hook/live-host-label behavior.
+
+T357 final local validation also passed `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh`. The package smoke rebuilt the release tarball, verified its
+checksum, installed the packaged binary into a temporary prefix, confirmed `engram 0.2.0-beta.1`,
+started packaged `engram serve --http --memory`, and verified `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`.
+
+T358 hardens the public MCP metadata for project-scoped lint. Runtime `project` filtering already
+worked, but the tool contract now explicitly describes `LintRequest.project`, and source HTTP daemon
+`tools/list` has a regression test that `lint.inputSchema.properties.project` is exposed. Validation
+passed `cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-mcp`,
+`cargo test -p engram-tests --test lint_tests test_mcp_lint_project_filter_excludes_unrelated_project_memory`,
+and
+`cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_lint_schema_exposes_project_filter`.
+The installed local binary was refreshed from hash
+`fa91efbd228683dae608881f5828bdc1ffe55b67376e414653f8ac8eb92ba8c9` to
+`62c9955925f74fba706ad466416033cc0bdbc211cf0443a373d4e5925760589a`, the live daemon restarted as
+PID `36562` on port `8765`, and an installed-daemon `tools/list` smoke confirmed the `lint.project`
+schema description.
+
+Current T388 matrix snapshot after exact-head release validation:
 
 | Category | Evidence-backed state | Remaining gate |
 | --- | --- | --- |
-| Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
-| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; doctor-level adapter readiness is green; T261 locally reconciles `origin/main`; T276 refreshes the branch/pull-hint evidence after T275 and confirms `origin/main` remains an ancestor of `HEAD`; T274 confirms current-plan/M6 gate memory still outranked stale lifecycle targets before cleanup; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence; T265 installs that source and proves live Codex labeling still works; T266 proves current data compiles into the generated vault projection in isolated temp output with exact expected file counts; T277 initializes and compiles the durable canonical generated vault at `/Users/yuval.meiri/.engram/vault` with 2,278 generated files, zero user files, zero skipped files, and marker/frontmatter scans clean; T278 validates the M6 review batch end to end with clean status, clean dry-run, five written reviewed MemoryItems, post-apply duplicate idempotence, content retrieval traces, and a post-apply canonical vault refresh to 2,287 generated files with zero user files; T279 archives the three exact T234/T247/T248 lifecycle targets, validates active search no longer returns them, records KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and refreshes the canonical vault to 2,291 generated files with zero user files; T280 publishes the branch, sets upstream tracking, and opens draft PR `#2`; T281 validates that the old T255 packet is not executable under current Claude `2.1.163`; T282 records a successor packet for Claude `2.1.163` without executing it; T283 validates that the T282 successor must not execute while ambient native Claude processes make attribution ambiguous; T284 records that broad lifecycle/direct-legacy mutation remains deferred after a fresh truncated lint sample; T285 fixes the first PR CI Clippy failures, including the Rust 1.96-only `collapsible_match` warning, and locally validates `git diff --check`, `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and serialized `cargo test --all-targets --jobs 1`; T286 closes the remote CI recheck for the T285 fix with successful run `27059846266` on T285 fix head `54c12eb20eefe1f69f162d9151b66868c120a70d`; T287 removes the Node.js 20 checkout-action deprecation path by moving all five CI checkout steps to `actions/checkout@v5` and fresh run `27062763355` passes all five PR CI jobs on the T287 head; T288 archives five exact superseded rolling handoffs, records KnowledgeCommit `019e9d2a-e428-7903-b17d-11468e2644ae`, validates that the post-archive lint sample no longer returns those target IDs, and PR CI run `27063949279` passes all five jobs on the T288 head; T289 archives five more exact superseded rolling handoffs, records KnowledgeCommit `019e9d5c-9c39-7c63-89a2-a8d2741c03e0`, validates that post-archive lint no longer returns those target IDs, and refreshes branch/pull-hint evidence after fetch; T290 archives five more exact superseded rolling handoffs, records KnowledgeCommit `019e9d8b-649b-7083-9029-78916c813ac1`, validates that post-archive lint no longer returns those target IDs, refreshes branch/pull-hint evidence after fetch, and refreshes the canonical vault to 2,336 generated files with zero user files; T291 archives five more exact superseded rolling handoffs, records KnowledgeCommit `019e9dba-a27e-7db2-8631-d8a76ec2a571`, validates that post-archive lint no longer returns those target IDs, refreshes branch/pull-hint evidence after fetch, and refreshes the canonical vault to 2,341 generated files with zero user files; T292 archives five more exact superseded rolling handoffs, records KnowledgeCommit `019e9de9-c8aa-78c3-8b89-df778e1e41e7`, validates that post-archive lint no longer returns those target IDs, refreshes branch/pull-hint evidence after fetch, and refreshes the canonical vault to 2,346 generated files with zero user files; T293 archives five more exact superseded rolling handoffs, records KnowledgeCommit `019e9e19-a913-7111-954d-e95c9a6a9e07`, validates that post-archive lint no longer returns those target IDs, refreshes branch/pull-hint evidence after fetch, and refreshes the canonical vault to 2,351 generated files with zero user files; T294 archives five more exact superseded rolling handoffs, records KnowledgeCommit `019e9e4a-57ad-7b51-a787-6b4859421cfa`, validates that post-archive lint no longer returns those target IDs, refreshes branch/pull-hint evidence after fetch, and refreshes the canonical vault to 2,356 generated files with zero user files; T295 records a beta-scope cut after PR CI run `27071097151` passed all five jobs on the T294 head, and follow-up run `27072115918` passed all five jobs on the T295 documentation head; T296 corrects the matrix wording so those historical exact-head runs are not treated as proof for later commits; T297 validates the current local beta path with a canonical vault refresh to 2,369 generated files and zero user files, readable/count-aligned vault index, lean `orient` trace `019e9ed6-784b-7513-be7f-ba7bb209e352`, dry-run M6 inventory/export/status evidence in `/private/tmp/engram-t297-m6-review-20260607`, clean obligations doctor, Codex/generic doctors `ready=true`, green PR CI run `27073249090` on the pre-report head `f03fb4b714d7b20a561d3a2316c7444878af93fe`, and exact-head PR CI run `27074430051` on report commit `5a1905398bfb5255b3314b1a78339cd655ccb964`; T298 archives five more exact superseded rolling handoffs and validates that post-archive lint advanced to `019dfd38-fc3d-7352-83a6-c9bbd16349ea`; T299 fixes beta-scope public contract issues in scoped obligation doctor guidance, MCP search schema wording, default stdio-proxy serve flag validation, quarantine review export mutation labeling, README/MCP setup host-scope wording, and exact-head PR CI run `27076011668`; T300 refreshes stale current-plan/handoff memory and validates lean `orient` now returns the T299 current plan first; T301 archives five more exact superseded rolling handoffs, validates that post-archive lint no longer returns those target IDs, and refreshes the canonical vault to 2,381 generated files with zero user files. | Validations are point-in-time and bounded to the tested classes. T278 proves the current review-batch apply and immediate vault refresh, not direct legacy deletion/deprecation or broad legacy simplification. T279 closes exact target lifecycle cleanup for three IDs, not exhaustive global lint cleanup. T280 closes initial branch publication, not PR readiness. T281/T282/T283 close stale-packet and unsafe-preflight handling only, not native Claude behavior. T284 is a read-only deferral, not cleanup. T286 closes only the remote CI recheck for the T285 fix head. T287 closes CI runtime hardening for the T287 head, not PR readiness. T288, T289, T290, T291, T292, T293, T294, T298, and T301 close only their exact archived MemoryItem IDs, not global lifecycle cleanup or direct-legacy deletion. T295 changes the beta release bar, not the production-completion bar. T296 is an evidence-wording correction, not PR readiness and not production completion. T297 report commit passed exact-head PR CI; T299 closes beta-contract wording, safety-boundary fixes, and exact-head CI for that head; T300 closes stale release-posture retrieval for the current-plan/handoff path, not production-complete Brain Harness parity. |
-| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, lifecycle hygiene, branch publication, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264/T265 narrow Claude Code source/runtime labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env and installed-CLI simulated-Claude smoke; T270 defines the future live native Claude label proof contract and records Gemini as default-deny/no-contract rather than guessed; T277 closes initial canonical vault init/compile, T278 proves one immediate post-write canonical vault refresh, T279 proves exact target lifecycle archive plus vault refresh, T280 proves initial remote branch/PR publication, T286 proves remote CI closure for the T285 fix head, T287 proves CI runtime hardening for the T287 head, T288 proves one exact superseded-handoff archive batch and green CI for that head, T289 proves a second exact superseded-handoff archive batch plus branch/pull-hint freshness, T290 proves a third exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T291 proves a fourth exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T292 proves a fifth exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T293 proves a sixth exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T294 proves a seventh exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T298 proves an eighth exact superseded-handoff archive batch with post-archive lint advancement, and T301 proves a ninth exact superseded-handoff archive batch with post-archive lint advancement plus canonical vault refresh. T284 still defers broad residual lifecycle cleanup after fresh read-only lint evidence. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, live Claude host-label proof, future exact lifecycle archive batches, PR readiness/review follow-up, and direct legacy deprecation/deletion execution remain unproved. |
-| Prepared but not executed | T255 prepared an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules, but T281 now marks it stale for current Claude `2.1.163`; T282 prepares the successor prompt-bearing packet for Claude `2.1.163`; T283 hard-stops that successor preflight because ambient native Claude processes would make attribution ambiguous; T267 is historical/non-executable after count drift; T275 has now been executed by T277 for initial canonical vault init/compile; T269 commits an exact/default-deny effective-hook visibility revalidation packet with a falsifiable `/hooks` observation contract and T197-style process-group cleanup path; T270 commits an exact/default-deny host-label proof packet for live native Claude and Gemini no-contract deferral; T271 was executed by T280 for initial branch publication/upstream/PR. | T282/T283 have not run native Claude and do not prove prompt-bearing behavior; T269 has not run native Claude and does not prove effective-hook visibility; T270 has not run native Claude and does not prove live Claude labels. |
-| Missing | Prompt-bearing native Claude execution with clean attribution, effective-hook execution result, live Claude host-label proof, any direct legacy deprecation/deletion execution after T278's current review-batch apply, PR readiness/review follow-up, and any future exact-target lifecycle archive batch beyond the T279/T288/T289/T290/T291/T292/T293/T294/T298/T301 targets. | Requires separate evidence-backed slices. |
-| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; fresh T283 telemetry shows the 20-trace window passing coverage but failing the three-intent threshold, while the 50-trace window passes with 60% coverage, five intents, and clean outcomes. Harness lifecycle compliance is soft; stale docs-only packets, T255, T269, and T282 can be mistaken for executed cleanup/validation; quarantined T278 entity-scope M6 candidates are not active MemoryItems; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
-| Blocked | Full harness parity is blocked on unresolved prompt-bearing native Claude execution, effective-hook visibility, and live host-label evidence. Residual lifecycle debt is still visible but broad cleanup is deferred by T284 and must not use broad `lint apply_safe`. | Execute or explicitly defer T282/T269/T270 with fresh evidence; keep future risky actions scoped and do not treat one closed gate as broad Brain Harness completion. |
+| Implemented | Brain Loop v1/lean `orient`, current-plan capture, used-memory IDs, obligation summary, telemetry feedback/eval, specialist Memory OS tools, project-scoped lint, generated local harness adapters, and M6 inventory/export/inspection/status paths exist. | Implementation existence is not completion evidence for every behavior class. |
+| Validated | Current-plan lean `orient` returns the latest captured plan first; obligations doctor is clean; supported local/Codex beta readiness is green; T333 closes generated Claude Code adapter drift so installed Claude Code harness status/doctor now report `ready=true`, while prompt-bearing native Claude, effective-hook, and live host-label gates remain unproved; T334 confirms the post-repair preflight now matches path/version/hash/harness assertions but still hard-stops on ambient native Claude process attribution; T340 refreshes that native-Claude/effective-hook/live-host-label preflight at head `6d0467e` and again confirms the runtime/harness/daemon/vault assertions match while native Claude processes still block clean attribution; T341 validates PR #3 exact head `2fa5b577bda8ab6141e0f7272736044d441a7e88` with all local CI-equivalent commands after hosted run `27101388242` failed before workflow steps; T261 locally reconciles `origin/main`; T276 refreshes the branch/pull-hint evidence after T275 and confirms `origin/main` remains an ancestor of `HEAD`; T274 confirms current-plan/M6 gate memory still outranked stale lifecycle targets before cleanup; T262 passes focused CLI/MCP external-session fallback tests, full telemetry integration, format, `cargo check -p engram-cli`, full clippy, and `git diff --check`; T263 installs the T262 binary and proves live Codex `orient` trace labeling plus feedback inheritance; T264 passes focused CLI/MCP resolver tests for guarded Claude fallback and Claude-over-Codex precedence; T265 installs that source and proves live Codex labeling still works; T266 proves current data compiles into the generated vault projection in isolated temp output with exact expected file counts; T277 initializes and compiles the durable canonical generated vault at `/Users/yuval.meiri/.engram/vault` with 2,278 generated files, zero user files, zero skipped files, and marker/frontmatter scans clean; T278 validates the M6 review batch end to end with clean status, clean dry-run, five written reviewed MemoryItems, post-apply duplicate idempotence, content retrieval traces, and a post-apply canonical vault refresh to 2,287 generated files with zero user files; T279 archives the three exact T234/T247/T248 lifecycle targets, validates active search no longer returns them, records KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and refreshes the canonical vault to 2,291 generated files with zero user files; T280 publishes the branch, sets upstream tracking, and opens draft PR `#2`; T281 validates that the old T255 packet is not executable under current Claude `2.1.163`; T282 records a successor packet for Claude `2.1.163` without executing it; T283 validates that the T282 successor must not execute while ambient native Claude processes make attribution ambiguous; T284 records that broad lifecycle/direct-legacy mutation remains deferred after a fresh truncated lint sample; T285 fixes the first PR CI Clippy failures, including the Rust 1.96-only `collapsible_match` warning, and locally validates `git diff --check`, `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and serialized `cargo test --all-targets --jobs 1`; T286 closes the remote CI recheck for the T285 fix head; T287 closes CI runtime hardening for the T287 head; T295 changes the beta release bar, not the production-completion bar; T299 closes beta-contract wording, safety-boundary fixes, and exact-head CI for that head; T305 closes installed local/Codex runtime/adapters drift only; T320 through T332 close only exact reviewed lifecycle targets; T333 executes the exact T314 snippet-only adapter repair and verifies unchanged settings hashes. | Validations are point-in-time and bounded to the tested classes. T278 proves the current review-batch apply and immediate vault refresh, not direct legacy deletion/deprecation or broad legacy simplification. T279/T288/T289/T290/T291/T292/T293/T294/T298/T301/T303/T320/T321/T323/T324/T325/T326/T327/T328/T329/T331/T332 close only their exact archived MemoryItem IDs, not global lifecycle cleanup or direct-legacy deletion. T300 closes stale release-posture retrieval for the current-plan/handoff path, not production-complete Brain Harness parity. T333 closes generated adapter drift only; T334 and T340 confirm that attribution, not adapter drift, is now the remaining native-Claude launch blocker. T341 proves local CI-equivalent health for the current head, not hosted CI or production parity. None of T333/T340/T341 proves native Claude prompt-bearing behavior, effective-hook visibility, or live host labels. |
+| Validated T336 scoped lint | `cargo test -p engram-index lint_project_scope_filters_memory_obligations_and_sessions`, `cargo test -p engram-tests --test lint_tests`, and isolated CLI smoke `cargo run -p engram-cli -- lint --data-dir <tempdir> run --scope-project engram --limit 5 --json` pass. The first live-store CLI smoke hit the expected SurrealDB lock because the daemon owns `~/.engram/data/LOCK`. | Proves scoped lint filtering and public plumbing only. It does not archive memory, run `lint apply_safe`, clean historical global lint findings, or close lifecycle debt. |
+| Validated T337 installed-runtime adoption | `cargo install --path engram-cli --force --root /Users/yuval.meiri/.local` installed hash `b775efa0946862eba8d4d8993bb946f0926372d8a3fe9bbfea98ea38e786e7c2`; `daemon status` reports PID `57356` spawned by the installed path; installed CLI isolated scoped-lint smoke returned zero findings and zero applied safe actions; fresh installed MCP smoke reported `lint_has_project_property=True` and `tools/call` with `project=engram` returned JSON. | Proves the installed local/Codex path picked up T336. It does not update Codex's already-loaded tool metadata inside an existing conversation, and it does not close hosted CI, lifecycle cleanup, native Claude, effective-hook, or live host-label gates. |
+| Validated T357 CLI daemon routing | Source checks passed `cargo check -p engram-cli`, `cargo test -p engram-cli`, `cargo fmt --all --check`, and `git diff --check`. Live source and installed smokes with daemon PID `64693` still running proved `engram lint run --scope-project engram --vault-path /Users/yuval.meiri/.engram/vault --limit 3 --json`, `engram vault status /Users/yuval.meiri/.engram/vault --json`, and `engram obligations doctor --limit 3 --json` return daemon-backed output instead of a RocksDB lock error. Installed hash is `fa91efbd228683dae608881f5828bdc1ffe55b67376e414653f8ac8eb92ba8c9`. Full `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` passed; the package smoke verified the release tarball checksum, installed the packaged binary into a temporary prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. | Proves common installed CLI health/admin commands no longer conflict with the running daemon and that the release tarball/install path works for the scoped beta. It does not change daemon behavior, restart the daemon, scope unscoped obligation doctor output, mutate lifecycle state, run broad cleanup, close hosted CI, or prove native Claude/effective-hook/live-host-label parity. |
+| Validated T358 lint project schema exposure | `LintRequest.project` now has explicit schema metadata, and source tests passed `cargo test -p engram-mcp`, `cargo test -p engram-tests --test lint_tests test_mcp_lint_project_filter_excludes_unrelated_project_memory`, and `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_lint_schema_exposes_project_filter`. The installed binary hash is `62c9955925f74fba706ad466416033cc0bdbc211cf0443a373d4e5925760589a`; the live daemon was restarted as PID `36562`; an installed-daemon `tools/list` smoke confirmed `lint.inputSchema.properties.project.description == "Optional project scope to lint."`. | Proves project-scoped lint is discoverable through the public MCP metadata and still works at runtime. It does not change lint filtering semantics, run `lint apply_safe`, close hosted CI, or prove native Claude/effective-hook/live-host-label parity. |
+| Validated T359 obligations CLI scope | `engram obligations list` and `engram obligations doctor` now accept `--scope-project` and `--cwd`. Daemon-backed CLI calls serialize those filters to the MCP `obligations` tool; direct-store fallback calls pass them to `ObligationService::list` and `ObligationService::doctor`. Source validation passed `cargo test -p engram-cli obligation_daemon_arguments`, `cargo check -p engram-cli`, `cargo fmt --all --check`, `git diff --check`, and `cargo test -p engram-tests --test obligation_tests`; source help, source daemon-backed smokes, and isolated `--data-dir` direct-store smokes passed. Installed hash is `ae45c01ab2a4c5046508e916a7c381655a71611f223fd8fc7989392cd3879f79`; installed scoped doctor returned `{"open":[],"warnings":[]}` and installed scoped open list returned `[]`. Final exact-head local CI-equivalent steps passed after rerunning a stalled serialized test step directly, and `./scripts/package-install-smoke.sh` verified the tarball checksum, temp install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`. | Proves CLI obligation health checks can be scoped in the supported local/Codex beta operator path without RocksDB lock conflicts or unscoped noise, and that the release package/install path still works. It does not mutate obligations, run lifecycle cleanup, close hosted CI, or prove native Claude/effective-hook/live-host-label parity. |
+| Validated T360 obligations schema scope | `ObligationRequest.project` and `ObligationRequest.cwd` now have explicit schema descriptions for scoped obligation health checks. Source validation passed `cargo test -p engram-mcp obligation_request_schema_exposes_scope_filters`, `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_obligations_schema_exposes_scope_filters`, `cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-mcp`, and `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list`. Installed hash is `ff16b90be46e54d089ce66e5b360630449bffc9f874da031beb10884f994756b`; the live daemon was restarted as PID `48118`; an installed-daemon `tools/list` smoke confirmed `obligations.inputSchema.properties.project.description == "Optional project scope for detect, add, list, open, and doctor."` and `obligations.inputSchema.properties.cwd.description == "Current working directory for detect/list/open/doctor scoping."`. Final exact-head `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` passed; the package smoke verified the tarball checksum, temp install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`. | Proves scoped obligation list/doctor behavior is discoverable through the public MCP metadata and still works at runtime, and that the release package/install path still works. It does not change obligation filtering semantics, mutate obligations, close hosted CI, or prove native Claude/effective-hook/live-host-label parity. |
+| Validated T361 telemetry project schema scope | `TelemetryRequest.project` now has explicit schema metadata for trace recording and project-scoped telemetry reports. Source validation passed `cargo test -p engram-mcp telemetry_request_schema_exposes_project_filter`, `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_telemetry_schema_exposes_project_filter`, `cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-mcp`, and `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list`. Final exact-head `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` passed; the package smoke verified the tarball checksum, temp install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`. Installed hash is `6c278872d2f71a5ce96fba3e1777b3cc2f4690e6d6c9caf74df093fb4fd7e49a`; the live daemon was restarted as PID `2865`; an installed-daemon `tools/list` smoke confirmed `telemetry.inputSchema.properties.project.description == "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."`. | Proves project-scoped telemetry reports are discoverable through the public MCP metadata and that the release package/install path still works. It does not change telemetry filtering semantics, scoring formulas, storage, ranking, `orient`, lifecycle state, close hosted CI, or prove native Claude/effective-hook/live-host-label parity. |
+| Validated T362 orient context schema contract | `OrientRequest.cwd`, `OrientRequest.project`, and `OrientRequest.response_shape` now have explicit schema metadata for repository/project resolution, scoped memory selection, and the lean Brain Loop response shape. Source validation passed `cargo test -p engram-mcp orient_request_schema_exposes_context_contract`, `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list_orient_schema_exposes_context_contract`, `cargo fmt --all --check`, `git diff --check`, `cargo test -p engram-mcp`, `cargo test -p engram-tests --test multi_session_tests test_mcp_tools_list`, and `./scripts/local-ci.sh`. `./scripts/package-install-smoke.sh` rebuilt the release package, verified the tarball checksum, temp install, packaged `engram 0.2.0-beta.1`, and packaged HTTP `/health`. Installed hash is `77a08e895614bea3b02816e67bafd64087ea0634f4b0ca58b8199a9ef7855633`; the live daemon was restarted as PID `47577`; an installed-daemon `tools/list` smoke confirmed the three `orient` schema descriptions. | Proves the core `orient` context contract is discoverable through the public MCP metadata and that the release package/install path still works. It does not change orientation ranking, memory selection semantics, telemetry, lifecycle state, close hosted CI, or prove native Claude/effective-hook/live-host-label parity. |
+| Validated T363 native-Claude preflight refresh | Read-only post-T362 preflight reconfirmed Claude Code `2.1.168` at `/Users/yuval.meiri/.local/share/claude/versions/2.1.168` with SHA-256 `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`, installed Engram hash `77a08e895614bea3b02816e67bafd64087ea0634f4b0ca58b8199a9ef7855633`, daemon PID `47577` healthy on port `8765`, Claude Code harness status/doctor `ready=true`, snippet-only harness install dry-run `planned=[]`, canonical vault status aligned at `total_file_count=2651`, `generated_file_count=2651`, `user_file_count=0`, `expected_generated_file_count=2651`, and scoped obligations doctor clean. Fresh process inventory still found active native `claude` PID `34797` on `ttys004`, so T363 hard-stopped before launch. | Proves the current production hard stop is still process attribution, not runtime drift, adapter drift, daemon drift, vault drift, or obligations. It does not launch native Claude, run `/hooks`, send prompts, prove prompt-bearing behavior, prove effective-hook visibility, prove live host labels, close hosted CI, or change beta scope. |
+| Validated T364 exact stale Claude-harness memory archive | Two evidence-less active Claude-harness MemoryItems were archived after exact fresh checks: `019dd4e3-bcec-7c02-9174-ba0ac0380d45` (`Claude Code native hook harness implemented`) and `019dd509-46f2-71c0-aff7-ebe777810825` (`Claude Code Engram-native harness activated`). `memory(get)` showed empty evidence, `graph(around, depth=1)` showed only project scope, project-scoped lint flagged stale-feedback/missing-evidence active memory, and direct search showed newer evidenced T333/T340/T363 records now represent the current Claude-harness state. Post-archive `memory(get)` reports both IDs `status=archived`; live daemon project-scoped lint returned `archived_targets_present=[]`; direct search now returns active evidenced successor/limitation records first. | Reduces stale active-memory risk around Claude harness readiness and keeps future agents from treating old activation claims as current production proof. It does not delete data, run broad `lint apply_safe`, change source, mutate settings/hooks, launch native Claude, prove prompt-bearing behavior, prove effective-hook visibility, prove live host labels, close hosted CI, or change beta scope. |
+| Validated T365 exact stale orient-contract memory archive | Two evidence-less active May 6 orient-contract/architecture MemoryItems were archived after exact fresh checks: `019dfed3-519d-7f01-8c46-c9245ba0045b` (`AI Council and Claude next-step synthesis after orient contract`) and `019dfed5-1875-7110-b355-8d1060e6d04a` (`Brain Harness Architecture synced after orient contract checkpoint`). `memory(get)` showed empty evidence, `graph(around, depth=1)` showed only project scope, project-scoped lint flagged both as stale-feedback and missing-evidence active memory, and direct search returned current evidenced T364 current-plan/beta-scope records first. Post-archive `memory(get)` reports both IDs `status=archived`; live daemon project-scoped lint returned `archived_targets_present=[]` and reduced returned findings from `20` to `16`. | Reduces stale active-memory risk around obsolete May 6 next-step/checkpoint guidance while preserving historical data. It does not delete data, run broad `lint apply_safe`, change source, close hosted CI, or prove native Claude/effective-hook/live-host-label or production/GA readiness. |
+| Validated T366 beta acceptance refresh | Local CI-equivalent validation passed with `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`, `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1`, `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`. `./scripts/package-install-smoke.sh` rebuilt the release package, verified the tarball checksum, installed the packaged binary in a temporary prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. PR #3 remains draft and hosted CI remains externally blocked before workflow-step execution. | Proves the current scoped local/Codex beta candidate has fresh local CI and package/install fallback evidence. It narrows the beta gate to release-owner fallback acceptance or restored hosted CI, then ready/merge/tag/publish mechanics. It does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove hooks or host labels, or make the system production/GA ready. |
+| Validated T367 native-Claude attribution preflight | Read-only preflight after T366 shows no active native `claude` CLI process, clearing the T363 attribution hard stop for the native CLI process class. Claude resolves to `/Users/yuval.meiri/.local/share/claude/versions/2.1.168`, version `2.1.168 (Claude Code)`, SHA-256 `377f0ecedba8246bdabdf312ce8b7cc8ae1160997b26f5edca352a4a8d61dc78`; installed Engram hash remains `77a08e895614bea3b02816e67bafd64087ea0634f4b0ca58b8199a9ef7855633`, daemon PID `47577` is healthy, harness status/doctor report `ready=true`, snippet-only install dry-run plans no writes, obligations doctor is clean, and the vault is count-aligned at `2665` generated files. 20-trace telemetry confidence passes, while 50-trace feedback coverage remains below gate at `36%`. | Moves T312/T335/T270 from attribution-blocked to approval-ready from the native CLI process standpoint, assuming a fresh preflight still matches immediately before launch. It does not execute native Claude, run `/hooks`, prove prompt-bearing behavior, prove live host labels, close hosted CI, or change production/GA readiness. Exact approval is still required before any native run. |
+| Validated T368 native-Claude attribution regression | Read-only preflight after T367 shows that T367's attribution-clear result was point-in-time only. Fresh process inventory finds native `claude` PID `34797` live again on `ttys004`, which hard-stops T312 prompt-bearing proof, T335 `/hooks` effective-hook proof, and T270 live host-label proof. T368 does not launch native Claude, run `/hooks`, signal the process, mutate harness settings/adapters, change source behavior, mark PR #3 ready, merge, tag, publish, or change the local/Codex beta scope. | Proves the current native-Claude production gate is blocked by process attribution again. It does not affect the scoped local/Codex beta path, and future native proof still requires exact approval plus a fresh clean preflight. |
+| Validated T369 exact-head beta validation | `./scripts/local-ci.sh` passed for the current PR #3 candidate tree, covering `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`, `cargo clippy --all-targets -- -D warnings`, CI-like `cargo test --all-targets --jobs 1`, and `cargo doc --no-deps`. `./scripts/package-install-smoke.sh` rebuilt the release package, verified the tarball checksum, installed the packaged binary in a temporary prefix, confirmed `engram 0.2.0-beta.1`, and verified packaged HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. Hosted run `27138579667` on T368 head `8dad84e37b6bc033904319c675683345c7b60972` still fails all jobs before workflow-step execution with `steps=[]`. | Removes the stale exact-head validation concern for the scoped local/Codex beta path and narrows the beta gate to explicit release-owner local-fallback acceptance or restored exact-head hosted CI, then ready/merge/tag/publish mechanics. It does not mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove hooks or host labels, close the 50-trace telemetry gate, run M6 write-apply, or make the system production/GA ready. |
+| Validated T378 CLI observed MCP tool flags closeout | PR #3 head `c876374db987252f4ad7ed88885ab55f30860b8a` exposes T377 checked MCP tool evidence through repeatable CLI `--observed-mcp-tool <TOOL>` flags on `engram harness status` and `engram harness doctor`. Focused source validation passed `git diff --check`, `cargo fmt --all --check`, `cargo test -p engram-cli harness_status_parses_observed_mcp_tool_flags`, `cargo test -p engram-cli`, `cargo check -p engram-cli`, and `cargo clippy -p engram-cli -- -D warnings`; exact-head `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` passed; PR #3 body is updated; hosted run `27153053722` still fails Check, Test, Format, Clippy, and Docs with `steps=0` on every job. | Proves checked MCP tool state can be verified through the installed CLI and refreshes exact-head local/package proof for the scoped beta. It does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close hosted CI, run native Claude, prove effective hooks/live host labels, run M6 write-apply, or make the system production/GA ready. |
+| Validated T380 stale M6 gate memory archive | Archived exactly MemoryItem `019dd35d-1a48-7103-b0e2-390225f8b418` (`Memory OS completion is paused at migration review gate`) after `memory(get)`, project-scoped lint, current search trace `019ea835-fb62-73b0-9640-baaebb06460e`, T278 evidence review, and AI Council T279 recall showed it was stale as active guidance after T278 closed the current T68/T209/T210/T250 M6 review-batch disposition/apply gate. Post-archive `memory(get)` reports `status=archived`; search trace `019ea83c-150b-7011-998f-54f61ba618d4` no longer returns the checkpoint in active memory results; project-scoped lint no longer reports `feedback-stale-active-memory:019dd35d-1a48-7103-b0e2-390225f8b418`; obligations doctor is clean. | Reduces stale active-memory risk around M6 retrieval and preserves the current explicit M6 limitation as active guidance. It does not delete data, run broad `lint apply_safe`, run M6 write-apply, change source behavior, change ranking or `orient`, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove effective hooks, prove live host labels, or change production/GA readiness. |
+| Validated T383 telemetry confidence recovery | After the current 50-trace telemetry window failed at `21/50` feedback records (`42%`), four judgeable traces were scored: current continuation orient `019ea8a5-f60b-76c2-9e53-016980300077`, T382 orient `019ea884-8d3b-7f92-9433-2c3b35159208`, T382 `changes_since` `019ea886-d4a6-7890-ac40-b1f3f52baf2d`, and T380 post-archive search `019ea83c-150b-7011-998f-54f61ba618d4`. Fresh 50-trace telemetry now passes at `25/50` feedback records (`50%`), and the 20-trace window passes at `10/20` (`50%`), both with zero task failures, zero bad-memory-used, zero stale-memory, and zero wrong-scope-memory outcomes. | Restores the current sampled retrieval-feedback confidence signal for the local/Codex Brain Harness path. It does not change telemetry formulas or thresholds, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, run M6 write-apply, run lifecycle cleanup, launch native Claude, prove effective hooks/live host labels, or make the system production/GA ready. |
+| Validated T384 exact stale active-memory cleanup | Archived exactly five project-scoped stale active MemoryItems after read-only lint, daemon-backed `memory(get)`, `graph(around, depth=1)`, current search, daemon status, vault status, and scoped obligations evidence: `019dd080-612a-7540-a028-42991c20ef1b`, `019dd083-e014-74f1-95e5-b1eef478e894`, `019dd3a8-138d-7453-9991-d724f96a128f`, `019dd3e4-9143-7721-9bff-b3fb505c8859`, and `019e68a7-3375-7943-8ef0-dc0dde64c8bd`. Post-archive project-scoped lint no longer reports those five `feedback_stale_active_memory` findings; vault status remains aligned at `2749/2749`, and scoped obligations doctor is clean. | Reduces stale active-memory pressure from old runtime/status/readiness/live-smoke snapshots while preserving history. It does not delete data, run broad `lint apply_safe`, end sessions, mutate M6, change ranking or `orient`, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks/live host labels, or make the system production/GA ready. |
+| Validated T385 evidenced memory replacement | Replaced or archived the next five project-scoped missing-evidence MemoryItems after daemon-backed `memory(get)`, `graph(around, depth=1)`, commit/source/test evidence review, lint, vault, and obligations checks. Active evidenced successors now preserve digest extraction apply (`019ea8e5-d8ba-7623-abb0-b4151504ad14`), orient contract checkpoint (`019ea8e6-19b0-7353-bc93-7124bfea5b61`), and real-session telemetry eval (`019ea8e6-59e6-7980-9a97-e08ab77073be`). Old evidence-less records `019dcaa6-0223-73a2-9fe4-76b61ff14faa`, `019dfecb-16ca-71c2-b391-e3c216601590`, and `019dfee0-90f8-7a61-a548-c2bddefcf897` are superseded; stale operational records `019dddbe-d369-7523-ac91-9bfeb016463b` and `019dfee6-c83a-7c02-a3ed-78fc9e80329b` are archived. KnowledgeCommit `019ea8e8-f0ee-7f91-b78b-5b96060b9f0a` records the memory changes. Post-change project-scoped lint starts at stale active-session warnings, vault status is aligned at `2756/2756`, and scoped obligations doctor is clean. | Reduces missing-evidence active-memory risk while preserving useful implementation facts as evidenced active memory. It does not run broad `lint apply_safe`, end sessions, mutate M6, change ranking or `orient`, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks/live host labels, or make the system production/GA ready. |
+| Validated T386 exact stale-session cleanup | Closed exactly five project-scoped stale active-session lint findings through `session(action="end")`: `019dd063-ee4f-7943-8409-0450bac3a724`, `019e7d38-68d7-7652-b62f-3e8e635253ae`, `019e7e6e-73e2-7e72-9351-da62e69686af`, `019e8470-5d37-7db0-ac21-1725184849e7`, and `019e990f-e4fb-7a02-a840-77a38dceab3e`. Each summary records the lint age, old event state, coordination state, and history-preservation boundary. Matching stale coordination rows with empty components/current_file were unregistered for `019dd063`, `019e7e6e`, `019e8470`, and `019e990f`; `019e7d38` had no active coordination row. Post-change `session(get)` reports all five as `completed` with non-null `ended_at`, `coord(list)` no longer shows the targeted rows, and project-scoped lint returns no findings. | Reduces stale active-session lint debt while preserving durable session history. It does not delete session events, run broad `lint apply_safe`, mutate M6, change source behavior, clean unrelated coordination-only rows, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks/live host labels, or make the system production/GA ready. |
+| Validated T387 exact coordination-orphan cleanup | Removed exactly three Engram-project active coordination rows that had no durable `session(get)` record: `019e683b-1560-7361-b535-53b012e04aa5`, `d238eb81-870e-4da7-8e5d-381014f151b0`, and `d96b3edb-f8ac-4d45-b644-92be32d0eae4`. Each row had agent `codex`, empty `components`, `current_file=null`, and stale June 1 heartbeats. Source inspection confirmed `coord.unregister` deletes only the ephemeral `active_session` row, and tests assert unregister removes a coordination row while tolerating nonexistent IDs. Post-cleanup `coord(list, project="engram")` returns `count=0`, project-scoped lint returns no findings, and scoped obligations doctor is clean. | Reduces project-local coordination noise while preserving durable session history and event data. It does not run broad `lint apply_safe`, inspect or change global non-Engram coordination rows, mutate M6, change source behavior, accept hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks/live host labels, or make the system production/GA ready. |
+| Validated T388 exact-head release validation | The T388 PR #3 head passes `./scripts/local-ci.sh`, covering `git diff --check`, `cargo fmt --all --check`, `cargo check --all-targets`, `cargo clippy --all-targets -- -D warnings`, CI-like `cargo test --all-targets --jobs 1`, and `cargo doc --no-deps`. The same head passes `./scripts/package-install-smoke.sh`, rebuilding the release package, verifying the checksum, installing the packaged binary into a temporary prefix, confirming `engram 0.2.0-beta.1`, and verifying packaged HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. | Refreshes local release validation for the actual current PR head after lifecycle/evidence/session/coordination cleanup. It does not close hosted CI, accept the local-validation fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove effective hooks/live host labels, mutate M6, or make the system production/GA ready. |
+| Validated T390 ungated gate-context ranking | `memory_ranker` now normalizes `ungated`, `un-gated`, `not gated`, and `not a gate` alongside existing `non-gated` / `non gated` continuation wording before gate-language checks. Focused validation passed `cargo test -p engram-index memory_ranker::tests`, the existing non-gated/M6 search regression fixtures, `cargo fmt --all --check`, `cargo check -p engram-index`, `cargo clippy -p engram-index --all-targets -- -D warnings`, and `git diff --check`. Exact-worktree `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` also passed; package smoke verified checksum, temporary install, `engram 0.2.0-beta.1`, and packaged HTTP `/health`. | Reduces a deterministic query-classification false positive where `ungated` could match the `gated` substring and create contextual M6 gate promotion. Explicit modal gate actions still trigger gate mode. It does not close hosted CI, accept the fallback, release PR #3, launch native Claude, mutate M6, run lifecycle cleanup, or make the system production/GA ready. |
+| Validated T391 gate word-boundary ranking | `memory_ranker` now requires ASCII word boundaries for short gate-language terms (`gate`, `gated`, `must`, `blocked`, `cannot`, `never`) while preserving substring checks for `approval gate`, `review-gated`, `do not`, `should not`, and `requires approval`. Focused validation passed `cargo test -p engram-index memory_ranker::tests`, the existing M6/current-plan search regression fixtures, `cargo fmt --all --check`, `cargo check -p engram-index`, `cargo clippy -p engram-index --all-targets -- -D warnings`, and `git diff --check`. Exact-worktree `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` also passed; package smoke verified checksum, temporary install, `engram 0.2.0-beta.1`, and packaged HTTP `/health`. | Reduces deterministic false positives where unrelated words such as `gateway`, `gatekeeper`, or `gatedness` could create contextual M6 gate promotion. Real `M6 gate`, `gated`, `review-gated`, and safety vocabulary still trigger gate context. It does not close hosted CI, accept the fallback, release PR #3, launch native Claude, mutate M6, run lifecycle cleanup, or make the system production/GA ready. |
+| Validated T392 decision-gate action boundary ranking | `memory_ranker` now requires ASCII word boundaries for fallback decision-gate action terms (`proceed`, `allowed`, `allow`, `apply`, `safety`, `block`, `blocked`, `must`) and migration-apply action terms. Focused validation passed `cargo test -p engram-index memory_ranker::tests`, the existing M6/current-plan search regression fixtures, `cargo fmt --all --check`, `cargo check -p engram-index`, `cargo clippy -p engram-index --all-targets -- -D warnings`, and `git diff --check`. Exact-worktree `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` also passed; package smoke verified checksum, temporary install, `engram 0.2.0-beta.1`, and packaged HTTP `/health`. | Reduces deterministic false positives where incidental substrings such as `mustache`, `blockchain`, `unblocked`, `allowance`, or `safetybelt` could force decision-gate mode and suppress current-plan routing. Explicit modal prompts and real boundary-delimited action terms still trigger gate classification. It does not close hosted CI, accept the fallback, release PR #3, launch native Claude, mutate M6, run lifecycle cleanup, or make the system production/GA ready. |
+| Validated T394 release archive path hardening | `./scripts/package-install-smoke.sh` now validates tarball members before extraction, rejecting empty listings, absolute or parent-directory paths, paths outside the expected `engram-<version>-<host-triple>/` root, and archives missing required package files. It also uses fixed-string `/health` JSON checks. Validation passed `bash -n scripts/package-install-smoke.sh`, `git diff --check`, the happy-path `./scripts/package-install-smoke.sh`, and a synthetic wrong-root archive smoke that failed closed before extraction. | Improves release-artifact verification for local and published package checks, especially when `SKIP_PACKAGE_BUILD=1` validates an existing tarball. It does not change Engram runtime behavior, close hosted CI, accept the fallback, release PR #3, launch native Claude, mutate M6, run lifecycle cleanup, or make the system production/GA ready. |
+| Validated T395 locked release reproducibility | `Cargo.lock` is now tracked, `.gitignore` no longer excludes it, and dependency-resolving local/hosted CI plus release-package Cargo commands use `--locked`. Validation passed `cargo metadata --locked --no-deps --format-version 1`, `cargo pkgid --locked -p engram-cli`, script syntax checks, `git diff --check`, `cargo fmt --all --check`, locked check/clippy, `./scripts/package-install-smoke.sh`, and the full locked `./scripts/local-ci.sh`. | Reduces release dependency drift risk by making local CI, hosted CI, and package builds use the same committed dependency graph. It does not change Engram runtime behavior, close hosted CI, accept the fallback, release PR #3, launch native Claude, mutate M6, run lifecycle cleanup, or make the system production/GA ready. |
+| Validated T396 Claude ready hook warning | Claude Code harness status keeps static `ready=true` semantics when generated adapter files and settings entries are present, but now includes an explicit warning that static readiness does not prove live effective-hook visibility and that Claude Code `/hooks` verification is still required before claiming native Claude hook behavior. Focused validation passed `cargo test -p engram-index claude_ready_status_warns_effective_hooks_need_live_hooks_proof`, `cargo test -p engram-tests --test harness_tests test_mcp_harness_claude_ready_warns_effective_hooks_need_live_hooks_proof`, `cargo fmt --all --check`, `git diff --check`, full `./scripts/local-ci.sh`, and `./scripts/package-install-smoke.sh`. | Reduces release/status overclaim risk for the deferred native-Claude effective-hook gate. It does not launch native Claude, run `/hooks`, prove effective-hook visibility or host labels, close hosted CI, accept the fallback, release PR #3, mutate M6, run lifecycle cleanup, or make the system production/GA ready. |
+| Validated T397 hosted CI pre-step verifier | `./scripts/verify-hosted-ci-prestep-blocker.sh` verifies a named hosted `CI` pull-request run targets the expected head, has exactly the expected release-gate jobs, and every job completed with failure and `steps=[]`. Validation passed script syntax, a positive check, a wrong-head fail-closed check, full local CI, package-install smoke, and the final pushed-head hosted run `27181816572` on `3d01a6f`. | Makes hosted-CI waiver-condition evidence repeatable for release-owner review. It does not accept the fallback, mark PR #3 ready, merge, tag, publish, or close production/GA gates. |
+| Validated T398 release package manifest | `./scripts/package-release.sh` now includes `MANIFEST.json` with package/version/host metadata, git head, tracked-change state, `Cargo.lock` SHA-256, and payload hashes. `./scripts/package-install-smoke.sh` requires and validates the manifest before install. Validation passed script syntax, `git diff --check`, happy-path package smoke, and a corrupted-manifest tarball that failed closed on the `engram` hash mismatch. | Improves release artifact provenance for local and published install checks. It does not accept the fallback, mark PR #3 ready, merge, tag, publish, or close production/GA gates. |
+| Validated T338 handoff evidence | `cargo test -p engram-index handoff`, `cargo check -p engram-index`, `cargo clippy -p engram-index --all-targets -- -D warnings`, `cargo fmt --all --check`, and `git diff --check` pass. New and updated handoff tests assert project updates carry tool-call evidence and session compile/write handoffs carry both tool-call and session-event evidence. Installed hash `e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5` wrote handoff `019ea34a-c3ac-74d0-ae42-52cd6adcb610` with tool-call evidence, and installed project-scoped lint did not flag that active handoff. | Proves future `HandoffService::update` writes are evidence-backed in source and in the refreshed local daemon. It does not repair every historical unevidenced handoff or close hosted CI, native Claude, effective-hook, live host-label, lifecycle-cleanup, or broad `lint apply_safe` gates. |
+| Validated T339 canonical vault resync | Preflight `vault(status)` reported `generated_file_count=2566`, `user_file_count=0`, and `expected_generated_file_count=2568`; `vault(compile)` completed with `files_skipped=[]`; postflight `vault(status)` reported `total_file_count=2568`, `generated_file_count=2568`, `user_file_count=0`, and `expected_generated_file_count=2568`. `obligations(action=doctor, project=engram)` returned no open obligations or warnings. | Proves the durable generated vault is count-aligned for the latest Memory OS state. It does not change source behavior, close hosted CI, run `lint apply_safe`, or prove native Claude, effective-hook, live host-label, direct legacy cleanup, or production parity gates. |
+| Validated T340 native-Claude preflight refresh | `which claude`, symlink target, version, and SHA-256 match the T312/T335 `2.1.168` baseline; Claude Code harness status/doctor return `ready=true`; snippet-only install dry-run returns `planned=[]`; daemon PID `92750` is running from the installed `0.2.0-beta.1` runtime; canonical vault status returns `total_file_count=2573`, `generated_file_count=2573`, `user_file_count=0`, and `expected_generated_file_count=2573`; obligations doctor is clean; tracked diff is empty and branch/upstream is `0 0`. Fresh process inventory still shows native Claude PIDs `60453` on `ttys001` and `311` on `ttys005`, so T340 hard-stops before launch. | Proves the current native-Claude blocker is still process attribution, not adapter drift, runtime drift, daemon drift, vault drift, or obligations. It does not launch native Claude, run `/hooks`, prove prompt-bearing behavior, prove effective-hook visibility, prove live host labels, close hosted CI, or change beta scope. |
+| Validated T341 exact-head local CI fallback | PR #3 head `2fa5b577bda8ab6141e0f7272736044d441a7e88` passes `git diff --check`, `cargo check --all-targets`, `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1`, `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`. Hosted run `27101388242` fails Check, Test, Format, Clippy, and Docs before any workflow steps with `steps: []`. Fresh AI Council consensus accepts this as beta-shippable only if the release owner accepts local validation as fallback. | Proves T341 local CI-equivalent health and narrows the beta release decision to release-owner fallback acceptance or hosted CI restoration. It does not mark PR #3 ready, merge, tag, publish, close hosted CI, launch native Claude, prove hooks or labels, or raise production/GA readiness to beta readiness. |
+| Validated T343 beta-scope consensus refresh | Current PR #3 body records T342 exact-head local CI-equivalent validation on head `966dc00d5248ac342b156974b5392700706f3139`; `gh run view 27101972733` reports hosted Check, Test, Format, Clippy, and Docs failed before workflow steps with `steps: []`; fresh AI Council broadcast returned three successful responses agreeing that the local/Codex MVP beta is shippable only if local fallback acceptance is explicit or hosted CI is restored. | Proves the release decision is narrowed to release-owner fallback acceptance or restored exact-head hosted CI. It is release-scope evidence only: it does not mark PR #3 ready, merge, tag, publish, close hosted CI, launch native Claude, prove effective hooks or host labels, or change production/GA readiness. |
+| Validated T348 release-artifact closeout | PR #3 head `5e1b9aca9cad97602a18adfbcb2920f42da9859a` passes `./scripts/local-ci.sh`, `./scripts/package-release.sh`, checksum verification, packaged release-note inspection, `git diff --check origin/main...HEAD`, and `bash -n scripts/package-release.sh scripts/local-ci.sh`. `docs/RELEASE_NOTES_V0_2_0_BETA_1.md` now includes the one-command local CI/package proof and no longer lists packaging as an open beta follow-up. Hosted run `27103454287` still fails Check, Test, Format, Clippy, and Docs before workflow steps with `steps: []` and billing/spending-limit annotations. | Proves the release artifact is internally consistent for the scoped local/Codex beta and that the hosted CI failure remains external/account-level. It does not accept the fallback decision, mark PR #3 ready, merge, tag, publish, close hosted CI, launch native Claude, prove hooks or labels, or change production/GA readiness. |
+| Validated T351 package install smoke closeout | T351 package-smoke candidate head `4d05f6fc2f4fb4c6309c431c083ea55540c32380` passes exact-head `./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh`. The smoke builds the release package, verifies the `.sha256`, extracts the archive, checks packaged `engram`, README, LICENSE, changelog, and release notes, installs into a temporary prefix, verifies temp-`PATH` resolution, verifies `engram 0.2.0-beta.1`, starts packaged `engram serve --http --memory`, and verifies `/health` returns the expected status/service/version JSON. Hosted run `27114219090` still fails before workflow steps with `steps: []` and account billing/spending-limit annotation. | Proves the candidate has a repeatable package/install/health smoke and the hosted CI failure remains external/account-level. It does not accept the fallback decision, mark PR #3 ready, merge, tag, publish, close hosted CI, launch native Claude, prove hooks or labels, or change production/GA readiness. |
+| Validated T353 deterministic embedding cache | `engram-embed` default configuration now resolves the model cache to `ENGRAM_EMBED_CACHE_DIR`, then `FASTEMBED_CACHE_DIR`, then `~/.engram/cache/fastembed`, with a relative `.engram/cache/fastembed` fallback if `HOME` is unavailable. `Embedder::new` passes that path to `fastembed::InitOptions::with_cache_dir`. `./scripts/package-install-smoke.sh` starts the packaged binary from the temporary install workspace with `ENGRAM_EMBED_CACHE_DIR` set explicitly. | Proves the beta install path no longer relies on repository-root cwd for fastembed cache discovery. It does not guarantee offline first-run unless the configured cache is already warm, and `HF_HOME` remains an upstream Hugging Face override. |
+| Validated T354 installed runtime refresh | Installed binary hash changed from `e53765568a2232c55c2d17a8a48480e745b2c2fda044a8d087681c20534e3dc5` to `a47edffa8c8ed955a311adac85033ce8a28235c37007b5149ea81a8ffeb456de` after `cargo install --path engram-cli --force --root /Users/yuval.meiri/.local`. The refreshed installed binary reports `engram 0.2.0-beta.1`. An isolated temp-data installed-runtime smoke started the refreshed binary on a non-default port with explicit `ENGRAM_EMBED_CACHE_DIR` and `/health` returned the expected status/service/version JSON. | Proves the installed binary on `PATH` has been refreshed after T353 and can serve the local beta health path. The live global daemon was not restarted, and this does not prove native Claude, effective hooks, live host labels, or hosted CI. |
+| Validated T355 global daemon refresh | The live global daemon was restarted from the refreshed installed binary. After one transient post-stop RocksDB lock conflict and a successful retry, `engram daemon status` reports PID `64693`, port `8765`, spawn path `/Users/yuval.meiri/.local/bin/engram`, and spawn version `0.2.0-beta.1`; `/health` returns the expected status/service/version JSON; live MCP `orient(response_shape="lean")` returned trace `019ea620-b1be-7dc1-a022-15f49badddf6`. | Proves the live local/Codex daemon path is now on the refreshed T354 installed runtime. It does not close hosted CI, accept the local-validation fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, or prove effective hooks/live host labels. |
+| Validated T356 native-Claude preflight refresh | Fresh read-only preflight after T355 confirms branch/upstream synchronization, unchanged Claude `2.1.168` path/hash, Claude Code `ready=true`, snippet-only dry-run `planned=[]`, live daemon PID `64693`, clean `/health`, count-aligned canonical vault status, clean obligations doctor, and hosted run `27122932006` still pre-step blocked with `steps: []`. Process inventory still shows native Claude PID `60453` on `ttys001` and PID `311` on `ttys005`. | Proves the current native-Claude blocker remains process attribution, not adapter drift, runtime drift, daemon drift, vault drift, obligations, or branch divergence. It does not launch native Claude, run `/hooks`, prove prompt-bearing behavior, prove effective-hook visibility, prove live host labels, close hosted CI, or change beta scope. |
+| Partially validated | Cross-harness behavior, current-plan/direct-search ranking, telemetry confidence, external-session labeling, lifecycle hygiene, branch publication, and M6 evidence collection have useful bounded evidence. T263 closes Codex Desktop installed-runtime evidence for guarded `CODEX_THREAD_ID` fallback and feedback trace inheritance; T264/T265 narrow Claude Code source/runtime labeling using documented `CLAUDE_CODE_SESSION_ID` subprocess env and installed-CLI simulated-Claude smoke; T270 defines the future live native Claude label proof contract and records Gemini as default-deny/no-contract rather than guessed; T277 closes initial canonical vault init/compile, T278 proves one immediate post-write canonical vault refresh, T279 proves exact target lifecycle archive plus vault refresh, T280 proves initial remote branch/PR publication, T286 proves remote CI closure for the T285 fix head, T287 proves CI runtime hardening for the T287 head, T288 proves one exact superseded-handoff archive batch and green CI for that head, T289 proves a second exact superseded-handoff archive batch plus branch/pull-hint freshness, T290 proves a third exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T291 proves a fourth exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T292 proves a fifth exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T293 proves a sixth exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T294 proves a seventh exact superseded-handoff archive batch plus branch/pull-hint freshness and canonical vault refresh, T298 proves an eighth exact superseded-handoff archive batch with post-archive lint advancement, T301 proves a ninth exact superseded-handoff archive batch with post-archive lint advancement plus canonical vault refresh, T303 proves a tenth exact superseded-handoff archive batch with post-archive lint advancement plus canonical vault refresh, T320 proves another exact superseded-handoff archive batch with post-archive lint advancement, T321 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T323 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T324 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T325 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T326 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T327 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T328 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T329 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T331 proves the next exact superseded-handoff archive batch with successor-status checks plus post-archive lint advancement, T332 proves a one-item exact superseded-handoff archive with successor-status checks plus post-archive lint removal from the bounded sample, and T330 proves the current-head local/Codex beta smoke with lean `orient`, obligations doctor, vault status/compile, bounded M6 inventory/temp-export/status/dry-run apply, and hosted-CI blocker evidence. T284 still defers broad residual lifecycle cleanup after fresh read-only lint evidence. | Native Claude prompt-bearing behavior, effective hooks, broad ranking quality, live Claude host-label proof, future exact lifecycle archive batches and direct legacy deprecation/deletion execution remain unproved. PR readiness/merge is closed by T302. |
+| Prepared but not executed | T255 prepared an exact/default-deny prompt-bearing native Claude MCP-`orient` validation packet with preflight/postflight and bounded cleanup rules, but T281 now marks it stale for current Claude `2.1.163`; T282 prepares the successor prompt-bearing packet for Claude `2.1.163`; T283 hard-stops that successor preflight because ambient native Claude processes would make attribution ambiguous; T312 prepares the next successor packet for observed Claude Code `2.1.168`; T313 prepared the exact generated-adapter repair approval packet, and T333 now executes its T314 `snippet-only --write` contract; T334 and T340 hard-stop T312 execution before launch because ambient native Claude processes remain live; T335 prepares the T269 effective-hook visibility successor for Claude Code `2.1.168` while preserving the T334/T340 attribution hard-stop; T267 is historical/non-executable after count drift; T275 has now been executed by T277 for initial canonical vault init/compile; T270 commits an exact/default-deny host-label proof packet for live native Claude and Gemini no-contract deferral; T271 was executed by T280 for initial branch publication/upstream/PR. | T282/T283/T312/T334/T335/T340 have not run native Claude and do not prove prompt-bearing behavior. T333 repairs generated adapters but does not run native Claude, execute `/hooks`, or prove effective-hook visibility or host labels. T335 supersedes T269 only for target/version/hash baseline and future execution contract; it does not prove effective-hook visibility. T270 has not run native Claude and does not prove live Claude labels. |
+| Missing | Release-owner fallback acceptance or hosted exact-head CI restoration for PR #3, prompt-bearing native Claude execution with clean attribution, effective-hook execution result, live Claude host-label proof, any direct legacy deprecation/deletion execution after T278's current review-batch apply, and any future exact-target lifecycle archive/session cleanup beyond the T279/T288/T289/T290/T291/T292/T293/T294/T298/T301/T303/T320/T321/T323/T324/T325/T326/T327/T328/T329/T331/T332/T380/T384/T385 targets. | Requires separate evidence-backed slices; T378 proves exact-head local CI plus package/install fallback evidence on PR #3 head `c876374db987252f4ad7ed88885ab55f30860b8a` but does not itself provide release-owner acceptance or hosted CI. T380 removes only one stale active M6 checkpoint from retrieval after T278, T384 removes five old active runtime/status/readiness/live-smoke snapshots, and T385 replaces/archives five missing-evidence records; none executes direct legacy deprecation/deletion, broad lifecycle cleanup, or stale-session cleanup. T333 only removes generated-adapter drift from the native-Claude preflight blockers, and T368/T372 prove live native Claude process attribution remains the current native-launch blocker. |
+| Risky | Telemetry is agent-assessed, sampled, and window-sensitive; T383 restores the current 50-trace and 20-trace confidence gates, but future trace windows can regress as new unscored traces enter the sample. Harness lifecycle compliance is soft; stale or docs-only packets such as T255, T269, T282, T312, T313, T334, T335, and T340 can be mistaken for executed cleanup/validation; scoped lint can be mistaken for cleanup rather than visibility; quarantined T278 entity-scope M6 candidates are not active MemoryItems; untracked root `AGENTS.md` remains user-owned and out of commits. | Keep scope wording exact and keep scoring material traces. |
+| Blocked | Full harness parity is blocked on unresolved prompt-bearing native Claude execution, effective-hook visibility, and live host-label evidence. T333 removes the Claude Code generated-adapter drift blocker and makes installed Claude Code harness status/doctor `ready=true`; T368/T372 show native `claude` PID `34797` live on `ttys004`, so clean attribution for a new native run is not currently available; T335 removes T269's stale runtime-baseline blocker but not the attribution or `/hooks` proof blockers. Residual lifecycle debt is still visible but broad cleanup is deferred by T284 and must not use broad `lint apply_safe`. | Retry T312/T335/T270 only after fresh read-only preflight confirms clean attribution and matching runtime state, or explicitly defer those gates. Keep future risky actions scoped and do not treat one closed gate as broad Brain Harness completion. |
 
-Gate-level T301 status:
+Gate-level T336 status:
 
 | Gate | Current state | Next closure condition |
 | --- | --- | --- |
 | M6 current review-batch disposition/apply | Closed for the T68/T209/T210/T250 review batch by T278. All 12 generated files have one disposition; pre-apply status was `ready_to_apply=true`; dry-run planned five writes with zero duplicates and zero warnings; actual apply wrote five reviewed active `project:engram` MemoryItems and KnowledgeCommit `019e9bd6-7e8e-7611-8326-1811b3b799a2`; post-apply status is idempotent with `planned_count=0` and `duplicate_count=5`. | No further action for the current batch. Direct legacy deprecation/deletion or broad migration simplification remains separate and evidence-gated. |
-| Lifecycle archive or deferral | Partially closed by T279 for the exact T234/T247/T248 targets. Fresh preflight showed all three were active/visible and dependency-free; T279 archived exactly those IDs, post-archive active search no longer returns them, and the canonical vault now marks their pages archived. T284 records that fresh global lint still returns at least 50 superseded-active warnings, but the sample is limit-truncated and not a scoped cleanup path. T288 archives five additional exact superseded rolling handoffs after per-target `memory(get)` and `graph(around)` review proved direct incoming supersedes edges: `019dd5cd-a403-7b53-9010-47bd94bba51a`, `019dd80d-7466-7061-8417-6d5f085defc6`, `019dd846-0f0f-7271-9e38-34e1ffc4f6d6`, `019dd84c-2812-75c0-bc3d-ab8ec05f9007`, and `019dd84c-a8d4-7cd3-b1a3-0f910c7050cc`. T289 then archives five more exact superseded rolling handoffs after per-target `memory(get)`, active-successor fetch, and `graph(around)` review: `019dd912-7adc-7860-bd80-95cc681cc061`, `019dd93c-b7f1-7e92-ac27-262e128163cd`, `019dd93f-2c18-7bf3-a4a4-038bac9d74fb`, `019dd940-7207-7f51-93ea-533d5f80d6e7`, and `019dd941-314b-74d3-a879-4e451c7bd258`. T290 then archives five more exact superseded rolling handoffs after the same review boundary: `019dd944-8d69-7b81-8659-b0ef8e23c75f`, `019dd946-c602-7ab0-a62d-519944dbd756`, `019dd947-5d00-71d2-a42a-b6f126a14201`, `019dd9b2-0be7-75a2-ac5d-036c0502ee3d`, and `019ddd45-11c3-7760-a5e9-6434434689ba`. T291 then archives five more exact superseded rolling handoffs after the same review boundary: `019ddd46-3320-7bf3-8048-63f09a726c10`, `019dde55-6c94-79c1-8594-035b9ec2e1b3`, `019dde55-f3f1-7ad1-b9cb-7a6f68b9c416`, `019dde56-36c9-7bf2-ad38-4914eec2bbdf`, and `019dde56-7aa2-75a0-b843-a520e39b5935`. T292 then archives five more exact superseded rolling handoffs after the same review boundary: `019dde56-b3f5-70d3-87b6-ef6ff06751bc`, `019dde57-7139-7fa3-a2e8-94583866c1f2`, `019dde87-a14b-7cc0-9dbd-0a0a84996fbb`, `019dde88-2c90-7860-8ed8-9b14a0273da8`, and `019ddea9-a614-7920-badf-ac2e9ae91fcb`. T293 then archives five more exact superseded rolling handoffs after the same review boundary: `019ddebe-5159-71a1-a593-03d5a38ad305`, `019ddec0-36a0-7611-a886-60fc2b3d5157`, `019ddec3-78bf-7021-a157-50be5e2b3e2f`, `019df80f-bb2d-7683-b802-4f4de39469df`, and `019dfc5b-99e4-71b1-aa1b-7d0caf596139`. T294 then archives five more exact superseded rolling handoffs after the same review boundary: `019dfc5d-b88d-7ba1-8b8f-29369f66ebe3`, `019dfc63-e051-71c2-8bd0-407debdc2cd3`, `019dfc66-146b-7480-b28d-6a7f960a5c66`, `019dfc87-9317-7fb3-975c-94f5b1647072`, and `019dfc87-c510-7c80-9159-9fee36315f0d`. T298 archives five more exact superseded rolling handoffs: `019dfc97-4f9b-7301-b401-38179a03aeec`, `019dfca2-cd3c-7241-a206-522556d5158b`, `019dfce1-c566-7031-b024-86ae45ac9132`, `019dfd36-487d-7552-97cb-c81cf53d1be5`, and `019dfd36-d0e5-7d12-81ad-d5b84db1d514`. T301 then archives five more exact superseded rolling handoffs after the same review boundary: `019dfd38-fc3d-7352-83a6-c9bbd16349ea`, `019dfd39-d183-7d42-bf44-87950acc27ef`, `019dfd3a-eb89-7bd2-85d1-4420c24c4e5d`, `019dfd3b-7502-7cf2-a097-9ffdf2458729`, and `019e019c-43a3-7a30-af48-dec8bbfe432f`. Post-T301 lint no longer returns the T301 IDs in the sampled findings; the sampled queue now begins with `019e01a0-5d8c-76f3-b537-935a53207cc0`. | No further action for the T279, T288, T289, T290, T291, T292, T293, T294, T298, or T301 IDs. Broad cleanup remains deferred; any future lifecycle write requires an exact target batch with fresh get/search/graph review. Do not use broad `lint apply_safe` or ranking/`orient` changes as cleanup. |
-| Prompt-bearing native Claude | T255 was prepared but is stale under current runtime evidence. T281 preflight resolved `/Users/yuval.meiri/.local/bin/claude` to `2.1.163` and stopped before launch because T255 hard-stops unless the target/version matches `2.1.161`. T282 prepares a successor packet for Claude `2.1.163` but does not launch native Claude or claim behavior. T283 runs the successor preflight and stops before launch because live native Claude processes on `ttys001` and `ttys005` make new-session attribution ambiguous. | Retry T282 only after fresh matching preflight shows no attribution-confusing native Claude processes, or separately record a durable deferral. |
-| Effective hook visibility | Inconclusive after T179; T255 intentionally does not authorize `/hooks`; T269 now prepares a stricter default-deny revalidation packet with transcript-based pass/fail criteria and pre-authorized process-group cleanup if EOF/session exit hangs. | Exact T269 approval and one bounded live run, or equivalent official/runtime evidence. |
+| Lifecycle archive or deferral | Partially closed by T279 for the exact T234/T247/T248 targets. Fresh preflight showed all three were active/visible and dependency-free; T279 archived exactly those IDs, post-archive active search no longer returns them, and the canonical vault now marks their pages archived. T284 records that fresh global lint still returns at least 50 superseded-active warnings, but the sample is limit-truncated and not a scoped cleanup path. T288 archives five additional exact superseded rolling handoffs after per-target `memory(get)` and `graph(around)` review proved direct incoming supersedes edges: `019dd5cd-a403-7b53-9010-47bd94bba51a`, `019dd80d-7466-7061-8417-6d5f085defc6`, `019dd846-0f0f-7271-9e38-34e1ffc4f6d6`, `019dd84c-2812-75c0-bc3d-ab8ec05f9007`, and `019dd84c-a8d4-7cd3-b1a3-0f910c7050cc`. T289 then archives five more exact superseded rolling handoffs after per-target `memory(get)`, active-successor fetch, and `graph(around)` review: `019dd912-7adc-7860-bd80-95cc681cc061`, `019dd93c-b7f1-7e92-ac27-262e128163cd`, `019dd93f-2c18-7bf3-a4a4-038bac9d74fb`, `019dd940-7207-7f51-93ea-533d5f80d6e7`, and `019dd941-314b-74d3-a879-4e451c7bd258`. T290 then archives five more exact superseded rolling handoffs after the same review boundary: `019dd944-8d69-7b81-8659-b0ef8e23c75f`, `019dd946-c602-7ab0-a62d-519944dbd756`, `019dd947-5d00-71d2-a42a-b6f126a14201`, `019dd9b2-0be7-75a2-ac5d-036c0502ee3d`, and `019ddd45-11c3-7760-a5e9-6434434689ba`. T291 then archives five more exact superseded rolling handoffs after the same review boundary: `019ddd46-3320-7bf3-8048-63f09a726c10`, `019dde55-6c94-79c1-8594-035b9ec2e1b3`, `019dde55-f3f1-7ad1-b9cb-7a6f68b9c416`, `019dde56-36c9-7bf2-ad38-4914eec2bbdf`, and `019dde56-7aa2-75a0-b843-a520e39b5935`. T292 then archives five more exact superseded rolling handoffs after the same review boundary: `019dde56-b3f5-70d3-87b6-ef6ff06751bc`, `019dde57-7139-7fa3-a2e8-94583866c1f2`, `019dde87-a14b-7cc0-9dbd-0a0a84996fbb`, `019dde88-2c90-7860-8ed8-9b14a0273da8`, and `019ddea9-a614-7920-badf-ac2e9ae91fcb`. T293 then archives five more exact superseded rolling handoffs after the same review boundary: `019ddebe-5159-71a1-a593-03d5a38ad305`, `019ddec0-36a0-7611-a886-60fc2b3d5157`, `019ddec3-78bf-7021-a157-50be5e2b3e2f`, `019df80f-bb2d-7683-b802-4f4de39469df`, and `019dfc5b-99e4-71b1-aa1b-7d0caf596139`. T294 then archives five more exact superseded rolling handoffs after the same review boundary: `019dfc5d-b88d-7ba1-8b8f-29369f66ebe3`, `019dfc63-e051-71c2-8bd0-407debdc2cd3`, `019dfc66-146b-7480-b28d-6a7f960a5c66`, `019dfc87-9317-7fb3-975c-94f5b1647072`, and `019dfc87-c510-7c80-9159-9fee36315f0d`. T298 archives five more exact superseded rolling handoffs: `019dfc97-4f9b-7301-b401-38179a03aeec`, `019dfca2-cd3c-7241-a206-522556d5158b`, `019dfce1-c566-7031-b024-86ae45ac9132`, `019dfd36-487d-7552-97cb-c81cf53d1be5`, and `019dfd36-d0e5-7d12-81ad-d5b84db1d514`. T301 then archives five more exact superseded rolling handoffs after the same review boundary: `019dfd38-fc3d-7352-83a6-c9bbd16349ea`, `019dfd39-d183-7d42-bf44-87950acc27ef`, `019dfd3a-eb89-7bd2-85d1-4420c24c4e5d`, `019dfd3b-7502-7cf2-a097-9ffdf2458729`, and `019e019c-43a3-7a30-af48-dec8bbfe432f`. T303 then archives five more exact superseded rolling handoffs after the same review boundary: `019e01a0-5d8c-76f3-b537-935a53207cc0`, `019e01d6-adc4-7971-aca3-c663b2be52c5`, `019e01db-1e53-7c23-b6c0-b4ba8d58b0bc`, `019e01f2-cfa4-7de0-b073-3bc1926e5c3c`, and `019e01f4-5fd7-77c2-8491-2f66a2eebda1`. T320 archives five more exact superseded rolling handoffs after the same review boundary: `019e1612-f863-7f63-bacb-a6d03ddf1f7c`, `019e1614-5134-7f32-9ffc-a6d7567f6f7a`, `019e1618-d7b9-77c1-b795-d2ded5233a7c`, `019e162b-a94f-7c53-87c0-969e35c8cc6a`, and `019e162e-7f15-7da0-9450-ac98f63062c0`. T321 archives five more exact superseded rolling handoffs after successor-status review: `019e1681-c15b-7642-ab66-3fd846b72cb1`, `019e168a-eecf-7d42-a52c-80037535fcf2`, `019e169d-b3c0-7962-b74b-645f1957b7b8`, `019e176d-f41a-7bb3-b22f-65d7b1bff9e6`, and `019e179d-f906-7063-b00c-3c879ca83e1c`. T323, T324, T325, T326, T327, T328, and T329 continue the same exact successor-status boundary: T323 archives `019e17da-5dc1-7b30-a440-f980f16bfefb`, `019e17dd-0e7c-7773-8fa9-df8196d3c474`, `019e17ea-e7f6-7c30-8635-1ad43345ee70`, `019e17eb-00d7-7230-9257-a8188bee6811`, and `019e1825-056e-7ac3-a5f0-053e4703afef`; T324 archives `019e1837-6d1c-7772-a026-4b2fd41c3490`, `019e184e-4c03-7531-9c2b-e7374cd58007`, `019e187c-6314-7d40-a213-c7a94409c80c`, `019e1b0e-2222-7421-8aed-0b8e01b66561`, and `019e1b3b-0e99-7593-bc91-9191019fcfeb`; T325 archives `019e1b88-1f4e-7dd3-b187-50853b034819`, `019e1c16-e287-72e1-8e69-6d6026cd39bb`, `019e1c1b-7ce7-7e41-b436-57825899f151`, `019e1c47-6680-7651-abbd-83060f3126ef`, and `019e1c51-d266-7fd3-a327-d89f544967cb`; T326 archives `019e1d0a-bcb2-79b0-8eca-a624c0229de2`, `019e1d29-a03c-7110-a58b-0aea4a6b7f05`, `019e1d3c-eb00-7eb0-90f9-fa7944557b90`, `019e1d3f-51c7-7050-8108-b667120b7514`, and `019e1d51-b545-7d71-9584-b008c448ad2e`; T327 archives `019e1d56-4fff-7dc3-822c-383132c57a25`, `019e2088-da67-7d23-9e43-3082d9157208`, `019e212b-a519-7341-9524-4a028685580b`, `019e212e-d7d4-75d1-962d-219413f93d4f`, and `019e5daf-f50b-7a22-82a3-5d62ffe9a8bb`; T328 archives `019e5db0-070d-7211-acb0-a69f5b575c5d`, `019e6993-6d69-78e1-a29d-93a61e2a6413`, `019e6994-a7b5-7530-9b74-483d48709d13`, `019e6995-67c0-7221-8922-1cad83d54229`, and `019e6995-ff6d-7db0-84bc-06475ffe4fa1`; T329 archives `019e6997-984b-7cd0-9c3f-6b08cf5959d6`, `019e6a47-b8a9-7382-8f7f-62a3dbd0dce5`, `019e7cd4-d927-7322-9354-f8b8d054c099`, `019e7ce0-b1a0-7d63-baac-d04ba7029b43`, and `019e7ce8-1b0b-7922-aa07-3cb161e36601`. Post-T329 lint no longer returns the T329 IDs in the sampled findings; T331 then archives `019e7cf7-560c-70e2-bbeb-3448f4637055`, `019e7d27-32d6-7200-944c-ef5945436f8c`, `019e7d28-add4-70e3-a55c-453f8fe8695d`, `019e7d29-0f3c-7961-9588-c1adbe4628af`, and `019e7da0-d384-7b12-b43a-d7188b1a8c38`; post-T331 lint no longer returns those IDs and the sampled queue begins with `019e7db8-de1e-7251-87ba-fea21bed17f7`; T332 then archives that single target after successor review, and post-T332 lint no longer returns it in the first ten sampled findings. | No further action for the T279, T288, T289, T290, T291, T292, T293, T294, T298, T301, T303, T320, T321, T323, T324, T325, T326, T327, T328, T329, T331, or T332 IDs. Broad cleanup remains deferred; any future lifecycle write requires an exact target batch with fresh get/search/graph review. Do not use broad `lint apply_safe` or ranking/`orient` changes as cleanup. |
+| Prompt-bearing native Claude | T255 was prepared but is stale under current runtime evidence. T281 preflight resolved `/Users/yuval.meiri/.local/bin/claude` to `2.1.163` and stopped before launch because T255 hard-stops unless the target/version matches `2.1.161`. T282 prepares a successor packet for Claude `2.1.163` but does not launch native Claude or claim behavior. T283 runs the successor preflight and stops before launch because live native Claude processes on `ttys001` and `ttys005` make new-session attribution ambiguous. T312 records a docs-only successor packet for observed Claude Code `2.1.168`; T333 removes generated-adapter drift and installed Claude Code harness status/doctor report `ready=true`; T334 confirms those runtime/harness assertions but still hard-stops before launch because native Claude PIDs `60453` and `311` make attribution ambiguous. | Retry T312 only after fresh matching preflight shows no attribution-confusing native Claude processes and all runtime/version/hash checks still match, or separately record a durable deferral. |
+| Claude Code generated adapter repair | Closed by T333. Fresh preflight matched T313 current/expected hashes and the `snippet-only` dry-run planned only `engram-memory-session.md`, `engram-end-session.md`, and `engram-stop-nudge.sh`. The write used `/Users/yuval.meiri/.local/bin/engram harness install --harness claude-code --settings-target snippet-only --write --json`, wrote exactly those three generated adapters, left settings/snippet hashes unchanged, kept `engram-stop-nudge.sh` executable, and made snippet-only dry-run report `planned=[]`. Installed CLI status and doctor now report Claude Code `ready=true`. | No further action for generated-adapter drift. Remaining Claude Code work is native Claude prompt-bearing execution, effective-hook visibility, and live host-label proof; do not infer those from adapter readiness. |
+| Effective hook visibility | Inconclusive after T179; T255/T312 intentionally do not authorize `/hooks`; T269 prepared a stricter default-deny revalidation packet with transcript-based pass/fail criteria and pre-authorized process-group cleanup, but its execution baseline is stale for current Claude `2.1.168`; T335 supersedes T269 for the observed `2.1.168` path/version/hash and future execution contract while preserving no-launch under ambiguous attribution. | Exact T335 approval and one bounded live run after clean attribution preflight, or equivalent official/runtime evidence. |
 | Host external-session labels | T265 installs T264 and live-validates Codex after refresh: daemon PID `25189` records live `orient` trace `019e964a-1aca-7a63-8549-04c39c491fc0` with `external_session_id=codex://threads/019e683b-1560-7361-b535-53b012e04aa5`, and feedback `019e964a-3cfb-7de3-9b0d-c1671ebd489b` inherits that trace label when submitted without an explicit label. Installed CLI help now advertises explicit labels, `ENGRAM_EXTERNAL_SESSION_ID`, guarded `CLAUDE_CODE_SESSION_ID`, then guarded Codex, and a simulated Claude+inherited-Codex temp-data CLI smoke returned trace `019e964a-9283-7c32-b6db-84d02633a2a7`. T270 defines exact future native Claude stored-label proof criteria and records Gemini as deferred/default-deny for lack of a documented MCP-subprocess session-id contract. | Execute exact T270 or exact dual-scope T255+T270 for live native Claude label proof; do not infer live Claude adoption from installed CLI/source tests, and do not implement Gemini labels without a documented contract. |
-| KnowledgeCommit/vault compile | T277 executes the T275 Snapshot A/B successor protocol under the 2026-06-06 standing authorization. Snapshot A and B matched at 1,605 MemoryItems, 549 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,278 expected generated files. Canonical `/Users/yuval.meiri/.engram/vault` was absent/non-symlink before execution, then `vault init` created the expected directory skeleton and `vault compile` produced 2,278 generated files with zero skipped files and zero user files. T278 then writes five M6 MemoryItems plus a KnowledgeCommit and recompiles the canonical vault to 2,287 generated files. T279 archives three exact lifecycle targets, records KnowledgeCommit `019e9be1-67ff-7e92-a87e-f92667fa3582`, and recompiles the canonical vault to 2,291 generated files. T289 records KnowledgeCommit `019e9d5c-9c39-7c63-89a2-a8d2741c03e0` and recompiles the canonical vault to 2,329 generated files. T290 records KnowledgeCommit `019e9d8b-649b-7083-9029-78916c813ac1` and recompiles the canonical vault to 2,336 generated files. T291 records KnowledgeCommit `019e9dba-a27e-7db2-8631-d8a76ec2a571` and recompiles the canonical vault to 2,341 generated files. T292 records KnowledgeCommit `019e9de9-c8aa-78c3-8b89-df778e1e41e7` and recompiles the canonical vault to 2,346 generated files. T293 records KnowledgeCommit `019e9e19-a913-7111-954d-e95c9a6a9e07` and recompiles the canonical vault to 2,351 generated files. T294 records KnowledgeCommit `019e9e4a-57ad-7b51-a787-6b4859421cfa` and recompiles the canonical vault to 2,356 generated files with zero user files. T301 recompiles the canonical vault after its exact archive batch: post-compile status is 1,674 MemoryItems, 583 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,381 generated files with zero user files. | Initial canonical generated-vault init/compile is closed, and T278/T279/T289/T290/T291/T292/T293/T294/T301 prove immediate post-write vault refreshes. Future update policy, native-Claude/effective-hook/host-label, and branch-publication gates remain separate. |
-| Branch synchronization | Closed for initial publication by T280. After fresh fetch/preflight, `HEAD` was `5b5e4bb92acf71a0f419e434b4725b6d47fe37fc`, `origin/main` was still an ancestor, `HEAD...origin/main` was `394 0`, no upstream or same-named remote branch existed, and only root `AGENTS.md` was untracked. `git push -u origin yuval.meiri/memory-os-phase0` created the remote branch and set upstream; draft PR `https://github.com/ymeiri/engram/pull/2` is open. T294 refreshes the recurring pull-hint evidence after fetch: `HEAD...origin/yuval.meiri/memory-os-phase0` is `0 0`, `origin/main...HEAD` is `0 410`, and `origin/main` is an ancestor of `HEAD`; no pull, merge, rebase, pull-policy config change, or branch rewrite ran. | Future branch work is PR maintenance, CI/review follow-up, or readiness changes; do not reopen initial publication unless remote state changes. |
-| PR CI follow-up | T285 fixes the first failing PR #2 CI run: Clippy's timestamp sort warnings and Test's concurrent linker bus-error failure mode. The first pushed fix surfaced one additional Rust 1.96-only `collapsible_match` warning in `engram-index/src/harness.rs`, also fixed in T285. Run `27058785227` then passed Check, Format, Docs, and Clippy but failed Test after the runner reported only 87 MB free disk while linking `engram-mcp`. T286 records that fresh run `27059846266` passed Check, Format, Docs, Clippy, and Test on T285 fix head `54c12eb20eefe1f69f162d9151b66868c120a70d`; the Test job completed in `42m54s`. Local `git diff --check`, `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --jobs 1`, and `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1` pass for the T285 fix. T287 run `27062763355` later passes all five PR CI jobs on head `eb2882f77ace0036af0d415a2f871d82388fb49d`; T288 run `27063949279` passes Check, Format, Docs, Clippy, and Test on head `fe759ab9a112c513eb23bee92543000065744319`. | Closed for the T285 fix head and T287/T288 heads. Future pushes must be checked by their own CI runs, and PR readiness/review follow-up remains separate. |
-| CI action runtime hardening | T287 updates `.github/workflows/ci.yml` so Check, Test, Format, Clippy, and Docs use `actions/checkout@v5` instead of `actions/checkout@v4`, addressing the Node.js 20 deprecation warning surfaced by PR CI run `27061750059`. Fresh run `27062763355` passed Check, Format, Docs, Clippy, and Test on the T287 head. | Closed for the T287 head. PR readiness/review follow-up remains separate. |
+| KnowledgeCommit/vault compile | T277 executes the T275 Snapshot A/B successor protocol and initializes/compiles the canonical generated vault. T278, T279, T289, T290, T291, T292, T293, T294, T301, and T303 prove immediate post-write vault refreshes after memory writes and lifecycle archives. T303 recompiles the canonical vault after the exact lifecycle archive writes; post-compile status is 1,679 MemoryItems, 586 KnowledgeCommits, 9 repositories, 32 entities, 79 projects, and 2,389 generated files with zero user files and `expected_generated_file_count=2389`. | Initial canonical generated-vault init/compile is closed, and current vault status is count-aligned. Future update policy and native-Claude/effective-hook/host-label gates remain separate. |
+| Branch synchronization | T280 published `yuval.meiri/memory-os-phase0`, set upstream tracking, and opened draft PR #2. T302 marks PR #2 ready, merges it into `main` as merge commit `71fd746402c7d63f8b5aa758bc2011796819b5f6`, fetches `origin/main`, verifies old phase-0 head is an ancestor of `origin/main`, and creates `yuval.meiri/memory-os-phase1` from the merged base. | Closed for phase-0 publication and merge. Future branch work should happen on phase-1 or later branches with fresh CI/PR evidence. |
+| PR release/CI follow-up | T285-T287 fixed PR CI failures and checkout runtime warnings. Current PR #2 head `93bc2428a452edf9c19322e9a63b7b1c757b52f2` passed exact-head CI run `27077943994` across Check, Format, Docs, Clippy, and Test. T302 marks PR #2 ready and merges it to `main` as `71fd746402c7d63f8b5aa758bc2011796819b5f6`. PR #3 then progresses through multiple locally validated heads while hosted Actions remains externally account-blocked. T345 adds `./scripts/local-ci.sh`; T346 adds `./scripts/package-release.sh`; T348 records exact-head local CI/package proof; T350 records first-user install docs; T351 records package-smoke candidate head `4d05f6fc2f4fb4c6309c431c083ea55540c32380`, exact-head `./scripts/local-ci.sh` success, exact-head `./scripts/package-install-smoke.sh` success, and hosted run `27114219090` failing before workflow steps with `steps: []` and billing/spending-limit annotation. | Closed for phase-0 beta release. Current phase-1 beta is release-ready only if the release owner explicitly accepts local CI/package-install proof as fallback, or if hosted exact-head CI is restored and passes. Do not mark PR #3 ready, merge, tag, publish, or claim production/GA parity without that release decision. |
+| CI action runtime hardening | T287 updates `.github/workflows/ci.yml` so Check, Test, Format, Clippy, and Docs use `actions/checkout@v5` instead of `actions/checkout@v4`, addressing the Node.js 20 deprecation warning surfaced by PR CI run `27061750059`. Fresh run `27062763355` passed Check, Format, Docs, Clippy, and Test on the T287 head. | Closed for the T287 head; PR readiness/merge is closed later by T302. |
 | Worktree ownership | Tracked worktree clean after T281 preflight; root `AGENTS.md` remains user-owned/untracked. | Leave unstaged unless the user explicitly asks to include it. |
+
+T323 lifecycle addendum: no further action is needed for the T323 archived IDs
+`019e17da-5dc1-7b30-a440-f980f16bfefb`,
+`019e17dd-0e7c-7773-8fa9-df8196d3c474`,
+`019e17ea-e7f6-7c30-8635-1ad43345ee70`,
+`019e17eb-00d7-7230-9257-a8188bee6811`, or
+`019e1825-056e-7ac3-a5f0-053e4703afef`. Post-T323 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e1837-6d1c-7772-a026-4b2fd41c3490`. Broad lifecycle cleanup remains deferred.
+
+T324 lifecycle addendum: no further action is needed for the T324 archived IDs
+`019e1837-6d1c-7772-a026-4b2fd41c3490`,
+`019e184e-4c03-7531-9c2b-e7374cd58007`,
+`019e187c-6314-7d40-a213-c7a94409c80c`,
+`019e1b0e-2222-7421-8aed-0b8e01b66561`, or
+`019e1b3b-0e99-7593-bc91-9191019fcfeb`. Post-T324 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e1b88-1f4e-7dd3-b187-50853b034819`. Broad lifecycle cleanup remains deferred.
+
+T325 lifecycle addendum: no further action is needed for the T325 archived IDs
+`019e1b88-1f4e-7dd3-b187-50853b034819`,
+`019e1c16-e287-72e1-8e69-6d6026cd39bb`,
+`019e1c1b-7ce7-7e41-b436-57825899f151`,
+`019e1c47-6680-7651-abbd-83060f3126ef`, or
+`019e1c51-d266-7fd3-a327-d89f544967cb`. Post-T325 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e1d0a-bcb2-79b0-8eca-a624c0229de2`. Broad lifecycle cleanup remains deferred.
+
+T326 lifecycle addendum: no further action is needed for the T326 archived IDs
+`019e1d0a-bcb2-79b0-8eca-a624c0229de2`,
+`019e1d29-a03c-7110-a58b-0aea4a6b7f05`,
+`019e1d3c-eb00-7eb0-90f9-fa7944557b90`,
+`019e1d3f-51c7-7050-8108-b667120b7514`, or
+`019e1d51-b545-7d71-9584-b008c448ad2e`. Post-T326 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e1d56-4fff-7dc3-822c-383132c57a25`. Broad lifecycle cleanup remains deferred.
+
+T327 lifecycle addendum: no further action is needed for the T327 archived IDs
+`019e1d56-4fff-7dc3-822c-383132c57a25`,
+`019e2088-da67-7d23-9e43-3082d9157208`,
+`019e212b-a519-7341-9524-4a028685580b`,
+`019e212e-d7d4-75d1-962d-219413f93d4f`, or
+`019e5daf-f50b-7a22-82a3-5d62ffe9a8bb`. Post-T327 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e5db0-070d-7211-acb0-a69f5b575c5d`. Broad lifecycle cleanup remains deferred.
+
+T328 lifecycle addendum: no further action is needed for the T328 archived IDs
+`019e5db0-070d-7211-acb0-a69f5b575c5d`,
+`019e6993-6d69-78e1-a29d-93a61e2a6413`,
+`019e6994-a7b5-7530-9b74-483d48709d13`,
+`019e6995-67c0-7221-8922-1cad83d54229`, or
+`019e6995-ff6d-7db0-84bc-06475ffe4fa1`. Post-T328 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e6997-984b-7cd0-9c3f-6b08cf5959d6`. Broad lifecycle cleanup remains deferred.
+
+T329 lifecycle addendum: no further action is needed for the T329 archived IDs
+`019e6997-984b-7cd0-9c3f-6b08cf5959d6`,
+`019e6a47-b8a9-7382-8f7f-62a3dbd0dce5`,
+`019e7cd4-d927-7322-9354-f8b8d054c099`,
+`019e7ce0-b1a0-7d63-baac-d04ba7029b43`, or
+`019e7ce8-1b0b-7922-aa07-3cb161e36601`. Post-T329 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e7cf7-560c-70e2-bbeb-3448f4637055`. Broad lifecycle cleanup remains deferred.
+
+T331 lifecycle addendum: no further action is needed for the T331 archived IDs
+`019e7cf7-560c-70e2-bbeb-3448f4637055`,
+`019e7d27-32d6-7200-944c-ef5945436f8c`,
+`019e7d28-add4-70e3-a55c-453f8fe8695d`,
+`019e7d29-0f3c-7961-9588-c1adbe4628af`, or
+`019e7da0-d384-7b12-b43a-d7188b1a8c38`. Post-T331 lint no longer returns those
+IDs in the sampled findings and the sampled queue now begins with
+`019e7db8-de1e-7251-87ba-fea21bed17f7`. Broad lifecycle cleanup remains deferred.
+
+T332 lifecycle addendum: no further action is needed for the T332 archived ID
+`019e7db8-de1e-7251-87ba-fea21bed17f7`. It was directly superseded by active
+successor `019e844c-6a05-7a10-858b-5212d117a4bb`; post-T332 lint no longer
+returns the T332 target in the first ten sampled findings and reports only stale-feedback review
+signals in that bounded sample. Broad lifecycle cleanup remains deferred.
 
 T265 addendum: the T255 native-Claude prompt-bearing packet is prepared, not executed. The latest
 20-trace telemetry window passes after T265 live Codex validation, including seven externally
@@ -7769,3 +8352,291 @@ lifecycle archive/apply_safe, deletion/cleanup/rollback, schema/storage/index/do
 MCP/ranking/`orient` changes, native Claude, Claude Bridge writes, harness install/settings/hooks/
 adapters, remote publication, and user-owned-file edits. T267 does not initialize the canonical
 vault and does not complete the Brain Harness goal.
+
+T368 native Claude attribution regression note:
+`docs/BRAIN_HARNESS_T368_NATIVE_CLAUDE_PREFLIGHT_ATTRIBUTION_REGRESSION_2026-06-08.md` records a
+fresh read-only native-Claude/effective-hook/live-host-label preflight after T367. T367's
+attribution-clear state was point-in-time only. Current process inventory shows native `claude`
+PID `34797` live on `ttys004`, which reintroduces the attribution hard stop for T312
+prompt-bearing proof, T335 `/hooks` effective-hook proof, and T270 live host-label proof. T368
+does not launch native Claude, run `/hooks`, signal the process, mutate harness settings/adapters,
+change source behavior, mark PR #3 ready, merge, tag, publish, or change the local/Codex beta
+scope.
+
+T369 exact-head beta validation note:
+`docs/BRAIN_HARNESS_T369_EXACT_HEAD_BETA_VALIDATION_2026-06-08.md` records current PR #3 candidate
+local validation after T368. `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh` passed, while hosted run `27138579667` still fails before
+workflow-step execution with `steps=[]`. T369 narrows the beta gate to release-owner local fallback
+acceptance or restored exact-head hosted CI, followed by ready/merge/tag/publish mechanics. It does
+not close native Claude, effective-hook, live host-label, 50-trace telemetry, M6 write-apply,
+hosted-CI, release-approval, or production/GA gates.
+
+T370 telemetry confidence refresh note:
+`docs/BRAIN_HARNESS_T370_TELEMETRY_CONFIDENCE_REFRESH_2026-06-08.md` records a point-in-time
+real-session telemetry catch-up. The 50-trace report failed at `13/50` feedback records (`26%`
+coverage), improved to `19/50` (`38%`) after initial feedback, and passed at `26/50` (`52%`) after
+feedback was added only for judgeable traces. The 20-trace window passed at `18/20` (`90%`).
+T370 strengthens sampled retrieval-feedback evidence, but it does not authorize M6 write-apply,
+lifecycle cleanup, native Claude, effective hooks, live host labels, hosted CI, release approval,
+or production/GA readiness.
+
+T371 exact-head validation after T370 note:
+`docs/BRAIN_HARNESS_T371_EXACT_HEAD_VALIDATION_AFTER_T370_2026-06-08.md` records local validation
+after the T370 telemetry evidence commit moved PR #3 to
+`4249855bee0fe4b33a9bd343d7750ce7a8da368f`. `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh` passed for the current candidate tree, while hosted run
+`27141590404` still fails before workflow-step execution with `steps=[]`. T371 refreshes the local
+fallback proof; the beta gate remains release-owner fallback acceptance or restored hosted CI green
+followed by ready/merge/tag/publish mechanics.
+
+T372 native Claude preflight and CI refresh note:
+`docs/BRAIN_HARNESS_T372_NATIVE_CLAUDE_PREFLIGHT_AND_CI_REFRESH_2026-06-08.md` refreshes the
+current hosted-CI and production-gate evidence after T371. Current PR #3 hosted run `27142919365`
+targets head `3cf0e3d453fe4f02a0e1019bcf79fe8779e72cde` and still fails Docs, Clippy, Test,
+Format, and Check before workflow-step execution with `steps=[]`. Installed Claude Code `2.1.168`,
+installed Engram daemon `0.2.0-beta.1`, harness status/doctor `ready=true`, obligations doctor,
+and canonical vault counts match the expected read-only preflight state. Native `claude` PID
+`34797` is still live on `ttys004`, so T312 prompt-bearing proof, T335 `/hooks` effective-hook
+proof, and T270 live host-label proof remain blocked by attribution ambiguity. T372 does not
+launch native Claude, run `/hooks`, signal processes, mutate settings/adapters, run M6, run
+`lint apply_safe`, mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T373 stale session lint context note:
+`docs/BRAIN_HARNESS_T373_STALE_SESSION_LINT_CONTEXT_2026-06-08.md` records a source hardening
+slice in `engram-index/src/lint.rs`: `stale_active_session` findings now include project, agent,
+RFC3339 `started_at`, and `age_hours` while preserving `safe_action=none`. This makes lifecycle
+review less ambiguous without ending sessions, archiving memory, running `lint apply_safe`, mutating
+M6, changing ranking/`orient`, launching native Claude, or changing release scope. Focused lint
+unit tests, public lint integration tests, fmt, check, clippy, local CI, and package/install smoke
+pass for the T373 candidate.
+
+T374 installed stale session lint runtime note:
+`docs/BRAIN_HARNESS_T374_INSTALLED_STALE_SESSION_LINT_RUNTIME_2026-06-08.md` records installed
+runtime adoption for T373. Before install, `/Users/yuval.meiri/.local/bin/engram` and
+`./target/release/engram` both reported `0.2.0-beta.1` but had different SHA-256 hashes. After
+`cargo build --release` and installing the rebuilt binary, both paths hash to
+`2446fe249b0b24745f47fafd356eec62fde2ca585b16c4f865f56d5e7c4c6a6c`; the daemon restarted on PID
+`30394`; HTTP `/health` returned ok; and installed
+`engram lint run --scope-project engram --limit 20 --json` showed stale-session messages with
+project, agent, `started_at`, and `age_hours`. T374 closes installed-runtime drift for that lint
+context only. It does not archive sessions or memory, run `lint apply_safe`, mutate M6, change
+ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T375 harness doctor lifecycle trigger context note:
+`docs/BRAIN_HARNESS_T375_HARNESS_DOCTOR_LIFECYCLE_TRIGGER_CONTEXT_2026-06-08.md` records source
+and installed-runtime hardening for ready harness-doctor warnings. `doctor` now includes the
+canonical policy trigger names in its soft lifecycle warning, so release and production-gate reports
+can see which lifecycle steps remain advisory without inferring them from the full policy object.
+Focused harness unit tests, MCP harness integration tests, fmt, check, clippy, release build,
+daemon restart, `/health`, live installed `harness doctor`, live installed `harness status`, and
+dist checksum validation passed. T375 does not install or mutate hooks/adapters, enforce lifecycle,
+archive memory, run `lint apply_safe`, mutate M6, change ranking/`orient`, launch native Claude,
+mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T376 structured lifecycle report note:
+`docs/BRAIN_HARNESS_T376_STRUCTURED_LIFECYCLE_REPORT_2026-06-08.md` records source and
+installed-runtime hardening for machine-readable harness lifecycle state. `HarnessStatusReport`
+now includes a `lifecycle` object with `soft_contract`, `enforced`, `advisory_triggers`, and
+`message`, and text CLI status/doctor output prints the lifecycle contract before adapter checks.
+Focused service and MCP harness tests, fmt, check, clippy, release build, daemon restart,
+`/health`, live installed JSON/text `harness doctor`, live installed JSON `harness status`, and
+dist checksum validation passed. T376 does not install or mutate hooks/adapters, enforce lifecycle,
+archive memory, run `lint apply_safe`, mutate M6, change ranking/`orient`, launch native Claude,
+mark PR #3 ready, merge, tag, publish, or change beta scope.
+
+T377 structured MCP tool report note:
+`docs/BRAIN_HARNESS_T377_STRUCTURED_MCP_TOOL_REPORT_2026-06-08.md` records source and
+installed-runtime hardening for machine-readable harness MCP tool availability state.
+`HarnessStatusReport` now includes an `mcp_tools` object with `checked`, `required_tools`,
+`observed_tools`, `missing_tools`, and `message`, while preserving compatibility
+`missing_mcp_tools`. This distinguishes "not checked" from "checked and complete" without warning
+or empty-list inference. Focused service and MCP harness tests, fmt, check, clippy, release build,
+daemon restart, `/health`, live installed JSON/text `harness doctor`, and dist checksum validation
+passed. Live MCP `harness(status)` with an observed tool list missing `telemetry` returned
+`mcp_tools.checked=true`, `missing_tools=["telemetry"]`, compatibility
+`missing_mcp_tools=["telemetry"]`, and `ready=false`; the installed CLI does not expose an
+observed-tool flag, so the checked path was not validated through CLI text flags. T377 does not
+install or mutate hooks/adapters, enforce lifecycle, archive memory, run `lint apply_safe`, mutate
+M6, change ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change
+beta scope.
+
+T378 CLI observed MCP tool flags note:
+`docs/BRAIN_HARNESS_T378_CLI_OBSERVED_MCP_TOOL_FLAGS_2026-06-08.md` records source hardening for
+release/operator checks. `engram harness status` and `engram harness doctor` now accept repeatable
+`--observed-mcp-tool <TOOL>` flags and pass those names into the T377 structured
+`mcp_tools.checked` path. Omitting the flag preserves unchecked behavior. Focused CLI parse
+validation, `cargo fmt --all --check`, `cargo test -p engram-cli`, `cargo check -p engram-cli`,
+and `cargo clippy -p engram-cli -- -D warnings` passed. The rebuilt installed binary hash is
+`d7e17ae33bdfd48c84fd24070b1d10b17a284c0e31993e7a9b190c7450180b34`, daemon PID `39185` is healthy,
+and installed CLI checked-complete plus checked-missing smokes passed. T378 does not install or
+mutate hooks/adapters, enforce lifecycle, archive memory, run `lint apply_safe`, mutate M6, change
+ranking/`orient`, launch native Claude, mark PR #3 ready, merge, tag, publish, or change beta
+scope.
+
+T383 telemetry confidence recovery note:
+`docs/BRAIN_HARNESS_T383_TELEMETRY_CONFIDENCE_RECOVERY_2026-06-08.md` records an evidence-only
+telemetry feedback catch-up after the current 50-trace project window failed at `21/50` feedback
+records (`42%`). Four judgeable traces were scored, and fresh reports now pass both the 50-trace
+window (`25/50`, `50%`) and the 20-trace window (`10/20`, `50%`) with zero task failures, zero
+bad-memory-used, zero stale-memory, and zero wrong-scope-memory outcomes. T383 does not change
+source behavior, telemetry formulas, release scope, hosted-CI fallback acceptance, M6, lifecycle,
+native Claude, effective hooks, live host labels, PR readiness, merge, tag, publish, or
+production/GA readiness.
+
+T384 exact stale active-memory cleanup note:
+`docs/BRAIN_HARNESS_T384_EXACT_STALE_ACTIVE_MEMORY_CLEANUP_2026-06-08.md` records exact
+lifecycle hygiene for five stale active MemoryItems surfaced by project-scoped lint. The archived
+targets were old runtime/status/readiness/live-smoke snapshots:
+`019dd080-612a-7540-a028-42991c20ef1b`,
+`019dd083-e014-74f1-95e5-b1eef478e894`,
+`019dd3a8-138d-7453-9991-d724f96a128f`,
+`019dd3e4-9143-7721-9bff-b3fb505c8859`, and
+`019e68a7-3375-7943-8ef0-dc0dde64c8bd`. Post-archive project-scoped lint no longer reports
+those five `feedback_stale_active_memory` findings; vault status remains aligned at `2749/2749`,
+and scoped obligations doctor remains clean. T384 preserves history and changes only Memory OS
+lifecycle state; it does not delete data, run broad `lint apply_safe`, end sessions, mutate M6,
+change ranking/`orient`, launch native Claude, accept hosted-CI fallback, mark PR #3 ready, merge,
+tag, publish, or change production/GA readiness.
+
+T393 beta release signoff checklist note:
+`docs/BRAIN_HARNESS_T393_BETA_RELEASE_SIGNOFF_CHECKLIST_2026-06-09.md` records the remaining
+release-management decision for `v0.2.0-beta.1` as an explicit checklist. It names the current
+reviewed head `4182a47d70c7a2af0786cf1f3cc04d9d2d90e8be`, exact-head
+`./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` evidence, hosted run
+`27176297515` with `steps=[]`, known beta limitations, and the post-signoff ready/merge/tag/
+publish sequence. T393 is docs-only release-gate clarification; it does not accept the hosted-CI
+fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels,
+mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T394 release archive path hardening note:
+`docs/BRAIN_HARNESS_T394_RELEASE_ARCHIVE_PATH_HARDENING_2026-06-09.md` records a small
+release-artifact verification hardening slice. `./scripts/package-install-smoke.sh` now validates
+tarball member paths before extraction, rejects paths outside the expected package root or with
+absolute/parent-directory components, verifies required archive members from the pre-extract
+listing, and uses fixed-string `/health` checks. The valid package smoke passed, and a synthetic
+wrong-root archive failed closed before extraction. T394 does not change runtime behavior, accept
+the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
+host labels, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T395 locked release reproducibility note:
+`docs/BRAIN_HARNESS_T395_LOCKED_RELEASE_REPRODUCIBILITY_2026-06-09.md` records the dependency
+graph reproducibility slice. `Cargo.lock` is now tracked, `.gitignore` no longer excludes it, and
+local/hosted CI plus release-package Cargo commands use `--locked` where dependency resolution
+matters. This makes dependency drift a visible validation failure instead of a silent difference
+between local validation, hosted CI, and release archive builds. Validation passed locked
+metadata/pkgid checks, script syntax checks, locked check/clippy, package/install smoke, and the
+full locked `./scripts/local-ci.sh`. T395 does not change runtime behavior, accept the hosted-CI
+fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels,
+mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T396 Claude ready hook warning note:
+`docs/BRAIN_HARNESS_T396_CLAUDE_READY_HOOK_WARNING_2026-06-09.md` records harness readiness
+non-overclaim hardening. Claude Code static status can still report `ready=true` when generated
+adapter files and settings entries are present, but it now warns that static readiness does not
+prove live effective-hook visibility and that Claude Code `/hooks` verification is required before
+claiming native Claude hook behavior. The focused service and MCP regression tests pass without
+launching native Claude, running `/hooks`, or mutating real project `.claude` settings. Full local
+CI and package-install smoke passed for the T396 head. T396 does not accept the hosted-CI fallback,
+mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6,
+run lifecycle cleanup, or make Engram production/GA ready.
+
+T397 hosted CI pre-step verifier note:
+`docs/BRAIN_HARNESS_T397_HOSTED_CI_PRESTEP_VERIFIER_2026-06-09.md` records a release-gate evidence
+hardening slice. `./scripts/verify-hosted-ci-prestep-blocker.sh` uses `gh run view` and `jq` to
+fail closed unless a hosted `CI` pull-request run targets the expected head, has run conclusion
+`failure`, contains exactly the expected release-gate jobs (`Check`, `Test`, `Format`, `Clippy`,
+and `Docs`), and every job completed with conclusion `failure` and `steps=[]`. The verifier passed
+against final T397 PR #3 hosted run `27181816572` at head
+`3d01a6ff2e539b23fffcd3666d11a4b5a137df98`. T397 does not accept the hosted-CI fallback, mark PR
+#3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, run
+lifecycle cleanup, or make Engram production/GA ready.
+
+T398 release package manifest note:
+`docs/BRAIN_HARNESS_T398_RELEASE_MANIFEST_2026-06-09.md` records release-artifact provenance
+hardening. `./scripts/package-release.sh` now includes `MANIFEST.json` inside the release archive
+with package/version/host metadata, git head, tracked-change state, `Cargo.lock` SHA-256, and
+payload hashes for the packaged binary and docs. `./scripts/package-install-smoke.sh` requires that
+manifest and validates its version, host triple, archive name, git head, tracked-change flag,
+lockfile hash, and payload hashes before installing the binary. The happy-path package smoke passed,
+and a temporary tarball with a corrupted `engram` manifest hash failed closed. T398 does not accept
+the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
+host labels, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T399 beta release gate report note:
+`docs/BRAIN_HARNESS_T399_BETA_RELEASE_GATE_REPORT_2026-06-09.md` records release-owner evidence
+aggregation. `./scripts/beta-release-gate-report.sh` checks branch/upstream sync, absence of
+tracked source changes, PR #3 head alignment, hosted CI success or exact-head hosted pre-step
+blocker verification, and, by default, exact-head local CI plus package/install smoke. It is a
+single evidence command for signoff review, not release approval. T399 does not accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
+host labels, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T400 native Claude gate preflight script note:
+`docs/BRAIN_HARNESS_T400_NATIVE_CLAUDE_GATE_PREFLIGHT_SCRIPT_2026-06-09.md` records a repeatable
+read-only production-gate preflight. `./scripts/native-claude-gate-preflight.sh` checks the current
+Claude Code baseline (`2.1.169`, SHA-256
+`86d8b820ad7eed50e50a130706d3dc5ef70696f91194de1b3897a842182afe3a`), branch/upstream state,
+installed Engram daemon, Claude Code harness status/doctor, snippet-only dry-run drift,
+obligations doctor, canonical vault alignment, and live native Claude CLI processes. Normal report
+mode classifies the current state as `blocked`; strict `--require-ready` mode exits `2` while PID
+`34797` is live on `ttys004`. T400 also recompiles the canonical vault from `2813/2814` to
+`2814/2814` generated files after a new MemoryItem write. T400 does not launch native Claude, run
+`/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
+mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T401 native Claude preflight JSON note:
+`docs/BRAIN_HARNESS_T401_NATIVE_CLAUDE_PREFLIGHT_JSON_2026-06-09.md` records structured-output
+hardening for the native Claude production gate. `./scripts/native-claude-gate-preflight.sh --json`
+now emits gate state, branch/upstream/head state, source cleanliness, Claude path/version/hash,
+daemon state, harness status/doctor summaries, snippet-only dry-run state, obligations, vault
+state, native Claude process inventory, blockers, and explicit non-action flags. Strict JSON mode
+preserves fail-closed behavior and exits `2` while blocked. T401 also corrects the T400 tracked
+evidence head to pushed commit `197ddc67c4bf65baad838919e7b992af31593539`. T401 does not launch
+native Claude, run `/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3 ready,
+merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T402 beta release gate JSON note:
+`docs/BRAIN_HARNESS_T402_BETA_RELEASE_GATE_JSON_2026-06-09.md` records structured-output hardening
+for the beta release-owner evidence report. `./scripts/beta-release-gate-report.sh --json` now
+emits branch/upstream/head state, tracked source state, PR state, hosted CI state, local CI state,
+package/install smoke state, `release_owner_decision_required`, and `release_actions_performed`.
+In JSON mode validation logs go to stderr so stdout stays parseable. T402 does not accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make
+Engram production/GA ready.
+
+T403 hosted CI verifier JSON note:
+`docs/BRAIN_HARNESS_T403_HOSTED_CI_VERIFIER_JSON_2026-06-09.md` records structured-output hardening
+for the exact hosted-CI pre-step blocker verifier. `./scripts/verify-hosted-ci-prestep-blocker.sh
+--json <run-id>` now emits a verified-run object with expected/current head, workflow, event,
+expected jobs, per-job status/conclusion/step counts, `hosted_ci_fallback_accepted=false`, and
+`release_actions_performed=false` after all existing fail-closed checks pass. Failed checks remain
+non-zero and do not emit success JSON. T403 does not accept the hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T404 embedded hosted verifier evidence note:
+`docs/BRAIN_HARNESS_T404_EMBEDDED_HOSTED_VERIFIER_EVIDENCE_2026-06-09.md` records structured
+release-gate aggregation hardening. In JSON mode, `./scripts/beta-release-gate-report.sh` now runs
+the hosted pre-step blocker verifier with `--json` and embeds the verified success object under
+`hosted_ci.verifier`; a green hosted-CI path leaves that field `null`. This gives the release owner
+a single parseable evidence artifact with branch/PR/local/package state plus exact hosted blocker
+proof. T404 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate
+M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T405 beta release decision-state note:
+`docs/BRAIN_HARNESS_T405_BETA_RELEASE_DECISION_STATE_2026-06-09.md` records release-owner
+automation hardening. `./scripts/beta-release-gate-report.sh` now reports `release_gate_state`,
+`ready_for_release_owner_review`, `hosted_ci_fallback_decision_required`, and JSON
+`remaining_release_actions` so quick/incomplete evidence is not confused with full exact-head
+release-owner-review evidence. T405 does not accept the hosted-CI fallback, mark PR #3 ready,
+merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T406 post-publish install verifier note:
+`docs/BRAIN_HARNESS_T406_PUBLISHED_RELEASE_INSTALL_VERIFIER_2026-06-09.md` records release
+verification hardening. `./scripts/verify-published-release-install.sh` downloads the expected
+GitHub release archive/checksum, or validates a local `--asset-dir` mirror, and delegates to
+`./scripts/package-install-smoke.sh` with `SKIP_PACKAGE_BUILD=1` and manifest expectations for the
+signed-off head. The beta report's final remaining action now names
+`verify_published_release_install`. T406 does not create a release, upload assets, accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or
+make Engram production/GA ready.

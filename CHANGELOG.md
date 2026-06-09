@@ -8,6 +8,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `engram daemon status` now reports daemon spawn provenance when available, including the
+  executable path/version that started the daemon and warnings for path, version, or pid/port
+  metadata drift.
+- `scripts/native-claude-gate-preflight.sh` collects read-only production-gate evidence for
+  native Claude prompt-bearing, effective-hook, and live host-label proof readiness, with
+  machine-readable `--json` output for release and GA automation.
+- `scripts/beta-release-gate-report.sh` now supports machine-readable `--json` output for
+  release-owner evidence automation while preserving text output and evidence-only semantics. When
+  hosted CI is verified as a pre-step blocker, the JSON report embeds the hosted verifier's
+  structured success object under `hosted_ci.verifier`; it also exposes the release gate state,
+  release-owner-review readiness, hosted-CI fallback-decision requirement, and remaining release
+  actions.
+- `scripts/verify-published-release-install.sh` verifies published release archive/checksum assets
+  by downloading them from GitHub and running the existing package install smoke against those
+  assets, with local `--asset-dir` validation for pre-publish rehearsal.
+- `scripts/verify-hosted-ci-prestep-blocker.sh` now supports machine-readable `--json` output for
+  direct hosted-CI waiver-condition automation while preserving fail-closed checks.
+
+## [0.2.0-beta.1] - 2026-06-07
+
+### Added
+- Initial local/Codex Brain Loop beta scope with lean `orient`, current-plan retrieval,
+  used-memory candidate IDs, obligation summaries, telemetry feedback, generated vault support,
+  and review-gated Memory OS flows.
+- Local CI-equivalent validation script (`scripts/local-ci.sh`) for exact-head release checks when
+  hosted GitHub Actions is externally blocked.
+- Local release packaging script (`scripts/package-release.sh`) that builds the release binary,
+  verifies its version, and writes a tarball plus SHA-256 checksum under `dist/`.
+- Memory OS harness adapter rendering for Codex, generic harnesses, Claude Code, Gemini CLI, and
+  Cursor, with lifecycle guidance kept advisory and approval-gated.
+- Generated Markdown vault support for durable local inspection of MemoryItems, knowledge commits,
+  repositories, entities, and projects.
+
+### Changed
+- Public setup docs now state that the beta-supported path is local/Codex; multi-host parity,
+  native Claude prompt-bearing proof, live host-label proof, and effective-hook proof remain
+  follow-up work.
+- Default `engram serve` stdio/proxy behavior now rejects incompatible HTTP-only or memory-only
+  flags instead of silently starting a different persistence mode.
+
+### Fixed
+- Scoped Memory OS search and final-response obligation guidance so project/cwd context is not
+  lost in the supported local/Codex beta path.
+- Refreshed the installed local `engram` binary, Codex generated adapter, and global daemon from the
+  beta candidate so installed local/Codex guidance matches source.
+- Escaped graph node ID examples in Rustdoc comments so the Docs CI job no longer reports invalid
+  HTML tag warnings for `memory:<...>` examples.
+- Claude harness status now warns when generated `SessionStart` or `SessionEnd` hook files are
+  installed but Claude settings do not register the corresponding required hook.
+- CI checkout runtime drift by moving workflow checkout steps to `actions/checkout@v5`.
+
+### Known Limitations
+- Native Claude prompt-bearing proof, effective-hook visibility, live Claude host-label proof,
+  direct legacy deprecation/deletion, broad lifecycle cleanup, broad `lint apply_safe`, exhaustive
+  telemetry completeness, OIDC/Vault/native-Claude auth/debugging, full multi-host parity, and new
+  feature work are not part of this beta gate.
+- The current Rustdoc warning set was closed in this candidate; future Rustdoc polish remains
+  production-hardening work, not an initial-beta gate.
+- Already-open agent UI sessions may need a fresh session or tool reload before they pick up the
+  refreshed installed Codex skill text.
+
+### Added
 - MCP setup guide for Claude Code, Cursor, and Windsurf (`docs/MCP_SETUP.md`)
 
 ## [0.1.0] - 2026-04-01
@@ -83,4 +145,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - SurrealDB datetime deserialization using custom `SurrealDateTime` enum
 - Raw SurQL queries to avoid SDK serialization issues with complex types
-

@@ -3525,7 +3525,10 @@ pub struct TelemetryRequest {
     pub arm: Option<String>,
     /// Query, prompt, or short operation context.
     pub query: Option<String>,
-    /// Project scope.
+    /// Project scope for trace recording and scoped telemetry reports.
+    #[schemars(
+        description = "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
+    )]
     pub project: Option<String>,
     /// Agent or harness label.
     pub agent: Option<String>,
@@ -7449,11 +7452,17 @@ fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, S
 /// Request an orientation context packet for the current user prompt.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct OrientRequest {
-    /// Current working directory, when known
+    /// Current working directory for repository/project resolution and scoped memory selection.
+    #[schemars(
+        description = "Current working directory for repository/project resolution and scoped memory selection."
+    )]
     pub cwd: Option<String>,
     /// Current user prompt or task request
     pub prompt: Option<String>,
-    /// Explicit project name, when known
+    /// Explicit project name for project resolution and project-scoped memory selection.
+    #[schemars(
+        description = "Explicit project name for project resolution and project-scoped memory selection."
+    )]
     pub project: Option<String>,
     /// Agent/harness name
     pub agent: Option<String>,
@@ -7469,7 +7478,10 @@ pub struct OrientRequest {
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
     pub limit: Option<usize>,
-    /// Response shape: full (default) or lean for read-only/verification tasks
+    /// Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance.
+    #[schemars(
+        description = "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+    )]
     pub response_shape: Option<OrientResponseShape>,
 }
 
@@ -7948,6 +7960,9 @@ pub struct LintRequest {
     /// Action: run, list, apply_safe
     #[schemars(description = "Action: run, list, apply_safe")]
     pub action: String,
+    /// Optional project scope to lint.
+    #[schemars(description = "Optional project scope to lint.")]
+    pub project: Option<String>,
     /// Optional Memory OS vault root to scan.
     pub vault_path: Option<String>,
     /// Maximum findings to return.
@@ -7965,6 +7980,7 @@ pub async fn lint_new(state: &ToolState, request: LintRequest) -> Result<String,
         .as_ref()
         .ok_or_else(|| "Lint service not initialized".to_string())?;
     let options = LintOptions {
+        project: request.project,
         vault_path: request.vault_path,
         limit: request.limit,
     };
@@ -8002,7 +8018,7 @@ pub struct GraphRequest {
     /// Action: around, path, subgraph, export
     #[schemars(description = "Action: around, path, subgraph, export")]
     pub action: String,
-    /// Start node ID for around/subgraph/path. Plain UUIDs are treated as memory:<id>.
+    /// Start node ID for around/subgraph/path. Plain UUIDs are treated as `memory:<id>`.
     pub node: Option<String>,
     /// Start node ID for path.
     pub from: Option<String>,
@@ -8189,11 +8205,13 @@ pub struct ObligationRequest {
     /// Action: detect, add, get, list, open, resolve, skip, doctor
     #[schemars(description = "Action: detect, add, get, list, open, resolve, skip, doctor")]
     pub action: String,
-    /// Current working directory for detect.
+    /// Current working directory for detect/list/open/doctor scoping.
+    #[schemars(description = "Current working directory for detect/list/open/doctor scoping.")]
     pub cwd: Option<String>,
     /// Prompt/task text for detect.
     pub prompt: Option<String>,
-    /// Project scope.
+    /// Optional project scope for detect, add, list, open, and doctor.
+    #[schemars(description = "Optional project scope for detect, add, list, open, and doctor.")]
     pub project: Option<String>,
     /// Maximum obligations to return or create.
     pub limit: Option<usize>,
@@ -11137,6 +11155,75 @@ mod tests {
                 None => env::remove_var(self.key),
             }
         }
+    }
+
+    #[test]
+    fn lint_request_schema_exposes_project_filter() {
+        let schema = schemars::schema_for!(LintRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("LintRequest schema should have properties");
+
+        assert!(properties.contains_key("project"));
+        assert_eq!(
+            properties["project"]["description"],
+            "Optional project scope to lint."
+        );
+    }
+
+    #[test]
+    fn obligation_request_schema_exposes_scope_filters() {
+        let schema = schemars::schema_for!(ObligationRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("ObligationRequest schema should have properties");
+
+        assert_eq!(
+            properties["project"]["description"],
+            "Optional project scope for detect, add, list, open, and doctor."
+        );
+        assert_eq!(
+            properties["cwd"]["description"],
+            "Current working directory for detect/list/open/doctor scoping."
+        );
+    }
+
+    #[test]
+    fn telemetry_request_schema_exposes_project_filter() {
+        let schema = schemars::schema_for!(TelemetryRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("TelemetryRequest schema should have properties");
+
+        assert_eq!(
+            properties["project"]["description"],
+            "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
+        );
+    }
+
+    #[test]
+    fn orient_request_schema_exposes_context_contract() {
+        let schema = schemars::schema_for!(OrientRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("OrientRequest schema should have properties");
+
+        assert_eq!(
+            properties["cwd"]["description"],
+            "Current working directory for repository/project resolution and scoped memory selection."
+        );
+        assert_eq!(
+            properties["project"]["description"],
+            "Explicit project name for project resolution and project-scoped memory selection."
+        );
+        assert_eq!(
+            properties["response_shape"]["description"],
+            "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+        );
     }
 
     #[test]

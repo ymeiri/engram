@@ -392,7 +392,7 @@ fn promote_approval_gate_items_for_gate_query(
     let Some(query) = context.query.map(str::to_lowercase) else {
         return;
     };
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query);
     if !query.contains("approval gate") || !asks_for_decision_gate(&query) {
         return;
     }
@@ -634,10 +634,7 @@ fn asks_for_decision_gate(query: &str) -> bool {
     // approval request. Explicit action or permission terms still keep gate guidance first.
     // Approval-gate wording inside a continuation prompt is context unless the query is asking
     // for a gate/handoff summary. Bare "approval" is not a gate request.
-    let query = query
-        .to_ascii_lowercase()
-        .replace("non-gated", "")
-        .replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query.to_ascii_lowercase());
     if has_modal_gate_action(&query) {
         return true;
     }
@@ -648,7 +645,7 @@ fn asks_for_decision_gate(query: &str) -> bool {
         "proceed", "allowed", "allow", "apply", "safety", "block", "blocked", "must",
     ]
     .iter()
-    .any(|term| query.contains(term))
+    .any(|term| contains_ascii_word(&query, term))
 }
 
 fn has_gate_summary_intent(query: &str) -> bool {
@@ -860,14 +857,14 @@ fn asks_for_explicit_migration_apply_gate(query: Option<&str>) -> bool {
     let Some(query) = query.map(str::to_lowercase) else {
         return false;
     };
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query);
     let mentions_migration = ["migration", "m6"].iter().any(|term| query.contains(term));
     let asks_apply_or_permission = [
         "apply", "proceed", "approve", "approval", "approved", "allowed", "allow", "run",
         "execute", "write",
     ]
     .iter()
-    .any(|term| query.contains(term));
+    .any(|term| contains_ascii_word(&query, term));
 
     mentions_migration && asks_apply_or_permission && asks_for_decision_gate(&query)
 }
@@ -883,7 +880,7 @@ fn asks_for_contextual_migration_gate_with_current_plan(context: MemoryRankConte
     let Some(query) = context.query.map(str::to_lowercase) else {
         return false;
     };
-    let query = query.replace("non-gated", "").replace("non gated", "");
+    let query = remove_continuation_gate_negations(&query);
 
     has_migration_gate_domain(&query) && has_contextual_gate_mention(&query)
 }
@@ -984,10 +981,13 @@ fn has_migration_apply_gate_detail(value: &str) -> bool {
 }
 
 fn has_contextual_gate_mention(value: &str) -> bool {
-    let value = value.replace("non-gated", "").replace("non gated", "");
-    ["approval gate", "review-gated", "gate", "gated"]
+    let value = remove_continuation_gate_negations(value);
+    ["approval gate", "review-gated"]
         .iter()
         .any(|term| value.contains(term))
+        || ["gate", "gated"]
+            .iter()
+            .any(|term| contains_ascii_word(&value, term))
 }
 
 fn contextual_migration_gate_signal_score(item: &MemoryItem) -> u16 {
@@ -1056,20 +1056,45 @@ fn memory_review_rank(review_state: MemoryReviewState) -> u8 {
 }
 
 fn has_gate_language(value: &str) -> bool {
-    let value = value.replace("non-gated", "").replace("non gated", "");
-    [
-        "review-gated",
-        "gate",
-        "must",
-        "do not",
-        "should not",
-        "blocked",
-        "cannot",
-        "never",
-        "requires approval",
-    ]
-    .iter()
-    .any(|term| value.contains(term))
+    let value = remove_continuation_gate_negations(value);
+    ["review-gated", "do not", "should not", "requires approval"]
+        .iter()
+        .any(|term| value.contains(term))
+        || ["gate", "must", "blocked", "cannot", "never"]
+            .iter()
+            .any(|term| contains_ascii_word(&value, term))
+}
+
+fn remove_continuation_gate_negations(value: &str) -> String {
+    value
+        .replace("non-gated", "")
+        .replace("non gated", "")
+        .replace("un-gated", "")
+        .replace("ungated", "")
+        .replace("not gated", "")
+        .replace("not a gate", "")
+}
+
+fn contains_ascii_word(value: &str, word: &str) -> bool {
+    value.match_indices(word).any(|(index, _)| {
+        let bytes = value.as_bytes();
+        let before = index.checked_sub(1).and_then(|i| bytes.get(i));
+        let after = bytes.get(index + word.len());
+        let before_is_boundary = match before {
+            Some(byte) => !is_ascii_word_byte(*byte),
+            None => true,
+        };
+        let after_is_boundary = match after {
+            Some(byte) => !is_ascii_word_byte(*byte),
+            None => true,
+        };
+
+        before_is_boundary && after_is_boundary
+    })
+}
+
+fn is_ascii_word_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 fn canonical_or_original(path: &Path) -> std::path::PathBuf {
@@ -1195,6 +1220,132 @@ mod tests {
         assert!(!asks_for_decision_gate(
             "current plan next step M6 gate context and non-gated work"
         ));
+    }
+
+    #[test]
+    fn ungated_continuation_words_do_not_create_gate_context() {
+        for query in [
+            "current plan next ungated Brain Harness feedback confidence M6",
+            "current plan next un-gated Brain Harness feedback confidence M6",
+            "current plan next not gated Brain Harness feedback confidence M6",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(!asks_for_decision_gate(query), "{query}");
+            assert!(
+                !asks_for_contextual_migration_gate_with_current_plan(context),
+                "{query}"
+            );
+            assert!(!has_contextual_gate_mention(query), "{query}");
+            assert!(!has_gate_language(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn explicit_gate_actions_survive_ungated_wording() {
+        for query in [
+            "next ungated step, should we proceed with migration apply?",
+            "next not gated step, should we run M6 write apply?",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(asks_for_decision_gate(query), "{query}");
+            assert!(!should_promote_current_plan(context), "{query}");
+        }
+    }
+
+    #[test]
+    fn decision_gate_action_words_require_boundaries() {
+        for query in [
+            "current plan next M6 mustache formatting",
+            "current plan next M6 blockchain status",
+            "current plan next M6 unblocked status",
+            "current plan next M6 allowance notes",
+            "current plan next M6 safetybelt note",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(!asks_for_decision_gate(query), "{query}");
+            assert!(should_promote_current_plan(context), "{query}");
+        }
+    }
+
+    #[test]
+    fn decision_gate_action_words_still_trigger_at_boundaries() {
+        for query in [
+            "must not proceed with M6",
+            "M6 path is blocked",
+            "block M6 write apply",
+            "allowed M6 apply",
+            "M6 safety gate",
+            "M6 write-apply gate",
+        ] {
+            assert!(asks_for_decision_gate(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn gateway_words_do_not_create_gate_context() {
+        for query in [
+            "current plan next M6 gateway routing confidence",
+            "current plan next M6 gatekeeper note",
+            "current plan next M6 gatedness wording",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(
+                !asks_for_contextual_migration_gate_with_current_plan(context),
+                "{query}"
+            );
+            assert!(!has_contextual_gate_mention(query), "{query}");
+            assert!(!has_gate_language(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn gate_boundary_words_still_trigger_gate_context() {
+        for query in [
+            "current plan next M6 gate context",
+            "current plan next M6 gated state",
+            "current plan next M6 review-gated status",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(
+                asks_for_contextual_migration_gate_with_current_plan(context),
+                "{query}"
+            );
+            assert!(has_contextual_gate_mention(query), "{query}");
+        }
+
+        for query in [
+            "must not proceed",
+            "blocked path",
+            "cannot proceed",
+            "never run",
+        ] {
+            assert!(has_gate_language(query), "{query}");
+        }
     }
 
     #[test]

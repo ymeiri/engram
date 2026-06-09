@@ -30,11 +30,17 @@ impl Embedder {
             }
         };
 
-        info!("Loading embedding model: {:?}", config.model);
+        info!(
+            "Loading embedding model: {:?} from cache {}",
+            config.model,
+            config.cache_dir.display()
+        );
 
+        let options = InitOptions::new(model_type)
+            .with_show_download_progress(true)
+            .with_cache_dir(config.cache_dir.clone());
         let model =
-            TextEmbedding::try_new(InitOptions::new(model_type).with_show_download_progress(true))
-                .map_err(|e| EmbedError::ModelLoad(e.to_string()))?;
+            TextEmbedding::try_new(options).map_err(|e| EmbedError::ModelLoad(e.to_string()))?;
 
         // Get dimension from model info
         let dimension = match &config.model {

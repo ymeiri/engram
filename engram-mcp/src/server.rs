@@ -441,7 +441,7 @@ impl EngramServer {
 
     /// Run Memory OS lint checks and safe remediations.
     #[tool(
-        description = "Run Memory OS health linting: run, list, apply_safe. Checks missing evidence, stale preferences, duplicate entity candidates, orphan project/task memory, stale active sessions, superseded active items, telemetry-flagged active memory, stale-feedback current-plan guidance, vault metadata, and handoffs missing next actions. apply_safe writes only when write=true."
+        description = "Run Memory OS health linting: run, list, apply_safe. Optionally filter by project. Checks missing evidence, stale preferences, duplicate entity candidates, orphan project/task memory, stale active sessions, superseded active items, telemetry-flagged active memory, stale-feedback current-plan guidance, vault metadata, open obligations, and handoffs missing next actions. apply_safe writes only when write=true."
     )]
     pub async fn lint(&self, params: Parameters<LintRequest>) -> Result<CallToolResult, McpError> {
         to_call_result(tools::lint_new(&self.state, params.0).await)
@@ -675,7 +675,7 @@ impl ServerHandler for EngramServer {
                  **Memory OS:**\n\
                  - orient: Get an orientation packet with project/repository resolution, active memory, review-needed memory, recent commits, and a memory cursor\n\
                  - harness: Manage agent harness policy/adapters and hook events (actions: status, doctor, render_policy, render_adapter, install, hook_event; install is dry-run unless write=true)\n\
-                 - lint: Run Memory OS health checks and safe remediations (actions: run, list, apply_safe; write required for safe actions)\n\
+                 - lint: Run Memory OS health checks and safe remediations (actions: run, list, apply_safe; optional project filter; write required for safe actions)\n\
                  - graph: Traverse derived memory graph (actions: around, path, subgraph, export)\n\
                  - handoff: Manage rolling handoffs (actions: get, update, compile; dry-run by default)\n\
                  - obligations: Manage agent-native obligations (actions: detect, add, get, list, open, resolve, skip, doctor; detect dry-run by default)\n\

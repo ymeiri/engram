@@ -42,14 +42,15 @@ use engram_index::{
     DocumentReindexExecutionStatus, DocumentReindexPlan, DocumentService, EntityService,
     GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
     HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
-    MemoryChanges, MemoryChangesSinceOptions, MemoryService, MigrationInventory,
-    MigrationInventoryOptions, MigrationReviewApply, MigrationReviewApplyOptions,
-    MigrationReviewExport, MigrationReviewStatus, ObligationDetectOptions, ObligationDetection,
-    ObligationDoctorReport, ObligationService, OrientInput, OrientationPacket, Pipeline,
-    PipelineConfig, RepositoryMigrationInventory, RepositoryMigrationOptions,
-    RepositoryMigrationReviewApply, RepositoryMigrationReviewApplyOptions,
-    RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus, RepositoryService,
-    SearchService, SessionService, TelemetryService, ToolIntelService, WorkService,
+    MemoryChanges, MemoryChangesSinceOptions, MemoryService, MemoryVaultExport, MemoryVaultInit,
+    MemoryVaultPage, MemoryVaultStatus, MigrationInventory, MigrationInventoryOptions,
+    MigrationReviewApply, MigrationReviewApplyOptions, MigrationReviewExport,
+    MigrationReviewStatus, ObligationDetectOptions, ObligationDetection, ObligationDoctorReport,
+    ObligationService, OrientInput, OrientationPacket, Pipeline, PipelineConfig,
+    RepositoryMigrationInventory, RepositoryMigrationOptions, RepositoryMigrationReviewApply,
+    RepositoryMigrationReviewApplyOptions, RepositoryMigrationReviewExport,
+    RepositoryMigrationReviewStatus, RepositoryService, SearchService, SessionService,
+    TelemetryService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
@@ -1959,6 +1960,10 @@ enum HarnessCommands {
         #[arg(long)]
         root: Option<String>,
 
+        /// MCP tool name observed by the client; repeat to verify required tools
+        #[arg(long = "observed-mcp-tool", value_name = "TOOL")]
+        observed_mcp_tools: Vec<String>,
+
         /// Print report as JSON
         #[arg(long)]
         json: bool,
@@ -1973,6 +1978,10 @@ enum HarnessCommands {
         /// Install root, defaults to home directory
         #[arg(long)]
         root: Option<String>,
+
+        /// MCP tool name observed by the client; repeat to verify required tools
+        #[arg(long = "observed-mcp-tool", value_name = "TOOL")]
+        observed_mcp_tools: Vec<String>,
 
         /// Print report as JSON
         #[arg(long)]
@@ -2121,6 +2130,10 @@ enum HarnessCommands {
 enum LintCommands {
     /// Run lint checks
     Run {
+        /// Optional project scope to lint
+        #[arg(long = "scope-project")]
+        scope_project: Option<String>,
+
         /// Optional Memory OS vault root to scan
         #[arg(long)]
         vault_path: Option<String>,
@@ -2136,6 +2149,10 @@ enum LintCommands {
 
     /// Alias for run
     List {
+        /// Optional project scope to lint
+        #[arg(long = "scope-project")]
+        scope_project: Option<String>,
+
         /// Optional Memory OS vault root to scan
         #[arg(long)]
         vault_path: Option<String>,
@@ -2151,6 +2168,10 @@ enum LintCommands {
 
     /// Apply safe lint actions only
     ApplySafe {
+        /// Optional project scope to lint
+        #[arg(long = "scope-project")]
+        scope_project: Option<String>,
+
         /// Optional Memory OS vault root to scan
         #[arg(long)]
         vault_path: Option<String>,
@@ -2173,7 +2194,7 @@ enum LintCommands {
 enum GraphCommands {
     /// Return a subgraph around a node ID
     Around {
-        /// Node ID. Plain UUIDs are treated as memory:<id>.
+        /// Node ID. Plain UUIDs are treated as `memory:<id>`.
         node: String,
 
         /// Traversal depth
@@ -2413,6 +2434,14 @@ enum ObligationCommands {
         #[arg(long)]
         status: Option<String>,
 
+        /// Project scope filter
+        #[arg(long)]
+        scope_project: Option<String>,
+
+        /// Current working directory scope filter
+        #[arg(long)]
+        cwd: Option<String>,
+
         /// Maximum obligations to print
         #[arg(short, long)]
         limit: Option<usize>,
@@ -2424,6 +2453,14 @@ enum ObligationCommands {
 
     /// Run obligation doctor checks
     Doctor {
+        /// Project scope filter
+        #[arg(long)]
+        scope_project: Option<String>,
+
+        /// Current working directory scope filter
+        #[arg(long)]
+        cwd: Option<String>,
+
         /// Maximum open obligations to inspect
         #[arg(short, long)]
         limit: Option<usize>,
@@ -2911,6 +2948,466 @@ fn extract_mcp_tool_json_text(response: serde_json::Value) -> Result<serde_json:
         .map_err(|error| anyhow::anyhow!("daemon MCP tool response was not JSON: {}", error))
 }
 
+async fn call_daemon_tool_if_available(
+    store_project: Option<&str>,
+    data_dir: Option<&str>,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<Option<serde_json::Value>> {
+    if data_dir.is_some() {
+        return Ok(None);
+    }
+
+    let daemon_config = match store_project {
+        Some(project) => daemon::DaemonConfig::project(project),
+        None => daemon::DaemonConfig::global(),
+    };
+    let info = match daemon::get_daemon_info(&daemon_config).await {
+        Ok(info) if info.healthy => info,
+        _ => return Ok(None),
+    };
+
+    let response = proxy::call_tool_once(info.port, tool_name, arguments).await?;
+    extract_mcp_tool_json_text(response).map(Some)
+}
+
+async fn lint_report_via_daemon(
+    store_project: Option<&str>,
+    data_dir: Option<&str>,
+    command: &LintCommands,
+) -> Result<Option<LintReport>> {
+    let response = call_daemon_tool_if_available(
+        store_project,
+        data_dir,
+        "lint",
+        lint_daemon_arguments(command),
+    )
+    .await?;
+    response
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(Into::into)
+}
+
+fn lint_daemon_arguments(command: &LintCommands) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    match command {
+        LintCommands::Run {
+            scope_project,
+            vault_path,
+            limit,
+            ..
+        }
+        | LintCommands::List {
+            scope_project,
+            vault_path,
+            limit,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("run"));
+            insert_optional_string(&mut map, "project", scope_project);
+            insert_optional_string(&mut map, "vault_path", vault_path);
+            insert_optional_usize(&mut map, "limit", *limit);
+        }
+        LintCommands::ApplySafe {
+            scope_project,
+            vault_path,
+            limit,
+            write,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("apply_safe"));
+            map.insert("write".to_string(), serde_json::json!(write));
+            insert_optional_string(&mut map, "project", scope_project);
+            insert_optional_string(&mut map, "vault_path", vault_path);
+            insert_optional_usize(&mut map, "limit", *limit);
+        }
+    }
+    serde_json::Value::Object(map)
+}
+
+fn print_lint_command_report(command: &LintCommands, report: &LintReport) -> Result<()> {
+    match command {
+        LintCommands::Run { json, .. } | LintCommands::List { json, .. } => {
+            if *json {
+                println!("{}", serde_json::to_string_pretty(report)?);
+            } else {
+                print_lint_report(report, false);
+            }
+        }
+        LintCommands::ApplySafe { write, json, .. } => {
+            if *json {
+                println!("{}", serde_json::to_string_pretty(report)?);
+            } else {
+                print_lint_report(report, !*write);
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn obligation_result_via_daemon(
+    store_project: Option<&str>,
+    data_dir: Option<&str>,
+    command: &ObligationCommands,
+) -> Result<Option<serde_json::Value>> {
+    let arguments = obligation_daemon_arguments(store_project, command)?;
+    call_daemon_tool_if_available(store_project, data_dir, "obligations", arguments).await
+}
+
+fn obligation_daemon_arguments(
+    store_project: Option<&str>,
+    command: &ObligationCommands,
+) -> Result<serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    match command {
+        ObligationCommands::Detect {
+            cwd,
+            prompt,
+            scope_project,
+            write,
+            limit,
+            writer_harness,
+            model_provider,
+            model,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("detect"));
+            let cwd = cwd_or_current(cwd.clone())?.display().to_string();
+            map.insert("cwd".to_string(), serde_json::json!(cwd));
+            insert_optional_string(&mut map, "prompt", prompt);
+            insert_optional_string(
+                &mut map,
+                "project",
+                &scope_project
+                    .clone()
+                    .or_else(|| store_project.map(str::to_string)),
+            );
+            map.insert("write".to_string(), serde_json::json!(write));
+            insert_optional_usize(&mut map, "limit", *limit);
+            map.insert(
+                "writer_harness".to_string(),
+                serde_json::json!(writer_harness),
+            );
+            map.insert(
+                "model_provider".to_string(),
+                serde_json::json!(model_provider),
+            );
+            map.insert("model".to_string(), serde_json::json!(model));
+        }
+        ObligationCommands::Add {
+            kind,
+            title,
+            description,
+            scope_project,
+            trigger_kind,
+            trigger_summary,
+            trigger_target,
+            required_resolutions,
+            writer_harness,
+            model_provider,
+            model,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("add"));
+            map.insert("kind".to_string(), serde_json::json!(kind));
+            map.insert("title".to_string(), serde_json::json!(title));
+            map.insert("description".to_string(), serde_json::json!(description));
+            insert_optional_string(
+                &mut map,
+                "project",
+                &scope_project
+                    .clone()
+                    .or_else(|| store_project.map(str::to_string)),
+            );
+            map.insert("trigger_kind".to_string(), serde_json::json!(trigger_kind));
+            map.insert(
+                "trigger_summary".to_string(),
+                serde_json::json!(trigger_summary),
+            );
+            insert_optional_string(&mut map, "trigger_target", trigger_target);
+            map.insert(
+                "required_resolutions".to_string(),
+                serde_json::json!(required_resolutions),
+            );
+            map.insert(
+                "writer_harness".to_string(),
+                serde_json::json!(writer_harness),
+            );
+            map.insert(
+                "model_provider".to_string(),
+                serde_json::json!(model_provider),
+            );
+            map.insert("model".to_string(), serde_json::json!(model));
+        }
+        ObligationCommands::List {
+            status,
+            scope_project,
+            cwd,
+            limit,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("list"));
+            insert_optional_string(&mut map, "status", status);
+            insert_optional_string(
+                &mut map,
+                "project",
+                &scope_project
+                    .clone()
+                    .or_else(|| store_project.map(str::to_string)),
+            );
+            if cwd.is_some() {
+                let cwd = cwd_or_current(cwd.clone())?.display().to_string();
+                map.insert("cwd".to_string(), serde_json::json!(cwd));
+            }
+            insert_optional_usize(&mut map, "limit", *limit);
+        }
+        ObligationCommands::Doctor {
+            scope_project,
+            cwd,
+            limit,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("doctor"));
+            insert_optional_string(
+                &mut map,
+                "project",
+                &scope_project
+                    .clone()
+                    .or_else(|| store_project.map(str::to_string)),
+            );
+            if cwd.is_some() {
+                let cwd = cwd_or_current(cwd.clone())?.display().to_string();
+                map.insert("cwd".to_string(), serde_json::json!(cwd));
+            }
+            insert_optional_usize(&mut map, "limit", *limit);
+        }
+        ObligationCommands::Resolve {
+            id,
+            resolution,
+            summary,
+            actor,
+            ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("resolve"));
+            map.insert("id".to_string(), serde_json::json!(id));
+            map.insert("resolution".to_string(), serde_json::json!(resolution));
+            map.insert("summary".to_string(), serde_json::json!(summary));
+            map.insert("actor".to_string(), serde_json::json!(actor));
+        }
+        ObligationCommands::Skip {
+            id, reason, actor, ..
+        } => {
+            map.insert("action".to_string(), serde_json::json!("skip"));
+            map.insert("id".to_string(), serde_json::json!(id));
+            map.insert("reason".to_string(), serde_json::json!(reason));
+            map.insert("actor".to_string(), serde_json::json!(actor));
+        }
+    }
+    Ok(serde_json::Value::Object(map))
+}
+
+fn print_obligation_command_result(
+    command: &ObligationCommands,
+    response: serde_json::Value,
+) -> Result<()> {
+    match command {
+        ObligationCommands::Detect { json, .. } => {
+            let detection: ObligationDetection = serde_json::from_value(response)?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&detection)?);
+            } else {
+                print_obligation_detection(&detection);
+            }
+        }
+        ObligationCommands::Add { json, .. }
+        | ObligationCommands::Resolve { json, .. }
+        | ObligationCommands::Skip { json, .. } => {
+            let obligation: AgentObligation = serde_json::from_value(response)?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&obligation)?);
+            } else {
+                print_obligation(&obligation);
+            }
+        }
+        ObligationCommands::List { json, .. } => {
+            let obligations: Vec<AgentObligation> = serde_json::from_value(response)?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&obligations)?);
+            } else {
+                print_obligation_list(&obligations);
+            }
+        }
+        ObligationCommands::Doctor { json, .. } => {
+            let report: ObligationDoctorReport = serde_json::from_value(response)?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print_obligation_doctor(&report);
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn vault_result_via_daemon(
+    store_project: Option<&str>,
+    data_dir: Option<&str>,
+    command: &VaultCommands,
+) -> Result<Option<serde_json::Value>> {
+    let response = call_daemon_tool_if_available(
+        store_project,
+        data_dir,
+        "vault",
+        vault_daemon_arguments(command),
+    )
+    .await?;
+    Ok(response)
+}
+
+fn vault_daemon_arguments(command: &VaultCommands) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    match command {
+        VaultCommands::Init { path, .. } => {
+            map.insert("action".to_string(), serde_json::json!("init"));
+            map.insert("vault_path".to_string(), serde_json::json!(path));
+        }
+        VaultCommands::Compile { path, .. } => {
+            map.insert("action".to_string(), serde_json::json!("compile"));
+            map.insert("vault_path".to_string(), serde_json::json!(path));
+        }
+        VaultCommands::Status { path, .. } => {
+            map.insert("action".to_string(), serde_json::json!("status"));
+            map.insert("vault_path".to_string(), serde_json::json!(path));
+        }
+        VaultCommands::Page { path, page, .. } => {
+            map.insert("action".to_string(), serde_json::json!("page"));
+            map.insert("vault_path".to_string(), serde_json::json!(path));
+            map.insert("page".to_string(), serde_json::json!(page));
+        }
+    }
+    serde_json::Value::Object(map)
+}
+
+fn print_vault_command_result(command: &VaultCommands, response: serde_json::Value) -> Result<()> {
+    match command {
+        VaultCommands::Init { json, .. } => {
+            let init: MemoryVaultInit = parse_daemon_wrapped_value(response, "init")?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&init)?);
+            } else {
+                print_vault_init(init);
+            }
+        }
+        VaultCommands::Compile { json, .. } => {
+            let export: MemoryVaultExport = parse_daemon_wrapped_value(response, "export")?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&export)?);
+            } else {
+                print_vault_export(export);
+            }
+        }
+        VaultCommands::Status { json, .. } => {
+            let status: MemoryVaultStatus = parse_daemon_wrapped_value(response, "status")?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&status)?);
+            } else {
+                print_vault_status(status);
+            }
+        }
+        VaultCommands::Page { json, .. } => {
+            let page: Option<MemoryVaultPage> = parse_daemon_wrapped_value(response, "page")?;
+            let page = page.ok_or_else(|| anyhow::anyhow!("Vault page not found"))?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&page)?);
+            } else {
+                print!("{}", page.contents);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_daemon_wrapped_value<T: serde::de::DeserializeOwned>(
+    response: serde_json::Value,
+    key: &str,
+) -> Result<T> {
+    let value = response
+        .get(key)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("daemon response did not include '{key}'"))?;
+    serde_json::from_value(value).map_err(Into::into)
+}
+
+fn print_vault_init(init: MemoryVaultInit) {
+    println!("✓ Memory vault initialized");
+    println!("  Root: {}", init.root);
+    println!("  Directories created: {}", init.directories_created.len());
+    println!(
+        "  Directories existing: {}",
+        init.directories_existing.len()
+    );
+    if !init.directories_created.is_empty() {
+        println!("Created:");
+        for path in init.directories_created {
+            println!("  - {}", path);
+        }
+    }
+}
+
+fn print_vault_export(export: MemoryVaultExport) {
+    println!("✓ Memory vault compiled");
+    println!("  Root:                 {}", export.root);
+    println!("  Files written:        {}", export.file_count());
+    println!("  Files skipped:        {}", export.files_skipped.len());
+    println!("  Memory items:         {}", export.memory_item_count);
+    println!("  Knowledge commits:    {}", export.knowledge_commit_count);
+    println!("  Repositories:         {}", export.repository_count);
+    println!("  Entities:             {}", export.entity_count);
+    println!("  Projects:             {}", export.project_count);
+    if !export.files_skipped.is_empty() {
+        println!("Skipped non-generated files:");
+        for path in export.files_skipped {
+            println!("  - {}", path);
+        }
+    }
+}
+
+fn print_vault_status(status: MemoryVaultStatus) {
+    println!("Memory vault status");
+    println!("  Root:              {}", status.root);
+    println!("  Exists:            {}", status.exists);
+    println!("  Initialized:       {}", status.initialized);
+    println!("  Total files:       {}", status.total_file_count);
+    println!("  Generated files:   {}", status.generated_file_count);
+    println!("  User files:        {}", status.user_file_count);
+    println!(
+        "  Expected generated files: {}",
+        status.expected_generated_file_count
+    );
+    println!("  Memory items:      {}", status.memory_item_count);
+    println!("  Knowledge commits: {}", status.knowledge_commit_count);
+    println!("  Repositories:      {}", status.repository_count);
+    println!("  Entities:          {}", status.entity_count);
+    println!("  Projects:          {}", status.project_count);
+    if !status.missing_directories.is_empty() {
+        println!("Missing directories:");
+        for path in status.missing_directories {
+            println!("  - {}", path);
+        }
+    }
+}
+
+fn insert_optional_usize(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: Option<usize>,
+) {
+    if let Some(value) = value {
+        map.insert(key.to_string(), serde_json::json!(value));
+    }
+}
+
 fn validate_serve_options(
     memory: bool,
     remote: Option<&str>,
@@ -3109,6 +3606,35 @@ fn print_harness_status(report: &HarnessStatusReport) {
     println!("Harness: {}", report.harness);
     println!("Root:    {}", report.root);
     println!("Ready:   {}", report.ready);
+    println!(
+        "Lifecycle: soft_contract={}, enforced={}",
+        report.lifecycle.soft_contract, report.lifecycle.enforced
+    );
+    if !report.lifecycle.advisory_triggers.is_empty() {
+        let triggers = report
+            .lifecycle
+            .advisory_triggers
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!("  Advisory triggers: {triggers}");
+    }
+    if report.mcp_tools.checked {
+        if report.mcp_tools.missing_tools.is_empty() {
+            println!("MCP tools: checked, all required tools observed");
+        } else {
+            println!(
+                "MCP tools: checked, missing {}",
+                report.mcp_tools.missing_tools.join(", ")
+            );
+        }
+    } else {
+        println!(
+            "MCP tools: not checked ({} required)",
+            report.mcp_tools.required_tools.len()
+        );
+    }
     println!("Adapters:");
     for adapter in &report.adapters {
         let marker = match adapter.status {
@@ -5776,6 +6302,39 @@ async fn main() -> Result<()> {
                             if let Some(project) = &config.project {
                                 println!("  Project: {}", project);
                             }
+                            let current_exe = std::env::current_exe().ok();
+                            let current_version = env!("CARGO_PKG_VERSION");
+                            if let Some(metadata) = &info.metadata {
+                                println!("  Spawned by: {}", metadata.executable_path);
+                                println!("  Spawn version: {}", metadata.executable_version);
+                                if let Some(path) = &current_exe {
+                                    let current_path = path.display().to_string();
+                                    println!("  Current CLI: {}", current_path);
+                                    if metadata.executable_path != current_path {
+                                        println!(
+                                            "  Warning: daemon was spawned by a different executable path; restart it after updating Engram if runtime drift is suspected"
+                                        );
+                                    }
+                                }
+                                if metadata.executable_version != current_version {
+                                    println!(
+                                        "  Warning: daemon version {} differs from current CLI version {}",
+                                        metadata.executable_version, current_version
+                                    );
+                                }
+                                if metadata.pid != info.pid || metadata.port != info.port {
+                                    println!(
+                                        "  Warning: daemon spawn metadata does not match pid/port files"
+                                    );
+                                }
+                            } else {
+                                println!(
+                                    "  Spawn metadata: unavailable (daemon may have been started by an older Engram binary)"
+                                );
+                                if let Some(path) = &current_exe {
+                                    println!("  Current CLI: {}", path.display());
+                                }
+                            }
                         }
                         Err(_) => {
                             println!("Daemon status: 🔴 not running");
@@ -7898,12 +8457,13 @@ async fn main() -> Result<()> {
                 HarnessCommands::Status {
                     harness,
                     root,
+                    observed_mcp_tools,
                     json,
                 } => {
                     let report = service.status(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
-                        &[],
+                        &observed_mcp_tools,
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -7914,12 +8474,13 @@ async fn main() -> Result<()> {
                 HarnessCommands::Doctor {
                     harness,
                     root,
+                    observed_mcp_tools,
                     json,
                 } => {
                     let report = service.doctor(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
-                        &[],
+                        &observed_mcp_tools,
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -8064,6 +8625,13 @@ async fn main() -> Result<()> {
             data_dir,
             command,
         } => {
+            if let Some(report) =
+                lint_report_via_daemon(project.as_deref(), data_dir.as_deref(), &command).await?
+            {
+                print_lint_command_report(&command, &report)?;
+                return Ok(());
+            }
+
             let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
             let db = connect_and_init(&config).await?;
             let service = LintService::new(db);
@@ -8071,16 +8639,24 @@ async fn main() -> Result<()> {
 
             match command {
                 LintCommands::Run {
+                    scope_project,
                     vault_path,
                     limit,
                     json,
                 }
                 | LintCommands::List {
+                    scope_project,
                     vault_path,
                     limit,
                     json,
                 } => {
-                    let report = service.run(LintOptions { vault_path, limit }).await?;
+                    let report = service
+                        .run(LintOptions {
+                            project: scope_project,
+                            vault_path,
+                            limit,
+                        })
+                        .await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -8088,17 +8664,21 @@ async fn main() -> Result<()> {
                     }
                 }
                 LintCommands::ApplySafe {
+                    scope_project,
                     vault_path,
                     limit,
                     write,
                     json,
                 } => {
+                    let options = LintOptions {
+                        project: scope_project,
+                        vault_path,
+                        limit,
+                    };
                     let mut report = if write {
-                        service
-                            .apply_safe(LintOptions { vault_path, limit })
-                            .await?
+                        service.apply_safe(options).await?
                     } else {
-                        service.run(LintOptions { vault_path, limit }).await?
+                        service.run(options).await?
                     };
                     if !write {
                         report.applied_safe_actions = 0;
@@ -8269,6 +8849,14 @@ async fn main() -> Result<()> {
             data_dir,
             command,
         } => {
+            if let Some(response) =
+                obligation_result_via_daemon(project.as_deref(), data_dir.as_deref(), &command)
+                    .await?
+            {
+                print_obligation_command_result(&command, response)?;
+                return Ok(());
+            }
+
             let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
             let db = connect_and_init(&config).await?;
             let service = ObligationService::new(db);
@@ -8347,6 +8935,8 @@ async fn main() -> Result<()> {
                 }
                 ObligationCommands::List {
                     status,
+                    scope_project,
+                    cwd,
                     limit,
                     json,
                 } => {
@@ -8357,15 +8947,36 @@ async fn main() -> Result<()> {
                                 .ok_or_else(|| anyhow::anyhow!("Invalid status: {}", value))
                         })
                         .transpose()?;
-                    let obligations = service.list(status, None, None, limit).await?;
+                    let cwd = if cwd.is_some() {
+                        Some(cwd_or_current(cwd)?.display().to_string())
+                    } else {
+                        None
+                    };
+                    let project_scope = scope_project.or(project);
+                    let obligations = service
+                        .list(status, project_scope.as_deref(), cwd.as_deref(), limit)
+                        .await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&obligations)?);
                     } else {
                         print_obligation_list(&obligations);
                     }
                 }
-                ObligationCommands::Doctor { limit, json } => {
-                    let report = service.doctor(None, None, limit).await?;
+                ObligationCommands::Doctor {
+                    scope_project,
+                    cwd,
+                    limit,
+                    json,
+                } => {
+                    let cwd = if cwd.is_some() {
+                        Some(cwd_or_current(cwd)?.display().to_string())
+                    } else {
+                        None
+                    };
+                    let project_scope = scope_project.or(project);
+                    let report = service
+                        .doctor(project_scope.as_deref(), cwd.as_deref(), limit)
+                        .await?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -8793,6 +9404,13 @@ async fn main() -> Result<()> {
             data_dir,
             command,
         } => {
+            if let Some(response) =
+                vault_result_via_daemon(project.as_deref(), data_dir.as_deref(), &command).await?
+            {
+                print_vault_command_result(&command, response)?;
+                return Ok(());
+            }
+
             let config = scoped_store_config(project.as_deref(), data_dir.as_deref())?;
             let db = connect_and_init(&config).await?;
             let service = MemoryService::new(db);
@@ -9277,6 +9895,103 @@ mod tests {
     }
 
     #[test]
+    fn lint_daemon_arguments_preserve_scope_project_filter() {
+        let args = lint_daemon_arguments(&LintCommands::ApplySafe {
+            scope_project: Some("engram".to_string()),
+            vault_path: Some("/tmp/vault".to_string()),
+            limit: Some(7),
+            write: false,
+            json: true,
+        });
+
+        assert_eq!(args["action"], serde_json::json!("apply_safe"));
+        assert_eq!(args["project"], serde_json::json!("engram"));
+        assert_eq!(args["vault_path"], serde_json::json!("/tmp/vault"));
+        assert_eq!(args["limit"], serde_json::json!(7));
+        assert_eq!(args["write"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn obligation_daemon_arguments_use_store_project_as_default_scope() {
+        let args = obligation_daemon_arguments(
+            Some("engram"),
+            &ObligationCommands::Add {
+                kind: "source_reading".to_string(),
+                title: "Read source".to_string(),
+                description: "Read source before editing".to_string(),
+                scope_project: None,
+                trigger_kind: "prompt".to_string(),
+                trigger_summary: "source work".to_string(),
+                trigger_target: None,
+                required_resolutions: vec!["source_read".to_string()],
+                json: true,
+                writer_harness: "engram_cli".to_string(),
+                model_provider: "engram".to_string(),
+                model: "obligation-add".to_string(),
+            },
+        )
+        .expect("obligation args");
+
+        assert_eq!(args["action"], serde_json::json!("add"));
+        assert_eq!(args["project"], serde_json::json!("engram"));
+        assert_eq!(
+            args["required_resolutions"],
+            serde_json::json!(["source_read"])
+        );
+    }
+
+    #[test]
+    fn obligation_daemon_arguments_scope_list_with_store_project() {
+        let args = obligation_daemon_arguments(
+            Some("engram"),
+            &ObligationCommands::List {
+                status: Some("open".to_string()),
+                scope_project: None,
+                cwd: None,
+                limit: Some(3),
+                json: true,
+            },
+        )
+        .expect("obligation list args");
+
+        assert_eq!(args["action"], serde_json::json!("list"));
+        assert_eq!(args["status"], serde_json::json!("open"));
+        assert_eq!(args["project"], serde_json::json!("engram"));
+        assert!(args.get("cwd").is_none());
+        assert_eq!(args["limit"], serde_json::json!(3));
+    }
+
+    #[test]
+    fn obligation_daemon_arguments_scope_doctor_with_explicit_project_and_cwd() {
+        let args = obligation_daemon_arguments(
+            Some("store-project"),
+            &ObligationCommands::Doctor {
+                scope_project: Some("engram".to_string()),
+                cwd: Some("/tmp/engram".to_string()),
+                limit: Some(5),
+                json: true,
+            },
+        )
+        .expect("obligation doctor args");
+
+        assert_eq!(args["action"], serde_json::json!("doctor"));
+        assert_eq!(args["project"], serde_json::json!("engram"));
+        assert_eq!(args["cwd"], serde_json::json!("/tmp/engram"));
+        assert_eq!(args["limit"], serde_json::json!(5));
+    }
+
+    #[test]
+    fn vault_daemon_arguments_wrap_cli_path_as_vault_path() {
+        let args = vault_daemon_arguments(&VaultCommands::Status {
+            path: "/tmp/vault".to_string(),
+            json: true,
+        });
+
+        assert_eq!(args["action"], serde_json::json!("status"));
+        assert_eq!(args["vault_path"], serde_json::json!("/tmp/vault"));
+    }
+
+    #[test]
     fn external_session_id_resolution_uses_flag_before_env() {
         assert_eq!(
             resolve_external_session_id(
@@ -9598,6 +10313,35 @@ mod tests {
                 _ => panic!("expected changes-since command"),
             },
             _ => panic!("expected memory command"),
+        }
+    }
+
+    #[test]
+    fn harness_status_parses_observed_mcp_tool_flags() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "harness",
+            "status",
+            "--harness",
+            "codex",
+            "--observed-mcp-tool",
+            "orient",
+            "--observed-mcp-tool",
+            "telemetry",
+            "--json",
+        ])
+        .expect("harness status command should parse observed MCP tools");
+
+        match cli.command {
+            Commands::Harness { command } => match command {
+                HarnessCommands::Status {
+                    observed_mcp_tools, ..
+                } => {
+                    assert_eq!(observed_mcp_tools, vec!["orient", "telemetry"]);
+                }
+                _ => panic!("expected status command"),
+            },
+            _ => panic!("expected harness command"),
         }
     }
 

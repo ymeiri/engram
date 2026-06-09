@@ -7,8 +7,9 @@
 use crate::error::{IndexError, IndexResult};
 use engram_core::harness::{
     HarnessAdapterCheck, HarnessAdapterKind, HarnessAdapterSpec, HarnessAdapterStatus,
-    HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleTrigger, HarnessPolicy,
-    HarnessRenderedAdapter, HarnessSettingsCheck, HarnessStatusReport,
+    HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleReport,
+    HarnessLifecycleTrigger, HarnessMcpToolReport, HarnessPolicy, HarnessRenderedAdapter,
+    HarnessSettingsCheck, HarnessStatusReport,
 };
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
@@ -26,6 +27,11 @@ const CLAUDE_HOOK_COMMAND: &str =
     "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"";
 const CLAUDE_SESSION_END_HOOK_COMMAND: &str =
     "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"";
+const CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING: &str = concat!(
+    "Claude Code static readiness confirms generated adapter files and settings entries; ",
+    "it does not prove live effective hook visibility. Verify effective hook configuration with ",
+    "Claude Code /hooks before claiming native Claude hook behavior."
+);
 
 /// Options for harness adapter installation.
 #[derive(Debug, Clone, Copy, Default)]
@@ -203,15 +209,31 @@ impl HarnessService {
             .iter()
             .map(|adapter| check_adapter(&root, adapter))
             .collect::<IndexResult<_>>()?;
+        let mcp_tools_checked = !observed_mcp_tools.is_empty();
         let missing_mcp_tools: Vec<String> = policy
             .required_mcp_tools
             .iter()
             .filter(|tool| {
-                !observed_mcp_tools.is_empty()
-                    && !observed_mcp_tools.iter().any(|name| name == *tool)
+                mcp_tools_checked && !observed_mcp_tools.iter().any(|name| name == *tool)
             })
             .cloned()
             .collect();
+        let mcp_tools = HarnessMcpToolReport {
+            checked: mcp_tools_checked,
+            required_tools: policy.required_mcp_tools.clone(),
+            observed_tools: observed_mcp_tools.to_vec(),
+            missing_tools: missing_mcp_tools.clone(),
+            message: if !mcp_tools_checked {
+                "MCP tool availability was not checked; provide observed_mcp_tools to verify the required tool set.".to_string()
+            } else if missing_mcp_tools.is_empty() {
+                "All required MCP tools were observed.".to_string()
+            } else {
+                format!(
+                    "Missing required MCP tools: {}.",
+                    missing_mcp_tools.join(", ")
+                )
+            },
+        };
 
         let mut warnings = Vec::new();
         for check in &adapters {
@@ -257,14 +279,34 @@ impl HarnessService {
             }
             warnings.extend(settings_status.warnings);
             settings = settings_status.checks;
+            warn_for_installed_claude_hook_files_without_settings(
+                &adapters,
+                &settings,
+                &mut warnings,
+            );
+            if ready {
+                warnings.push(CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING.to_string());
+            }
         }
 
         Ok(HarnessStatusReport {
             harness,
             root: root.display().to_string(),
+            lifecycle: HarnessLifecycleReport {
+                soft_contract: policy.soft_contract,
+                enforced: !policy.soft_contract,
+                advisory_triggers: policy.lifecycle_triggers.clone(),
+                message: if policy.soft_contract {
+                    "Lifecycle compliance is advisory; agents should follow the listed triggers."
+                        .to_string()
+                } else {
+                    "Lifecycle compliance is enforced by the harness.".to_string()
+                },
+            },
             policy,
             adapters,
             missing_mcp_tools,
+            mcp_tools,
             settings,
             warnings,
             ready,
@@ -280,9 +322,16 @@ impl HarnessService {
     ) -> IndexResult<HarnessStatusReport> {
         let mut report = self.status(harness, root, observed_mcp_tools)?;
         if report.ready {
+            let triggers = report
+                .lifecycle
+                .advisory_triggers
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
             report
                 .warnings
-                .push("Harness adapter files are present; lifecycle compliance is still soft and depends on the agent following the policy.".to_string());
+                .push(format!("Harness adapter files are present; lifecycle compliance is still soft and depends on the agent following the policy. Advisory triggers: {triggers}."));
         } else {
             report.warnings.push(
                 "Harness is not fully installed; agents may still use Engram manually through MCP."
@@ -1511,6 +1560,44 @@ fn warn_for_split_settings(checks: &[HarnessSettingsCheck], warnings: &mut Vec<S
     }
 }
 
+fn warn_for_installed_claude_hook_files_without_settings(
+    adapters: &[HarnessAdapterCheck],
+    settings: &[HarnessSettingsCheck],
+    warnings: &mut Vec<String>,
+) {
+    let hook_mappings = [
+        (
+            "SessionStart:startup|resume|compact",
+            "claude-session-start-hook",
+            "SessionStart startup|resume|compact",
+        ),
+        ("SessionEnd", "claude-session-end-hook", "SessionEnd"),
+    ];
+
+    for (setting_name, adapter_name, event_label) in hook_mappings {
+        let missing_required_setting = settings.iter().any(|check| {
+            check.kind == "hook"
+                && check.required
+                && check.name == setting_name
+                && check.locations.is_empty()
+        });
+        if !missing_required_setting {
+            continue;
+        }
+
+        let Some(adapter) = adapters.iter().find(|check| {
+            check.name == adapter_name && check.status == HarnessAdapterStatus::Installed
+        }) else {
+            continue;
+        };
+
+        warnings.push(format!(
+            "Generated Claude hook file for {event_label} is installed at {}, but Claude settings do not register the required {setting_name} hook; Claude will not run that file until settings.json or settings.local.json references it.",
+            adapter.path
+        ));
+    }
+}
+
 fn claude_engram_permissions(settings: &Value) -> Vec<String> {
     settings
         .pointer("/permissions/allow")
@@ -2617,6 +2704,84 @@ mod tests {
     }
 
     #[test]
+    fn doctor_names_soft_lifecycle_triggers_when_ready() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install(HarnessKind::Codex, Some(root.path()), true)
+            .unwrap();
+
+        let report = service
+            .doctor(HarnessKind::Codex, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(report.ready);
+        assert!(report.lifecycle.soft_contract);
+        assert!(!report.lifecycle.enforced);
+        assert_eq!(
+            report.lifecycle.advisory_triggers,
+            vec![
+                HarnessLifecycleTrigger::TaskStartOrient,
+                HarnessLifecycleTrigger::BeforeMajorDecisionChangesSince,
+                HarnessLifecycleTrigger::AfterDiscoveryRecord,
+                HarnessLifecycleTrigger::BeforeFinalChangesSince,
+                HarnessLifecycleTrigger::BeforeFinalObligations,
+                HarnessLifecycleTrigger::BeforeContextCompactionSave,
+                HarnessLifecycleTrigger::SessionEndHandoff,
+                HarnessLifecycleTrigger::CommitWorkflowConsultMemory,
+            ]
+        );
+        let lifecycle_warning = report
+            .warnings
+            .iter()
+            .find(|warning| warning.contains("Advisory triggers:"))
+            .expect("ready doctor should name advisory lifecycle triggers");
+        assert!(lifecycle_warning.contains("task_start_orient"));
+        assert!(lifecycle_warning.contains("before_final_obligations"));
+        assert!(lifecycle_warning.contains("session_end_handoff"));
+        assert!(lifecycle_warning.contains("commit_workflow_consult_memory"));
+    }
+
+    #[test]
+    fn status_distinguishes_unchecked_from_missing_mcp_tools() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install(HarnessKind::Codex, Some(root.path()), true)
+            .unwrap();
+
+        let unchecked = service
+            .status(HarnessKind::Codex, Some(root.path()), &[])
+            .unwrap();
+        assert!(unchecked.ready);
+        assert!(!unchecked.mcp_tools.checked);
+        assert!(unchecked.mcp_tools.missing_tools.is_empty());
+        assert!(unchecked.missing_mcp_tools.is_empty());
+
+        let observed_without_telemetry = vec![
+            "orient".to_string(),
+            "memory".to_string(),
+            "harness".to_string(),
+            "lint".to_string(),
+            "graph".to_string(),
+            "handoff".to_string(),
+            "obligations".to_string(),
+            "vault".to_string(),
+        ];
+        let checked = service
+            .status(
+                HarnessKind::Codex,
+                Some(root.path()),
+                &observed_without_telemetry,
+            )
+            .unwrap();
+        assert!(!checked.ready);
+        assert!(checked.mcp_tools.checked);
+        assert_eq!(checked.mcp_tools.missing_tools, vec!["telemetry"]);
+        assert_eq!(checked.missing_mcp_tools, vec!["telemetry"]);
+    }
+
+    #[test]
     fn write_install_creates_generated_adapters() {
         let root = tempfile::tempdir().unwrap();
         let report = HarnessService::new()
@@ -2966,6 +3131,33 @@ mod tests {
     }
 
     #[test]
+    fn claude_ready_status_warns_effective_hooks_need_live_hooks_proof() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::Project,
+                },
+            )
+            .unwrap();
+
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(status.ready, "{:?}", status.warnings);
+        assert!(status.warnings.iter().any(|warning| {
+            warning.contains("does not prove live effective hook visibility")
+                && warning.contains("Claude Code /hooks")
+        }));
+    }
+
+    #[test]
     fn adopt_user_owned_hook_backs_up_and_replaces_file() {
         let root = tempfile::tempdir().unwrap();
         let hook = root.path().join(".claude/hooks/engram-session-start.sh");
@@ -3054,6 +3246,109 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("settings target is snippet-only")));
+    }
+
+    #[test]
+    fn claude_install_snippet_only_repairs_adapters_without_rewriting_existing_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let claude_dir = root.path().join(".claude");
+        let commands_dir = claude_dir.join("commands");
+        fs::create_dir_all(&commands_dir).unwrap();
+
+        let settings_path = claude_dir.join("settings.json");
+        let local_settings_path = claude_dir.join("settings.local.json");
+        let snippet_path = claude_dir.join("engram-settings-snippet.json");
+        let stale_command_path = commands_dir.join("engram-memory-session.md");
+        let settings_contents = r#"{"permissions":{"allow":["mcp__engram__search"]}}"#;
+        let local_settings_contents = r#"{"hooks":{"Stop":[{"hooks":[]}]}}"#;
+        let user_snippet_contents = r#"{"user":"owned"}"#;
+        fs::write(&settings_path, settings_contents).unwrap();
+        fs::write(&local_settings_path, local_settings_contents).unwrap();
+        fs::write(&snippet_path, user_snippet_contents).unwrap();
+        fs::write(&stale_command_path, format!("{MARKER_MD}\nstale adapter\n")).unwrap();
+
+        let report = HarnessService::new()
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::SnippetOnly,
+                },
+            )
+            .unwrap();
+
+        assert!(report
+            .written
+            .iter()
+            .any(|file| file.path == stale_command_path.display().to_string()));
+        assert!(report
+            .written
+            .iter()
+            .all(|file| !file.path.ends_with("settings.json")
+                && !file.path.ends_with("settings.local.json")
+                && !file.path.ends_with("engram-settings-snippet.json")));
+        assert!(report
+            .skipped
+            .iter()
+            .any(|file| file.name == "claude-settings-merge"
+                && file.message.contains("snippet-only")));
+        assert_eq!(
+            fs::read_to_string(&settings_path).unwrap(),
+            settings_contents
+        );
+        assert_eq!(
+            fs::read_to_string(&local_settings_path).unwrap(),
+            local_settings_contents
+        );
+        assert_eq!(
+            fs::read_to_string(&snippet_path).unwrap(),
+            user_snippet_contents
+        );
+        assert!(fs::read_to_string(&stale_command_path)
+            .unwrap()
+            .contains("obligations(action=detect, project=..., cwd=...)"));
+    }
+
+    #[test]
+    fn status_warns_when_claude_hook_files_are_installed_but_settings_missing() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::SnippetOnly,
+                },
+            )
+            .unwrap();
+
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(!status.ready);
+        for adapter_name in ["claude-session-start-hook", "claude-session-end-hook"] {
+            assert!(status.adapters.iter().any(|check| {
+                check.name == adapter_name && check.status == HarnessAdapterStatus::Installed
+            }));
+        }
+        for setting_name in ["SessionStart:startup|resume|compact", "SessionEnd"] {
+            assert!(status.settings.iter().any(|check| {
+                check.name == setting_name && check.kind == "hook" && check.locations.is_empty()
+            }));
+        }
+        assert!(status.warnings.iter().any(|warning| {
+            warning.contains("SessionStart startup|resume|compact")
+                && warning.contains("Claude settings do not register")
+        }));
+        assert!(status.warnings.iter().any(|warning| {
+            warning.contains("SessionEnd") && warning.contains("Claude settings do not register")
+        }));
     }
 
     #[test]

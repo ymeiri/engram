@@ -24,14 +24,37 @@ engram is a local-first memory system purpose-built for AI coding agents. It con
 
 ### 1. Install
 
+From source with Rust 1.80+:
+
 ```bash
-# From source (Rust 1.80+)
 git clone https://github.com/ymeiri/engram.git
-cd engram && cargo build --release
-# Binary: ./target/release/engram
+cd engram
+cargo build --release
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 ./target/release/engram "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
 ```
 
-> Pre-built binaries coming soon. See [Releases](https://github.com/ymeiri/engram/releases).
+From a published beta release artifact:
+
+```bash
+version=0.2.0-beta.1
+archive="engram-${version}-aarch64-apple-darwin.tar.gz"
+
+curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
+curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}.sha256"
+shasum -a 256 -c "${archive}.sha256"
+tar -xzf "${archive}"
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 "engram-${version}-aarch64-apple-darwin/engram" "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
+```
+
+See [Releases](https://github.com/ymeiri/engram/releases) for published artifacts.
 
 ### 2. Initialize and start
 
@@ -54,6 +77,9 @@ Add to your Claude Code config (`~/.claude.json`):
   }
 }
 ```
+
+This is an MCP setup example. Current beta behavior is validated on the local/Codex Brain Loop
+path; host-specific prompt, hook, and label parity remains follow-up work.
 
 For Cursor or Windsurf, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
 
@@ -203,12 +229,23 @@ engram work task create <project-id> "Migrate auth service" -p high
 ## Development
 
 ```bash
-cargo build                    # Build all crates
-cargo test                     # Run tests
-cargo clippy --all-targets -- -D warnings
+cargo build --locked           # Build all crates with the committed dependency graph
+cargo test --locked            # Run tests with the committed dependency graph
+cargo clippy --locked --all-targets -- -D warnings
 cargo fmt
+./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
+./scripts/package-release.sh   # Build a local release tarball, manifest, and checksum
+./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
+./scripts/beta-release-gate-report.sh  # Collect PR/CI/package gate evidence and release-review state
+./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
+./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; add --json for automation
+./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness; add --json for automation
 RUST_LOG=debug engram serve    # Verbose logging
 ```
+
+Embedding model files are cached under `~/.engram/cache/fastembed` by default. Set
+`ENGRAM_EMBED_CACHE_DIR` to use a pre-warmed or shared cache; upstream `FASTEMBED_CACHE_DIR` and
+`HF_HOME` are also honored.
 
 ## Technology
 
