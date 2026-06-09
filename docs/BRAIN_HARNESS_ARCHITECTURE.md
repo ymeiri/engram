@@ -3702,3 +3702,10 @@ knowledge and improve agent behavior.
      upload assets, accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close
      native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA
      gates.
+223. Treat T407 as post-release native-Claude preflight hardening, not native Claude validation.
+     `scripts/native-claude-gate-preflight.sh` now defaults its expected branch to `main` after
+     the beta merge and accepts `--expected-branch <branch>` for explicit non-main checks. The
+     canonical generated vault was recompiled from `2823/2833` to `2833/2833`, leaving only the
+     pre-existing native Claude process blocker. T407 does not launch native Claude, run `/hooks`,
+     signal processes, mutate settings/adapters, close native-Claude, effective-hook,
+     live-host-label, M6, lifecycle, release, or production/GA gates.

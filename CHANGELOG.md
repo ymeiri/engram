@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metadata drift.
 - `scripts/native-claude-gate-preflight.sh` collects read-only production-gate evidence for
   native Claude prompt-bearing, effective-hook, and live host-label proof readiness, with
-  machine-readable `--json` output for release and GA automation.
+  machine-readable `--json` output for release and GA automation. It defaults its post-release
+  branch expectation to `main` and supports `--expected-branch <branch>` for explicit non-main
+  checks.
 - `scripts/beta-release-gate-report.sh` now supports machine-readable `--json` output for
   release-owner evidence automation while preserving text output and evidence-only semantics. When
   hosted CI is verified as a pre-step blocker, the JSON report embeds the hosted verifier's
