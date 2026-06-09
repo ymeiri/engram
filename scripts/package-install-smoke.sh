@@ -30,6 +30,34 @@ run_step() {
     "$@"
 }
 
+sha256_file() {
+    shasum -a 256 "$1" | awk '{ print $1 }'
+}
+
+manifest_string_value() {
+    local manifest="$1"
+    local key="$2"
+    grep -F "\"${key}\":" "$manifest" |
+        head -n 1 |
+        sed 's/^[^:]*:"//; s/".*$//'
+}
+
+manifest_boolean_value() {
+    local manifest="$1"
+    local key="$2"
+    grep -F "\"${key}\":" "$manifest" |
+        head -n 1 |
+        sed 's/^[^:]*://; s/[,[:space:]]//g'
+}
+
+manifest_file_sha256() {
+    local manifest="$1"
+    local path="$2"
+    grep -F "\"path\":\"${path}\"" "$manifest" |
+        sed -n 's/.*"sha256":"\([0-9a-f]\{64\}\)".*/\1/p' |
+        head -n 1
+}
+
 choose_port() {
     if [[ -n "${SMOKE_PORT:-}" ]]; then
         printf '%s\n' "$SMOKE_PORT"
@@ -86,7 +114,8 @@ validate_archive_paths() {
         "$archive_name/README.md" \
         "$archive_name/LICENSE" \
         "$archive_name/CHANGELOG.md" \
-        "$archive_name/RELEASE_NOTES.md"
+        "$archive_name/RELEASE_NOTES.md" \
+        "$archive_name/MANIFEST.json"
     do
         if ! grep -Fxq "$required_member" "$listing"; then
             printf 'error: release archive is missing required member: %s\n' \
@@ -123,7 +152,8 @@ for required_path in \
     "$package_dir/README.md" \
     "$package_dir/LICENSE" \
     "$package_dir/CHANGELOG.md" \
-    "$package_dir/RELEASE_NOTES.md"
+    "$package_dir/RELEASE_NOTES.md" \
+    "$package_dir/MANIFEST.json"
 do
     if [[ ! -s "$required_path" ]]; then
         printf 'error: expected packaged file is missing or empty: %s\n' "$required_path" >&2
@@ -134,6 +164,74 @@ if [[ ! -x "$package_dir/engram" ]]; then
     printf 'error: packaged engram binary is not executable: %s\n' "$package_dir/engram" >&2
     exit 1
 fi
+
+manifest="$package_dir/MANIFEST.json"
+run_step "verify package manifest" true
+
+expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD:-$(git -C "$repo_root" rev-parse HEAD)}"
+expected_cargo_lock_sha256="${EXPECTED_CARGO_LOCK_SHA256:-$(sha256_file "$repo_root/Cargo.lock")}"
+if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" ]]; then
+    expected_tracked_changes_present="$EXPECTED_TRACKED_CHANGES_PRESENT"
+elif git -C "$repo_root" diff --quiet --ignore-submodules -- &&
+    git -C "$repo_root" diff --cached --quiet --ignore-submodules --; then
+    expected_tracked_changes_present=false
+else
+    expected_tracked_changes_present=true
+fi
+
+manifest_package="$(manifest_string_value "$manifest" package)"
+manifest_version="$(manifest_string_value "$manifest" version)"
+manifest_host_triple="$(manifest_string_value "$manifest" host_triple)"
+manifest_archive_name="$(manifest_string_value "$manifest" archive_name)"
+manifest_git_head="$(manifest_string_value "$manifest" git_head)"
+manifest_tracked_changes_present="$(manifest_boolean_value "$manifest" tracked_changes_present)"
+manifest_cargo_lock_sha256="$(manifest_string_value "$manifest" cargo_lock_sha256)"
+
+if [[ "$manifest_package" != "engram" ]]; then
+    printf 'error: manifest package mismatch: expected engram, got %s\n' \
+        "$manifest_package" >&2
+    exit 1
+fi
+if [[ "$manifest_version" != "$package_version" ]]; then
+    printf 'error: manifest version mismatch: expected %s, got %s\n' \
+        "$package_version" "$manifest_version" >&2
+    exit 1
+fi
+if [[ "$manifest_host_triple" != "$host_triple" ]]; then
+    printf 'error: manifest host triple mismatch: expected %s, got %s\n' \
+        "$host_triple" "$manifest_host_triple" >&2
+    exit 1
+fi
+if [[ "$manifest_archive_name" != "$archive_name" ]]; then
+    printf 'error: manifest archive name mismatch: expected %s, got %s\n' \
+        "$archive_name" "$manifest_archive_name" >&2
+    exit 1
+fi
+if [[ "$manifest_git_head" != "$expected_git_head" ]]; then
+    printf 'error: manifest git head mismatch: expected %s, got %s\n' \
+        "$expected_git_head" "$manifest_git_head" >&2
+    exit 1
+fi
+if [[ "$manifest_tracked_changes_present" != "$expected_tracked_changes_present" ]]; then
+    printf 'error: manifest tracked-changes flag mismatch: expected %s, got %s\n' \
+        "$expected_tracked_changes_present" "$manifest_tracked_changes_present" >&2
+    exit 1
+fi
+if [[ "$manifest_cargo_lock_sha256" != "$expected_cargo_lock_sha256" ]]; then
+    printf 'error: manifest Cargo.lock hash mismatch: expected %s, got %s\n' \
+        "$expected_cargo_lock_sha256" "$manifest_cargo_lock_sha256" >&2
+    exit 1
+fi
+
+for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
+    expected_sha="$(sha256_file "$package_dir/$package_file")"
+    manifest_sha="$(manifest_file_sha256 "$manifest" "$package_file")"
+    if [[ "$manifest_sha" != "$expected_sha" ]]; then
+        printf 'error: manifest hash mismatch for %s: expected %s, got %s\n' \
+            "$package_file" "$expected_sha" "$manifest_sha" >&2
+        exit 1
+    fi
+done
 
 mkdir -p "$work_dir/prefix/bin" "$work_dir/home" "$work_dir/data" "$embed_cache_dir"
 run_step "install binary in temp prefix" install -m 755 "$package_dir/engram" "$work_dir/prefix/bin/engram"

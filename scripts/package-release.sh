@@ -22,6 +22,10 @@ run_step() {
     "$@"
 }
 
+sha256_file() {
+    shasum -a 256 "$1" | awk '{ print $1 }'
+}
+
 run_step "build release binary" cargo build --locked --release -p engram-cli
 
 binary="$repo_root/target/release/engram"
@@ -44,6 +48,34 @@ cp "$binary" "$staging_dir/engram"
 cp README.md LICENSE CHANGELOG.md "$staging_dir/"
 cp docs/RELEASE_NOTES_V0_2_0_BETA_1.md "$staging_dir/RELEASE_NOTES.md"
 chmod 755 "$staging_dir/engram"
+
+git_head="$(git rev-parse HEAD)"
+if git diff --quiet --ignore-submodules -- && git diff --cached --quiet --ignore-submodules --; then
+    tracked_changes_present=false
+else
+    tracked_changes_present=true
+fi
+cargo_lock_sha256="$(sha256_file Cargo.lock)"
+
+manifest="$staging_dir/MANIFEST.json"
+cat >"$manifest" <<EOF
+{
+  "package":"engram",
+  "version":"${package_version}",
+  "host_triple":"${host_triple}",
+  "archive_name":"${archive_name}",
+  "git_head":"${git_head}",
+  "tracked_changes_present":${tracked_changes_present},
+  "cargo_lock_sha256":"${cargo_lock_sha256}",
+  "files":[
+    {"path":"engram","sha256":"$(sha256_file "$staging_dir/engram")"},
+    {"path":"README.md","sha256":"$(sha256_file "$staging_dir/README.md")"},
+    {"path":"LICENSE","sha256":"$(sha256_file "$staging_dir/LICENSE")"},
+    {"path":"CHANGELOG.md","sha256":"$(sha256_file "$staging_dir/CHANGELOG.md")"},
+    {"path":"RELEASE_NOTES.md","sha256":"$(sha256_file "$staging_dir/RELEASE_NOTES.md")"}
+  ]
+}
+EOF
 
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"

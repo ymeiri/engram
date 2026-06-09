@@ -51,14 +51,16 @@ incremental/debug settings, and docs.
 
 The local pre-publish packaging command is `./scripts/package-release.sh`. It builds the release
 binary, verifies that `engram --version` matches the workspace package version, and writes a tarball
-plus SHA-256 checksum under ignored `dist/`.
+plus SHA-256 checksum under ignored `dist/`. The archive includes `MANIFEST.json` with the package
+version, host triple, git head, tracked-change state, `Cargo.lock` hash, and payload file hashes.
 
 The local install-smoke command is `./scripts/package-install-smoke.sh`. It builds the package,
-verifies the checksum, extracts the archive, installs the packaged binary into a temporary prefix,
-confirms `PATH` resolution and `engram --version`, starts the packaged binary with
-`engram serve --http --memory`, and verifies `/health`. The smoke starts the server from the
-temporary install workspace and sets `ENGRAM_EMBED_CACHE_DIR` explicitly, so package validation no
-longer relies on the repository root as the process cwd for embedding model cache discovery.
+verifies the checksum, extracts the archive, verifies `MANIFEST.json`, installs the packaged binary
+into a temporary prefix, confirms `PATH` resolution and `engram --version`, starts the packaged
+binary with `engram serve --http --memory`, and verifies `/health`. The smoke starts the server
+from the temporary install workspace and sets `ENGRAM_EMBED_CACHE_DIR` explicitly, so package
+validation no longer relies on the repository root as the process cwd for embedding model cache
+discovery.
 
 The hosted-CI pre-step blocker verifier is
 `./scripts/verify-hosted-ci-prestep-blocker.sh <run-id>`. It is a read-only GitHub CLI check that
@@ -1006,7 +1008,16 @@ T397 adds `./scripts/verify-hosted-ci-prestep-blocker.sh` as a repeatable hosted
 condition check. The script uses `gh run view` and `jq` to assert that a run is for the exact
 expected head, workflow `CI`, event `pull_request`, conclusion `failure`, and exactly the expected
 jobs `Check`, `Test`, `Format`, `Clippy`, and `Docs`, with every job completed as failure and
-`steps=[]`. On current PR #3 head `2368919745cea3050217da9bdc8bd1d6a8435636`, it verified hosted
-run `27180509992` as a pre-step blocker. T397 does not accept the hosted-CI fallback, mark PR #3
-ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make
-the system production/GA ready.
+`steps=[]`. On final T397 PR #3 head `3d01a6ff2e539b23fffcd3666d11a4b5a137df98`, it verified
+hosted run `27181816572` as a pre-step blocker. T397 does not accept the hosted-CI fallback, mark
+PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or
+make the system production/GA ready.
+
+T398 adds release-package provenance to the tarball itself. `./scripts/package-release.sh` now
+writes `MANIFEST.json` with package/version/host metadata, git head, tracked-change state,
+`Cargo.lock` SHA-256, and payload hashes for `engram`, `README.md`, `LICENSE`, `CHANGELOG.md`, and
+`RELEASE_NOTES.md`. `./scripts/package-install-smoke.sh` requires and validates the manifest before
+installing the binary, and a corrupted-manifest temporary tarball failed closed on the `engram`
+hash mismatch. T398 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
+launch native Claude, prove hooks or host labels, mutate M6, or make the system production/GA
+ready.

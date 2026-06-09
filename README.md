@@ -234,8 +234,8 @@ cargo test --locked            # Run tests with the committed dependency graph
 cargo clippy --locked --all-targets -- -D warnings
 cargo fmt
 ./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
-./scripts/package-release.sh   # Build a local release tarball and checksum
-./scripts/package-install-smoke.sh  # Verify the tarball installs and serves /health
+./scripts/package-release.sh   # Build a local release tarball, manifest, and checksum
+./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 

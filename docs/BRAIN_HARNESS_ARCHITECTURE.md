@@ -3635,3 +3635,8 @@ knowledge and improve agent behavior.
      (`steps=[]`). This makes release-owner review repeatable, but it does not accept the
      hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close native-Claude,
      effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
+214. Treat T398 as release-artifact provenance hardening, not release approval. The release tarball
+     now includes `MANIFEST.json`, and the package install smoke validates manifest metadata and
+     payload hashes before install. This improves local and post-publish artifact trust, but it
+     does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close
+     native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
