@@ -8640,3 +8640,13 @@ signed-off head. The beta report's final remaining action now names
 `verify_published_release_install`. T406 does not create a release, upload assets, accept the
 hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or
 make Engram production/GA ready.
+
+T407 post-release native Claude preflight note:
+`docs/BRAIN_HARNESS_T407_POST_RELEASE_NATIVE_CLAUDE_PREFLIGHT_2026-06-09.md` records
+post-release production-gate preflight hardening. `./scripts/native-claude-gate-preflight.sh` now
+defaults its expected branch to `main` after the beta merge and accepts
+`--expected-branch <branch>` for explicit non-main checks. The canonical generated vault was
+recompiled from `2823/2833` to `2833/2833`, clearing the vault-count blocker. The preflight still
+fails closed because native Claude CLI processes are already running. T407 does not launch native
+Claude, run `/hooks`, signal processes, mutate settings/adapters, mutate M6, run lifecycle cleanup,
+or make Engram production/GA ready.

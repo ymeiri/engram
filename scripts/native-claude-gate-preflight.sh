@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-expected_branch="${EXPECTED_BRANCH:-yuval.meiri/memory-os-phase1}"
+expected_branch="${EXPECTED_BRANCH:-main}"
 expected_claude_bin="${CLAUDE_BIN:-/Users/yuval.meiri/.local/bin/claude}"
 expected_claude_target="${EXPECTED_CLAUDE_TARGET:-/Users/yuval.meiri/.local/share/claude/versions/2.1.169}"
 expected_claude_version="${EXPECTED_CLAUDE_VERSION:-2.1.169 (Claude Code)}"
@@ -23,6 +23,7 @@ Collect read-only evidence for the native Claude prompt-bearing, /hooks, and
 live host-label production gates.
 
 Options:
+  --expected-branch <branch>   Expected current branch (default: EXPECTED_BRANCH or main)
   --require-ready             Exit non-zero unless the gate is ready to execute
   --allow-worktree-changes    Allow tracked or extra untracked source changes
   --json                      Emit machine-readable JSON instead of text
@@ -64,6 +65,11 @@ print_json_summary() {
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --expected-branch)
+            [[ $# -ge 2 ]] || fail "--expected-branch requires a branch name"
+            expected_branch="$2"
+            shift 2
+            ;;
         --require-ready)
             require_ready=1
             shift
