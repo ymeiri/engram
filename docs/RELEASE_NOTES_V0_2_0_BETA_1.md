@@ -62,6 +62,13 @@ from the temporary install workspace and sets `ENGRAM_EMBED_CACHE_DIR` explicitl
 validation no longer relies on the repository root as the process cwd for embedding model cache
 discovery.
 
+The post-publish install verifier is `./scripts/verify-published-release-install.sh`. After a
+release is published, it downloads the expected archive and checksum from GitHub, then runs the
+same package install smoke against those downloaded assets with `SKIP_PACKAGE_BUILD=1`. It also
+supports `--asset-dir <path>` for pre-publish rehearsal against a local release-asset mirror. The
+verifier is evidence-only: it does not create a release, upload assets, mark PR #3 ready, merge,
+tag, publish, accept the hosted-CI fallback, or mutate release state.
+
 The hosted-CI pre-step blocker verifier is
 `./scripts/verify-hosted-ci-prestep-blocker.sh <run-id>`. It is a read-only GitHub CLI check that
 fails unless the run targets the expected head, is the `CI` pull-request workflow, contains exactly
@@ -107,7 +114,8 @@ tagging `v0.2.0-beta.1`, the release owner should confirm:
    expansion, and exhaustive telemetry/auth/ops/performance/cross-platform hardening remain
    deferred.
 6. After signoff, PR #3 may be marked ready, merged, tagged as `v0.2.0-beta.1`, published with the
-   release archive and checksum, and verified with the published install commands.
+   release archive and checksum, and verified with
+   `./scripts/verify-published-release-install.sh`.
 
 ## Beta Install Quickstart
 
@@ -1101,3 +1109,11 @@ Full evidence with verified hosted pre-step blocker, local CI, and package/insta
 `fallback_release_owner_decision_required` with review readiness true. Quick or skipped local
 evidence reports `evidence_incomplete`. T405 does not accept the hosted-CI fallback, mark PR #3
 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T406 adds `./scripts/verify-published-release-install.sh` for post-publish install verification.
+The script downloads the expected GitHub release archive and checksum, or validates a local
+`--asset-dir` mirror, then delegates to `./scripts/package-install-smoke.sh` with
+`SKIP_PACKAGE_BUILD=1` and manifest expectations for the signed-off head. T406 also renames the
+beta report's final remaining action to `verify_published_release_install`. T406 does not create a
+release, upload assets, accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
+mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

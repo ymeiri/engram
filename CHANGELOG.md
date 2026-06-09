@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   structured success object under `hosted_ci.verifier`; it also exposes the release gate state,
   release-owner-review readiness, hosted-CI fallback-decision requirement, and remaining release
   actions.
+- `scripts/verify-published-release-install.sh` verifies published release archive/checksum assets
+  by downloading them from GitHub and running the existing package install smoke against those
+  assets, with local `--asset-dir` validation for pre-publish rehearsal.
 - `scripts/verify-hosted-ci-prestep-blocker.sh` now supports machine-readable `--json` output for
   direct hosted-CI waiver-condition automation while preserving fail-closed checks.
 

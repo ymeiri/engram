@@ -8630,3 +8630,13 @@ automation hardening. `./scripts/beta-release-gate-report.sh` now reports `relea
 `remaining_release_actions` so quick/incomplete evidence is not confused with full exact-head
 release-owner-review evidence. T405 does not accept the hosted-CI fallback, mark PR #3 ready,
 merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T406 post-publish install verifier note:
+`docs/BRAIN_HARNESS_T406_PUBLISHED_RELEASE_INSTALL_VERIFIER_2026-06-09.md` records release
+verification hardening. `./scripts/verify-published-release-install.sh` downloads the expected
+GitHub release archive/checksum, or validates a local `--asset-dir` mirror, and delegates to
+`./scripts/package-install-smoke.sh` with `SKIP_PACKAGE_BUILD=1` and manifest expectations for the
+signed-off head. The beta report's final remaining action now names
+`verify_published_release_install`. T406 does not create a release, upload assets, accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or
+make Engram production/GA ready.

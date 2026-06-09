@@ -10,7 +10,7 @@ tool reports, CLI observed MCP tool checks, research-method checkpoints, beta re
 checklists, release archive path hardening, locked release reproducibility, repeatable native
 Claude gate preflight checks, structured native Claude preflight output, and structured beta
 release gate output, structured hosted CI blocker verification, and embedded hosted verifier
-evidence, and explicit beta release decision state
+evidence, explicit beta release decision state, and post-publish install verification
 Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3692,5 +3692,13 @@ knowledge and improve agent behavior.
      `hosted_ci_fallback_decision_required`, and JSON `remaining_release_actions`. These fields
      describe the next release-management decision; they do not perform or imply that decision.
      T405 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close
+     native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA
+     gates.
+222. Treat T406 as post-publish verification hardening, not release publication.
+     `scripts/verify-published-release-install.sh` verifies downloaded GitHub release assets, or a
+     local release-asset mirror, by running the existing package install smoke with package-build
+     disabled and manifest expectations fixed to the signed-off head. The beta report's final
+     release action now names `verify_published_release_install`. T406 does not create a release,
+     upload assets, accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close
      native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA
      gates.

@@ -241,7 +241,7 @@ if [[ "$json_output" == "1" ]]; then
                     "merge_pr",
                     "tag_v0.2.0-beta.1",
                     "publish_release_artifacts",
-                    "verify_published_install"
+                    "verify_published_release_install"
                 ]
             elif $state == "hosted_ci_passing_release_owner_review_required" then
                 [
@@ -250,7 +250,7 @@ if [[ "$json_output" == "1" ]]; then
                     "merge_pr",
                     "tag_v0.2.0-beta.1",
                     "publish_release_artifacts",
-                    "verify_published_install"
+                    "verify_published_release_install"
                 ]
             else
                 [
