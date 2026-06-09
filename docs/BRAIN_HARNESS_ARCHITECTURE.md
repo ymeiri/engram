@@ -3622,3 +3622,10 @@ knowledge and improve agent behavior.
      resolution changes fail validation instead of changing local, hosted, or package build inputs.
      This does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close
      native-Claude, effective-hook, live-host-label, M6, lifecycle, or production/GA gates.
+212. Treat T396 as Claude harness non-overclaim hardening, not effective-hook proof. Static
+     Claude Code harness status can still report `ready=true` when generated adapters and settings
+     entries are present, but the report now warns that live effective-hook visibility still
+     requires Claude Code `/hooks` verification before claiming native Claude hook behavior. This
+     does not launch native Claude, run `/hooks`, mutate real `.claude` settings, accept the
+     hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close effective-hook,
+     live-host-label, M6, lifecycle, or production/GA gates.

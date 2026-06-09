@@ -27,6 +27,11 @@ const CLAUDE_HOOK_COMMAND: &str =
     "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"";
 const CLAUDE_SESSION_END_HOOK_COMMAND: &str =
     "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"";
+const CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING: &str = concat!(
+    "Claude Code static readiness confirms generated adapter files and settings entries; ",
+    "it does not prove live effective hook visibility. Verify effective hook configuration with ",
+    "Claude Code /hooks before claiming native Claude hook behavior."
+);
 
 /// Options for harness adapter installation.
 #[derive(Debug, Clone, Copy, Default)]
@@ -279,6 +284,9 @@ impl HarnessService {
                 &settings,
                 &mut warnings,
             );
+            if ready {
+                warnings.push(CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING.to_string());
+            }
         }
 
         Ok(HarnessStatusReport {
@@ -3120,6 +3128,33 @@ mod tests {
             .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
             .unwrap();
         assert!(status.ready, "{:?}", status.warnings);
+    }
+
+    #[test]
+    fn claude_ready_status_warns_effective_hooks_need_live_hooks_proof() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install_with_options(
+                HarnessKind::ClaudeCode,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::Project,
+                },
+            )
+            .unwrap();
+
+        let status = service
+            .status(HarnessKind::ClaudeCode, Some(root.path()), &[])
+            .unwrap();
+
+        assert!(status.ready, "{:?}", status.warnings);
+        assert!(status.warnings.iter().any(|warning| {
+            warning.contains("does not prove live effective hook visibility")
+                && warning.contains("Claude Code /hooks")
+        }));
     }
 
     #[test]

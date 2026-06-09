@@ -239,6 +239,38 @@ async fn test_mcp_harness_status_reports_missing_observed_mcp_tools() {
 }
 
 #[tokio::test]
+async fn test_mcp_harness_claude_ready_warns_effective_hooks_need_live_hooks_proof() {
+    let state = ToolState::new();
+    let root = tempdir().expect("tempdir should be created");
+
+    let mut install = request("install");
+    install.harness = Some("claude_code".to_string());
+    install.root = Some(root.path().display().to_string());
+    install.write = Some(true);
+    tools::harness_new(&state, install)
+        .await
+        .expect("install should work");
+
+    let mut status = request("status");
+    status.harness = Some("claude_code".to_string());
+    status.root = Some(root.path().display().to_string());
+    let response = tools::harness_new(&state, status)
+        .await
+        .expect("status should work");
+    let json = parse_json(&response);
+
+    assert_eq!(json["ready"], true);
+    let warnings = json["warnings"]
+        .as_array()
+        .expect("warnings should be an array");
+    assert!(warnings.iter().any(|warning| {
+        let warning = warning.as_str().expect("warning should be a string");
+        warning.contains("does not prove live effective hook visibility")
+            && warning.contains("Claude Code /hooks")
+    }));
+}
+
+#[tokio::test]
 async fn test_mcp_harness_hook_event_returns_claude_hook_json() {
     let state = setup_tool_state().await;
 

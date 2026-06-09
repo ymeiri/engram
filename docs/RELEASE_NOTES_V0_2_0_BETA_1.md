@@ -983,3 +983,13 @@ archive creation. Validation passed locked metadata/pkgid checks, script syntax 
 check/clippy, package/install smoke, and the full locked `./scripts/local-ci.sh`. T395 does not
 accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove
 hooks or host labels, mutate M6, or make the system production/GA ready.
+
+T396 hardens Claude Code harness readiness reporting against native-hook overclaims. A statically
+ready Claude Code status report still returns `ready=true` when generated adapter files and
+settings entries are present, but it now also warns that static readiness does not prove live
+effective-hook visibility and that Claude Code `/hooks` verification is still required before
+claiming native Claude hook behavior. Focused service and MCP tests prove the warning is present
+without running native Claude, executing `/hooks`, or mutating real project `.claude` settings.
+Full local CI and package-install smoke passed for the T396 head. T396 does not accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
+host labels, mutate M6, or make the system production/GA ready.
