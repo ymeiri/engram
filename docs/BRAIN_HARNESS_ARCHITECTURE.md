@@ -8,7 +8,8 @@ scoped obligation/telemetry/orient MCP metadata, native-Claude attribution prefl
 exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
 tool reports, CLI observed MCP tool checks, research-method checkpoints, beta release signoff
 checklists, release archive path hardening, locked release reproducibility, repeatable native
-Claude gate preflight checks, and structured native Claude preflight output
+Claude gate preflight checks, structured native Claude preflight output, and structured beta
+release gate output
 Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3662,4 +3663,11 @@ knowledge and improve agent behavior.
      explicit non-action flags in a machine-readable object. Strict JSON mode still fails closed
      while blocked. T401 does not launch native Claude, run `/hooks`, signal processes, accept the
      hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close native-Claude,
+     effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
+218. Treat T402 as structured beta release evidence hardening, not release acceptance. The beta
+     release gate report now supports `--json`, exposing branch/upstream/head state, tracked source
+     state, PR draft/merge/check state, hosted CI state, local CI state, package/install smoke
+     state, release-owner decision requirement, and explicit non-release-action status. JSON mode
+     sends validation logs to stderr so stdout remains parseable. T402 does not accept the
+     hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close native-Claude,
      effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.

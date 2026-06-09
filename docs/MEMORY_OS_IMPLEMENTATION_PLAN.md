@@ -8595,3 +8595,12 @@ preserves fail-closed behavior and exits `2` while blocked. T401 also corrects t
 evidence head to pushed commit `197ddc67c4bf65baad838919e7b992af31593539`. T401 does not launch
 native Claude, run `/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3 ready,
 merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T402 beta release gate JSON note:
+`docs/BRAIN_HARNESS_T402_BETA_RELEASE_GATE_JSON_2026-06-09.md` records structured-output hardening
+for the beta release-owner evidence report. `./scripts/beta-release-gate-report.sh --json` now
+emits branch/upstream/head state, tracked source state, PR state, hosted CI state, local CI state,
+package/install smoke state, `release_owner_decision_required`, and `release_actions_performed`.
+In JSON mode validation logs go to stderr so stdout stays parseable. T402 does not accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make
+Engram production/GA ready.

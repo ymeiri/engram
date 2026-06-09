@@ -75,6 +75,8 @@ the tracked tree is clean, PR #3 points at the local head, hosted CI is either g
 pre-step blocker is verified, and, unless `--quick` or skip flags are used, the local CI and
 package/install smoke commands pass on the same head. It is evidence for release-owner review only;
 it does not accept the waiver, mark the PR ready, merge, tag, publish, or change release scope.
+Add `--json` to emit the final evidence object on stdout for automation; validation logs are routed
+to stderr in JSON mode so stdout remains parseable.
 
 ### Release-Owner Signoff Checklist
 
@@ -1061,3 +1063,10 @@ doctor summaries, snippet-only dry-run state, obligations, vault state, native C
 blockers, and explicit non-action flags. Strict JSON mode still exits `2` while blocked. T401 does
 not launch native Claude, run `/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3
 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T402 adds machine-readable `--json` output to `./scripts/beta-release-gate-report.sh`. JSON mode
+emits branch/upstream/head state, tracked source state, PR draft/merge/check state, hosted CI state,
+local CI state, package/install smoke state, `release_owner_decision_required`, and
+`release_actions_performed`. Step logs go to stderr in JSON mode so stdout remains parseable. T402
+does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run
+lifecycle cleanup, or make Engram production/GA ready.

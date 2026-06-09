@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/native-claude-gate-preflight.sh` collects read-only production-gate evidence for
   native Claude prompt-bearing, effective-hook, and live host-label proof readiness, with
   machine-readable `--json` output for release and GA automation.
+- `scripts/beta-release-gate-report.sh` now supports machine-readable `--json` output for
+  release-owner evidence automation while preserving text output and evidence-only semantics.
 
 ## [0.2.0-beta.1] - 2026-06-07
 

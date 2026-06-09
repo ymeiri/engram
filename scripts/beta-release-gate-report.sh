@@ -9,6 +9,7 @@ hosted_run_id="${HOSTED_RUN_ID:-}"
 run_local_ci=1
 run_package_smoke=1
 allow_tracked_changes=0
+json_output=0
 
 usage() {
     cat <<'USAGE'
@@ -23,6 +24,7 @@ Options:
   --skip-local-ci               Skip ./scripts/local-ci.sh
   --skip-package-smoke          Skip ./scripts/package-install-smoke.sh
   --allow-tracked-changes       Allow tracked working-tree/index changes during development
+  --json                        Emit final evidence as machine-readable JSON
   -h, --help                    Show this help
 
 This script is evidence only. It does not accept the hosted-CI fallback, mark a
@@ -43,8 +45,13 @@ require_tool() {
 run_step() {
     local name="$1"
     shift
-    printf '\n==> %s\n' "$name"
-    "$@"
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> %s\n' "$name" >&2
+        "$@" >&2
+    else
+        printf '\n==> %s\n' "$name"
+        "$@"
+    fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -74,6 +81,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --allow-tracked-changes)
             allow_tracked_changes=1
+            shift
+            ;;
+        --json)
+            json_output=1
             shift
             ;;
         -h | --help)
@@ -158,26 +169,91 @@ fi
 if [[ "$run_local_ci" == "1" ]]; then
     run_step "local CI-equivalent validation" "$repo_root/scripts/local-ci.sh"
 else
-    printf '\n==> local CI-equivalent validation\nskipped\n'
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> local CI-equivalent validation\nskipped\n' >&2
+    else
+        printf '\n==> local CI-equivalent validation\nskipped\n'
+    fi
 fi
 
 if [[ "$run_package_smoke" == "1" ]]; then
     run_step "package/install smoke validation" "$repo_root/scripts/package-install-smoke.sh"
 else
-    printf '\n==> package/install smoke validation\nskipped\n'
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> package/install smoke validation\nskipped\n' >&2
+    else
+        printf '\n==> package/install smoke validation\nskipped\n'
+    fi
 fi
 
-printf '\nBeta release gate evidence collected:\n'
-printf '  branch: %s\n' "$branch"
-printf '  upstream: %s (ahead=%s behind=%s)\n' "$upstream" "$ahead_count" "$behind_count"
-printf '  head: %s\n' "$head_sha"
-printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
-printf '  pr: #%s %s\n' "$pr_number" "$pr_url"
-printf '  pr_draft: %s\n' "$pr_draft"
-printf '  pr_merge_state: %s\n' "$pr_merge_state"
-printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
-printf '  local_ci: %s\n' "$([[ "$run_local_ci" == "1" ]] && printf 'passed' || printf 'skipped')"
-printf '  package_install_smoke: %s\n' \
-    "$([[ "$run_package_smoke" == "1" ]] && printf 'passed' || printf 'skipped')"
-printf '  release_owner_decision_required: true\n'
-printf '  release_actions_performed: false\n'
+local_ci_state="$([[ "$run_local_ci" == "1" ]] && printf 'passed' || printf 'skipped')"
+package_smoke_state="$([[ "$run_package_smoke" == "1" ]] && printf 'passed' || printf 'skipped')"
+
+if [[ "$json_output" == "1" ]]; then
+    checks_json="$(
+        jq -R -s '
+            split("\n")
+            | map(select(length > 0) | split("\t") | {
+                name: .[0],
+                status: .[1],
+                conclusion: .[2]
+            })
+        ' "$checks_file"
+    )"
+
+    jq -n \
+        --arg branch "$branch" \
+        --arg upstream "$upstream" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg pr_number "$pr_number" \
+        --arg pr_url "$pr_url" \
+        --arg pr_draft "$pr_draft" \
+        --arg pr_merge_state "$pr_merge_state" \
+        --arg hosted_ci_state "$hosted_ci_state" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg local_ci "$local_ci_state" \
+        --arg package_install_smoke "$package_smoke_state" \
+        --argjson checks "$checks_json" \
+        '{
+            branch: $branch,
+            upstream: {
+                name: $upstream,
+                ahead: ($ahead | tonumber),
+                behind: ($behind | tonumber)
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            pr: {
+                number: ($pr_number | tonumber),
+                url: $pr_url,
+                draft: ($pr_draft == "true"),
+                merge_state: $pr_merge_state,
+                checks: $checks
+            },
+            hosted_ci: {
+                state: $hosted_ci_state,
+                run_id: (if $hosted_run_id == "" then null else $hosted_run_id end)
+            },
+            local_ci: $local_ci,
+            package_install_smoke: $package_install_smoke,
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+else
+    printf '\nBeta release gate evidence collected:\n'
+    printf '  branch: %s\n' "$branch"
+    printf '  upstream: %s (ahead=%s behind=%s)\n' "$upstream" "$ahead_count" "$behind_count"
+    printf '  head: %s\n' "$head_sha"
+    printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
+    printf '  pr: #%s %s\n' "$pr_number" "$pr_url"
+    printf '  pr_draft: %s\n' "$pr_draft"
+    printf '  pr_merge_state: %s\n' "$pr_merge_state"
+    printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
+    printf '  local_ci: %s\n' "$local_ci_state"
+    printf '  package_install_smoke: %s\n' "$package_smoke_state"
+    printf '  release_owner_decision_required: true\n'
+    printf '  release_actions_performed: false\n'
+fi
