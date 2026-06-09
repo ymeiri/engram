@@ -963,3 +963,13 @@ checklist names the exact local evidence, hosted-CI waiver condition, known beta
 manual release actions required after signoff. It does not accept the hosted-CI fallback, mark PR #3
 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make the
 system production/GA ready.
+
+T394 hardens `./scripts/package-install-smoke.sh` for release-artifact validation. Before extracting
+the tarball, the smoke now rejects empty archive listings, absolute or parent-directory paths,
+members outside the expected `engram-<version>-<host-triple>/` root, and archives missing required
+package members. The `/health` checks now use fixed-string matching. The valid package smoke passed,
+including checksum verification, archive-path inspection, temp-prefix install,
+`engram 0.2.0-beta.1`, and packaged HTTP `/health`; a synthetic wrong-root archive failed closed
+before extraction. T394 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag,
+publish, launch native Claude, prove hooks or host labels, mutate M6, or make the system
+production/GA ready.

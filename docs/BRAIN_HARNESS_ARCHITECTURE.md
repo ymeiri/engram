@@ -6,8 +6,8 @@ effective-hook successor packet, project-scoped lint, exact lifecycle maintenanc
 beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks,
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
 exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
-tool reports, CLI observed MCP tool checks, research-method checkpoints, and beta release signoff
-checklists
+tool reports, CLI observed MCP tool checks, research-method checkpoints, beta release signoff
+checklists, and release archive path hardening
 Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3609,5 +3609,11 @@ knowledge and improve agent behavior.
 209. Treat T393 as release-gate clarification, not release approval. The signoff checklist names
      the exact local CI/package evidence, hosted-CI waiver condition, known beta limitations, and
      post-signoff ready/merge/tag/publish actions, but it does not accept the waiver, mark PR #3
+     ready, merge, tag, publish, or close native-Claude, effective-hook, live-host-label, M6,
+     lifecycle, or production/GA gates.
+210. Treat T394 as release-artifact verification hardening, not release approval. The package
+     install smoke now validates the archive member list before extraction and fails closed when
+     members are outside the expected package root or required files are absent. This improves the
+     local/published artifact check path but does not accept the hosted-CI fallback, mark PR #3
      ready, merge, tag, publish, or close native-Claude, effective-hook, live-host-label, M6,
      lifecycle, or production/GA gates.

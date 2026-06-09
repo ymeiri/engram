@@ -48,6 +48,54 @@ choose_port() {
     return 1
 }
 
+validate_archive_paths() {
+    local archive="$1"
+    local listing="$2"
+    local member
+    local required_member
+
+    tar -tzf "$archive" >"$listing"
+    if [[ ! -s "$listing" ]]; then
+        printf 'error: release archive is empty: %s\n' "$archive" >&2
+        exit 1
+    fi
+
+    while IFS= read -r member; do
+        if [[ -z "$member" ]]; then
+            printf 'error: release archive contains an empty member path\n' >&2
+            exit 1
+        fi
+        if [[ "$member" = /* || "$member" == "../"* || "$member" == *"/../"* ||
+            "$member" == "." || "$member" == ".." || "$member" == *"/.." ]]; then
+            printf 'error: release archive contains unsafe member path: %s\n' "$member" >&2
+            exit 1
+        fi
+
+        case "$member" in
+            "$archive_name" | "$archive_name/" | "$archive_name/"*) ;;
+            *)
+                printf 'error: release archive member is outside expected root %s: %s\n' \
+                    "$archive_name" "$member" >&2
+                exit 1
+                ;;
+        esac
+    done <"$listing"
+
+    for required_member in \
+        "$archive_name/engram" \
+        "$archive_name/README.md" \
+        "$archive_name/LICENSE" \
+        "$archive_name/CHANGELOG.md" \
+        "$archive_name/RELEASE_NOTES.md"
+    do
+        if ! grep -Fxq "$required_member" "$listing"; then
+            printf 'error: release archive is missing required member: %s\n' \
+                "$required_member" >&2
+            exit 1
+        fi
+    done
+}
+
 if [[ "${SKIP_PACKAGE_BUILD:-0}" != "1" ]]; then
     run_step "build release package" "$repo_root/scripts/package-release.sh"
 fi
@@ -65,6 +113,8 @@ cp "$tarball" "$checksum" "$work_dir/"
 cd "$work_dir"
 
 run_step "verify checksum" shasum -a 256 -c "$(basename "$checksum")"
+run_step "inspect archive paths" validate_archive_paths "$(basename "$tarball")" \
+    "$work_dir/archive-contents.txt"
 run_step "extract archive" tar -xzf "$(basename "$tarball")"
 
 package_dir="$work_dir/$archive_name"
@@ -140,9 +190,9 @@ if [[ ! -s "$health_json" ]]; then
     exit 1
 fi
 
-grep -q '"status":"ok"' "$health_json"
-grep -q '"service":"engram"' "$health_json"
-grep -q "\"version\":\"${package_version}\"" "$health_json"
+grep -Fq '"status":"ok"' "$health_json"
+grep -Fq '"service":"engram"' "$health_json"
+grep -Fq "\"version\":\"${package_version}\"" "$health_json"
 
 printf '\nPackage install smoke passed:\n'
 printf '  %s\n' "$tarball"
