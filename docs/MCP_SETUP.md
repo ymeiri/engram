@@ -1,18 +1,59 @@
 # MCP Setup Guide
 
-Ready-made configurations for connecting engram to your AI coding agent.
+Ready-made configurations for connecting engram to supported local AI coding agents.
 
-> **Beta scope:** the current beta is validated for the local/Codex Brain Loop path. The
-> configurations below show MCP setup for common hosts, but full multi-host parity, native
-> Claude prompt-bearing proof, live host-label proof, and effective-hook proof are still
-> follow-up work.
+> **Beta scope:** v0.2.0-beta.2 supports guided setup for Claude Code, Codex, and Cursor. Other
+> MCP-compatible hosts may work with `engram serve`, but they are not part of this beta support
+> matrix.
 
-The sections below are connection examples. They are not proof of host behavioral parity,
-prompt-bearing native execution, lifecycle hook correctness, or host-label propagation.
+## Recommended Setup
+
+Run the setup wizard:
+
+```bash
+engram setup
+```
+
+For automation or docs, pass the agent explicitly. Setup is a dry-run unless `--write` is present:
+
+```bash
+engram setup --agent claude-code
+engram setup --agent codex
+engram setup --agent cursor
+```
+
+After reviewing the planned files:
+
+```bash
+engram setup --agent claude-code --write
+engram setup --agent codex --write
+engram setup --agent cursor --write
+```
+
+Claude Code exposes lifecycle hooks, so setup can write hook files and merge Claude settings.
+Codex and Cursor use generated skills/instructions in this beta; they still need MCP configured so
+the agent can call Engram tools.
+
+By default, setup writes under your home directory. Use `--root .` from a repository if you want
+project-local agent files.
 
 ## Claude Code
 
-Add to `~/.claude.json`:
+Guided setup:
+
+```bash
+engram setup --agent claude-code
+engram setup --agent claude-code --write
+```
+
+By default, Claude settings are written to `.claude/settings.json` when `--write` is approved. For
+personal, gitignored settings:
+
+```bash
+engram setup --agent claude-code --write --settings-target settings.local.json
+```
+
+Manual MCP configuration in `~/.claude.json`:
 
 ```json
 {
@@ -25,7 +66,7 @@ Add to `~/.claude.json`:
 }
 ```
 
-For project-specific memory (isolated data per project):
+For project-specific memory:
 
 ```json
 {
@@ -38,9 +79,41 @@ For project-specific memory (isolated data per project):
 }
 ```
 
+## Codex
+
+Guided setup installs Codex skills under `.codex/skills/`:
+
+```bash
+engram setup --agent codex
+engram setup --agent codex --write
+```
+
+Codex MCP configuration uses TOML. Add Engram to the Codex config:
+
+```toml
+[mcp_servers.engram]
+command = "/absolute/path/to/engram"
+args = ["serve"]
+```
+
+For project-specific memory:
+
+```toml
+[mcp_servers.engram]
+command = "/absolute/path/to/engram"
+args = ["serve", "--project", "my-project"]
+```
+
 ## Cursor
 
-Add to your Cursor MCP configuration (Settings > MCP):
+Guided setup installs Cursor Agent skills under `.cursor/skills/`:
+
+```bash
+engram setup --agent cursor
+engram setup --agent cursor --write
+```
+
+Add Engram to Cursor's MCP configuration:
 
 ```json
 {
@@ -53,67 +126,68 @@ Add to your Cursor MCP configuration (Settings > MCP):
 }
 ```
 
-## Windsurf
+## First Orient
 
-Add to your Windsurf MCP configuration:
+After setup, restart the agent and ask it to run `orient` for the current project. If no documents
+are indexed yet, Engram will tell the agent to ask which existing docs, runbooks, notes, ADRs, or
+knowledge folders should be ingested.
 
-```json
-{
-  "mcpServers": {
-    "engram": {
-      "command": "/absolute/path/to/engram",
-      "args": ["serve"]
-    }
-  }
-}
+Preview ingestion before writing:
+
+```bash
+engram index --plan ./docs
+engram index ./docs --recursive
 ```
+
+Agents can also use the MCP `docs` tool with `action="plan"` before indexing approved paths.
 
 ## Multi-Session Setup
 
-If you run multiple agents on the same project, engram automatically shares knowledge through a background daemon:
+If you run multiple agents on the same project, engram shares knowledge through a background daemon:
 
 ```
 Agent 1 (Claude Code)  ──┐
                           ├── HTTP ──> engram daemon ──> SurrealDB
-Agent 2 (Cursor)       ──┘
+Agent 2 (Codex/Cursor) ──┘
 ```
 
-No extra configuration needed. `engram serve` auto-starts the daemon on first launch and subsequent agents connect automatically.
-Daemon sharing is supported by the server/proxy path; host-specific prompt, hook, and label
-behavior remains a separate beta follow-up unless validated for that host.
+No extra daemon configuration is required. `engram serve` auto-starts the daemon on first launch and
+subsequent agents connect automatically.
 
 ### Project Isolation
 
 Each `--project` flag creates an isolated daemon with separate data:
 
 ```bash
-# These two agents share memory:
+# These agents share memory:
 engram serve --project backend
 
 # This agent has its own isolated memory:
 engram serve --project frontend
 ```
 
-Daemon files are stored in `~/.engram/` (global) or `~/.engram/projects/<name>/` (per-project).
+Daemon files are stored in `~/.engram/` globally or `~/.engram/projects/<name>/` per project.
 
 ## Verify Setup
 
-After configuring your agent, test the connection:
+After configuring your agent:
 
-1. Ask your agent: *"Remember that this project uses OAuth for authentication."*
-2. Start a **new session** (close and reopen the agent).
-3. Ask: *"What authentication approach does this project use?"*
+1. Ask your agent to run `orient` for the current project.
+2. Ask it to remember a small project decision.
+3. Start a new session.
+4. Ask it to recall that decision.
 
-If engram is working, the agent recalls your OAuth decision from step 1.
+If engram is working, the agent can use its MCP tools to recall the stored decision.
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| Agent doesn't see engram | Restart the MCP client after editing config |
-| Permission denied | Use an absolute path to the binary; ensure it's executable |
-| Server won't start | Run `engram serve` directly in terminal to see errors |
+| Agent does not see engram | Restart the MCP client after editing config |
+| Permission denied | Use an absolute path to the binary and ensure it is executable |
+| Server will not start | Run `engram serve` directly in a terminal to see errors |
 | Daemon port conflict | Check `engram daemon status`; stop with `engram daemon stop` |
+| First semantic call pauses | Run `engram warmup embeddings` to prepare the local model cache |
 | Need verbose logs | `RUST_LOG=debug engram serve` |
 
 ## Environment Variables

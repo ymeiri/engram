@@ -6,6 +6,7 @@ cd "$repo_root"
 
 pr_number="${PR_NUMBER:-3}"
 hosted_run_id="${HOSTED_RUN_ID:-}"
+package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 run_local_ci=1
 run_package_smoke=1
 allow_tracked_changes=0
@@ -15,7 +16,7 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/beta-release-gate-report.sh [options]
 
-Collect release-owner evidence for the scoped local/Codex beta gate.
+Collect release-owner evidence for the current beta gate.
 
 Options:
   --pr <number>                 GitHub PR number to inspect (default: PR_NUMBER or 3)
@@ -234,13 +235,15 @@ if [[ "$json_output" == "1" ]]; then
     remaining_release_actions_json="$(
         jq -n \
             --arg state "$release_gate_state" \
+            --arg version "$package_version" \
             'if $state == "fallback_release_owner_decision_required" then
                 [
                     "release_owner_accept_hosted_ci_fallback_or_restore_hosted_ci",
                     "mark_pr_ready",
                     "merge_pr",
-                    "tag_v0.2.0-beta.1",
+                    "tag_v\($version)",
                     "publish_release_artifacts",
+                    "publish_homebrew_tap",
                     "verify_published_release_install"
                 ]
             elif $state == "hosted_ci_passing_release_owner_review_required" then
@@ -248,8 +251,9 @@ if [[ "$json_output" == "1" ]]; then
                     "release_owner_approve_release",
                     "mark_pr_ready",
                     "merge_pr",
-                    "tag_v0.2.0-beta.1",
+                    "tag_v\($version)",
                     "publish_release_artifacts",
+                    "publish_homebrew_tap",
                     "verify_published_release_install"
                 ]
             else

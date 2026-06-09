@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-beta.2] - 2026-06-09
+
 ### Added
+- `engram setup` provides a guided, dry-run-first setup path for Claude Code, Codex, and Cursor.
+- First `orient` now prompts the agent to ask which existing docs, runbooks, notes, ADRs, or
+  knowledge folders to ingest when the document index is empty.
+- Homebrew packaging support for macOS Apple Silicon beta installs.
 - `engram warmup embeddings` prepares and verifies the local fastembed ONNX model cache before
   first agent use or offline/sandboxed work.
 - `engram daemon status` now reports daemon spawn provenance when available, including the
@@ -33,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pull_request`.
 
 ### Changed
+- README, MCP setup, security, and contribution docs now describe the beta install/setup path and
+  open-source project expectations.
 - Cold embedding-model initialization now prints an explicit first-run download/cache warning before
   fastembed loads the model.
 - RocksDB lock conflicts now include recovery guidance and daemon startup failures include recent

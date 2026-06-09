@@ -55,6 +55,7 @@ use engram_index::{
 };
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
+use std::io::Write;
 use time::OffsetDateTime;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -135,6 +136,29 @@ enum Commands {
     Warmup {
         #[command(subcommand)]
         command: WarmupCommands,
+    },
+
+    /// Configure engram for a local AI agent
+    Setup {
+        /// Agent harness to configure
+        #[arg(long, value_enum)]
+        agent: Option<SetupAgentArg>,
+
+        /// Install root, defaults to home directory
+        #[arg(long)]
+        root: Option<String>,
+
+        /// Actually write adapter and hook files; omitted means dry-run
+        #[arg(long)]
+        write: bool,
+
+        /// Skip interactive confirmation; requires --agent
+        #[arg(long)]
+        yes: bool,
+
+        /// Claude Code settings target when writing settings
+        #[arg(long, value_parser = parse_harness_settings_target, default_value = "settings.json")]
+        settings_target: HarnessSettingsTarget,
     },
 
     /// Add an entity to the knowledge base
@@ -1960,6 +1984,41 @@ impl From<HarnessKindArg> for HarnessKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum SetupAgentArg {
+    ClaudeCode,
+    Codex,
+    Cursor,
+}
+
+impl SetupAgentArg {
+    fn label(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "Claude Code",
+            Self::Codex => "Codex",
+            Self::Cursor => "Cursor",
+        }
+    }
+
+    fn cli_value(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "claude-code",
+            Self::Codex => "codex",
+            Self::Cursor => "cursor",
+        }
+    }
+}
+
+impl From<SetupAgentArg> for HarnessKind {
+    fn from(value: SetupAgentArg) -> Self {
+        match value {
+            SetupAgentArg::ClaudeCode => Self::ClaudeCode,
+            SetupAgentArg::Codex => Self::Codex,
+            SetupAgentArg::Cursor => Self::Cursor,
+        }
+    }
+}
+
 fn parse_harness_settings_target(value: &str) -> Result<HarnessSettingsTarget, String> {
     HarnessSettingsTarget::parse(value)
 }
@@ -3732,6 +3791,105 @@ fn print_harness_install(report: &HarnessInstallReport) {
             println!("  - {warning}");
         }
     }
+}
+
+fn resolve_setup_agent(agent: Option<SetupAgentArg>, yes: bool) -> Result<SetupAgentArg> {
+    match agent {
+        Some(agent) => Ok(agent),
+        None if yes => Err(anyhow::anyhow!(
+            "--yes requires --agent so setup can run non-interactively"
+        )),
+        None => prompt_setup_agent(),
+    }
+}
+
+fn prompt_setup_agent() -> Result<SetupAgentArg> {
+    println!("Select the AI agent to configure:");
+    println!("  1. Claude Code");
+    println!("  2. Codex");
+    println!("  3. Cursor");
+    print!("Agent [1-3]: ");
+    std::io::stdout().flush()?;
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    match input.trim().to_ascii_lowercase().as_str() {
+        "1" | "claude" | "claude-code" | "claude code" => Ok(SetupAgentArg::ClaudeCode),
+        "2" | "codex" => Ok(SetupAgentArg::Codex),
+        "3" | "cursor" => Ok(SetupAgentArg::Cursor),
+        other => Err(anyhow::anyhow!(
+            "Unsupported setup agent '{}'. Choose claude-code, codex, or cursor.",
+            other
+        )),
+    }
+}
+
+fn confirm_setup_write(agent: SetupAgentArg) -> Result<bool> {
+    print!(
+        "Write engram adapter/hook configuration for {}? [y/N]: ",
+        agent.label()
+    );
+    std::io::stdout().flush()?;
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    Ok(matches!(
+        input.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
+
+fn print_setup_next_steps(agent: SetupAgentArg, wrote_files: bool) {
+    println!();
+    println!("Next steps:");
+    if wrote_files {
+        println!(
+            "  1. Restart {} so it reloads the Engram adapter configuration.",
+            agent.label()
+        );
+    } else {
+        println!(
+            "  1. Review the dry-run above, then run `engram setup --agent {} --write`",
+            agent.cli_value()
+        );
+        println!("     with the same --root value if you supplied one.");
+    }
+    println!("  2. In your agent, ask it to run `orient` for the current project.");
+    println!(
+        "  3. If no documents are indexed yet, orient will ask which existing knowledge to ingest."
+    );
+    println!(
+        "  4. Preview ingestion with `engram index --plan <path>`, then index approved paths."
+    );
+}
+
+fn run_setup(
+    agent: Option<SetupAgentArg>,
+    root: Option<String>,
+    write: bool,
+    yes: bool,
+    settings_target: HarnessSettingsTarget,
+) -> Result<()> {
+    let agent = resolve_setup_agent(agent, yes)?;
+    let mut write = write;
+    if write && !yes && !confirm_setup_write(agent)? {
+        println!("Write declined; showing the dry-run plan instead.");
+        write = false;
+    }
+
+    let service = HarnessService::new();
+    let report = service.install_with_options(
+        agent.into(),
+        root.as_deref().map(std::path::Path::new),
+        HarnessInstallOptions {
+            write,
+            adopt_user_owned: false,
+            settings_target,
+        },
+    )?;
+    print_harness_install(&report);
+    print_setup_next_steps(agent, !report.dry_run && !report.written.is_empty());
+    Ok(())
 }
 
 fn print_obligation_detection(detection: &ObligationDetection) {
@@ -6159,6 +6317,11 @@ async fn main() -> Result<()> {
             let _db = connect_and_init(&config).await?;
 
             println!("✓ Database initialized successfully!");
+            println!();
+            println!("Next steps:");
+            println!("  1. `engram warmup embeddings` to prepare the local model cache.");
+            println!("  2. `engram setup` to configure Claude Code, Codex, or Cursor.");
+            println!("  3. Open your agent and ask it to run `orient` for this project.");
         }
 
         Commands::Serve {
@@ -6436,6 +6599,16 @@ async fn main() -> Result<()> {
                 warmup_embeddings(cache_dir)?;
             }
         },
+
+        Commands::Setup {
+            agent,
+            root,
+            write,
+            yes,
+            settings_target,
+        } => {
+            run_setup(agent, root, write, yes, settings_target)?;
+        }
 
         Commands::Add { what } => {
             // Connect to database using RocksDB for persistence
@@ -10409,6 +10582,43 @@ mod tests {
             },
             _ => panic!("expected warmup command"),
         }
+    }
+
+    #[test]
+    fn setup_parses_supported_agent_and_write_flags() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "setup",
+            "--agent",
+            "codex",
+            "--write",
+            "--yes",
+            "--root",
+            "/tmp/engram-setup",
+        ])
+        .expect("setup command should parse");
+
+        match cli.command {
+            Commands::Setup {
+                agent,
+                root,
+                write,
+                yes,
+                ..
+            } => {
+                assert_eq!(agent, Some(SetupAgentArg::Codex));
+                assert_eq!(root.as_deref(), Some("/tmp/engram-setup"));
+                assert!(write);
+                assert!(yes);
+            }
+            _ => panic!("expected setup command"),
+        }
+    }
+
+    #[test]
+    fn setup_yes_requires_agent_for_noninteractive_runs() {
+        let err = resolve_setup_agent(None, true).unwrap_err();
+        assert!(err.to_string().contains("--yes requires --agent"));
     }
 
     #[test]

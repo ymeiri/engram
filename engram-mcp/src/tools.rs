@@ -59,6 +59,18 @@ const CLAUDE_CODE_EXTERNAL_SESSION_PREFIX: &str = "claude-code://sessions/";
 const CODEX_THREAD_EXTERNAL_SESSION_PREFIX: &str = "codex://threads/";
 const MAX_CLAUDE_CODE_SESSION_ID_LEN: usize = 128;
 const MAX_CODEX_THREAD_ID_LEN: usize = 128;
+const KNOWLEDGE_ONBOARDING_RECOMMENDED_ACTION: &str = concat!(
+    "No documents are indexed yet. Ask the user which existing project docs, runbooks, notes, ",
+    "or knowledge folders Engram should ingest; preview first with docs(action=\"plan\", ",
+    "path=...) or `engram index --plan <path>` before indexing."
+);
+const KNOWLEDGE_ONBOARDING_CONTEXT_SECTION: &str = concat!(
+    "\n\n## Knowledge Onboarding\n",
+    "No indexed documents were found. Before assuming project-document context is available, ",
+    "ask the user which existing docs, runbooks, notes, ADRs, or knowledge folders they want ",
+    "Engram to ingest. Preview first with docs(action=\"plan\", path=...) or ",
+    "`engram index --plan <path>`, then index only approved paths.\n"
+);
 
 /// Shared state for MCP tools.
 pub struct ToolState {
@@ -7595,6 +7607,7 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
             .await
             .map_err(|e| e.to_string())?
     };
+    apply_knowledge_onboarding_to_packet(state, &mut packet).await?;
     let (obligation_summary, open_obligations) =
         orient_open_obligations(state, project.as_deref(), cwd.as_deref()).await?;
     apply_obligation_summary_to_packet(&mut packet, &obligation_summary, &open_obligations);
@@ -7684,6 +7697,52 @@ fn apply_obligation_summary_to_packet(
             obligation.title, obligation.description
         ));
     }
+}
+
+async fn apply_knowledge_onboarding_to_packet(
+    state: &ToolState,
+    packet: &mut OrientationPacket,
+) -> Result<(), String> {
+    let should_prompt = {
+        let service_guard = state.doc_service.read().await;
+        let Some(service) = service_guard.as_ref() else {
+            return Ok(());
+        };
+        let stats = service.stats().await.map_err(|e| e.to_string())?;
+        needs_knowledge_onboarding_prompt(
+            stats.source_count,
+            stats.chunk_count,
+            stats.searchable_chunk_count,
+        )
+    };
+
+    if !should_prompt {
+        return Ok(());
+    }
+
+    if !packet
+        .recommended_actions
+        .iter()
+        .any(|action| action == KNOWLEDGE_ONBOARDING_RECOMMENDED_ACTION)
+    {
+        packet
+            .recommended_actions
+            .push(KNOWLEDGE_ONBOARDING_RECOMMENDED_ACTION.to_string());
+    }
+    if !packet.context_pack.contains("## Knowledge Onboarding") {
+        packet
+            .context_pack
+            .push_str(KNOWLEDGE_ONBOARDING_CONTEXT_SECTION);
+    }
+    Ok(())
+}
+
+fn needs_knowledge_onboarding_prompt(
+    source_count: u64,
+    chunk_count: u64,
+    searchable_chunk_count: u64,
+) -> bool {
+    source_count == 0 && chunk_count == 0 && searchable_chunk_count == 0
 }
 
 impl OrientLeanResponse {
@@ -11224,6 +11283,14 @@ mod tests {
             properties["response_shape"]["description"],
             "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
         );
+    }
+
+    #[test]
+    fn knowledge_onboarding_prompt_is_needed_only_when_document_store_is_empty() {
+        assert!(needs_knowledge_onboarding_prompt(0, 0, 0));
+        assert!(!needs_knowledge_onboarding_prompt(1, 0, 0));
+        assert!(!needs_knowledge_onboarding_prompt(0, 1, 0));
+        assert!(!needs_knowledge_onboarding_prompt(0, 0, 1));
     }
 
     #[test]

@@ -6,6 +6,8 @@ cd "$repo_root"
 
 dist_dir="${DIST_DIR:-$repo_root/dist}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
+release_notes_slug="$(printf '%s' "$package_version" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
+release_notes_source="$repo_root/docs/RELEASE_NOTES_V${release_notes_slug}.md"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-package.XXXXXX")"
@@ -28,6 +30,12 @@ sha256_file() {
 
 run_step "build release binary" cargo build --locked --release -p engram-cli
 
+if [[ ! -f "$release_notes_source" ]]; then
+    printf 'error: release notes not found for version %s: %s\n' \
+        "$package_version" "$release_notes_source" >&2
+    exit 1
+fi
+
 binary="$repo_root/target/release/engram"
 if [[ ! -x "$binary" ]]; then
     printf 'error: release binary was not built at %s\n' "$binary" >&2
@@ -46,7 +54,7 @@ staging_dir="$work_dir/$archive_name"
 mkdir -p "$staging_dir" "$dist_dir"
 cp "$binary" "$staging_dir/engram"
 cp README.md LICENSE CHANGELOG.md "$staging_dir/"
-cp docs/RELEASE_NOTES_V0_2_0_BETA_1.md "$staging_dir/RELEASE_NOTES.md"
+cp "$release_notes_source" "$staging_dir/RELEASE_NOTES.md"
 chmod 755 "$staging_dir/engram"
 
 git_head="$(git rev-parse HEAD)"

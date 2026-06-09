@@ -13,7 +13,8 @@ If you discover a security vulnerability, please report it responsibly:
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | ✅        |
+| 0.2.0-beta.x | ✅ |
+| 0.1.x | Security fixes only when practical |
 
 ## Security Considerations
 
@@ -21,3 +22,5 @@ engram stores data locally. Users should:
 - Protect the `~/.engram` directory
 - Be cautious about what data is indexed
 - Review MCP tool permissions
+- Pre-warm embeddings if first-run network access is not acceptable:
+  `engram warmup embeddings`

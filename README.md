@@ -18,7 +18,9 @@ Your AI coding assistant forgets everything between sessions — project convent
 
 engram is a local-first memory system purpose-built for AI coding agents. It connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so compatible agents can gain persistent knowledge across sessions without embedding API calls.
 
-> **Beta scope:** the current beta is validated for the local/Codex Brain Loop path. Other MCP-compatible hosts can use the same server setup, but full multi-host parity, native Claude prompt-bearing proof, live host-label proof, and effective-hook proof are still in progress.
+> **Beta scope:** v0.2.0-beta.2 supports guided local setup for Claude Code, Codex,
+> and Cursor. Other MCP-compatible hosts may work with the same server, but they are not part of
+> this beta support matrix.
 >
 > **First-run cache note:** semantic search uses a local ONNX embedding model. First use may download
 > `all-MiniLM-L6-v2` from Hugging Face into the local cache unless you pre-warm it with
@@ -28,23 +30,21 @@ engram is a local-first memory system purpose-built for AI coding agents. It con
 
 ### 1. Install
 
-From source with Rust 1.80+:
+Homebrew is the preferred path for macOS Apple Silicon:
 
 ```bash
-git clone https://github.com/ymeiri/engram.git
-cd engram
-cargo build --release
-
-mkdir -p "$HOME/.local/bin"
-install -m 755 ./target/release/engram "$HOME/.local/bin/engram"
-export PATH="$HOME/.local/bin:$PATH"
+brew tap ymeiri/engram
+brew install engram
 engram --version
 ```
+
+The Homebrew beta formula is scoped to Apple Silicon macOS. Other platforms can install from a
+release artifact or build from source.
 
 From a published beta release artifact:
 
 ```bash
-version=0.2.0-beta.1
+version=0.2.0-beta.2
 archive="engram-${version}-aarch64-apple-darwin.tar.gz"
 
 curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
@@ -60,6 +60,19 @@ engram --version
 
 See [Releases](https://github.com/ymeiri/engram/releases) for published artifacts.
 
+From source with Rust 1.80+:
+
+```bash
+git clone https://github.com/ymeiri/engram.git
+cd engram
+cargo build --release
+
+mkdir -p "$HOME/.local/bin"
+install -m 755 ./target/release/engram "$HOME/.local/bin/engram"
+export PATH="$HOME/.local/bin:$PATH"
+engram --version
+```
+
 ### 2. Warm up embeddings for offline use
 
 ```bash
@@ -69,14 +82,45 @@ engram warmup embeddings
 The warmup command prepares the local model cache and confirms embeddings work before you connect an
 agent. This is optional when you are online, but recommended before offline or sandboxed use.
 
-### 3. Initialize and start
+### 3. Initialize storage
 
 ```bash
 engram init      # Creates ~/.engram/data/
-engram serve     # Starts MCP server
 ```
 
-### 4. Connect to your agent
+`engram init` is intentionally script-safe and non-interactive. Use `engram setup` for the human
+agent setup flow.
+
+### 4. Configure your agent
+
+Run the guided setup wizard:
+
+```bash
+engram setup
+```
+
+For non-interactive setup, select the agent explicitly. The default is a dry-run:
+
+```bash
+engram setup --agent claude-code
+engram setup --agent codex
+engram setup --agent cursor
+```
+
+After reviewing the planned files, write the agent adapter and hook configuration:
+
+```bash
+engram setup --agent codex --write
+```
+
+Setup supports Claude Code, Codex, and Cursor in this beta. It uses the same harness adapter
+installer as `engram harness install`, keeps writes approval-gated, and does not overwrite
+user-owned files unless you opt into the lower-level harness command.
+
+By default, setup writes under your home directory. Use `--root .` from a repository if you want
+project-local agent files.
+
+Manual MCP configuration is also supported. For example, Claude Code can use:
 
 Add to your Claude Code config (`~/.claude.json`):
 
@@ -91,12 +135,26 @@ Add to your Claude Code config (`~/.claude.json`):
 }
 ```
 
-This is an MCP setup example. Current beta behavior is validated on the local/Codex Brain Loop
-path; host-specific prompt, hook, and label parity remains follow-up work.
+For Codex and Cursor examples, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
 
-For Cursor or Windsurf, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
+### 5. First orient and knowledge ingestion
 
-### 5. Verify it works
+Restart your agent after writing setup files. In the agent, ask:
+
+> Run orient for this project.
+
+On first orient, if no documents are indexed yet, Engram tells the agent to ask which existing
+project docs, runbooks, notes, ADRs, or knowledge folders you want it to ingest. Preview ingestion
+before writing:
+
+```bash
+engram index --plan ./docs
+engram index ./docs --recursive
+```
+
+You can also let the agent use the MCP `docs` tool to plan and index approved paths.
+
+### 6. Verify memory works
 
 Open your agent and try:
 
@@ -105,6 +163,18 @@ Open your agent and try:
 3. *"What auth approach does this project use?"*
 
 If engram is connected, your agent recalls the decision from step 1.
+
+## What To Expect
+
+- `engram init` only prepares local storage. It does not change agent settings.
+- `engram setup` shows a dry-run plan by default. Use `--write` only after reviewing the planned
+  adapter and hook files.
+- `engram serve` is the MCP server command your agent runs. In default mode it starts or connects
+  to a local daemon so multiple sessions can share memory safely.
+- First `orient` gives the agent a project context packet. If the document index is empty, it asks
+  the user which existing knowledge should be ingested before indexing anything.
+- Indexed documents, memory items, sessions, tool history, and work context are stored locally under
+  `~/.engram/` unless you use a project-specific or explicit data directory.
 
 ## What It Does
 
@@ -130,13 +200,17 @@ engram gives your coding agent MCP tools that let it read, search, and write to 
 
 ## Why engram?
 
-**Local and private.** Single Rust binary with an embedded database. No Docker, no Postgres, no API keys, no cloud. Your data stays in `~/.engram/`.
+**Local and private.** Single Rust binary with an embedded database. No Docker, no Postgres, and
+no embedding API keys. Your data stays in `~/.engram/`; first embedding use may download the local
+ONNX model unless you pre-warm the cache.
 
 **Built for coding agents.** Not a chatbot memory system — engram understands repos, PRs, tasks, tool usage patterns, and multi-session coordination. It knows what a pull request *is*.
 
-**MCP-native.** Not an adapter or wrapper. Built from the ground up for the Model Context Protocol. The beta-supported path is local/Codex; broader host parity is documented as follow-up work.
+**MCP-native.** Not an adapter or wrapper. Built from the ground up for the Model Context
+Protocol. Guided beta setup covers Claude Code, Codex, and Cursor.
 
-**Minimal setup.** `engram init && engram serve`, add one MCP config entry, and your agent has persistent memory. No schema definitions, no ontology configuration, no embedding API keys.
+**Minimal setup.** Install the binary, run `engram init`, then use `engram setup` to configure a
+supported local agent. No schema definitions, no ontology configuration, no embedding API keys.
 
 ## How It Compares
 
@@ -151,7 +225,7 @@ engram gives your coding agent MCP tools that let it read, search, and write to 
 ## Architecture
 
 ```
-AI Coding Agent (Claude Code, Cursor, Windsurf, ...)
+AI Coding Agent (Claude Code, Codex, Cursor, ...)
         │
         │ MCP (JSON-RPC over stdio)
         ▼
@@ -249,6 +323,7 @@ cargo fmt
 ./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
 ./scripts/package-release.sh   # Build a local release tarball, manifest, and checksum
 ./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
+./scripts/render-homebrew-formula.sh  # Render tap-ready Homebrew formula from the tarball
 ./scripts/beta-release-gate-report.sh  # Collect PR/CI/package gate evidence and release-review state
 ./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
 ./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; use --event push for main runs
@@ -281,6 +356,15 @@ and other semantic paths may need network access for the one-time model download
 - **Database lock conflict:** Run `engram daemon status` to check whether another Engram daemon owns
   the RocksDB store. If no Engram process is using the store and a crash left a stale lock, remove
   the reported `LOCK` file and retry. Check `engram daemon logs` for the original startup error.
+
+## Open Source
+
+- Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md) for local development, tests, and PR
+  expectations.
+- Security: see [SECURITY.md](SECURITY.md) for vulnerability reporting and supported beta
+  versions. Do not open public issues for private security reports.
+- Conduct: see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- License: Apache-2.0.
 
 ## License
 
