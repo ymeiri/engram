@@ -973,3 +973,13 @@ including checksum verification, archive-path inspection, temp-prefix install,
 before extraction. T394 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag,
 publish, launch native Claude, prove hooks or host labels, mutate M6, or make the system
 production/GA ready.
+
+T395 commits `Cargo.lock` and makes the local/hosted CI plus release-package paths use the locked
+dependency graph. `.github/workflows/ci.yml`, `./scripts/local-ci.sh`, `./scripts/package-release.sh`,
+and `./scripts/package-install-smoke.sh` now use `--locked` for dependency-resolving Cargo commands,
+and README development commands reflect the locked workflow. This makes dependency drift fail
+explicitly instead of silently changing release inputs between local validation, hosted CI, and
+archive creation. Validation passed locked metadata/pkgid checks, script syntax checks, locked
+check/clippy, package/install smoke, and the full locked `./scripts/local-ci.sh`. T395 does not
+accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove
+hooks or host labels, mutate M6, or make the system production/GA ready.

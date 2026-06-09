@@ -7,7 +7,7 @@ beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI ch
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
 exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
 tool reports, CLI observed MCP tool checks, research-method checkpoints, beta release signoff
-checklists, and release archive path hardening
+checklists, release archive path hardening, and locked release reproducibility
 Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3617,3 +3617,8 @@ knowledge and improve agent behavior.
      local/published artifact check path but does not accept the hosted-CI fallback, mark PR #3
      ready, merge, tag, publish, or close native-Claude, effective-hook, live-host-label, M6,
      lifecycle, or production/GA gates.
+211. Treat T395 as release dependency-graph reproducibility hardening, not release approval.
+     `Cargo.lock` is tracked and CI/package commands use `--locked` so unreviewed dependency
+     resolution changes fail validation instead of changing local, hosted, or package build inputs.
+     This does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close
+     native-Claude, effective-hook, live-host-label, M6, lifecycle, or production/GA gates.

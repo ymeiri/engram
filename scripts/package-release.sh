@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 dist_dir="${DIST_DIR:-$repo_root/dist}"
-package_version="$(cargo pkgid -p engram-cli | sed 's/.*#//')"
+package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-package.XXXXXX")"
@@ -22,7 +22,7 @@ run_step() {
     "$@"
 }
 
-run_step "build release binary" cargo build --release -p engram-cli
+run_step "build release binary" cargo build --locked --release -p engram-cli
 
 binary="$repo_root/target/release/engram"
 if [[ ! -x "$binary" ]]; then

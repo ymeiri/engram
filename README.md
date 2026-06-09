@@ -229,9 +229,9 @@ engram work task create <project-id> "Migrate auth service" -p high
 ## Development
 
 ```bash
-cargo build                    # Build all crates
-cargo test                     # Run tests
-cargo clippy --all-targets -- -D warnings
+cargo build --locked           # Build all crates with the committed dependency graph
+cargo test --locked            # Run tests with the committed dependency graph
+cargo clippy --locked --all-targets -- -D warnings
 cargo fmt
 ./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
 ./scripts/package-release.sh   # Build a local release tarball and checksum

@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 dist_dir="${DIST_DIR:-$repo_root/dist}"
-package_version="$(cargo pkgid -p engram-cli | sed 's/.*#//')"
+package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"

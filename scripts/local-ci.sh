@@ -13,9 +13,9 @@ run_step() {
 
 run_step "git diff whitespace check" git diff --check
 run_step "rustfmt" cargo fmt --all --check
-run_step "cargo check" cargo check --all-targets
-run_step "clippy" cargo clippy --all-targets -- -D warnings
-run_step "tests" env CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --all-targets --jobs 1
-run_step "docs" cargo doc --no-deps
+run_step "cargo check" cargo check --locked --all-targets
+run_step "clippy" cargo clippy --locked --all-targets -- -D warnings
+run_step "tests" env CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo test --locked --all-targets --jobs 1
+run_step "docs" cargo doc --locked --no-deps
 
 printf '\nLocal CI-equivalent validation passed.\n'
