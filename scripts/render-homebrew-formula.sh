@@ -34,12 +34,11 @@ class Engram < Formula
   url "${release_base_url}/${archive_name}.tar.gz"
   sha256 "${sha256}"
   license "Apache-2.0"
-  version "${package_version}"
+  depends_on arch: :arm64
 
   def install
-    unless OS.mac? && Hardware::CPU.arm?
-      odie "engram #{version} Homebrew beta currently supports Apple Silicon macOS only"
-    end
+    odie "engram #{version} Homebrew beta currently supports macOS only" if OS.linux?
+    odie "engram #{version} Homebrew beta currently supports Apple Silicon only" unless Hardware::CPU.arm?
 
     bin.install "engram"
     prefix.install "README.md", "CHANGELOG.md", "LICENSE", "RELEASE_NOTES.md", "MANIFEST.json"
@@ -57,8 +56,8 @@ class Engram < Formula
   end
 
   test do
-    assert_match "engram #{version}", shell_output("#{bin}/engram --version")
-    system "#{bin}/engram", "harness", "status", "--harness", "codex", "--root", testpath
+    assert_match "engram #{version}", shell_output("#{bin/"engram"} --version")
+    system bin/"engram", "harness", "status", "--harness", "codex", "--root", testpath
   end
 end
 EOF
