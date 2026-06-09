@@ -22,6 +22,7 @@ const PORT_RANGE: std::ops::Range<u16> = 8765..8775;
 /// Extra time after a successful health check to catch children that exit
 /// immediately while another daemon instance is satisfying the probe.
 const DAEMON_SPAWN_STABILITY_DELAY: Duration = Duration::from_millis(250);
+const DAEMON_ERROR_LOG_LINES: usize = 20;
 
 /// Configuration for daemon management.
 #[derive(Debug, Clone, Default)]
@@ -142,7 +143,13 @@ pub async fn ensure_daemon_running(config: &DaemonConfig) -> Result<u16> {
     let pid = child.id();
 
     // Wait for daemon to be ready
-    wait_for_spawned_daemon(port, &mut child, Duration::from_secs(30)).await?;
+    wait_for_spawned_daemon(
+        port,
+        &mut child,
+        Duration::from_secs(30),
+        &config.log_file(),
+    )
+    .await?;
 
     // Save daemon info
     let metadata = DaemonSpawnMetadata::new(&exe, pid, port);
@@ -183,40 +190,64 @@ pub async fn check_daemon_health(port: u16) -> Result<()> {
 }
 
 /// Wait for the daemon health endpoint while also requiring the spawned child to stay alive.
-async fn wait_for_spawned_daemon(port: u16, child: &mut Child, timeout: Duration) -> Result<()> {
+async fn wait_for_spawned_daemon(
+    port: u16,
+    child: &mut Child,
+    timeout: Duration,
+    log_file: &Path,
+) -> Result<()> {
     let start = std::time::Instant::now();
     let mut interval = tokio::time::interval(Duration::from_millis(100));
 
     while start.elapsed() < timeout {
         interval.tick().await;
-        ensure_spawned_child_still_running(child)?;
+        ensure_spawned_child_still_running(child, Some(log_file))?;
 
         if check_daemon_health(port).await.is_ok() {
             tokio::time::sleep(DAEMON_SPAWN_STABILITY_DELAY).await;
-            ensure_spawned_child_still_running(child)?;
+            ensure_spawned_child_still_running(child, Some(log_file))?;
             info!("Daemon is ready on port {}", port);
             return Ok(());
         }
     }
 
+    let log_tail = recent_log_tail(log_file, DAEMON_ERROR_LOG_LINES)
+        .map(|tail| format!("\n\nRecent daemon log:\n{}", tail))
+        .unwrap_or_default();
     bail!(
-        "Daemon failed to start within {} seconds",
-        timeout.as_secs()
+        "Daemon failed to start within {} seconds{}",
+        timeout.as_secs(),
+        log_tail
     )
 }
 
-fn ensure_spawned_child_still_running(child: &mut Child) -> Result<()> {
+fn ensure_spawned_child_still_running(child: &mut Child, log_file: Option<&Path>) -> Result<()> {
     if let Some(status) = child
         .try_wait()
         .context("Failed to inspect spawned daemon process")?
     {
+        let log_tail = log_file
+            .and_then(|path| recent_log_tail(path, DAEMON_ERROR_LOG_LINES))
+            .map(|tail| format!("\n\nRecent daemon log:\n{}", tail))
+            .unwrap_or_default();
         bail!(
-            "Spawned daemon process {} exited before daemon readiness was confirmed: {}",
+            "Spawned daemon process {} exited before daemon readiness was confirmed: {}{}",
             child.id(),
-            status
+            status,
+            log_tail
         );
     }
     Ok(())
+}
+
+fn recent_log_tail(path: &Path, max_lines: usize) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let start = lines.len().saturating_sub(max_lines);
+    Some(lines[start..].join("\n"))
 }
 
 /// Find an available port in the configured range.
@@ -416,7 +447,7 @@ mod tests {
             .spawn()
             .expect("spawn sleep child");
 
-        assert!(ensure_spawned_child_still_running(&mut child).is_ok());
+        assert!(ensure_spawned_child_still_running(&mut child, None).is_ok());
 
         let _ = child.kill();
         let _ = child.wait();
@@ -435,11 +466,20 @@ mod tests {
 
         let _ = child.wait();
 
-        let error = ensure_spawned_child_still_running(&mut child)
+        let error = ensure_spawned_child_still_running(&mut child, None)
             .expect_err("exited child should fail liveness check");
         assert!(error
             .to_string()
             .contains("exited before daemon readiness was confirmed"));
+    }
+
+    #[test]
+    fn recent_log_tail_returns_last_lines() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("daemon.log");
+        fs::write(&path, "one\ntwo\nthree\n").expect("write log");
+
+        assert_eq!(recent_log_tail(&path, 2).as_deref(), Some("two\nthree"));
     }
 
     #[test]

@@ -16,9 +16,13 @@ Your AI coding assistant forgets everything between sessions — project convent
 > "What auth approach does this project use?"
 > *"This project uses OAuth. You chose it over API keys on Jan 12 for delegated partner access."*
 
-engram is a local-first memory system purpose-built for AI coding agents. It connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so compatible agents can gain persistent knowledge across sessions with zero cloud dependencies.
+engram is a local-first memory system purpose-built for AI coding agents. It connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so compatible agents can gain persistent knowledge across sessions without embedding API calls.
 
 > **Beta scope:** the current beta is validated for the local/Codex Brain Loop path. Other MCP-compatible hosts can use the same server setup, but full multi-host parity, native Claude prompt-bearing proof, live host-label proof, and effective-hook proof are still in progress.
+>
+> **First-run cache note:** semantic search uses a local ONNX embedding model. First use may download
+> `all-MiniLM-L6-v2` from Hugging Face into the local cache unless you pre-warm it with
+> `engram warmup embeddings`.
 
 ## Quick Start
 
@@ -56,14 +60,23 @@ engram --version
 
 See [Releases](https://github.com/ymeiri/engram/releases) for published artifacts.
 
-### 2. Initialize and start
+### 2. Warm up embeddings for offline use
+
+```bash
+engram warmup embeddings
+```
+
+The warmup command prepares the local model cache and confirms embeddings work before you connect an
+agent. This is optional when you are online, but recommended before offline or sandboxed use.
+
+### 3. Initialize and start
 
 ```bash
 engram init      # Creates ~/.engram/data/
 engram serve     # Starts MCP server
 ```
 
-### 3. Connect to your agent
+### 4. Connect to your agent
 
 Add to your Claude Code config (`~/.claude.json`):
 
@@ -83,7 +96,7 @@ path; host-specific prompt, hook, and label parity remains follow-up work.
 
 For Cursor or Windsurf, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
 
-### 4. Verify it works
+### 5. Verify it works
 
 Open your agent and try:
 
@@ -245,7 +258,8 @@ RUST_LOG=debug engram serve    # Verbose logging
 
 Embedding model files are cached under `~/.engram/cache/fastembed` by default. Set
 `ENGRAM_EMBED_CACHE_DIR` to use a pre-warmed or shared cache; upstream `FASTEMBED_CACHE_DIR` and
-`HF_HOME` are also honored.
+`HF_HOME` are also honored. If the cache is cold, `engram serve`, `engram index`, `engram search`,
+and other semantic paths may need network access for the one-time model download.
 
 ## Technology
 
@@ -254,7 +268,7 @@ Embedding model files are cached under `~/.engram/cache/fastembed` by default. S
 | **Language** | Rust | Single binary, no runtime deps, memory safety |
 | **Database** | SurrealDB (embedded) | Multi-model: relational + graph + vector in one DB |
 | **Protocol** | MCP | Agent-agnostic standard by Anthropic |
-| **Embeddings** | fastembed (ONNX) | Local inference, no API calls, total privacy |
+| **Embeddings** | fastembed (ONNX) | Local inference; no embedding API calls after cache warmup |
 
 ## Troubleshooting
 
@@ -262,6 +276,11 @@ Embedding model files are cached under `~/.engram/cache/fastembed` by default. S
 - **Permission denied?** Make sure the binary path in your MCP config is absolute and executable.
 - **Verify server starts:** Run `engram serve` directly in a terminal to check for errors.
 - **Verbose logging:** `RUST_LOG=debug engram serve` for detailed output.
+- **First run pauses at embeddings:** Run `engram warmup embeddings` in a terminal. It prints the
+  cache path and explains whether a one-time Hugging Face model download may occur.
+- **Database lock conflict:** Run `engram daemon status` to check whether another Engram daemon owns
+  the RocksDB store. If no Engram process is using the store and a crash left a stale lock, remove
+  the reported `LOCK` file and retry. Check `engram daemon logs` for the original startup error.
 
 ## License
 

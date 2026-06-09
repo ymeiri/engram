@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `engram warmup embeddings` prepares and verifies the local fastembed ONNX model cache before
+  first agent use or offline/sandboxed work.
 - `engram daemon status` now reports daemon spawn provenance when available, including the
   executable path/version that started the daemon and warnings for path, version, or pid/port
   metadata drift.
@@ -29,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   direct hosted-CI waiver-condition automation while preserving fail-closed checks. It also accepts
   `--event <event>` for explicit post-merge push-run verification while defaulting to
   `pull_request`.
+
+### Changed
+- Cold embedding-model initialization now prints an explicit first-run download/cache warning before
+  fastembed loads the model.
+- RocksDB lock conflicts now include recovery guidance and daemon startup failures include recent
+  daemon log output so stale lock and active-daemon cases are easier to diagnose.
 
 ## [0.2.0-beta.1] - 2026-06-07
 

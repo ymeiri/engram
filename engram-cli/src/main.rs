@@ -25,6 +25,7 @@ use engram_core::repository::{ProjectRepositoryRole, RepositoryContext};
 use engram_core::session::{EventType, SessionStatus};
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
+use engram_embed::{cache_dir_has_model_files, EmbedConfig, Embedder};
 use engram_index::{
     ChunkingStrategy, CoordinationService, DigestExtractionOptions, DigestExtractionPlan,
     DigestExtractionReviewApply, DigestExtractionReviewApplyOptions, DigestInventory,
@@ -128,6 +129,12 @@ enum Commands {
     Daemon {
         #[command(subcommand)]
         command: DaemonCommands,
+    },
+
+    /// Prepare local runtime assets before first use or offline work
+    Warmup {
+        #[command(subcommand)]
+        command: WarmupCommands,
     },
 
     /// Add an entity to the knowledge base
@@ -1228,6 +1235,16 @@ enum CoordCommands {
 
     /// Show coordination statistics
     Stats,
+}
+
+#[derive(Subcommand)]
+enum WarmupCommands {
+    /// Download and verify the local embedding model cache
+    Embeddings {
+        /// Override the embedding model cache directory
+        #[arg(long)]
+        cache_dir: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2861,6 +2878,28 @@ fn scoped_store_config(project: Option<&str>, data_dir: Option<&str>) -> Result<
     }
 
     Ok(StoreConfig::rocksdb(StoreConfig::default_data_dir()))
+}
+
+fn warmup_embeddings(cache_dir: Option<String>) -> Result<()> {
+    let mut config = EmbedConfig::default();
+    if let Some(cache_dir) = cache_dir {
+        config.cache_dir = std::path::PathBuf::from(cache_dir);
+    }
+
+    println!("Preparing Engram embedding model cache");
+    println!("  Cache: {}", config.cache_dir.display());
+    if !cache_dir_has_model_files(&config.cache_dir) {
+        println!("  First warmup may download all-MiniLM-L6-v2 (~90 MB) from Hugging Face.");
+        println!("  Reuse this cache offline with ENGRAM_EMBED_CACHE_DIR.");
+    }
+
+    let embedder = Embedder::new(config)?;
+    let _embedding = embedder.embed("engram embedding warmup")?;
+
+    println!("✓ Embedding model is ready");
+    println!("  Dimension: {}", embedder.dimension());
+    println!("  Cache: {}", embedder.config().cache_dir.display());
+    Ok(())
 }
 
 async fn handle_harness_hook_via_daemon(
@@ -6391,6 +6430,12 @@ async fn main() -> Result<()> {
                 }
             }
         }
+
+        Commands::Warmup { command } => match command {
+            WarmupCommands::Embeddings { cache_dir } => {
+                warmup_embeddings(cache_dir)?;
+            }
+        },
 
         Commands::Add { what } => {
             // Connect to database using RocksDB for persistence
@@ -10342,6 +10387,27 @@ mod tests {
                 _ => panic!("expected status command"),
             },
             _ => panic!("expected harness command"),
+        }
+    }
+
+    #[test]
+    fn warmup_embeddings_parses_cache_dir() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "warmup",
+            "embeddings",
+            "--cache-dir",
+            "/tmp/engram-cache",
+        ])
+        .expect("warmup embeddings command should parse cache dir");
+
+        match cli.command {
+            Commands::Warmup { command } => match command {
+                WarmupCommands::Embeddings { cache_dir } => {
+                    assert_eq!(cache_dir.as_deref(), Some("/tmp/engram-cache"));
+                }
+            },
+            _ => panic!("expected warmup command"),
         }
     }
 

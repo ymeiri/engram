@@ -16,7 +16,7 @@ pub mod config;
 pub mod embedder;
 pub mod error;
 
-pub use config::EmbedConfig;
+pub use config::{cache_dir_has_model_files, default_cache_dir, EmbedConfig};
 pub use embedder::Embedder;
 pub use error::{EmbedError, EmbedResult};
 

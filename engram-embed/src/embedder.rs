@@ -1,10 +1,10 @@
 //! Embedding generation using fastembed.
 
-use crate::config::{EmbedConfig, EmbeddingModel};
+use crate::config::{cache_dir_has_model_files, EmbedConfig, EmbeddingModel};
 use crate::error::{EmbedError, EmbedResult};
 use fastembed::{EmbeddingModel as FastEmbedModel, InitOptions, TextEmbedding};
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 /// The embedder for generating text embeddings.
 pub struct Embedder {
@@ -35,6 +35,17 @@ impl Embedder {
             config.model,
             config.cache_dir.display()
         );
+        if !cache_dir_has_model_files(&config.cache_dir) {
+            let message = format!(
+                "Engram is preparing the local embedding model cache at {}. \
+                 First run may download all-MiniLM-L6-v2 (~90 MB) from Hugging Face. \
+                 Run `engram warmup embeddings` before offline use, or set \
+                 ENGRAM_EMBED_CACHE_DIR to a pre-warmed cache.",
+                config.cache_dir.display()
+            );
+            warn!("{}", message);
+            eprintln!("engram: {}", message);
+        }
 
         let options = InitOptions::new(model_type)
             .with_show_download_progress(true)

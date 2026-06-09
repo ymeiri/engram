@@ -58,7 +58,9 @@ pub type Db = Surreal<Any>;
 pub async fn connect(config: &StoreConfig) -> StoreResult<Db> {
     info!("Connecting to SurrealDB: {}", config.connection_string());
     let db: Db = Surreal::init();
-    db.connect(config.connection_string()).await?;
+    db.connect(config.connection_string())
+        .await
+        .map_err(|err| StoreError::database_with_config(err, config))?;
 
     // Handle authentication for remote connections
     if let StorageBackend::Remote {
