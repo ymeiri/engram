@@ -7,7 +7,8 @@ beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI ch
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
 exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
 tool reports, CLI observed MCP tool checks, research-method checkpoints, beta release signoff
-checklists, release archive path hardening, and locked release reproducibility
+checklists, release archive path hardening, locked release reproducibility, and repeatable native
+Claude gate preflight checks
 Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3646,3 +3647,12 @@ knowledge and improve agent behavior.
      local CI plus package/install smoke. It gives the release owner a single evidence command, but
      it does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close
      native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
+216. Treat T400 as repeatable native-Claude production-gate preflight, not native Claude
+     validation. `scripts/native-claude-gate-preflight.sh` records the current Claude Code
+     `2.1.169` path/hash baseline, branch/upstream state, installed Engram daemon, harness
+     status/doctor, snippet-only dry-run drift, obligations doctor, canonical vault alignment, and
+     native Claude CLI processes. Current strict mode fails closed because PID `34797` is still
+     live on `ttys004`. T400 also resynced the canonical vault to `2814/2814` generated files, but
+     it does not launch native Claude, run `/hooks`, signal processes, accept the hosted-CI
+     fallback, mark PR #3 ready, merge, tag, publish, or close native-Claude, effective-hook,
+     live-host-label, M6, lifecycle, release, or production/GA gates.

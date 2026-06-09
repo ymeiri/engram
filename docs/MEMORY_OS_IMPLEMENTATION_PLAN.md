@@ -8571,3 +8571,16 @@ blocker verification, and, by default, exact-head local CI plus package/install 
 single evidence command for signoff review, not release approval. T399 does not accept the
 hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
 host labels, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T400 native Claude gate preflight script note:
+`docs/BRAIN_HARNESS_T400_NATIVE_CLAUDE_GATE_PREFLIGHT_SCRIPT_2026-06-09.md` records a repeatable
+read-only production-gate preflight. `./scripts/native-claude-gate-preflight.sh` checks the current
+Claude Code baseline (`2.1.169`, SHA-256
+`86d8b820ad7eed50e50a130706d3dc5ef70696f91194de1b3897a842182afe3a`), branch/upstream state,
+installed Engram daemon, Claude Code harness status/doctor, snippet-only dry-run drift,
+obligations doctor, canonical vault alignment, and live native Claude CLI processes. Normal report
+mode classifies the current state as `blocked`; strict `--require-ready` mode exits `2` while PID
+`34797` is live on `ttys004`. T400 also recompiles the canonical vault from `2813/2814` to
+`2814/2814` generated files after a new MemoryItem write. T400 does not launch native Claude, run
+`/hooks`, signal processes, accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
+mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

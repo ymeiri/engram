@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `engram daemon status` now reports daemon spawn provenance when available, including the
   executable path/version that started the daemon and warnings for path, version, or pid/port
   metadata drift.
+- `scripts/native-claude-gate-preflight.sh` collects read-only production-gate evidence for
+  native Claude prompt-bearing, effective-hook, and live host-label proof readiness.
 
 ## [0.2.0-beta.1] - 2026-06-07
 

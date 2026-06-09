@@ -1,0 +1,244 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+expected_branch="${EXPECTED_BRANCH:-yuval.meiri/memory-os-phase1}"
+expected_claude_bin="${CLAUDE_BIN:-/Users/yuval.meiri/.local/bin/claude}"
+expected_claude_target="${EXPECTED_CLAUDE_TARGET:-/Users/yuval.meiri/.local/share/claude/versions/2.1.169}"
+expected_claude_version="${EXPECTED_CLAUDE_VERSION:-2.1.169 (Claude Code)}"
+expected_claude_sha256="${EXPECTED_CLAUDE_SHA256:-86d8b820ad7eed50e50a130706d3dc5ef70696f91194de1b3897a842182afe3a}"
+engram_bin="${ENGRAM_BIN:-/Users/yuval.meiri/.local/bin/engram}"
+vault_path="${ENGRAM_VAULT_PATH:-/Users/yuval.meiri/.engram/vault}"
+require_ready=0
+allow_worktree_changes=0
+
+usage() {
+    cat <<'USAGE'
+Usage: scripts/native-claude-gate-preflight.sh [options]
+
+Collect read-only evidence for the native Claude prompt-bearing, /hooks, and
+live host-label production gates.
+
+Options:
+  --require-ready             Exit non-zero unless the gate is ready to execute
+  --allow-worktree-changes    Allow tracked or extra untracked source changes
+  -h, --help                  Show this help
+
+Environment overrides:
+  EXPECTED_BRANCH, CLAUDE_BIN, EXPECTED_CLAUDE_TARGET,
+  EXPECTED_CLAUDE_VERSION, EXPECTED_CLAUDE_SHA256, ENGRAM_BIN,
+  ENGRAM_VAULT_PATH.
+
+This script is evidence only. It never launches Claude, sends /hooks or prompts,
+signals processes, mutates settings/adapters, accepts release fallback, marks a
+PR ready, merges, tags, or publishes.
+USAGE
+}
+
+fail() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_tool() {
+    local tool="$1"
+    command -v "$tool" >/dev/null 2>&1 || fail "required tool is missing: $tool"
+}
+
+sha256_file() {
+    shasum -a 256 "$1" | awk '{ print $1 }'
+}
+
+add_blocker() {
+    printf '%s\n' "$1" >>"$blockers_file"
+}
+
+print_json_summary() {
+    local status_json="$1"
+    jq -c "$2" "$status_json"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --require-ready)
+            require_ready=1
+            shift
+            ;;
+        --allow-worktree-changes)
+            allow_worktree_changes=1
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            fail "unknown option: $1"
+            ;;
+    esac
+done
+
+require_tool git
+require_tool jq
+require_tool ps
+require_tool realpath
+require_tool shasum
+
+[[ -x "$expected_claude_bin" ]] || fail "Claude binary is not executable: $expected_claude_bin"
+[[ -x "$engram_bin" ]] || fail "Engram binary is not executable: $engram_bin"
+
+blockers_file="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-blockers.XXXXXX")"
+process_file="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-processes.XXXXXX")"
+harness_status_json="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-status.XXXXXX")"
+harness_doctor_json="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-doctor.XXXXXX")"
+harness_install_json="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-install.XXXXXX")"
+obligations_json="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-obligations.XXXXXX")"
+vault_json="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-vault.XXXXXX")"
+daemon_status="$(mktemp "${TMPDIR:-/tmp}/engram-native-claude-daemon.XXXXXX")"
+
+cleanup() {
+    rm -f "$blockers_file" "$process_file" "$harness_status_json" "$harness_doctor_json" \
+        "$harness_install_json" "$obligations_json" "$vault_json" "$daemon_status"
+}
+trap cleanup EXIT
+
+branch="$(git branch --show-current)"
+head_sha="$(git rev-parse HEAD)"
+[[ "$branch" == "$expected_branch" ]] ||
+    add_blocker "branch mismatch: expected $expected_branch, got ${branch:-<none>}"
+
+upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+if [[ -z "$upstream" ]]; then
+    add_blocker "current branch has no upstream"
+    ahead_count="unknown"
+    behind_count="unknown"
+else
+    read -r ahead_count behind_count < <(git rev-list --left-right --count HEAD..."$upstream")
+    if [[ "$ahead_count" != "0" || "$behind_count" != "0" ]]; then
+        add_blocker "branch is not synced with $upstream: ahead=$ahead_count behind=$behind_count"
+    fi
+fi
+
+if git diff --quiet --ignore-submodules -- &&
+    git diff --cached --quiet --ignore-submodules --; then
+    tracked_changes_present=false
+else
+    tracked_changes_present=true
+fi
+
+untracked_files="$(git ls-files --others --exclude-standard)"
+extra_untracked_files="$(
+    printf '%s\n' "$untracked_files" |
+        awk 'NF && $0 != "AGENTS.md" { print }'
+)"
+
+if [[ "$allow_worktree_changes" != "1" ]]; then
+    [[ "$tracked_changes_present" == "false" ]] ||
+        add_blocker "tracked working-tree or index changes are present"
+    [[ -z "$extra_untracked_files" ]] ||
+        add_blocker "unexpected untracked files are present"
+fi
+
+claude_target="$(realpath "$expected_claude_bin")"
+claude_version="$("$expected_claude_bin" --version)"
+claude_sha256="$(sha256_file "$claude_target")"
+
+[[ "$claude_target" == "$expected_claude_target" ]] ||
+    add_blocker "Claude target mismatch: expected $expected_claude_target, got $claude_target"
+[[ "$claude_version" == "$expected_claude_version" ]] ||
+    add_blocker "Claude version mismatch: expected $expected_claude_version, got $claude_version"
+[[ "$claude_sha256" == "$expected_claude_sha256" ]] ||
+    add_blocker "Claude target SHA-256 mismatch: expected $expected_claude_sha256, got $claude_sha256"
+
+"$engram_bin" harness status --harness claude-code --json >"$harness_status_json"
+"$engram_bin" harness doctor --harness claude-code --json >"$harness_doctor_json"
+"$engram_bin" harness install --harness claude-code --settings-target snippet-only --json \
+    >"$harness_install_json"
+"$engram_bin" obligations doctor --scope-project engram --cwd "$repo_root" --limit 20 --json \
+    >"$obligations_json"
+"$engram_bin" vault status "$vault_path" --json >"$vault_json"
+"$engram_bin" daemon status >"$daemon_status"
+
+jq -e '.ready == true' "$harness_status_json" >/dev/null ||
+    add_blocker "Claude Code harness status is not ready"
+jq -e '.ready == true' "$harness_doctor_json" >/dev/null ||
+    add_blocker "Claude Code harness doctor is not ready"
+jq -e '(.planned // []) | length == 0' "$harness_install_json" >/dev/null ||
+    add_blocker "snippet-only harness install dry-run has planned changes"
+jq -e '((.open // []) | length == 0) and ((.warnings // []) | length == 0)' \
+    "$obligations_json" >/dev/null || add_blocker "obligations doctor has open items or warnings"
+jq -e '
+    .initialized == true
+    and .generated_file_count == .expected_generated_file_count
+    and .user_file_count == 0
+' "$vault_json" >/dev/null || add_blocker "canonical vault is not generated-count aligned"
+grep -q 'Daemon status: .*running' "$daemon_status" ||
+    add_blocker "Engram daemon is not running"
+
+ps -axo pid,ppid,tty,stat,etime,command >"$process_file"
+native_processes="$(
+    awk '
+        NR == 1 { next }
+        $6 == "claude" || $6 ~ /\/claude$/ { print }
+    ' "$process_file"
+)"
+claude_family_process_count="$(
+    awk '
+        BEGIN { count = 0 }
+        NR > 1 && tolower($0) ~ /claude|anthropic/ { count++ }
+        END { print count }
+    ' "$process_file"
+)"
+
+if [[ -n "$native_processes" ]]; then
+    add_blocker "native Claude CLI processes are already running"
+fi
+
+if [[ -s "$blockers_file" ]]; then
+    gate_state="blocked"
+else
+    gate_state="ready"
+fi
+
+printf 'Native Claude production gate preflight:\n'
+printf '  gate_state: %s\n' "$gate_state"
+printf '  branch: %s\n' "$branch"
+printf '  upstream: %s (ahead=%s behind=%s)\n' "${upstream:-<none>}" "$ahead_count" "$behind_count"
+printf '  head: %s\n' "$head_sha"
+printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
+printf '  extra_untracked_files_present: %s\n' "$([[ -n "$extra_untracked_files" ]] && printf true || printf false)"
+printf '  claude_bin: %s\n' "$expected_claude_bin"
+printf '  claude_target: %s\n' "$claude_target"
+printf '  claude_version: %s\n' "$claude_version"
+printf '  claude_sha256: %s\n' "$claude_sha256"
+printf '  engram_bin: %s\n' "$engram_bin"
+printf '  daemon: %s\n' "$(tr '\n' ';' <"$daemon_status" | sed 's/; */; /g')"
+printf '  harness_status: %s\n' "$(print_json_summary "$harness_status_json" '{ready,warnings}')"
+printf '  harness_doctor: %s\n' "$(print_json_summary "$harness_doctor_json" '{ready,warnings}')"
+printf '  snippet_only_dry_run: %s\n' "$(print_json_summary "$harness_install_json" '{planned,warnings}')"
+printf '  obligations: %s\n' "$(print_json_summary "$obligations_json" '{open,warnings}')"
+printf '  vault: %s\n' \
+    "$(print_json_summary "$vault_json" '{initialized,total_file_count,generated_file_count,user_file_count,expected_generated_file_count}')"
+printf '  native_claude_processes_present: %s\n' "$([[ -n "$native_processes" ]] && printf true || printf false)"
+printf '  claude_family_process_count: %s\n' "$claude_family_process_count"
+
+if [[ -n "$native_processes" ]]; then
+    printf '  native_claude_processes:\n'
+    printf '%s\n' "$native_processes" | sed 's/^/    /'
+fi
+
+if [[ -s "$blockers_file" ]]; then
+    printf '  blockers:\n'
+    sed 's/^/    - /' "$blockers_file"
+fi
+
+printf '  native_claude_launch_performed: false\n'
+printf '  hooks_command_performed: false\n'
+printf '  process_signals_performed: false\n'
+printf '  release_actions_performed: false\n'
+
+if [[ "$gate_state" != "ready" && "$require_ready" == "1" ]]; then
+    exit 2
+fi

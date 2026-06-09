@@ -1039,3 +1039,16 @@ passes for the exact head. By default it also runs `./scripts/local-ci.sh` and
 checks. T399 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch
 native Claude, prove hooks or host labels, mutate M6, run lifecycle cleanup, or make Engram
 production/GA ready.
+
+T400 adds `./scripts/native-claude-gate-preflight.sh` as a repeatable read-only production-gate
+preflight for native Claude prompt-bearing proof, effective-hook visibility, and live host labels.
+The current observed Claude Code baseline is `2.1.169` at
+`/Users/yuval.meiri/.local/share/claude/versions/2.1.169` with SHA-256
+`86d8b820ad7eed50e50a130706d3dc5ef70696f91194de1b3897a842182afe3a`. The script also verifies
+branch sync, installed Engram daemon state, harness status/doctor, snippet-only dry-run drift,
+obligations doctor, canonical vault alignment, and live native Claude CLI processes. The current
+report is still blocked by live native Claude PID `34797` on `ttys004`; strict mode exits `2` until
+that blocker clears. T400 also recompiled the canonical vault back to `2814/2814` generated files
+after a new MemoryItem write. T400 does not launch native Claude, run `/hooks`, signal processes,
+accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle
+cleanup, or make Engram production/GA ready.
