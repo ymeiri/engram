@@ -8622,3 +8622,11 @@ the hosted pre-step blocker verifier with `--json` and embeds the verified succe
 a single parseable evidence artifact with branch/PR/local/package state plus exact hosted blocker
 proof. T404 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate
 M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T405 beta release decision-state note:
+`docs/BRAIN_HARNESS_T405_BETA_RELEASE_DECISION_STATE_2026-06-09.md` records release-owner
+automation hardening. `./scripts/beta-release-gate-report.sh` now reports `release_gate_state`,
+`ready_for_release_owner_review`, `hosted_ci_fallback_decision_required`, and JSON
+`remaining_release_actions` so quick/incomplete evidence is not confused with full exact-head
+release-owner-review evidence. T405 does not accept the hosted-CI fallback, mark PR #3 ready,
+merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

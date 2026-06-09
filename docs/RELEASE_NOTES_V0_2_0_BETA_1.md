@@ -80,7 +80,11 @@ it does not accept the waiver, mark the PR ready, merge, tag, publish, or change
 Add `--json` to emit the final evidence object on stdout for automation; validation logs are routed
 to stderr in JSON mode so stdout remains parseable. When hosted CI is accepted only as a verified
 pre-step blocker candidate, the JSON object embeds the verifier's structured proof under
-`hosted_ci.verifier`; a green hosted-CI path leaves that field `null`.
+`hosted_ci.verifier`; a green hosted-CI path leaves that field `null`. The same report also emits
+`release_gate_state`, `ready_for_release_owner_review`,
+`hosted_ci_fallback_decision_required`, and `remaining_release_actions` so automation can
+distinguish full exact-head evidence from quick/incomplete evidence without performing release
+actions.
 
 ### Release-Owner Signoff Checklist
 
@@ -1089,3 +1093,11 @@ evidence and non-action flags. The text report and green-hosted-CI path remain u
 green hosted-CI path reports `hosted_ci.verifier=null`. T404 does not accept the hosted-CI
 fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram
 production/GA ready.
+
+T405 adds explicit release-review state to `./scripts/beta-release-gate-report.sh`. Text and JSON
+reports now include `release_gate_state`, `ready_for_release_owner_review`, and
+`hosted_ci_fallback_decision_required`; JSON reports also include `remaining_release_actions`.
+Full evidence with verified hosted pre-step blocker, local CI, and package/install smoke reports
+`fallback_release_owner_decision_required` with review readiness true. Quick or skipped local
+evidence reports `evidence_incomplete`. T405 does not accept the hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

@@ -204,6 +204,21 @@ fi
 local_ci_state="$([[ "$run_local_ci" == "1" ]] && printf 'passed' || printf 'skipped')"
 package_smoke_state="$([[ "$run_package_smoke" == "1" ]] && printf 'passed' || printf 'skipped')"
 
+release_gate_state="evidence_incomplete"
+ready_for_release_owner_review=false
+hosted_ci_fallback_decision_required=false
+
+if [[ "$local_ci_state" == "passed" && "$package_smoke_state" == "passed" ]]; then
+    if [[ "$hosted_ci_state" == "passing" ]]; then
+        release_gate_state="hosted_ci_passing_release_owner_review_required"
+        ready_for_release_owner_review=true
+    elif [[ "$hosted_ci_state" == "pre_step_blocker_verified" ]]; then
+        release_gate_state="fallback_release_owner_decision_required"
+        ready_for_release_owner_review=true
+        hosted_ci_fallback_decision_required=true
+    fi
+fi
+
 if [[ "$json_output" == "1" ]]; then
     checks_json="$(
         jq -R -s '
@@ -214,6 +229,34 @@ if [[ "$json_output" == "1" ]]; then
                 conclusion: .[2]
             })
         ' "$checks_file"
+    )"
+
+    remaining_release_actions_json="$(
+        jq -n \
+            --arg state "$release_gate_state" \
+            'if $state == "fallback_release_owner_decision_required" then
+                [
+                    "release_owner_accept_hosted_ci_fallback_or_restore_hosted_ci",
+                    "mark_pr_ready",
+                    "merge_pr",
+                    "tag_v0.2.0-beta.1",
+                    "publish_release_artifacts",
+                    "verify_published_install"
+                ]
+            elif $state == "hosted_ci_passing_release_owner_review_required" then
+                [
+                    "release_owner_approve_release",
+                    "mark_pr_ready",
+                    "merge_pr",
+                    "tag_v0.2.0-beta.1",
+                    "publish_release_artifacts",
+                    "verify_published_install"
+                ]
+            else
+                [
+                    "run_full_beta_release_gate_report_with_local_ci_and_package_smoke"
+                ]
+            end'
     )"
 
     jq -n \
@@ -231,8 +274,12 @@ if [[ "$json_output" == "1" ]]; then
         --arg hosted_run_id "$hosted_run_id" \
         --arg local_ci "$local_ci_state" \
         --arg package_install_smoke "$package_smoke_state" \
+        --arg release_gate_state "$release_gate_state" \
+        --arg ready_for_review "$ready_for_release_owner_review" \
+        --arg fallback_decision "$hosted_ci_fallback_decision_required" \
         --argjson checks "$checks_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        --argjson remaining_release_actions "$remaining_release_actions_json" \
         '{
             branch: $branch,
             upstream: {
@@ -256,6 +303,10 @@ if [[ "$json_output" == "1" ]]; then
             },
             local_ci: $local_ci,
             package_install_smoke: $package_install_smoke,
+            release_gate_state: $release_gate_state,
+            ready_for_release_owner_review: ($ready_for_review == "true"),
+            hosted_ci_fallback_decision_required: ($fallback_decision == "true"),
+            remaining_release_actions: $remaining_release_actions,
             release_owner_decision_required: true,
             release_actions_performed: false
         }'
@@ -271,6 +322,10 @@ else
     printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
     printf '  local_ci: %s\n' "$local_ci_state"
     printf '  package_install_smoke: %s\n' "$package_smoke_state"
+    printf '  release_gate_state: %s\n' "$release_gate_state"
+    printf '  ready_for_release_owner_review: %s\n' "$ready_for_release_owner_review"
+    printf '  hosted_ci_fallback_decision_required: %s\n' \
+        "$hosted_ci_fallback_decision_required"
     printf '  release_owner_decision_required: true\n'
     printf '  release_actions_performed: false\n'
 fi
