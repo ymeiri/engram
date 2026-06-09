@@ -7,7 +7,8 @@ cd "$repo_root"
 expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
 expected_head="${EXPECTED_HEAD_SHA:-$(git rev-parse HEAD)}"
 expected_jobs=(Check Test Format Clippy Docs)
-run_id="${1:-${GITHUB_RUN_ID:-}}"
+run_id="${GITHUB_RUN_ID:-}"
+json_output=0
 run_json="$(mktemp "${TMPDIR:-/tmp}/engram-hosted-ci-run.XXXXXX")"
 
 cleanup() {
@@ -24,6 +25,47 @@ require_tool() {
     local tool="$1"
     command -v "$tool" >/dev/null 2>&1 || fail "required tool is missing: $tool"
 }
+
+usage() {
+    cat <<'USAGE'
+Usage: scripts/verify-hosted-ci-prestep-blocker.sh [options] [run-id]
+
+Verify that a hosted CI run failed before workflow steps ran.
+
+Options:
+  --json        Emit machine-readable JSON instead of text on success
+  -h, --help    Show this help
+
+Environment overrides:
+  EXPECTED_HEAD_SHA       Expected run head (default: git rev-parse HEAD)
+  EXPECTED_WORKFLOW_NAME  Expected workflow name (default: CI)
+  GITHUB_RUN_ID           Run ID when no positional run-id is supplied
+
+This script is evidence only. It does not accept a hosted-CI fallback,
+mark a PR ready, merge, tag, publish, or perform release actions.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --json)
+            json_output=1
+            shift
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        -*)
+            fail "unknown option: $1"
+            ;;
+        *)
+            [[ -z "$run_id" ]] || fail "run id provided more than once"
+            run_id="$1"
+            shift
+            ;;
+    esac
+done
 
 require_tool gh
 require_tool jq
@@ -95,10 +137,54 @@ for job_name in "${expected_jobs[@]}"; do
         fail "$job_name job has workflow steps, so this is not a pre-step blocker: $step_count"
 done
 
-printf 'Hosted CI pre-step blocker verified:\n'
-printf '  run: %s\n' "$actual_run_id"
-printf '  url: %s\n' "$actual_url"
-printf '  head: %s\n' "$actual_head"
-printf '  workflow: %s\n' "$actual_workflow"
-printf '  jobs: %s\n' "${expected_jobs[*]}"
-printf '  condition: all expected jobs completed with conclusion=failure and steps=[]\n'
+if [[ "$json_output" == "1" ]]; then
+    expected_jobs_json="$(printf '%s\n' "${expected_jobs[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')"
+    jobs_json="$(
+        jq '[.jobs[] | {
+            name,
+            status,
+            conclusion,
+            step_count: (.steps | length)
+        }]' "$run_json"
+    )"
+
+    jq -n \
+        --arg run_id "$actual_run_id" \
+        --arg url "$actual_url" \
+        --arg expected_head "$expected_head" \
+        --arg head "$actual_head" \
+        --arg status "$actual_status" \
+        --arg conclusion "$actual_conclusion" \
+        --arg expected_workflow "$expected_workflow" \
+        --arg workflow "$actual_workflow" \
+        --arg event "$actual_event" \
+        --argjson expected_jobs "$expected_jobs_json" \
+        --argjson jobs "$jobs_json" \
+        '{
+            condition_verified: true,
+            run: {
+                id: ($run_id | tonumber),
+                url: $url,
+                expected_head: $expected_head,
+                head: $head,
+                status: $status,
+                conclusion: $conclusion,
+                expected_workflow: $expected_workflow,
+                workflow: $workflow,
+                event: $event
+            },
+            expected_jobs: $expected_jobs,
+            jobs: $jobs,
+            condition: "all expected jobs completed with conclusion=failure and steps=[]",
+            hosted_ci_fallback_accepted: false,
+            release_actions_performed: false
+        }'
+else
+    printf 'Hosted CI pre-step blocker verified:\n'
+    printf '  run: %s\n' "$actual_run_id"
+    printf '  url: %s\n' "$actual_url"
+    printf '  head: %s\n' "$actual_head"
+    printf '  workflow: %s\n' "$actual_workflow"
+    printf '  jobs: %s\n' "${expected_jobs[*]}"
+    printf '  condition: all expected jobs completed with conclusion=failure and steps=[]\n'
+fi

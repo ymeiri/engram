@@ -8604,3 +8604,12 @@ package/install smoke state, `release_owner_decision_required`, and `release_act
 In JSON mode validation logs go to stderr so stdout stays parseable. T402 does not accept the
 hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make
 Engram production/GA ready.
+
+T403 hosted CI verifier JSON note:
+`docs/BRAIN_HARNESS_T403_HOSTED_CI_VERIFIER_JSON_2026-06-09.md` records structured-output hardening
+for the exact hosted-CI pre-step blocker verifier. `./scripts/verify-hosted-ci-prestep-blocker.sh
+--json <run-id>` now emits a verified-run object with expected/current head, workflow, event,
+expected jobs, per-job status/conclusion/step counts, `hosted_ci_fallback_accepted=false`, and
+`release_actions_performed=false` after all existing fail-closed checks pass. Failed checks remain
+non-zero and do not emit success JSON. T403 does not accept the hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

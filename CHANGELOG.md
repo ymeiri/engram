@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   machine-readable `--json` output for release and GA automation.
 - `scripts/beta-release-gate-report.sh` now supports machine-readable `--json` output for
   release-owner evidence automation while preserving text output and evidence-only semantics.
+- `scripts/verify-hosted-ci-prestep-blocker.sh` now supports machine-readable `--json` output for
+  direct hosted-CI waiver-condition automation while preserving fail-closed checks.
 
 ## [0.2.0-beta.1] - 2026-06-07
 

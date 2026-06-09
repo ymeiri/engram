@@ -68,6 +68,8 @@ fails unless the run targets the expected head, is the `CI` pull-request workflo
 the expected release-gate jobs, and every job completed with conclusion `failure` and `steps=[]`.
 It is evidence for release-owner waiver review only; it does not accept the waiver or change PR
 state.
+Add `--json` to emit machine-readable success evidence for the verified run. Failed checks remain
+stderr-only and non-zero.
 
 The beta release-gate evidence command is
 `./scripts/beta-release-gate-report.sh --hosted-run <run-id>`. It verifies the branch is synced,
@@ -1070,3 +1072,10 @@ local CI state, package/install smoke state, `release_owner_decision_required`, 
 `release_actions_performed`. Step logs go to stderr in JSON mode so stdout remains parseable. T402
 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run
 lifecycle cleanup, or make Engram production/GA ready.
+
+T403 adds machine-readable `--json` output to `./scripts/verify-hosted-ci-prestep-blocker.sh`.
+JSON mode emits the verified run, expected/current head, workflow, event, expected jobs, per-job
+status/conclusion/step counts, `hosted_ci_fallback_accepted=false`, and
+`release_actions_performed=false` after all existing checks pass. Failed checks remain non-zero and
+do not emit a success JSON object. T403 does not accept the hosted-CI fallback, mark PR #3 ready,
+merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

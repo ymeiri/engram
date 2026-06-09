@@ -43,6 +43,12 @@ pull-request `CI` run for the current branch when no ID is supplied. It defaults
 to `git rev-parse HEAD`, and supports `EXPECTED_HEAD_SHA` / `EXPECTED_WORKFLOW_NAME` overrides for
 explicit release checks.
 
+T403 later added machine-readable success output:
+
+```bash
+scripts/verify-hosted-ci-prestep-blocker.sh --json <run-id>
+```
+
 ## Evidence
 
 The current PR #3 hosted run was verified with:

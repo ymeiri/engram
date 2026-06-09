@@ -9,7 +9,7 @@ exact stale Claude-harness and orient-contract memory cleanup, structured harnes
 tool reports, CLI observed MCP tool checks, research-method checkpoints, beta release signoff
 checklists, release archive path hardening, locked release reproducibility, repeatable native
 Claude gate preflight checks, structured native Claude preflight output, and structured beta
-release gate output
+release gate output, and structured hosted CI blocker verification
 Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
@@ -3670,4 +3670,11 @@ knowledge and improve agent behavior.
      state, release-owner decision requirement, and explicit non-release-action status. JSON mode
      sends validation logs to stderr so stdout remains parseable. T402 does not accept the
      hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close native-Claude,
+     effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
+219. Treat T403 as structured hosted-CI blocker evidence hardening, not waiver acceptance. The
+     hosted pre-step blocker verifier now supports `--json`, exposing the verified run,
+     expected/current head, workflow, event, expected job list, per-job status/conclusion/step
+     counts, fallback acceptance false, and release actions false after all fail-closed checks
+     pass. Failed checks remain non-zero and do not emit a success JSON object. T403 does not
+     accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, close native-Claude,
      effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
