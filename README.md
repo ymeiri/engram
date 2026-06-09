@@ -238,7 +238,7 @@ cargo fmt
 ./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
 ./scripts/beta-release-gate-report.sh  # Collect PR/CI/package gate evidence and release-review state
 ./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
-./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; add --json for automation
+./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; use --event push for main runs
 ./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness; use --expected-branch for non-main checks
 RUST_LOG=debug engram serve    # Verbose logging
 ```

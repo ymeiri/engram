@@ -26,7 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by downloading them from GitHub and running the existing package install smoke against those
   assets, with local `--asset-dir` validation for pre-publish rehearsal.
 - `scripts/verify-hosted-ci-prestep-blocker.sh` now supports machine-readable `--json` output for
-  direct hosted-CI waiver-condition automation while preserving fail-closed checks.
+  direct hosted-CI waiver-condition automation while preserving fail-closed checks. It also accepts
+  `--event <event>` for explicit post-merge push-run verification while defaulting to
+  `pull_request`.
 
 ## [0.2.0-beta.1] - 2026-06-07
 

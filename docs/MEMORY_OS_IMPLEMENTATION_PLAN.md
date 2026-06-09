@@ -8650,3 +8650,11 @@ recompiled from `2823/2833` to `2833/2833`, clearing the vault-count blocker. Th
 fails closed because native Claude CLI processes are already running. T407 does not launch native
 Claude, run `/hooks`, signal processes, mutate settings/adapters, mutate M6, run lifecycle cleanup,
 or make Engram production/GA ready.
+
+T408 hosted CI event verifier note:
+`docs/BRAIN_HARNESS_T408_HOSTED_CI_EVENT_VERIFIER_2026-06-09.md` records hosted-CI evidence
+hardening. `./scripts/verify-hosted-ci-prestep-blocker.sh` now accepts `--event <event>` and
+`EXPECTED_EVENT`, defaulting to `pull_request`, so post-merge `push` runs can be verified by the
+same fail-closed exact-head/workflow/jobs/zero-step contract. T408 does not accept hosted-CI
+fallback, make hosted CI pass, launch native Claude, run `/hooks`, mutate M6, run lifecycle cleanup,
+or make Engram production/GA ready.
