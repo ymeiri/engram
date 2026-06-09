@@ -920,3 +920,19 @@ verified the checksum, installed the packaged binary into a temporary prefix, co
 ranking query classification; it does not accept the hosted-CI fallback, mark PR #3 ready, merge,
 tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make the system
 production/GA ready.
+
+T392 tightens deterministic decision-gate action matching. Fallback action terms in
+`asks_for_decision_gate` and migration-apply action terms in
+`asks_for_explicit_migration_apply_gate` now require ASCII word boundaries, so incidental substrings
+such as `mustache`, `blockchain`, `unblocked`, `allowance`, and `safetybelt` do not force
+decision-gate mode. Explicit modal prompts and real boundary-delimited gate terms such as `must`,
+`blocked`, `allowed`, `safety`, and `write-apply` still trigger gate classification. Focused ranker
+tests, existing M6/current-plan search regressions, formatter check, `cargo check -p engram-index`,
+focused clippy, and `git diff --check` passed. Exact-worktree `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh` also passed; the package smoke rebuilt the release archive,
+verified the checksum, installed the packaged binary into a temporary prefix, confirmed
+`engram 0.2.0-beta.1`, and verified packaged HTTP `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. T392 changes only deterministic
+ranking query classification; it does not accept the hosted-CI fallback, mark PR #3 ready, merge,
+tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make the system
+production/GA ready.

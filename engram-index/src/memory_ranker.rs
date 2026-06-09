@@ -645,7 +645,7 @@ fn asks_for_decision_gate(query: &str) -> bool {
         "proceed", "allowed", "allow", "apply", "safety", "block", "blocked", "must",
     ]
     .iter()
-    .any(|term| query.contains(term))
+    .any(|term| contains_ascii_word(&query, term))
 }
 
 fn has_gate_summary_intent(query: &str) -> bool {
@@ -864,7 +864,7 @@ fn asks_for_explicit_migration_apply_gate(query: Option<&str>) -> bool {
         "execute", "write",
     ]
     .iter()
-    .any(|term| query.contains(term));
+    .any(|term| contains_ascii_word(&query, term));
 
     mentions_migration && asks_apply_or_permission && asks_for_decision_gate(&query)
 }
@@ -1259,6 +1259,40 @@ mod tests {
 
             assert!(asks_for_decision_gate(query), "{query}");
             assert!(!should_promote_current_plan(context), "{query}");
+        }
+    }
+
+    #[test]
+    fn decision_gate_action_words_require_boundaries() {
+        for query in [
+            "current plan next M6 mustache formatting",
+            "current plan next M6 blockchain status",
+            "current plan next M6 unblocked status",
+            "current plan next M6 allowance notes",
+            "current plan next M6 safetybelt note",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(!asks_for_decision_gate(query), "{query}");
+            assert!(should_promote_current_plan(context), "{query}");
+        }
+    }
+
+    #[test]
+    fn decision_gate_action_words_still_trigger_at_boundaries() {
+        for query in [
+            "must not proceed with M6",
+            "M6 path is blocked",
+            "block M6 write apply",
+            "allowed M6 apply",
+            "M6 safety gate",
+            "M6 write-apply gate",
+        ] {
+            assert!(asks_for_decision_gate(query), "{query}");
         }
     }
 

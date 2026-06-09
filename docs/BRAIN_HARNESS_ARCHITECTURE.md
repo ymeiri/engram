@@ -3597,3 +3597,11 @@ knowledge and improve agent behavior.
      `should not`, and `requires approval` remain substring-based. T391 does not close hosted CI,
      native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA
      gates.
+208. Treat T392 as deterministic decision-gate action boundary hardening, not broad ranking proof.
+     Fallback action words such as `proceed`, `allowed`, `allow`, `apply`, `safety`, `block`,
+     `blocked`, and `must` require ASCII word boundaries before they can force decision-gate mode.
+     The same boundary rule applies to migration-apply action terms. This prevents incidental
+     substrings like `mustache`, `blockchain`, `unblocked`, `allowance`, and `safetybelt` from
+     suppressing current-plan routing. Explicit modal prompts still trigger gate mode. T392 does
+     not close hosted CI, native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or
+     production/GA gates.
