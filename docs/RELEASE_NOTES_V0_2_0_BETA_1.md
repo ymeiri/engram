@@ -60,6 +60,26 @@ confirms `PATH` resolution and `engram --version`, starts the packaged binary wi
 temporary install workspace and sets `ENGRAM_EMBED_CACHE_DIR` explicitly, so package validation no
 longer relies on the repository root as the process cwd for embedding model cache discovery.
 
+### Release-Owner Signoff Checklist
+
+The remaining beta decision is explicit release-owner signoff, not additional product scope. Before
+tagging `v0.2.0-beta.1`, the release owner should confirm:
+
+1. `./scripts/local-ci.sh` on the signed-off head is accepted as the local CI-equivalent beta gate
+   while hosted GitHub Actions is externally blocked before workflow-step execution.
+2. `./scripts/package-install-smoke.sh` on the same head is accepted as package/checksum/install
+   and packaged HTTP `/health` proof.
+3. The current hosted run can be waived for this beta only if it failed before workflow-step
+   execution with `steps=[]`, matching the external billing/spending-limit blocker rather than a
+   source or packaging failure.
+4. The known beta limitations listed in this file are accepted: native Claude prompt-bearing
+   behavior, effective-hook visibility, live Claude host labels, full multi-host parity, direct
+   legacy deprecation/deletion, broad lifecycle cleanup or broad `lint apply_safe`, M6 write-apply
+   expansion, and exhaustive telemetry/auth/ops/performance/cross-platform hardening remain
+   deferred.
+5. After signoff, PR #3 may be marked ready, merged, tagged as `v0.2.0-beta.1`, published with the
+   release archive and checksum, and verified with the published install commands.
+
 ## Beta Install Quickstart
 
 For source installs, build and place the binary on `PATH` before running `engram init` or
@@ -936,3 +956,10 @@ verified the checksum, installed the packaged binary into a temporary prefix, co
 ranking query classification; it does not accept the hosted-CI fallback, mark PR #3 ready, merge,
 tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make the system
 production/GA ready.
+
+T393 adds an explicit beta release-owner signoff checklist in
+`docs/BRAIN_HARNESS_T393_BETA_RELEASE_SIGNOFF_CHECKLIST_2026-06-09.md` and this release note. The
+checklist names the exact local evidence, hosted-CI waiver condition, known beta limitations, and
+manual release actions required after signoff. It does not accept the hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make the
+system production/GA ready.

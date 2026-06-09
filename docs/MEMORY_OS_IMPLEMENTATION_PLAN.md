@@ -2,7 +2,7 @@
 
 Status: Implementation in progress
 Date: 2026-04-26
-Last Updated: 2026-06-08
+Last Updated: 2026-06-09
 Audience: Engram maintainers, AI coding-agent users, future contributors
 Scope: Whether to extend Engram or build a new system; full design for a local-first AI memory operating system.
 
@@ -8493,3 +8493,13 @@ and scoped obligations doctor remains clean. T384 preserves history and changes 
 lifecycle state; it does not delete data, run broad `lint apply_safe`, end sessions, mutate M6,
 change ranking/`orient`, launch native Claude, accept hosted-CI fallback, mark PR #3 ready, merge,
 tag, publish, or change production/GA readiness.
+
+T393 beta release signoff checklist note:
+`docs/BRAIN_HARNESS_T393_BETA_RELEASE_SIGNOFF_CHECKLIST_2026-06-09.md` records the remaining
+release-management decision for `v0.2.0-beta.1` as an explicit checklist. It names the current
+reviewed head `4182a47d70c7a2af0786cf1f3cc04d9d2d90e8be`, exact-head
+`./scripts/local-ci.sh` and `./scripts/package-install-smoke.sh` evidence, hosted run
+`27176297515` with `steps=[]`, known beta limitations, and the post-signoff ready/merge/tag/
+publish sequence. T393 is docs-only release-gate clarification; it does not accept the hosted-CI
+fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels,
+mutate M6, run lifecycle cleanup, or make Engram production/GA ready.

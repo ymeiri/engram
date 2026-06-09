@@ -3,11 +3,12 @@
 Status: Draft RFC with Brain Loop v1, beta release metadata, installed-runtime refresh,
 snippet-only Claude Code adapter repair, post-repair native-Claude preflight,
 effective-hook successor packet, project-scoped lint, exact lifecycle maintenance,
-beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks, and
+beta-scope consensus refresh, CLI daemon admin routing, scoped obligation CLI checks,
 scoped obligation/telemetry/orient MCP metadata, native-Claude attribution preflight refreshes,
 exact stale Claude-harness and orient-contract memory cleanup, structured harness lifecycle and MCP
-tool reports, CLI observed MCP tool checks, and research-method checkpoints
-Date: 2026-06-08
+tool reports, CLI observed MCP tool checks, research-method checkpoints, and beta release signoff
+checklists
+Date: 2026-06-09
 Audience: Engram maintainers, AI-agent harness authors, future contributors
 Scope: Define how Engram becomes a brain harness for AI coding agents, and how to prove the design before removing legacy memory paths.
 
@@ -3605,3 +3606,8 @@ knowledge and improve agent behavior.
      suppressing current-plan routing. Explicit modal prompts still trigger gate mode. T392 does
      not close hosted CI, native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or
      production/GA gates.
+209. Treat T393 as release-gate clarification, not release approval. The signoff checklist names
+     the exact local CI/package evidence, hosted-CI waiver condition, known beta limitations, and
+     post-signoff ready/merge/tag/publish actions, but it does not accept the waiver, mark PR #3
+     ready, merge, tag, publish, or close native-Claude, effective-hook, live-host-label, M6,
+     lifecycle, or production/GA gates.
