@@ -60,6 +60,13 @@ confirms `PATH` resolution and `engram --version`, starts the packaged binary wi
 temporary install workspace and sets `ENGRAM_EMBED_CACHE_DIR` explicitly, so package validation no
 longer relies on the repository root as the process cwd for embedding model cache discovery.
 
+The hosted-CI pre-step blocker verifier is
+`./scripts/verify-hosted-ci-prestep-blocker.sh <run-id>`. It is a read-only GitHub CLI check that
+fails unless the run targets the expected head, is the `CI` pull-request workflow, contains exactly
+the expected release-gate jobs, and every job completed with conclusion `failure` and `steps=[]`.
+It is evidence for release-owner waiver review only; it does not accept the waiver or change PR
+state.
+
 ### Release-Owner Signoff Checklist
 
 The remaining beta decision is explicit release-owner signoff, not additional product scope. Before
@@ -71,7 +78,8 @@ tagging `v0.2.0-beta.1`, the release owner should confirm:
    and packaged HTTP `/health` proof.
 3. The current hosted run can be waived for this beta only if it failed before workflow-step
    execution with `steps=[]`, matching the external billing/spending-limit blocker rather than a
-   source or packaging failure.
+   source or packaging failure. Verify the run with
+   `./scripts/verify-hosted-ci-prestep-blocker.sh <run-id>` before signoff.
 4. The known beta limitations listed in this file are accepted: native Claude prompt-bearing
    behavior, effective-hook visibility, live Claude host labels, full multi-host parity, direct
    legacy deprecation/deletion, broad lifecycle cleanup or broad `lint apply_safe`, M6 write-apply
@@ -993,3 +1001,12 @@ without running native Claude, executing `/hooks`, or mutating real project `.cl
 Full local CI and package-install smoke passed for the T396 head. T396 does not accept the
 hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
 host labels, mutate M6, or make the system production/GA ready.
+
+T397 adds `./scripts/verify-hosted-ci-prestep-blocker.sh` as a repeatable hosted-CI waiver
+condition check. The script uses `gh run view` and `jq` to assert that a run is for the exact
+expected head, workflow `CI`, event `pull_request`, conclusion `failure`, and exactly the expected
+jobs `Check`, `Test`, `Format`, `Clippy`, and `Docs`, with every job completed as failure and
+`steps=[]`. On current PR #3 head `2368919745cea3050217da9bdc8bd1d6a8435636`, it verified hosted
+run `27180509992` as a pre-step blocker. T397 does not accept the hosted-CI fallback, mark PR #3
+ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make
+the system production/GA ready.

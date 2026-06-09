@@ -8538,3 +8538,14 @@ launching native Claude, running `/hooks`, or mutating real project `.claude` se
 CI and package-install smoke passed for the T396 head. T396 does not accept the hosted-CI fallback,
 mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6,
 run lifecycle cleanup, or make Engram production/GA ready.
+
+T397 hosted CI pre-step verifier note:
+`docs/BRAIN_HARNESS_T397_HOSTED_CI_PRESTEP_VERIFIER_2026-06-09.md` records a release-gate evidence
+hardening slice. `./scripts/verify-hosted-ci-prestep-blocker.sh` uses `gh run view` and `jq` to
+fail closed unless a hosted `CI` pull-request run targets the expected head, has run conclusion
+`failure`, contains exactly the expected release-gate jobs (`Check`, `Test`, `Format`, `Clippy`,
+and `Docs`), and every job completed with conclusion `failure` and `steps=[]`. The verifier passed
+against current PR #3 hosted run `27180509992` at head
+`2368919745cea3050217da9bdc8bd1d6a8435636`. T397 does not accept the hosted-CI fallback, mark PR
+#3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6, run
+lifecycle cleanup, or make Engram production/GA ready.

@@ -3629,3 +3629,9 @@ knowledge and improve agent behavior.
      does not launch native Claude, run `/hooks`, mutate real `.claude` settings, accept the
      hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close effective-hook,
      live-host-label, M6, lifecycle, or production/GA gates.
+213. Treat T397 as hosted-CI waiver-condition evidence, not waiver acceptance. The
+     `verify-hosted-ci-prestep-blocker.sh` script proves that a named `CI` pull-request run targets
+     the expected head and that the expected release-gate jobs failed before workflow steps ran
+     (`steps=[]`). This makes release-owner review repeatable, but it does not accept the
+     hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close native-Claude,
+     effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
