@@ -3709,3 +3709,10 @@ knowledge and improve agent behavior.
      pre-existing native Claude process blocker. T407 does not launch native Claude, run `/hooks`,
      signal processes, mutate settings/adapters, close native-Claude, effective-hook,
      live-host-label, M6, lifecycle, release, or production/GA gates.
+224. Treat T408 as hosted-CI evidence hardening, not hosted-CI recovery or fallback acceptance.
+     `scripts/verify-hosted-ci-prestep-blocker.sh` now accepts `--event <event>` and
+     `EXPECTED_EVENT` while retaining `pull_request` as the default. The event remains part of the
+     fail-closed contract and JSON evidence, so post-merge `push` runs can be verified without
+     weakening PR-run verification. T408 does not accept a hosted-CI fallback, mark a PR ready,
+     merge, tag, publish, close native-Claude, effective-hook, live-host-label, M6, lifecycle,
+     release, or production/GA gates.

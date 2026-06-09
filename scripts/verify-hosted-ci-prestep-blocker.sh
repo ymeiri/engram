@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
+expected_event="${EXPECTED_EVENT:-pull_request}"
 expected_head="${EXPECTED_HEAD_SHA:-$(git rev-parse HEAD)}"
 expected_jobs=(Check Test Format Clippy Docs)
 run_id="${GITHUB_RUN_ID:-}"
@@ -33,12 +34,14 @@ Usage: scripts/verify-hosted-ci-prestep-blocker.sh [options] [run-id]
 Verify that a hosted CI run failed before workflow steps ran.
 
 Options:
+  --event <event>  Expected GitHub Actions event (default: EXPECTED_EVENT or pull_request)
   --json        Emit machine-readable JSON instead of text on success
   -h, --help    Show this help
 
 Environment overrides:
   EXPECTED_HEAD_SHA       Expected run head (default: git rev-parse HEAD)
   EXPECTED_WORKFLOW_NAME  Expected workflow name (default: CI)
+  EXPECTED_EVENT          Expected run event (default: pull_request)
   GITHUB_RUN_ID           Run ID when no positional run-id is supplied
 
 This script is evidence only. It does not accept a hosted-CI fallback,
@@ -48,6 +51,11 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --event)
+            [[ $# -ge 2 ]] || fail "--event requires an event name"
+            expected_event="$2"
+            shift 2
+            ;;
         --json)
             json_output=1
             shift
@@ -78,7 +86,7 @@ if [[ -z "$run_id" ]]; then
         gh run list \
             --workflow "$expected_workflow" \
             --branch "$current_branch" \
-            --event pull_request \
+            --event "$expected_event" \
             --limit 1 \
             --json databaseId \
             --jq '.[0].databaseId // empty'
@@ -104,7 +112,8 @@ actual_url="$(jq -r '.url // empty' "$run_json")"
 [[ "$actual_conclusion" == "failure" ]] || fail "run conclusion is not failure: $actual_conclusion"
 [[ "$actual_workflow" == "$expected_workflow" ]] ||
     fail "workflow mismatch: expected $expected_workflow, got $actual_workflow"
-[[ "$actual_event" == "pull_request" ]] || fail "run event is not pull_request: $actual_event"
+[[ "$actual_event" == "$expected_event" ]] ||
+    fail "run event mismatch: expected $expected_event, got $actual_event"
 
 actual_jobs="$(jq -r '.jobs[].name' "$run_json" | LC_ALL=C sort)"
 expected_jobs_sorted="$(printf '%s\n' "${expected_jobs[@]}" | LC_ALL=C sort)"
@@ -157,6 +166,7 @@ if [[ "$json_output" == "1" ]]; then
         --arg conclusion "$actual_conclusion" \
         --arg expected_workflow "$expected_workflow" \
         --arg workflow "$actual_workflow" \
+        --arg expected_event "$expected_event" \
         --arg event "$actual_event" \
         --argjson expected_jobs "$expected_jobs_json" \
         --argjson jobs "$jobs_json" \
@@ -171,6 +181,7 @@ if [[ "$json_output" == "1" ]]; then
                 conclusion: $conclusion,
                 expected_workflow: $expected_workflow,
                 workflow: $workflow,
+                expected_event: $expected_event,
                 event: $event
             },
             expected_jobs: $expected_jobs,
@@ -185,6 +196,7 @@ else
     printf '  url: %s\n' "$actual_url"
     printf '  head: %s\n' "$actual_head"
     printf '  workflow: %s\n' "$actual_workflow"
+    printf '  event: %s\n' "$actual_event"
     printf '  jobs: %s\n' "${expected_jobs[*]}"
     printf '  condition: all expected jobs completed with conclusion=failure and steps=[]\n'
 fi
