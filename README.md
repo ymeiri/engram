@@ -236,6 +236,7 @@ cargo fmt
 ./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
 ./scripts/package-release.sh   # Build a local release tarball, manifest, and checksum
 ./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
+./scripts/beta-release-gate-report.sh  # Collect PR/CI/package gate evidence
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 

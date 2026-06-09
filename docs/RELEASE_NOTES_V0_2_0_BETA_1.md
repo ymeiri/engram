@@ -69,6 +69,13 @@ the expected release-gate jobs, and every job completed with conclusion `failure
 It is evidence for release-owner waiver review only; it does not accept the waiver or change PR
 state.
 
+The beta release-gate evidence command is
+`./scripts/beta-release-gate-report.sh --hosted-run <run-id>`. It verifies the branch is synced,
+the tracked tree is clean, PR #3 points at the local head, hosted CI is either green or the
+pre-step blocker is verified, and, unless `--quick` or skip flags are used, the local CI and
+package/install smoke commands pass on the same head. It is evidence for release-owner review only;
+it does not accept the waiver, mark the PR ready, merge, tag, publish, or change release scope.
+
 ### Release-Owner Signoff Checklist
 
 The remaining beta decision is explicit release-owner signoff, not additional product scope. Before
@@ -82,12 +89,14 @@ tagging `v0.2.0-beta.1`, the release owner should confirm:
    execution with `steps=[]`, matching the external billing/spending-limit blocker rather than a
    source or packaging failure. Verify the run with
    `./scripts/verify-hosted-ci-prestep-blocker.sh <run-id>` before signoff.
-4. The known beta limitations listed in this file are accepted: native Claude prompt-bearing
+4. `./scripts/beta-release-gate-report.sh --hosted-run <run-id>` has been run on the signed-off
+   head, or the equivalent branch/PR/CI/local/package evidence has been reviewed manually.
+5. The known beta limitations listed in this file are accepted: native Claude prompt-bearing
    behavior, effective-hook visibility, live Claude host labels, full multi-host parity, direct
    legacy deprecation/deletion, broad lifecycle cleanup or broad `lint apply_safe`, M6 write-apply
    expansion, and exhaustive telemetry/auth/ops/performance/cross-platform hardening remain
    deferred.
-5. After signoff, PR #3 may be marked ready, merged, tagged as `v0.2.0-beta.1`, published with the
+6. After signoff, PR #3 may be marked ready, merged, tagged as `v0.2.0-beta.1`, published with the
    release archive and checksum, and verified with the published install commands.
 
 ## Beta Install Quickstart
@@ -1021,3 +1030,12 @@ installing the binary, and a corrupted-manifest temporary tarball failed closed 
 hash mismatch. T398 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish,
 launch native Claude, prove hooks or host labels, mutate M6, or make the system production/GA
 ready.
+
+T399 adds `./scripts/beta-release-gate-report.sh` as a release-owner evidence collector. The script
+fails closed unless the branch is synced to its upstream, tracked source changes are absent, PR #3
+points at the local head, and hosted CI is either green or the hosted pre-step blocker verifier
+passes for the exact head. By default it also runs `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh`; `--quick` and skip flags are available for read-only status
+checks. T399 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch
+native Claude, prove hooks or host labels, mutate M6, run lifecycle cleanup, or make Engram
+production/GA ready.

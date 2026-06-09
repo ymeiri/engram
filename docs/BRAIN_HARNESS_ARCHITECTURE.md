@@ -3640,3 +3640,9 @@ knowledge and improve agent behavior.
      payload hashes before install. This improves local and post-publish artifact trust, but it
      does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close
      native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.
+215. Treat T399 as beta release-gate evidence aggregation, not release approval.
+     `scripts/beta-release-gate-report.sh` verifies branch sync, clean tracked source state, PR head
+     alignment, hosted CI success or verified pre-step-blocker fallback evidence, and, by default,
+     local CI plus package/install smoke. It gives the release owner a single evidence command, but
+     it does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, or close
+     native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA gates.

@@ -8562,3 +8562,12 @@ lockfile hash, and payload hashes before installing the binary. The happy-path p
 and a temporary tarball with a corrupted `engram` manifest hash failed closed. T398 does not accept
 the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
 host labels, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T399 beta release gate report note:
+`docs/BRAIN_HARNESS_T399_BETA_RELEASE_GATE_REPORT_2026-06-09.md` records release-owner evidence
+aggregation. `./scripts/beta-release-gate-report.sh` checks branch/upstream sync, absence of
+tracked source changes, PR #3 head alignment, hosted CI success or exact-head hosted pre-step
+blocker verification, and, by default, exact-head local CI plus package/install smoke. It is a
+single evidence command for signoff review, not release approval. T399 does not accept the
+hosted-CI fallback, mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or
+host labels, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
