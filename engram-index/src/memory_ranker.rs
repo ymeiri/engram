@@ -982,9 +982,12 @@ fn has_migration_apply_gate_detail(value: &str) -> bool {
 
 fn has_contextual_gate_mention(value: &str) -> bool {
     let value = remove_continuation_gate_negations(value);
-    ["approval gate", "review-gated", "gate", "gated"]
+    ["approval gate", "review-gated"]
         .iter()
         .any(|term| value.contains(term))
+        || ["gate", "gated"]
+            .iter()
+            .any(|term| contains_ascii_word(&value, term))
 }
 
 fn contextual_migration_gate_signal_score(item: &MemoryItem) -> u16 {
@@ -1054,19 +1057,12 @@ fn memory_review_rank(review_state: MemoryReviewState) -> u8 {
 
 fn has_gate_language(value: &str) -> bool {
     let value = remove_continuation_gate_negations(value);
-    [
-        "review-gated",
-        "gate",
-        "must",
-        "do not",
-        "should not",
-        "blocked",
-        "cannot",
-        "never",
-        "requires approval",
-    ]
-    .iter()
-    .any(|term| value.contains(term))
+    ["review-gated", "do not", "should not", "requires approval"]
+        .iter()
+        .any(|term| value.contains(term))
+        || ["gate", "must", "blocked", "cannot", "never"]
+            .iter()
+            .any(|term| contains_ascii_word(&value, term))
 }
 
 fn remove_continuation_gate_negations(value: &str) -> String {
@@ -1077,6 +1073,28 @@ fn remove_continuation_gate_negations(value: &str) -> String {
         .replace("ungated", "")
         .replace("not gated", "")
         .replace("not a gate", "")
+}
+
+fn contains_ascii_word(value: &str, word: &str) -> bool {
+    value.match_indices(word).any(|(index, _)| {
+        let bytes = value.as_bytes();
+        let before = index.checked_sub(1).and_then(|i| bytes.get(i));
+        let after = bytes.get(index + word.len());
+        let before_is_boundary = match before {
+            Some(byte) => !is_ascii_word_byte(*byte),
+            None => true,
+        };
+        let after_is_boundary = match after {
+            Some(byte) => !is_ascii_word_byte(*byte),
+            None => true,
+        };
+
+        before_is_boundary && after_is_boundary
+    })
+}
+
+fn is_ascii_word_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
 }
 
 fn canonical_or_original(path: &Path) -> std::path::PathBuf {
@@ -1241,6 +1259,58 @@ mod tests {
 
             assert!(asks_for_decision_gate(query), "{query}");
             assert!(!should_promote_current_plan(context), "{query}");
+        }
+    }
+
+    #[test]
+    fn gateway_words_do_not_create_gate_context() {
+        for query in [
+            "current plan next M6 gateway routing confidence",
+            "current plan next M6 gatekeeper note",
+            "current plan next M6 gatedness wording",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(
+                !asks_for_contextual_migration_gate_with_current_plan(context),
+                "{query}"
+            );
+            assert!(!has_contextual_gate_mention(query), "{query}");
+            assert!(!has_gate_language(query), "{query}");
+        }
+    }
+
+    #[test]
+    fn gate_boundary_words_still_trigger_gate_context() {
+        for query in [
+            "current plan next M6 gate context",
+            "current plan next M6 gated state",
+            "current plan next M6 review-gated status",
+        ] {
+            let context = MemoryRankContext::search(
+                Some("engram"),
+                Some("/Users/yuval.meiri/projects/engram"),
+                Some(query),
+            );
+
+            assert!(
+                asks_for_contextual_migration_gate_with_current_plan(context),
+                "{query}"
+            );
+            assert!(has_contextual_gate_mention(query), "{query}");
+        }
+
+        for query in [
+            "must not proceed",
+            "blocked path",
+            "cannot proceed",
+            "never run",
+        ] {
+            assert!(has_gate_language(query), "{query}");
         }
     }
 

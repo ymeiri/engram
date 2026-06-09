@@ -3590,3 +3590,10 @@ knowledge and improve agent behavior.
      `gated` or `gate`. Explicit modal gate actions such as "should we proceed with migration
      apply" still trigger gate mode. T390 does not close hosted CI, native-Claude, effective-hook,
      live-host-label, M6, lifecycle, release, or production/GA gates.
+207. Treat T391 as deterministic gate-term boundary hardening, not broader ranking proof. Bare
+     terms such as `gate`, `gated`, `must`, `blocked`, `cannot`, and `never` require ASCII word
+     boundaries, so unrelated words such as `gateway`, `gatekeeper`, and `gatedness` do not create
+     contextual M6 gate promotion. Phrase checks for `approval gate`, `review-gated`, `do not`,
+     `should not`, and `requires approval` remain substring-based. T391 does not close hosted CI,
+     native-Claude, effective-hook, live-host-label, M6, lifecycle, release, or production/GA
+     gates.

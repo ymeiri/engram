@@ -905,3 +905,18 @@ HTTP `/health` returned `{"status":"ok","service":"engram","version":"0.2.0-beta
 changes only deterministic ranking query classification; it does not accept the hosted-CI fallback,
 mark PR #3 ready, merge, tag, publish, launch native Claude, prove hooks or host labels, mutate M6,
 or make the system production/GA ready.
+
+T391 tightens deterministic gate-language matching after T390. Bare gate terms such as `gate`,
+`gated`, `must`, `blocked`, `cannot`, and `never` now require ASCII word boundaries, while
+multi-word or hyphenated phrases such as `approval gate`, `review-gated`, `do not`, `should not`,
+and `requires approval` remain substring checks. This prevents unrelated words such as `gateway`,
+`gatekeeper`, and `gatedness` from creating contextual M6 gate promotion. Focused ranker tests,
+existing M6/current-plan search regressions, formatter check, `cargo check -p engram-index`,
+focused clippy, and `git diff --check` passed. Exact-worktree `./scripts/local-ci.sh` and
+`./scripts/package-install-smoke.sh` also passed; the package smoke rebuilt the release archive,
+verified the checksum, installed the packaged binary into a temporary prefix, confirmed
+`engram 0.2.0-beta.1`, and verified packaged HTTP `/health` returned
+`{"status":"ok","service":"engram","version":"0.2.0-beta.1"}`. T391 changes only deterministic
+ranking query classification; it does not accept the hosted-CI fallback, mark PR #3 ready, merge,
+tag, publish, launch native Claude, prove hooks or host labels, mutate M6, or make the system
+production/GA ready.
