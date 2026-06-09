@@ -78,7 +78,9 @@ pre-step blocker is verified, and, unless `--quick` or skip flags are used, the 
 package/install smoke commands pass on the same head. It is evidence for release-owner review only;
 it does not accept the waiver, mark the PR ready, merge, tag, publish, or change release scope.
 Add `--json` to emit the final evidence object on stdout for automation; validation logs are routed
-to stderr in JSON mode so stdout remains parseable.
+to stderr in JSON mode so stdout remains parseable. When hosted CI is accepted only as a verified
+pre-step blocker candidate, the JSON object embeds the verifier's structured proof under
+`hosted_ci.verifier`; a green hosted-CI path leaves that field `null`.
 
 ### Release-Owner Signoff Checklist
 
@@ -1079,3 +1081,11 @@ status/conclusion/step counts, `hosted_ci_fallback_accepted=false`, and
 `release_actions_performed=false` after all existing checks pass. Failed checks remain non-zero and
 do not emit a success JSON object. T403 does not accept the hosted-CI fallback, mark PR #3 ready,
 merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T404 embeds the T403 hosted verifier JSON inside the T402 beta release-gate report JSON. When
+`./scripts/beta-release-gate-report.sh --json` verifies hosted CI via the pre-step blocker path,
+`hosted_ci.verifier` now carries the exact verifier success object with run/head/workflow/job
+evidence and non-action flags. The text report and green-hosted-CI path remain unchanged, and a
+green hosted-CI path reports `hosted_ci.verifier=null`. T404 does not accept the hosted-CI
+fallback, mark PR #3 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram
+production/GA ready.

@@ -103,8 +103,9 @@ require_tool jq
 
 pr_json="$(mktemp "${TMPDIR:-/tmp}/engram-beta-pr.XXXXXX")"
 checks_file="$(mktemp "${TMPDIR:-/tmp}/engram-beta-checks.XXXXXX")"
+hosted_verifier_file="$(mktemp "${TMPDIR:-/tmp}/engram-beta-hosted-verifier.XXXXXX")"
 cleanup() {
-    rm -f "$pr_json" "$checks_file"
+    rm -f "$pr_json" "$checks_file" "$hosted_verifier_file"
 }
 trap cleanup EXIT
 
@@ -150,6 +151,7 @@ jq -r '
 expected_jobs_sorted="$(printf '%s\n' Check Test Format Clippy Docs | LC_ALL=C sort)"
 actual_jobs_sorted="$(awk -F '\t' '{ print $1 }' "$checks_file" | LC_ALL=C sort)"
 hosted_ci_state="unknown"
+hosted_ci_verifier_json="null"
 
 if [[ "$actual_jobs_sorted" == "$expected_jobs_sorted" ]] &&
     awk -F '\t' 'BEGIN { ok = 1 } $2 != "COMPLETED" || $3 != "SUCCESS" { ok = 0 } END { exit ok ? 0 : 1 }' \
@@ -161,8 +163,21 @@ else
         verify_args+=("$hosted_run_id")
     fi
 
-    run_step "verify hosted CI pre-step fallback" env EXPECTED_HEAD_SHA="$head_sha" \
-        "$repo_root/scripts/verify-hosted-ci-prestep-blocker.sh" "${verify_args[@]}"
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> verify hosted CI pre-step fallback\n' >&2
+        env EXPECTED_HEAD_SHA="$head_sha" \
+            "$repo_root/scripts/verify-hosted-ci-prestep-blocker.sh" --json \
+            "${verify_args[@]}" >"$hosted_verifier_file"
+        jq -e '.condition_verified == true' "$hosted_verifier_file" >/dev/null ||
+            fail "hosted CI pre-step verifier did not emit verified JSON"
+        hosted_ci_verifier_json="$(jq -c '.' "$hosted_verifier_file")"
+        if [[ -z "$hosted_run_id" ]]; then
+            hosted_run_id="$(jq -r '.run.id // empty' "$hosted_verifier_file")"
+        fi
+    else
+        run_step "verify hosted CI pre-step fallback" env EXPECTED_HEAD_SHA="$head_sha" \
+            "$repo_root/scripts/verify-hosted-ci-prestep-blocker.sh" "${verify_args[@]}"
+    fi
     hosted_ci_state="pre_step_blocker_verified"
 fi
 
@@ -217,6 +232,7 @@ if [[ "$json_output" == "1" ]]; then
         --arg local_ci "$local_ci_state" \
         --arg package_install_smoke "$package_smoke_state" \
         --argjson checks "$checks_json" \
+        --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         '{
             branch: $branch,
             upstream: {
@@ -235,7 +251,8 @@ if [[ "$json_output" == "1" ]]; then
             },
             hosted_ci: {
                 state: $hosted_ci_state,
-                run_id: (if $hosted_run_id == "" then null else $hosted_run_id end)
+                run_id: (if $hosted_run_id == "" then null else $hosted_run_id end),
+                verifier: $hosted_ci_verifier
             },
             local_ci: $local_ci,
             package_install_smoke: $package_install_smoke,

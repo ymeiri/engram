@@ -8613,3 +8613,12 @@ expected jobs, per-job status/conclusion/step counts, `hosted_ci_fallback_accept
 `release_actions_performed=false` after all existing fail-closed checks pass. Failed checks remain
 non-zero and do not emit success JSON. T403 does not accept the hosted-CI fallback, mark PR #3
 ready, merge, tag, publish, mutate M6, run lifecycle cleanup, or make Engram production/GA ready.
+
+T404 embedded hosted verifier evidence note:
+`docs/BRAIN_HARNESS_T404_EMBEDDED_HOSTED_VERIFIER_EVIDENCE_2026-06-09.md` records structured
+release-gate aggregation hardening. In JSON mode, `./scripts/beta-release-gate-report.sh` now runs
+the hosted pre-step blocker verifier with `--json` and embeds the verified success object under
+`hosted_ci.verifier`; a green hosted-CI path leaves that field `null`. This gives the release owner
+a single parseable evidence artifact with branch/PR/local/package state plus exact hosted blocker
+proof. T404 does not accept the hosted-CI fallback, mark PR #3 ready, merge, tag, publish, mutate
+M6, run lifecycle cleanup, or make Engram production/GA ready.

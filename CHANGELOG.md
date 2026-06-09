@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   native Claude prompt-bearing, effective-hook, and live host-label proof readiness, with
   machine-readable `--json` output for release and GA automation.
 - `scripts/beta-release-gate-report.sh` now supports machine-readable `--json` output for
-  release-owner evidence automation while preserving text output and evidence-only semantics.
+  release-owner evidence automation while preserving text output and evidence-only semantics. When
+  hosted CI is verified as a pre-step blocker, the JSON report embeds the hosted verifier's
+  structured success object under `hosted_ci.verifier`.
 - `scripts/verify-hosted-ci-prestep-blocker.sh` now supports machine-readable `--json` output for
   direct hosted-CI waiver-condition automation while preserving fail-closed checks.
 
