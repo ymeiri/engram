@@ -19,7 +19,7 @@ authors = ["Yuval Meiri"]
 repository = "https://github.com/ymeiri/engram"
 homepage = "https://github.com/ymeiri/engram"
 description = "Personal Knowledge Augmentation System for AI coding agents"
-keywords = ["mcp", "knowledge-graph", "ai-agents", "memory", "context"]
+keywords = ["mcp", "knowledge-graph", "ai-agents", "memory", "semantic-search"]
 categories = ["development-tools", "database"]
 
 [workspace.dependencies]

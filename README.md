@@ -4,7 +4,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 
-> Persistent memory for AI coding agents. One binary. Local and private.
+> Local-first persistent memory for AI coding agents via MCP. One binary. Private by default.
 
 Your AI coding assistant forgets everything between sessions — project conventions, architectural decisions, what you were working on, which tools work best. **engram remembers.**
 
@@ -16,7 +16,10 @@ Your AI coding assistant forgets everything between sessions — project convent
 > "What auth approach does this project use?"
 > *"This project uses OAuth. You chose it over API keys on Jan 12 for delegated partner access."*
 
-engram is a local-first memory system purpose-built for AI coding agents. It connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so compatible agents can gain persistent knowledge across sessions without embedding API calls.
+engram is a local-first memory system and knowledge base purpose-built for AI coding agents. It
+connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so Claude Code, Codex,
+Cursor, and other compatible agents can use semantic search, session memory, document recall, and
+tool history across sessions without embedding API calls.
 
 > **Beta scope:** v0.2.0-beta.2 supports guided local setup for Claude Code, Codex,
 > and Cursor. Other MCP-compatible hosts may work with the same server, but they are not part of
