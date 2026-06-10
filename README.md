@@ -257,8 +257,8 @@ engram gives your coding agent MCP tools that let it read, search, and write to 
 
 | Capability | What it remembers | Example |
 |-----------|-------------------|---------|
-| **Project knowledge** | Repos, services, tools, concepts, conventions | "MCP" = Model Context Protocol |
-| **Session memory** | Decisions, rationale, events across sessions | "We chose OAuth over API keys because..." |
+| **Project knowledge** | Repos, services, tools, concepts, conventions | "Auth owns login, billing consumes its JWT claims" |
+| **Session memory** | Decisions, rationale, events across sessions | "OAuth was chosen for delegated partner access" |
 | **Document recall** | Semantic search over indexed docs | Search "deploy" → relevant runbook section |
 | **Tool memory** | Which tools succeed in which context | "For Go builds, use bzl (95% success)" |
 
@@ -287,15 +287,17 @@ Protocol. Guided beta setup covers Claude Code, Codex, and Cursor.
 **Minimal setup.** Install the binary, run `engram init`, then use `engram setup` to configure a
 supported local agent. No schema definitions, no ontology configuration, no embedding API keys.
 
-## How It Compares
+## Where It Fits
 
-|  | engram | General memory systems | Cloud memory APIs |
-|--|--------|------------------------|-------------------|
-| Built for coding agents | Yes | No | Partial |
-| Local / no cloud required | Yes | Varies | No |
-| MCP-native | Yes | No | No |
-| Understands PRs, repos, tasks | Yes | No | Partial |
-| Single binary, zero infra | Yes | No | No |
+engram is a good fit when you want a local memory layer for AI coding agents that work across
+multiple sessions, repositories, and tools.
+
+| Use engram when... | Consider something else when... |
+|--------------------|---------------------------------|
+| You want Claude Code, Codex, or Cursor to remember project decisions across sessions | You need a hosted company knowledge base for humans |
+| You want memory stored locally on your machine | You need managed cloud retention, access control, and audit logs |
+| You want MCP tools for entities, sessions, documents, work items, and coordination | You only need a generic vector database or search API |
+| You want a single local binary with no database service to operate | You already have a production knowledge platform your agents can query directly |
 
 ## Architecture
 
