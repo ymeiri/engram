@@ -176,6 +176,81 @@ If engram is connected, your agent recalls the decision from step 1.
 - Indexed documents, memory items, sessions, tool history, and work context are stored locally under
   `~/.engram/` unless you use a project-specific or explicit data directory.
 
+## Uninstall
+
+Stop Engram before removing the binary:
+
+```bash
+engram daemon stop 2>/dev/null || true
+```
+
+If you used project-specific daemons, stop each project daemon first:
+
+```bash
+engram daemon stop --project my-project 2>/dev/null || true
+```
+
+Remove generated agent setup files from the same root where you ran `engram setup --write`.
+For the default home-directory setup:
+
+```bash
+# Codex
+rm -rf ~/.codex/skills/engram-memory-session
+rm -rf ~/.codex/skills/engram-resume-session
+rm -f ~/AGENTS.engram.md
+
+# Cursor
+rm -rf ~/.cursor/skills/engram-memory-session
+rm -rf ~/.cursor/skills/engram-resume-session
+rm -rf ~/.cursor/skills/engram-end-session
+```
+
+For Claude Code project setup, remove the generated files from that project root:
+
+```bash
+rm -f .claude/commands/engram-memory-session.md
+rm -f .claude/commands/engram-resume-session.md
+rm -f .claude/commands/engram-end-session.md
+rm -f .claude/hooks/engram-session-start.sh
+rm -f .claude/hooks/engram-stop-nudge.sh
+rm -f .claude/hooks/engram-session-end.sh
+rm -f .claude/engram-settings-snippet.json
+rm -f AGENTS.engram.md
+```
+
+If you added Engram manually to Claude Code, Codex, or Cursor MCP settings, remove the `engram`
+MCP server entry from that agent's config file.
+
+Then uninstall the binary:
+
+```bash
+# Homebrew
+brew uninstall ymeiri/engram/engram
+brew untap ymeiri/engram
+
+# Manual install
+rm -f ~/.local/bin/engram
+```
+
+By default, keep `~/.engram/` so local memory can be restored later. To remove local memory without
+deleting it immediately, move it aside:
+
+```bash
+mv ~/.engram ~/.engram.backup.$(date +%Y%m%d%H%M%S)
+```
+
+Permanent data deletion is destructive:
+
+```bash
+rm -rf ~/.engram
+```
+
+Verify removal:
+
+```bash
+command -v engram || echo "engram binary removed"
+```
+
 ## What It Does
 
 engram gives your coding agent MCP tools that let it read, search, and write to its own persistent memory. You code naturally; the agent decides when to store knowledge for the future.
