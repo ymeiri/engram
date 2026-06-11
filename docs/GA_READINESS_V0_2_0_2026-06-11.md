@@ -163,6 +163,17 @@ SHA-256 shape before any tarball or checksum is written.
 This keeps final `v0.2.0` packaging from publishing an archive whose manifest is malformed or
 structurally inconsistent before the downstream install smoke ever runs.
 
+## Hosted CI Multi-Session Test Stabilization
+
+GitHub Actions run `27358951202` for commit `900101f` failed in the `Test` job while Format,
+Check, Docs, and Clippy passed. The failure was isolated to
+`engram-tests/tests/multi_session_tests.rs`: all 17 tests failed to start a daemon because the Rust
+test harness ran daemon-spawning tests concurrently and each timed out waiting for `/health`.
+
+The test harness now serializes each `TestDaemon` lifetime with a process-local async lock. This
+keeps multi-session coverage intact while preventing hosted CI from starting one daemon per test at
+the same time.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -207,3 +218,4 @@ structurally inconsistent before the downstream install smoke ever runs.
   9204cdea38361acb6647ffb4c7b2399590c349f2 --json` (expected tag-commit failure)
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
   package-release manifest build guard
+- `cargo test -p engram-tests --test multi_session_tests`

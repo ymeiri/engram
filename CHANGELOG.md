@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
   release archive is created.
 
+### Fixed
+- Serialized the multi-session daemon integration test harness so hosted CI does not start one
+  daemon per test concurrently and time out waiting for `/health`.
+
 ## [0.2.0-beta.2] - 2026-06-09
 
 ### Added

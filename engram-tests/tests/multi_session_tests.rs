@@ -9,14 +9,16 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
 use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::process::{Child, Command};
+use tokio::sync::{Mutex as TokioMutex, OwnedMutexGuard};
 
 /// Global port counter to ensure each test gets unique ports.
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(19000);
 static ENGRAM_BIN: OnceLock<PathBuf> = OnceLock::new();
+static DAEMON_TEST_LOCK: OnceLock<Arc<TokioMutex<()>>> = OnceLock::new();
 
 /// Get a unique port for testing.
 fn get_test_port() -> u16 {
@@ -53,6 +55,12 @@ fn test_embed_cache_dir() -> PathBuf {
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(".fastembed_cache")
+}
+
+fn daemon_test_lock() -> Arc<TokioMutex<()>> {
+    DAEMON_TEST_LOCK
+        .get_or_init(|| Arc::new(TokioMutex::new(())))
+        .clone()
 }
 
 fn resolve_engram_bin() -> PathBuf {
@@ -92,6 +100,7 @@ struct TestDaemon {
     port: u16,
     child: Child,
     _data_dir: TempDir,
+    _lock: OwnedMutexGuard<()>,
 }
 
 impl TestDaemon {
@@ -103,6 +112,7 @@ impl TestDaemon {
 
     /// Start a daemon on a specific port.
     async fn start_on_port(port: u16) -> Result<Self> {
+        let lock = daemon_test_lock().lock_owned().await;
         let data_dir = TempDir::new().context("Failed to create temp dir")?;
 
         let child = Command::new(engram_bin())
@@ -121,6 +131,7 @@ impl TestDaemon {
             port,
             child,
             _data_dir: data_dir,
+            _lock: lock,
         };
 
         // Wait for daemon to be ready
