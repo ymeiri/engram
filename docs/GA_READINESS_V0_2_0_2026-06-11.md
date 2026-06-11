@@ -57,12 +57,12 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
 | Versioning | Partially validated | Workspace metadata and lockfile are consistent at `0.2.0-beta.2`. | Bump workspace version and lockfile to `0.2.0` only after GA blockers are closed. |
-| Hosted CI | Validated through setup-path docs checkpoint | Main push CI run `27363378532` passed for setup-path docs checkpoint `86dd38d`; earlier runs `27361233663`, `27335890558`, and `27340971819` passed for release-hardening, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Hosted CI | Validated through GA release-gate checkpoint | Main push CI run `27372009309` passed for release-gate checkpoint `a082a63`; earlier runs `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for setup-path docs, release-hardening, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
 | Local runtime | Validated for beta.2 source | Release build passed; installed binary and daemon now match `0.2.0-beta.2`. | Repeat install/daemon smoke on the final GA versioned head. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
-| Generated vault | Validated | Canonical vault status after memory updates reports `generated_file_count=2880`, `expected_generated_file_count=2880`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
-| Native Claude production gate | Blocked | Fresh `scripts/native-claude-gate-preflight.sh --json` on `86dd38d` reports `gate_state=blocked`: branch synced, tracked tree clean, obligations clean, vault aligned at `2880/2880`, Claude Code `2.1.173` hash matches, daemon reports `0.2.0-beta.2`, and the blocker is an already-running native Claude CLI process on `ttys001`. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
+| Generated vault | Validated | Canonical vault status after memory updates reports `generated_file_count=2888`, `expected_generated_file_count=2888`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
+| Native Claude production gate | Blocked | Fresh `scripts/native-claude-gate-preflight.sh --json` on `a082a63` reports `gate_state=blocked`: branch synced, tracked tree clean, obligations clean, vault aligned at `2888/2888`, Claude Code `2.1.173` hash matches, daemon reports `0.2.0-beta.2`, and the blocker is an already-running native Claude CLI process on `ttys001`. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
@@ -218,8 +218,8 @@ guarantee.
 
 ## Native Claude Gate Refresh
 
-A fresh read-only native Claude production-gate preflight ran on setup-path docs checkpoint
-`86dd38d`. The script reported:
+A fresh read-only native Claude production-gate preflight ran again on release-gate checkpoint
+`a082a63`. The script reported:
 
 - `gate_state=blocked`
 - branch `main`, upstream `origin/main`, `ahead=0`, `behind=0`
@@ -233,8 +233,8 @@ A fresh read-only native Claude production-gate preflight ran on setup-path docs
   that live effective-hook visibility still requires Claude Code `/hooks` verification
 - snippet-only harness install dry-run planned no generated-file changes
 - obligations doctor returned no open items or warnings
-- canonical vault status was aligned at `generated_file_count=2880`,
-  `expected_generated_file_count=2880`, `user_file_count=0`
+- canonical vault status was aligned at `generated_file_count=2888`,
+  `expected_generated_file_count=2888`, `user_file_count=0`
 - the blocker was an already-running native Claude CLI process on `ttys001`
 - no native Claude launch, `/hooks` command, process signal, or release action was performed
 
@@ -244,6 +244,10 @@ Strict mode also failed closed as intended: `scripts/native-claude-gate-prefligh
 This refresh keeps the production gate open. It narrows the current native-Claude blocker to
 process-state availability for a future proof run; it does not prove prompt-bearing behavior,
 effective-hook visibility, or live host-label attribution.
+
+This refresh also confirms the divergent-branch warning seen during a prior pull
+attempt is not the live repo state: after `git fetch --tags --prune origin`, `main` and
+`origin/main` were still aligned at `a082a63` with `ahead=0`, `behind=0`.
 
 ## Release-Facing Docs Scope Cleanup
 
@@ -342,3 +346,8 @@ version to `0.2.0`, emits `workspace_version_matches_release=false`, and keeps
   expected `release_version=0.2.0`, `workspace_version_matches_release=false`,
   `release_gate_state=version_bump_required`, and no `tag_v0.2.0-beta.2`
   remaining action
+- `scripts/native-claude-gate-preflight.sh --json | jq .`
+  expected `head=a082a63969df1be1179f38a75a02ee23ff815166`,
+  `gate_state=blocked`, vault `2888/2888`, no tracked changes, no extra untracked files, and
+  blocker `native Claude CLI processes are already running`
+- `scripts/native-claude-gate-preflight.sh --json --require-ready` (expected exit code `2`)
