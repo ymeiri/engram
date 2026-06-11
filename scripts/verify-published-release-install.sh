@@ -11,6 +11,7 @@ tag="v${package_version}"
 asset_dir=""
 expected_git_head="$(git rev-parse HEAD)"
 expected_tracked_changes_present=false
+expected_prerelease="auto"
 json_output=0
 
 usage() {
@@ -27,6 +28,8 @@ Options:
   --expected-git-head <sha>              Expected MANIFEST.json git head (default: current HEAD)
   --expected-tracked-changes-present <bool>
                                         Expected MANIFEST.json tracked-change flag (default: false)
+  --expected-prerelease <auto|true|false>
+                                        Expected GitHub release prerelease state (default: auto from tag suffix)
   --asset-dir <path>                     Validate existing archive/checksum directory instead of downloading
   --json                                 Emit final evidence as machine-readable JSON
   -h, --help                             Show this help
@@ -88,6 +91,14 @@ while [[ $# -gt 0 ]]; do
             esac
             shift 2
             ;;
+        --expected-prerelease)
+            [[ $# -ge 2 ]] || fail "--expected-prerelease requires auto, true, or false"
+            case "$2" in
+                auto | true | false) expected_prerelease="$2" ;;
+                *) fail "--expected-prerelease must be auto, true, or false" ;;
+            esac
+            shift 2
+            ;;
         --asset-dir)
             [[ $# -ge 2 ]] || fail "--asset-dir requires a path"
             asset_dir="$2"
@@ -114,6 +125,14 @@ require_tool jq
 archive_name="engram-${package_version}-${host_triple}"
 tarball_name="${archive_name}.tar.gz"
 checksum_name="${tarball_name}.sha256"
+resolved_expected_prerelease="$expected_prerelease"
+if [[ "$resolved_expected_prerelease" == "auto" ]]; then
+    if [[ "$tag" == *"-"* ]]; then
+        resolved_expected_prerelease=true
+    else
+        resolved_expected_prerelease=false
+    fi
+fi
 downloaded_assets=false
 release_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-view.XXXXXX")"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-release-install.XXXXXX")"
@@ -139,8 +158,14 @@ if [[ -z "$asset_dir" ]]; then
         --json tagName,name,isDraft,isPrerelease,url,targetCommitish >"$release_json"
 
     release_tag="$(jq -r '.tagName // empty' "$release_json")"
+    release_draft="$(jq -r '.isDraft' "$release_json")"
+    release_prerelease="$(jq -r '.isPrerelease' "$release_json")"
     [[ "$release_tag" == "$tag" ]] ||
         fail "release tag mismatch: expected $tag, got ${release_tag:-<none>}"
+    [[ "$release_draft" == "false" ]] ||
+        fail "release is still a draft: $tag"
+    [[ "$release_prerelease" == "$resolved_expected_prerelease" ]] ||
+        fail "release prerelease state mismatch for $tag: expected $resolved_expected_prerelease, got $release_prerelease"
 
     run_step "download release assets" gh release download "$tag" \
         --repo "$repo" \
@@ -178,6 +203,7 @@ if [[ "$json_output" == "1" ]]; then
         --arg asset_dir "$asset_dir" \
         --arg expected_git_head "$expected_git_head" \
         --arg expected_tracked_changes_present "$expected_tracked_changes_present" \
+        --arg expected_prerelease "$resolved_expected_prerelease" \
         --arg downloaded_assets "$downloaded_assets" \
         --slurpfile release "$release_json" \
         '{
@@ -195,6 +221,7 @@ if [[ "$json_output" == "1" ]]; then
             release: ($release[0] // {}),
             expected_git_head: $expected_git_head,
             expected_tracked_changes_present: ($expected_tracked_changes_present == "true"),
+            expected_prerelease: ($expected_prerelease == "true"),
             install_smoke: "passed",
             published_install_verified: true,
             release_actions_performed: false
@@ -205,6 +232,7 @@ else
     printf '  tag: %s\n' "$tag"
     printf '  version: %s\n' "$package_version"
     printf '  host_triple: %s\n' "$host_triple"
+    printf '  expected_prerelease: %s\n' "$resolved_expected_prerelease"
     printf '  assets_source: %s\n' \
         "$([[ "$downloaded_assets" == "true" ]] && printf 'github_release' || printf 'asset_dir')"
     printf '  archive: %s\n' "$tarball_name"

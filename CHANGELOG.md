@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer can produce GA-ready formula text after the final version bump.
 - Made local release packaging fail closed on tracked changes by default, with
   `ALLOW_TRACKED_CHANGES=1` reserved for explicit development rehearsals.
+- Hardened published release install verification so GitHub release checks fail on draft releases
+  or unexpected prerelease/stable state before downloading assets.
 
 ## [0.2.0-beta.2] - 2026-06-09
 
