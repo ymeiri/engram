@@ -37,25 +37,24 @@ sha256_file() {
 manifest_string_value() {
     local manifest="$1"
     local key="$2"
-    grep -F "\"${key}\":" "$manifest" |
-        head -n 1 |
-        sed 's/^[^:]*:"//; s/".*$//'
+    jq -er --arg key "$key" '.[$key] | strings' "$manifest"
 }
 
 manifest_boolean_value() {
     local manifest="$1"
     local key="$2"
-    grep -F "\"${key}\":" "$manifest" |
-        head -n 1 |
-        sed 's/^[^:]*://; s/[,[:space:]]//g'
+    jq -er --arg key "$key" '.[$key] | booleans | tostring' "$manifest"
 }
 
 manifest_file_sha256() {
     local manifest="$1"
     local path="$2"
-    grep -F "\"path\":\"${path}\"" "$manifest" |
-        sed -n 's/.*"sha256":"\([0-9a-f]\{64\}\)".*/\1/p' |
-        head -n 1
+    jq -er --arg path "$path" '
+        .files[]
+        | select(.path == $path)
+        | .sha256
+        | select(test("^[0-9a-f]{64}$"))
+    ' "$manifest"
 }
 
 choose_port() {
@@ -123,6 +122,11 @@ validate_archive_paths() {
             exit 1
         fi
     done
+}
+
+command -v jq >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: jq\n' >&2
+    exit 1
 }
 
 if [[ "${SKIP_PACKAGE_BUILD:-0}" != "1" ]]; then

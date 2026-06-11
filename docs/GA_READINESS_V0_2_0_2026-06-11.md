@@ -143,6 +143,15 @@ This keeps the final `v0.2.0` post-publish verifier from accepting a draft or pr
 release even if the archive assets install successfully, and it prevents `v0.2.0` evidence from
 being collected on an unbumped `0.2.0-beta.2` checkout.
 
+## Package Manifest Verification Guard
+
+`scripts/package-install-smoke.sh` now parses packaged `MANIFEST.json` with `jq` instead of
+line-oriented text matching. The install smoke checks release metadata, boolean dirty-state
+provenance, Cargo.lock hash provenance, and each packaged file hash through structured JSON queries.
+
+This keeps local package rehearsals and published-release install verification from accepting
+malformed or misleading manifest JSON during the final `v0.2.0` artifact proof.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -180,3 +189,5 @@ being collected on an unbumped `0.2.0-beta.2` checkout.
 - `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir <temp> --json` (expected failure)
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-prerelease false --json` (expected failure)
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --json`
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the `jq`
+  manifest parser change
