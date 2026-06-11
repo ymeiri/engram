@@ -2,13 +2,13 @@
 
 Date: 2026-06-11
 Status: GA preparation in progress
-Base inspected: `main` at `40b8f0fff5b3de886d14bc8c3ac673bf303853bc`
+Latest validated checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
 
 ## Summary
 
 The expected GA target remains `v0.2.0`. Repo and release evidence show no `v0.2.0`
 tag or GitHub release yet. The latest published prerelease is `v0.2.0-beta.2`, and
-the current `main` branch is four commits past that tag.
+the latest validated checkpoint is five commits past that tag.
 
 `v0.2.0-beta.1` is verified as a signed local tag and published GitHub prerelease.
 `v0.2.0-beta.2` is also verified as a signed local tag and published GitHub
@@ -24,8 +24,9 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `ec2e263`.
 - GitHub releases: `v0.2.0-beta.1` and `v0.2.0-beta.2` are published
   prereleases; `v0.1.0` remains the stable/latest release.
-- Current hosted CI: main push run `27276034000` for `40b8f0f` completed
-  successfully on 2026-06-10.
+- Current hosted CI: main push run `27335890558` for `b650a30` completed
+  successfully on 2026-06-11. The `Test` job ran
+  `cargo test --locked --all-targets --jobs 1` and completed in `27m45s`.
 - Workspace versions: every Engram workspace package resolves to
   `0.2.0-beta.2` in `cargo metadata`, and `Cargo.lock` matches that version.
 - Local runtime before refresh: installed `engram` and daemon still reported
@@ -43,12 +44,12 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
 | Versioning | Partially validated | Workspace metadata and lockfile are consistent at `0.2.0-beta.2`. | Bump workspace version and lockfile to `0.2.0` only after GA blockers are closed. |
-| Hosted CI | Validated for current main | Main push CI run `27276034000` passed on current head. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Hosted CI | Validated for latest checkpoint | Main push CI run `27335890558` passed for `b650a30`. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
 | Local runtime | Validated for beta.2 source | Release build passed; installed binary and daemon now match `0.2.0-beta.2`. | Repeat install/daemon smoke on the final GA versioned head. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
-| Generated vault | Validated | Canonical vault compiled to `generated_file_count=2851`, `expected_generated_file_count=2851`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
-| Native Claude production gate | Blocked | Preflight baseline now matches Claude Code `2.1.173` and current Engram daemon/vault; the only remaining blocker is an already-running native Claude CLI process. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
+| Generated vault | Validated | Canonical vault compiled after memory updates to `generated_file_count=2856`, `expected_generated_file_count=2856`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
+| Native Claude production gate | Blocked | Preflight baseline now matches Claude Code `2.1.173` and current Engram daemon/vault; the only remaining blocker is an already-running native Claude CLI process, most recently PID `67572` on `ttys001`. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Partially validated | Beta.2 docs and setup support Codex; current task used native Codex MCP `orient` successfully. | Run a final supported-path setup/orient smoke on the GA head. |
 | Cursor setup/runtime path | Implemented / needs validation | Beta.2 adds guided setup for Cursor. | Run or explicitly defer Cursor smoke before GA support claims. |
@@ -72,6 +73,15 @@ effective-hook, and host-label proof. If yes, the next blocking condition is ext
 state: a pre-existing native Claude CLI process is running, and the fail-closed preflight correctly
 refuses to proceed.
 
+## Exact-Head CI Refresh
+
+After this first GA slice was committed as `b650a30`, GitHub Actions main CI run
+`27335890558` completed successfully for that exact commit. Format, Check, Docs, Clippy, and Test
+all passed; the serialized Test job completed in `27m45s`.
+
+This proves the `b650a30` readiness checkpoint. Any later docs, version, package, or release commit
+still needs its own exact-head CI evidence before it can be used as a final GA release head.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -92,3 +102,5 @@ refuses to proceed.
 - `engram harness doctor --harness claude-code --json`
 - `engram obligations doctor --scope-project engram --cwd /Users/yuval.meiri/projects/engram --limit 20 --json`
 - `scripts/native-claude-gate-preflight.sh --allow-worktree-changes --json`
+- `gh run watch 27335890558 --repo ymeiri/engram --exit-status --interval 30`
+- `scripts/native-claude-gate-preflight.sh --json`
