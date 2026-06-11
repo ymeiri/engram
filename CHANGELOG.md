@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   workspace package version and the gate remains version-blocked until the `0.2.0` bump lands.
 - Hardened the GA release gate report so final release notes must retain explicit scope limits for
   native Claude proof and broad lifecycle/M6 mutation claims before owner review.
+- Bumped the workspace package metadata to `0.2.0` for final GA validation; tag, artifact,
+  Homebrew, and GitHub release publication remain gated on exact-head CI and full release-gate
+  evidence.
 
 ### Fixed
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one
