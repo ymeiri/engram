@@ -6,9 +6,9 @@ cd "$repo_root"
 
 expected_branch="${EXPECTED_BRANCH:-main}"
 expected_claude_bin="${CLAUDE_BIN:-/Users/yuval.meiri/.local/bin/claude}"
-expected_claude_target="${EXPECTED_CLAUDE_TARGET:-/Users/yuval.meiri/.local/share/claude/versions/2.1.169}"
-expected_claude_version="${EXPECTED_CLAUDE_VERSION:-2.1.169 (Claude Code)}"
-expected_claude_sha256="${EXPECTED_CLAUDE_SHA256:-86d8b820ad7eed50e50a130706d3dc5ef70696f91194de1b3897a842182afe3a}"
+expected_claude_target="${EXPECTED_CLAUDE_TARGET:-/Users/yuval.meiri/.local/share/claude/versions/2.1.173}"
+expected_claude_version="${EXPECTED_CLAUDE_VERSION:-2.1.173 (Claude Code)}"
+expected_claude_sha256="${EXPECTED_CLAUDE_SHA256:-235c1bacdcc7f9d8d92368c95a0c66c26fcac98f878f21b10c73af340bc331ab}"
 engram_bin="${ENGRAM_BIN:-/Users/yuval.meiri/.local/bin/engram}"
 vault_path="${ENGRAM_VAULT_PATH:-/Users/yuval.meiri/.engram/vault}"
 require_ready=0
