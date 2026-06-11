@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ad hoc text matching when checking release metadata and packaged file hashes.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
   release archive is created.
+- Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
+  Cursor setup adapter install/status rehearsal results.
 
 ### Fixed
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one

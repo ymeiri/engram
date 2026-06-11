@@ -2,7 +2,8 @@
 
 Date: 2026-06-11
 Status: GA preparation in progress
-Validated release-code checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
+Validated release-hardening checkpoint: `eb0e3a96b7a751a90d482dad95ab9ae31af76a7e`
+Validated release-code baseline checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
 Validated release-notes docs checkpoint: `c095770f1821c731c01b176a83fe43903618a2f8`
 
 ## Summary
@@ -30,6 +31,10 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 - Release-notes hosted CI: main push run `27340971819` for `c095770` completed
   successfully on 2026-06-11. The `Test` job ran
   `cargo test --locked --all-targets --jobs 1` and completed in `28m43s`.
+- Release-hardening hosted CI: main push run `27361233663` for `eb0e3a9` completed
+  successfully on 2026-06-11. The `Test` job ran
+  `cargo test --locked --all-targets --jobs 1` and completed from
+  `16:20:13Z` to `16:47:17Z`.
 - Workspace versions: every Engram workspace package resolves to
   `0.2.0-beta.2` in `cargo metadata`, and `Cargo.lock` matches that version.
 - Local runtime before refresh: installed `engram` and daemon still reported
@@ -47,15 +52,15 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
 | Versioning | Partially validated | Workspace metadata and lockfile are consistent at `0.2.0-beta.2`. | Bump workspace version and lockfile to `0.2.0` only after GA blockers are closed. |
-| Hosted CI | Validated for listed checkpoints | Main push CI run `27335890558` passed for release-code checkpoint `b650a30`; run `27340971819` passed for release-notes docs checkpoint `c095770`. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Hosted CI | Validated for release-hardening checkpoint | Main push CI run `27361233663` passed for release-hardening checkpoint `eb0e3a9`; earlier runs `27335890558` and `27340971819` passed for the release-code and release-notes baselines. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
 | Local runtime | Validated for beta.2 source | Release build passed; installed binary and daemon now match `0.2.0-beta.2`. | Repeat install/daemon smoke on the final GA versioned head. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
-| Generated vault | Validated | Canonical vault compiled after memory updates to `generated_file_count=2860`, `expected_generated_file_count=2860`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
+| Generated vault | Validated | Canonical vault compiled after memory updates to `generated_file_count=2878`, `expected_generated_file_count=2878`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
 | Native Claude production gate | Blocked | Preflight baseline now matches Claude Code `2.1.173` and current Engram daemon/vault; the only remaining blocker is an already-running native Claude CLI process, most recently PID `61303` on `ttys001`. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
-| Codex setup/runtime path | Partially validated | Beta.2 docs and setup support Codex; current task used native Codex MCP `orient` successfully. | Run a final supported-path setup/orient smoke on the GA head. |
-| Cursor setup/runtime path | Implemented / needs validation | Beta.2 adds guided setup for Cursor. | Run or explicitly defer Cursor smoke before GA support claims. |
+| Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
+| Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
 | Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the pre-GA `0.2.0-beta.2` workspace. Local release packaging now fails closed on tracked changes by default. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
 | Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
@@ -174,6 +179,38 @@ The test harness now serializes each `TestDaemon` lifetime with a process-local 
 keeps multi-session coverage intact while preventing hosted CI from starting one daemon per test at
 the same time.
 
+The follow-up commit `eb0e3a9` has exact-head hosted CI evidence: run `27361233663` completed
+successfully for Format, Docs, Check, Clippy, and Test. This makes `eb0e3a9` the validated
+release-hardening checkpoint before any future GA version, package, or release publication changes.
+
+## Supported Setup Path Rehearsal
+
+Codex and Cursor setup paths were rehearsed in isolated temp roots so the validation did not modify
+the user's real harness configuration.
+
+Codex:
+
+- `target/debug/engram setup --agent codex --root /tmp/engram-codex-setup.BWMgtQ --write --yes`
+  wrote `.codex/skills/engram-memory-session/SKILL.md`,
+  `.codex/skills/engram-resume-session/SKILL.md`, and `AGENTS.engram.md`.
+- `target/debug/engram harness status --harness codex --root /tmp/engram-codex-setup.BWMgtQ
+  --json` and `target/debug/engram harness doctor --harness codex --root
+  /tmp/engram-codex-setup.BWMgtQ --json` reported required adapters installed and `ready=true`.
+
+Cursor:
+
+- `target/debug/engram setup --agent cursor --root /tmp/engram-cursor-setup.ShHnjs --write --yes`
+  wrote `.cursor/skills/engram-memory-session/SKILL.md`,
+  `.cursor/skills/engram-resume-session/SKILL.md`, and
+  `.cursor/skills/engram-end-session/SKILL.md`.
+- `target/debug/engram harness status --harness cursor --root /tmp/engram-cursor-setup.ShHnjs
+  --json` and `target/debug/engram harness doctor --harness cursor --root
+  /tmp/engram-cursor-setup.ShHnjs --json` reported required adapters installed and `ready=true`.
+
+This proves generated adapter install/status behavior for clean roots. It does not claim a live
+Cursor host session, and it does not upgrade advisory lifecycle compliance into a hard runtime
+guarantee.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -219,3 +256,13 @@ the same time.
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
   package-release manifest build guard
 - `cargo test -p engram-tests --test multi_session_tests`
+- `target/debug/engram setup --agent codex --root /tmp/engram-codex-setup.BWMgtQ --write --yes`
+- `target/debug/engram harness status --harness codex --root /tmp/engram-codex-setup.BWMgtQ
+  --json`
+- `target/debug/engram harness doctor --harness codex --root /tmp/engram-codex-setup.BWMgtQ
+  --json`
+- `target/debug/engram setup --agent cursor --root /tmp/engram-cursor-setup.ShHnjs --write --yes`
+- `target/debug/engram harness status --harness cursor --root /tmp/engram-cursor-setup.ShHnjs
+  --json`
+- `target/debug/engram harness doctor --harness cursor --root /tmp/engram-cursor-setup.ShHnjs
+  --json`
