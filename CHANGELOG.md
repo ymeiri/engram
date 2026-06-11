@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Drafted the `v0.2.0` GA release notes artifact with install, upgrade, first-run,
   and known-limitation guidance for final release review.
+- Added a `v0.2.0` GA release-owner approval runbook that requires fresh exact-head gate evidence,
+  names the post-approval commands, and preserves default-deny release boundaries.
 
 ### Changed
 - Refreshed the native Claude production-gate preflight baseline to the current Claude Code
@@ -47,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bumped the workspace package metadata to `0.2.0` for final GA validation; tag, artifact,
   Homebrew, and GitHub release publication remain gated on exact-head CI and full release-gate
   evidence.
+- Refreshed the GA readiness matrix with pre-runbook exact-head `0.2.0` CI, full release-gate,
+  package smoke, and Homebrew formula evidence; publication still requires explicit release-owner
+  approval and a fresh full gate on the release head.
 
 ### Fixed
 - Kept work-management integration tests offline-deterministic by using the no-embedder

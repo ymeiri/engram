@@ -6,6 +6,7 @@ Validated setup-path docs checkpoint: `86dd38d0ef56bad5aa0c999578313c7f4a133e41`
 Validated release-hardening checkpoint: `eb0e3a96b7a751a90d482dad95ab9ae31af76a7e`
 Validated release-code baseline checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
 Validated release-notes docs checkpoint: `c095770f1821c731c01b176a83fe43903618a2f8`
+Pre-runbook GA release-owner review head: `1eefa11aff32e4d3802cc327ddc8d8957fd2f56f`
 
 ## Summary
 
@@ -42,6 +43,13 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `16:57:15Z` to `17:25:26Z`.
 - Workspace versions: every Engram workspace package now resolves to
   `0.2.0` in `cargo metadata --locked`, and `Cargo.lock` matches that version.
+- Pre-runbook GA release-owner review CI: main push run `27379891728` for
+  `1eefa11aff32e4d3802cc327ddc8d8957fd2f56f` completed successfully on
+  2026-06-11 for Check, Test, Clippy, Docs, and Format.
+- Pre-runbook full GA release gate: `scripts/release-gate-report.sh --target ga --hosted-run 27379891728
+  --json` passed with `local_ci=passed`, `package_install_smoke=passed`,
+  `release_scope.state=complete`, `release_gate_state=hosted_ci_passing_release_owner_review_required`,
+  and `ready_for_release_owner_review=true`.
 - Local runtime before refresh: installed `engram` and daemon still reported
   `0.2.0-beta.1`.
 - Local runtime after refresh: installed binary hash
@@ -56,9 +64,9 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | --- | --- | --- | --- |
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
-| Versioning | Locally validated / needs exact-head CI | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version. | Re-run exact-head CI and the full GA release gate on the versioned head before any tag, package, Homebrew, or GitHub release publication. |
-| Hosted CI | Validated through GA release-gate checkpoint | Main push CI run `27372009309` passed for release-gate checkpoint `a082a63`; earlier runs `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for setup-path docs, release-hardening, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
-| Local runtime | Validated for GA package smoke / installed global still beta.2 | Release build and isolated package/install smoke passed for `engram 0.2.0`; the previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | Repeat install/daemon smoke through the full GA release gate on the clean committed head. |
+| Versioning | Validated pre-runbook / gate command authoritative | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version on head `1eefa11`; full GA gate confirmed `workspace_version_matches_release=true`. | Rerun exact-head CI and the full GA gate after this runbook or any other release-facing change. |
+| Hosted CI | Validated pre-runbook / gate command authoritative | Main push CI run `27379891728` passed for head `1eefa11`; earlier runs `27372009309`, `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for release-gate, setup-path docs, release-hardening, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Local runtime | Validated for GA package smoke / installed global still beta.2 | Full GA gate package/install smoke passed for `engram 0.2.0`; the previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | After release publication, verify the published install path and then refresh local runtime evidence if desired. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
 | Generated vault | Validated | Canonical vault status after memory updates reports `generated_file_count=2888`, `expected_generated_file_count=2888`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
@@ -67,11 +75,11 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
-| Package artifacts | Locally validated / unpublished | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the `0.2.0` workspace, creating and verifying `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum. Local release packaging still fails closed on tracked changes by default. | Re-run package smoke through the full GA release gate on the clean committed head, then publish and verify assets only after owner approval. |
-| Homebrew | Locally validated / unpublished | A local formula render from the `0.2.0` archive produced Ruby-valid formula text for macOS Apple Silicon with no beta-specific wording. | Re-render/audit the formula from the final clean release archive and update the tap only after release approval. |
+| Package artifacts | Validated pre-runbook / unpublished | Beta.2 GitHub release has archive and checksum assets; full GA package-install smoke passed for `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum on clean head `1eefa11`. Local release packaging still fails closed on tracked changes by default. | Publish and verify assets only after owner approval and a fresh full gate on the release head. |
+| Homebrew | Validated pre-runbook / unpublished | A local formula render from the `0.2.0` archive produced Ruby-valid formula text for macOS Apple Silicon with no beta-specific wording. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
-| Git release mechanics | Versioned / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga` now supports current-main release-owner evidence without depending on the merged beta PR #3 and blocks release owner review until the versioned head has exact-head CI and full local/package evidence. | Rerun exact-head CI and the full GA release gate, then tag, publish, and verify only after final validation passes. |
+| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27379891728 --json` passed on the pre-runbook versioned head and reported `ready_for_release_owner_review=true`. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval and fresh exact-head gate evidence. |
 
 ## First GA Slice Completed
 
@@ -309,9 +317,33 @@ Local validation on the version-bump worktree confirmed:
   fixtures to `WorkService::new` so non-embedding work tests stay offline-deterministic; explicit
   model-dependent semantic tests remain opt-in/ignored.
 
-Before this head can be used for release-owner review, it must still pass exact-head hosted CI and
-the full GA release gate on the clean committed head. The release notes scope acknowledgements for
-native Claude proof limits and lifecycle/M6 limits must remain present.
+The follow-up hosted-CI hardening commit `1eefa11` fixed incidental model-cache dependence in
+work-management CRUD/MCP tests. Exact-head hosted CI run `27379891728` passed for that head, and
+the full GA release gate passed with local CI, package/install smoke, and release-scope
+acknowledgements complete. This makes `1eefa11` ready for release-owner review, not published.
+
+## Pre-Runbook GA Release-Owner Review Checkpoint
+
+Head `1eefa11aff32e4d3802cc327ddc8d8957fd2f56f` is the pre-runbook owner-review candidate.
+
+Evidence collected on this head:
+
+- `gh run view 27379891728 --repo ymeiri/engram --json headSha,status,conclusion,jobs,url`
+  confirmed exact-head hosted CI success for Check, Test, Clippy, Docs, and Format.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27379891728 --json` reran local CI,
+  generated docs, ran package/install smoke, and emitted
+  `release_gate_state=hosted_ci_passing_release_owner_review_required`.
+- Package smoke produced `dist/engram-0.2.0-aarch64-apple-darwin.tar.gz` with checksum
+  `57e404714d3ebb2df3dd4622075748742526c9ead63725e4844cd775ce4b9642`.
+- `scripts/render-homebrew-formula.sh` and `ruby -c dist/homebrew/Formula/engram.rb` validated
+  a tap-ready formula from that archive.
+- `gh release view v0.2.0 --repo ymeiri/engram` still reports `release not found`, and
+  `git tag --list 'v*' --sort=version:refname` still stops at `v0.2.0-beta.2`.
+
+`docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` is the default-deny release-owner approval
+runbook for the remaining manual release actions. Because adding that runbook changes `main`, the
+release head must still get fresh exact-head hosted CI and a full GA release gate before tag,
+publish, or Homebrew tap update.
 
 ## Validation Run
 
