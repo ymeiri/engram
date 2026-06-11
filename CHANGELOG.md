@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Drafted the `v0.2.0` GA release notes artifact with install, upgrade, first-run,
+  and known-limitation guidance for final release review.
+
 ### Changed
 - Refreshed the native Claude production-gate preflight baseline to the current Claude Code
   `2.1.173` path/hash so GA checks fail only on live blockers, not stale expected metadata.

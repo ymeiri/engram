@@ -53,7 +53,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Partially validated | Beta.2 docs and setup support Codex; current task used native Codex MCP `orient` successfully. | Run a final supported-path setup/orient smoke on the GA head. |
 | Cursor setup/runtime path | Implemented / needs validation | Beta.2 adds guided setup for Cursor. | Run or explicitly defer Cursor smoke before GA support claims. |
-| Release notes and changelog | Missing for GA | Beta.1/beta.2 notes and changelog exist; no GA release notes exist yet. | Add `v0.2.0` release notes and promote changelog entries only after the GA scope is fixed. |
+| Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
 | Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; package scripts exist. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
 | Homebrew | Implemented / needs GA validation | Beta Homebrew rendering exists and post-beta style fixes landed. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
 | Docs consistency | Risky | README and MCP setup are beta.2-oriented; historical docs contain many beta-specific caveats by design. | Update only release-facing docs for GA; do not rewrite historical T-doc evidence. |
@@ -83,6 +83,17 @@ This proves the `b650a30` readiness checkpoint. Any later docs, version, package
 still needs its own exact-head CI evidence before it can be used as a final GA release head.
 This document intentionally treats its own later maintenance commits as evidence updates, not as
 the release-code checkpoint.
+
+## GA Release Notes Draft
+
+`docs/RELEASE_NOTES_V0_2_0.md` has been added as the release-notes artifact that
+`scripts/package-release.sh` will require once the workspace version is bumped to `0.2.0`.
+The notes include install, upgrade, first-run, and known-limitation sections, and they explicitly
+avoid claiming native Claude prompt-bearing, live `/hooks`, or live host-label proof unless the
+final release gate records that evidence.
+
+The notes are not by themselves a release decision. They still need final review on the versioned
+GA head before tag, package, Homebrew, or GitHub release publication.
 
 ## Validation Run
 
