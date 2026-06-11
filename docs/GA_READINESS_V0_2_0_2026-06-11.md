@@ -57,8 +57,8 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Codex setup/runtime path | Partially validated | Beta.2 docs and setup support Codex; current task used native Codex MCP `orient` successfully. | Run a final supported-path setup/orient smoke on the GA head. |
 | Cursor setup/runtime path | Implemented / needs validation | Beta.2 adds guided setup for Cursor. | Run or explicitly defer Cursor smoke before GA support claims. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
-| Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; package scripts exist. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
-| Homebrew | Implemented / needs GA validation | Beta Homebrew rendering exists and post-beta style fixes landed. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
+| Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the pre-GA `0.2.0-beta.2` workspace. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
+| Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
 | Docs consistency | Risky | README and MCP setup are beta.2-oriented; historical docs contain many beta-specific caveats by design. | Update only release-facing docs for GA; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Risky | Legacy layers remain substrate; broad lifecycle cleanup and M6 write-apply expansion are not proven GA-complete. | Either close specific lifecycle/M6 gates with evidence or explicitly scope them out of `v0.2.0` GA claims. |
 | Git release mechanics | Missing | No `v0.2.0` tag, release, or package publication exists. | Tag, publish, and verify only after final validation passes. |
@@ -102,6 +102,24 @@ The release-notes draft commit `c095770` has exact-head GitHub Actions evidence:
 `27340971819` completed successfully for Format, Check, Docs, Clippy, and Test. This validates the
 release-notes docs checkpoint, not a final GA versioned release head.
 
+## Package and Homebrew Rehearsal
+
+A local pre-GA package rehearsal ran in an isolated temp `DIST_DIR` on the `0.2.0-beta.2`
+workspace version. `scripts/package-install-smoke.sh` built the release binary, created and checked
+the `engram-0.2.0-beta.2-aarch64-apple-darwin.tar.gz` archive and checksum, verified safe archive
+paths and manifest hashes, installed the packaged binary into a temp prefix, and started the
+packaged HTTP server long enough to verify:
+
+```json
+{"status":"ok","service":"engram","version":"0.2.0-beta.2"}
+```
+
+The same temp archive was then used to render a Homebrew formula with
+`scripts/render-homebrew-formula.sh`. `ruby -c` reported `Syntax OK`, and a targeted search found no
+remaining `Homebrew beta`, `beta Homebrew`, or `Homebrew beta currently` wording in the rendered
+formula. This is rehearsal evidence only; the final `v0.2.0` archive still needs the same package
+and Homebrew checks after the workspace version bump.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -125,3 +143,12 @@ release-notes docs checkpoint, not a final GA versioned release head.
 - `gh run watch 27335890558 --repo ymeiri/engram --exit-status --interval 30`
 - `scripts/native-claude-gate-preflight.sh --json`
 - `gh run watch 27340971819 --repo ymeiri/engram --exit-status --interval 30`
+- `git diff --check`
+- `bash -n scripts/render-homebrew-formula.sh`
+- `bash -n scripts/package-release.sh`
+- `bash -n scripts/package-install-smoke.sh`
+- `cargo fmt --all --check`
+- `DIST_DIR=<temp> scripts/package-install-smoke.sh`
+- `DIST_DIR=<temp> FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
+- `ruby -c <temp>/homebrew/Formula/engram.rb`
+- `if rg -n "Homebrew beta|beta Homebrew|Homebrew beta currently" <temp>/homebrew/Formula/engram.rb; then exit 1; fi`

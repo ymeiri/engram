@@ -1,7 +1,7 @@
 # Homebrew Packaging
 
-The beta Homebrew formula is rendered from the macOS Apple Silicon release tarball so the formula
-uses the exact published artifact SHA-256.
+The Homebrew formula is rendered from the macOS Apple Silicon release tarball so the formula uses
+the exact published artifact SHA-256.
 
 Release-owner flow:
 
@@ -29,4 +29,4 @@ brew tap ymeiri/engram
 brew install engram
 ```
 
-The v0.2.0 beta Homebrew path is intentionally scoped to Apple Silicon macOS.
+The v0.2.0 Homebrew path is intentionally scoped to Apple Silicon macOS.

@@ -13,7 +13,7 @@ output="${FORMULA_OUTPUT:-$dist_dir/homebrew/Formula/engram.rb}"
 release_base_url="${HOMEBREW_RELEASE_BASE_URL:-https://github.com/ymeiri/engram/releases/download/v${package_version}}"
 
 if [[ "$host_triple" != "aarch64-apple-darwin" ]]; then
-    printf 'error: Homebrew beta formula currently supports aarch64-apple-darwin only, got %s\n' \
+    printf 'error: Homebrew formula currently supports aarch64-apple-darwin only, got %s\n' \
         "$host_triple" >&2
     exit 1
 fi
@@ -37,8 +37,8 @@ class Engram < Formula
   depends_on arch: :arm64
 
   def install
-    odie "engram #{version} Homebrew beta currently supports macOS only" if OS.linux?
-    odie "engram #{version} Homebrew beta currently supports Apple Silicon only" unless Hardware::CPU.arm?
+    odie "engram #{version} Homebrew package currently supports macOS only" if OS.linux?
+    odie "engram #{version} Homebrew package currently supports Apple Silicon only" unless Hardware::CPU.arm?
 
     bin.install "engram"
     prefix.install "README.md", "CHANGELOG.md", "LICENSE", "RELEASE_NOTES.md", "MANIFEST.json"

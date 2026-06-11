@@ -41,8 +41,8 @@ brew install engram
 engram --version
 ```
 
-The Homebrew beta formula is scoped to Apple Silicon macOS. Other platforms can install from a
-release artifact or build from source.
+The Homebrew formula is scoped to Apple Silicon macOS. Other platforms can install from a release
+artifact or build from source.
 
 From a published beta release artifact:
 
