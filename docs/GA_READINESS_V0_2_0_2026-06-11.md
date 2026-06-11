@@ -69,7 +69,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
 | Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the pre-GA `0.2.0-beta.2` workspace. Local release packaging now fails closed on tracked changes by default. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
 | Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
-| Docs consistency | Risky | README and MCP setup are beta.2-oriented; historical docs contain many beta-specific caveats by design. | Update only release-facing docs for GA; do not rewrite historical T-doc evidence. |
+| Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Risky | Legacy layers remain substrate; broad lifecycle cleanup and M6 write-apply expansion are not proven GA-complete. | Either close specific lifecycle/M6 gates with evidence or explicitly scope them out of `v0.2.0` GA claims. |
 | Git release mechanics | Missing | No `v0.2.0` tag, release, or package publication exists. | Tag, publish, and verify only after final validation passes. |
 
@@ -245,6 +245,16 @@ This refresh keeps the production gate open. It narrows the current native-Claud
 process-state availability for a future proof run; it does not prove prompt-bearing behavior,
 effective-hook visibility, or live host-label attribution.
 
+## Release-Facing Docs Scope Cleanup
+
+README, MCP setup, and security policy wording were updated so the supported setup path is framed
+as a `0.2.x` support scope rather than a beta-only support matrix. The docs still preserve the
+current release fact that `v0.2.0-beta.2` is the latest published artifact and that final
+`v0.2.0` artifacts require exact-head release validation before publication.
+
+This narrows the release-facing documentation gap without changing historical T-doc evidence,
+version metadata, tags, packages, Homebrew output, or GitHub releases.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -302,3 +312,5 @@ effective-hook visibility, or live host-label attribution.
   --json`
 - `target/debug/engram harness doctor --harness cursor --root /tmp/engram-cursor-setup.ShHnjs
   --json`
+- `rg -n "Beta scope|this beta|beta support|published beta|supported beta|beta setup|Guided beta" README.md docs/MCP_SETUP.md SECURITY.md CONTRIBUTING.md docs/RELEASE_NOTES_V0_2_0.md -S` (expected no output)
+- `rg -n "v0\\.2\\.0-beta|0\\.2\\.0-beta" README.md docs/MCP_SETUP.md SECURITY.md CONTRIBUTING.md docs/RELEASE_NOTES_V0_2_0.md -S`

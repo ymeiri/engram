@@ -13,7 +13,8 @@ If you discover a security vulnerability, please report it responsibly:
 
 | Version | Supported |
 |---------|-----------|
-| 0.2.0-beta.x | ✅ |
+| 0.2.x | Yes |
+| 0.2.0-beta.x | Yes, until v0.2.0 GA is published |
 | 0.1.x | Security fixes only when practical |
 
 ## Security Considerations

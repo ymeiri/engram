@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only
   native Claude preflight evidence; the native Claude production gate remains blocked by an
   already-running CLI process and is not claimed as closed.
+- Shifted release-facing setup and security docs from beta-only wording to a `0.2.x` support scope
+  while preserving the current fact that `v0.2.0-beta.2` is still the latest published artifact.
 
 ### Fixed
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one

@@ -2,9 +2,9 @@
 
 Ready-made configurations for connecting engram to supported local AI coding agents.
 
-> **Beta scope:** v0.2.0-beta.2 supports guided setup for Claude Code, Codex, and Cursor. Other
-> MCP-compatible hosts may work with `engram serve`, but they are not part of this beta support
-> matrix.
+> **0.2.x support scope:** guided setup supports Claude Code, Codex, and Cursor. Other
+> MCP-compatible hosts may work with `engram serve`, but they are not part of the supported
+> 0.2.x setup matrix.
 
 ## Recommended Setup
 
@@ -31,8 +31,8 @@ engram setup --agent cursor --write
 ```
 
 Claude Code exposes lifecycle hooks, so setup can write hook files and merge Claude settings.
-Codex and Cursor use generated skills/instructions in this beta; they still need MCP configured so
-the agent can call Engram tools.
+Codex and Cursor use generated skills/instructions; they still need MCP configured so the agent can
+call Engram tools.
 
 By default, setup writes under your home directory. Use `--root .` from a repository if you want
 project-local agent files.

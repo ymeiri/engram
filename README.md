@@ -21,9 +21,12 @@ connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so
 Cursor, and other compatible agents can use semantic search, session memory, document recall, and
 tool history across sessions without embedding API calls.
 
-> **Beta scope:** v0.2.0-beta.2 supports guided local setup for Claude Code, Codex,
-> and Cursor. Other MCP-compatible hosts may work with the same server, but they are not part of
-> this beta support matrix.
+> **0.2.x support scope:** guided local setup supports Claude Code, Codex, and Cursor. Other
+> MCP-compatible hosts may work with the same server, but they are not part of the supported
+> 0.2.x setup matrix.
+>
+> **Current release state:** the latest published artifact is still `v0.2.0-beta.2`; final
+> `v0.2.0` artifacts must pass exact-head release validation before publication.
 >
 > **First-run cache note:** semantic search uses a local ONNX embedding model. First use may download
 > `all-MiniLM-L6-v2` from Hugging Face into the local cache unless you pre-warm it with
@@ -44,10 +47,10 @@ engram --version
 The Homebrew formula is scoped to Apple Silicon macOS. Other platforms can install from a release
 artifact or build from source.
 
-From a published beta release artifact:
+From a published release artifact:
 
 ```bash
-version=0.2.0-beta.2
+version=0.2.0-beta.2  # use 0.2.0 after the GA release is published
 archive="engram-${version}-aarch64-apple-darwin.tar.gz"
 
 curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
@@ -116,9 +119,9 @@ After reviewing the planned files, write the agent adapter and hook configuratio
 engram setup --agent codex --write
 ```
 
-Setup supports Claude Code, Codex, and Cursor in this beta. It uses the same harness adapter
-installer as `engram harness install`, keeps writes approval-gated, and does not overwrite
-user-owned files unless you opt into the lower-level harness command.
+Setup supports Claude Code, Codex, and Cursor in the 0.2.x support matrix. It uses the same
+harness adapter installer as `engram harness install`, keeps writes approval-gated, and does not
+overwrite user-owned files unless you opt into the lower-level harness command.
 
 By default, setup writes under your home directory. Use `--root .` from a repository if you want
 project-local agent files.
@@ -285,7 +288,7 @@ ONNX model unless you pre-warm the cache.
 **Built for coding agents.** Not a chatbot memory system — engram understands repos, PRs, tasks, tool usage patterns, and multi-session coordination. It knows what a pull request *is*.
 
 **MCP-native.** Not an adapter or wrapper. Built from the ground up for the Model Context
-Protocol. Guided beta setup covers Claude Code, Codex, and Cursor.
+Protocol. Guided setup covers Claude Code, Codex, and Cursor.
 
 **Minimal setup.** Install the binary, run `engram init`, then use `engram setup` to configure a
 supported local agent. No schema definitions, no ontology configuration, no embedding API keys.
@@ -444,8 +447,8 @@ and other semantic paths may need network access for the one-time model download
 
 - Contributions: see [CONTRIBUTING.md](CONTRIBUTING.md) for local development, tests, and PR
   expectations.
-- Security: see [SECURITY.md](SECURITY.md) for vulnerability reporting and supported beta
-  versions. Do not open public issues for private security reports.
+- Security: see [SECURITY.md](SECURITY.md) for vulnerability reporting and supported versions.
+  Do not open public issues for private security reports.
 - Conduct: see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 - License: Apache-2.0.
 
