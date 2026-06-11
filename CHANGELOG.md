@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already-running CLI process and is not claimed as closed.
 - Shifted release-facing setup and security docs from beta-only wording to a `0.2.x` support scope
   while preserving the current fact that `v0.2.0-beta.2` is still the latest published artifact.
+- Added a GA-capable release gate report script for current-main CI/package evidence, while keeping
+  the beta PR gate command as a compatibility wrapper.
 
 ### Fixed
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one

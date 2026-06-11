@@ -71,7 +71,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Risky | Legacy layers remain substrate; broad lifecycle cleanup and M6 write-apply expansion are not proven GA-complete. | Either close specific lifecycle/M6 gates with evidence or explicitly scope them out of `v0.2.0` GA claims. |
-| Git release mechanics | Missing | No `v0.2.0` tag, release, or package publication exists. | Tag, publish, and verify only after final validation passes. |
+| Git release mechanics | Partially hardened | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga` now supports current-main release-owner evidence without depending on the merged beta PR #3. | Tag, publish, and verify only after final validation passes. |
 
 ## First GA Slice Completed
 
@@ -255,6 +255,17 @@ current release fact that `v0.2.0-beta.2` is the latest published artifact and t
 This narrows the release-facing documentation gap without changing historical T-doc evidence,
 version metadata, tags, packages, Homebrew output, or GitHub releases.
 
+## GA Release Gate Report
+
+The previous release-owner evidence collector was beta-specific and defaulted to PR #3. That PR is
+merged and no longer points at current `main`, so it cannot validate the current GA baseline.
+
+`scripts/release-gate-report.sh` now supports an explicit `--target ga` mode that verifies the
+current branch, upstream sync, tracked-change state, and a hosted push CI run for the exact current
+head without requiring a PR. `scripts/beta-release-gate-report.sh` remains as a compatibility
+wrapper for beta PR gates. The script remains evidence-only: it does not accept fallbacks, mark a
+PR ready, merge, tag, publish, mutate harness state, or change release scope.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -314,3 +325,9 @@ version metadata, tags, packages, Homebrew output, or GitHub releases.
   --json`
 - `rg -n "Beta scope|this beta|beta support|published beta|supported beta|beta setup|Guided beta" README.md docs/MCP_SETUP.md SECURITY.md CONTRIBUTING.md docs/RELEASE_NOTES_V0_2_0.md -S` (expected no output)
 - `rg -n "v0\\.2\\.0-beta|0\\.2\\.0-beta" README.md docs/MCP_SETUP.md SECURITY.md CONTRIBUTING.md docs/RELEASE_NOTES_V0_2_0.md -S`
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `scripts/release-gate-report.sh --target ga --hosted-run 27367795100 --quick
+  --allow-tracked-changes --json`
+- `scripts/release-gate-report.sh --target ga --quick --allow-tracked-changes --json`
+- `scripts/release-gate-report.sh --target ga --hosted-run 27367795100 --quick`
+  with tracked development changes present (expected failure)

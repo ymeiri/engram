@@ -407,7 +407,8 @@ cargo fmt
 ./scripts/package-release.sh   # Build a local release tarball, manifest, and checksum
 ./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
 ./scripts/render-homebrew-formula.sh  # Render tap-ready Homebrew formula from the tarball
-./scripts/beta-release-gate-report.sh  # Collect PR/CI/package gate evidence and release-review state
+./scripts/release-gate-report.sh --target ga  # Collect CI/package gate evidence and release-review state
+./scripts/beta-release-gate-report.sh  # Compatibility wrapper for beta PR release gates
 ./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
 ./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; use --event push for main runs
 ./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness; use --expected-branch for non-main checks
