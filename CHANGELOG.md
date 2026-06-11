@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release archive is created.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
+- Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only
+  native Claude preflight evidence; the native Claude production gate remains blocked by an
+  already-running CLI process and is not claimed as closed.
 
 ### Fixed
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one

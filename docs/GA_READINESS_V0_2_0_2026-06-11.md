@@ -2,6 +2,7 @@
 
 Date: 2026-06-11
 Status: GA preparation in progress
+Validated setup-path docs checkpoint: `86dd38d0ef56bad5aa0c999578313c7f4a133e41`
 Validated release-hardening checkpoint: `eb0e3a96b7a751a90d482dad95ab9ae31af76a7e`
 Validated release-code baseline checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
 Validated release-notes docs checkpoint: `c095770f1821c731c01b176a83fe43903618a2f8`
@@ -35,6 +36,10 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   successfully on 2026-06-11. The `Test` job ran
   `cargo test --locked --all-targets --jobs 1` and completed from
   `16:20:13Z` to `16:47:17Z`.
+- Setup-path docs hosted CI: main push run `27363378532` for `86dd38d` completed
+  successfully on 2026-06-11. The `Test` job ran
+  `cargo test --locked --all-targets --jobs 1` and completed from
+  `16:57:15Z` to `17:25:26Z`.
 - Workspace versions: every Engram workspace package resolves to
   `0.2.0-beta.2` in `cargo metadata`, and `Cargo.lock` matches that version.
 - Local runtime before refresh: installed `engram` and daemon still reported
@@ -52,12 +57,12 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
 | Versioning | Partially validated | Workspace metadata and lockfile are consistent at `0.2.0-beta.2`. | Bump workspace version and lockfile to `0.2.0` only after GA blockers are closed. |
-| Hosted CI | Validated for release-hardening checkpoint | Main push CI run `27361233663` passed for release-hardening checkpoint `eb0e3a9`; earlier runs `27335890558` and `27340971819` passed for the release-code and release-notes baselines. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Hosted CI | Validated through setup-path docs checkpoint | Main push CI run `27363378532` passed for setup-path docs checkpoint `86dd38d`; earlier runs `27361233663`, `27335890558`, and `27340971819` passed for release-hardening, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
 | Local runtime | Validated for beta.2 source | Release build passed; installed binary and daemon now match `0.2.0-beta.2`. | Repeat install/daemon smoke on the final GA versioned head. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
-| Generated vault | Validated | Canonical vault compiled after memory updates to `generated_file_count=2878`, `expected_generated_file_count=2878`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
-| Native Claude production gate | Blocked | Preflight baseline now matches Claude Code `2.1.173` and current Engram daemon/vault; the only remaining blocker is an already-running native Claude CLI process, most recently PID `61303` on `ttys001`. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
+| Generated vault | Validated | Canonical vault status after memory updates reports `generated_file_count=2880`, `expected_generated_file_count=2880`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
+| Native Claude production gate | Blocked | Fresh `scripts/native-claude-gate-preflight.sh --json` on `86dd38d` reports `gate_state=blocked`: branch synced, tracked tree clean, obligations clean, vault aligned at `2880/2880`, Claude Code `2.1.173` hash matches, daemon reports `0.2.0-beta.2`, and the blocker is an already-running native Claude CLI process on `ttys001`. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the fail-closed preflight and proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
@@ -211,10 +216,40 @@ This proves generated adapter install/status behavior for clean roots. It does n
 Cursor host session, and it does not upgrade advisory lifecycle compliance into a hard runtime
 guarantee.
 
+## Native Claude Gate Refresh
+
+A fresh read-only native Claude production-gate preflight ran on setup-path docs checkpoint
+`86dd38d`. The script reported:
+
+- `gate_state=blocked`
+- branch `main`, upstream `origin/main`, `ahead=0`, `behind=0`
+- `tracked_changes_present=false`
+- Claude Code target `/Users/yuval.meiri/.local/share/claude/versions/2.1.173`,
+  version `2.1.173 (Claude Code)`, SHA-256
+  `235c1bacdcc7f9d8d92368c95a0c66c26fcac98f878f21b10c73af340bc331ab`
+- Engram daemon running from `/Users/yuval.meiri/.local/bin/engram`, spawn version
+  `0.2.0-beta.2`
+- `harness_status.ready=true` and `harness_doctor.ready=true`, with static warnings
+  that live effective-hook visibility still requires Claude Code `/hooks` verification
+- snippet-only harness install dry-run planned no generated-file changes
+- obligations doctor returned no open items or warnings
+- canonical vault status was aligned at `generated_file_count=2880`,
+  `expected_generated_file_count=2880`, `user_file_count=0`
+- the blocker was an already-running native Claude CLI process on `ttys001`
+- no native Claude launch, `/hooks` command, process signal, or release action was performed
+
+Strict mode also failed closed as intended: `scripts/native-claude-gate-preflight.sh --json
+--require-ready` returned exit code `2` while reporting the same blocked gate state.
+
+This refresh keeps the production gate open. It narrows the current native-Claude blocker to
+process-state availability for a future proof run; it does not prove prompt-bearing behavior,
+effective-hook visibility, or live host-label attribution.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
 - `git rev-list --left-right --count main...origin/main`
+- `gh run view 27363378532 --json status,conclusion,headSha,url,jobs`
 - `gh release list --repo ymeiri/engram --limit 20`
 - `gh release view v0.2.0-beta.1 --repo ymeiri/engram ...`
 - `gh release view v0.2.0-beta.2 --repo ymeiri/engram ...`
@@ -233,6 +268,7 @@ guarantee.
 - `scripts/native-claude-gate-preflight.sh --allow-worktree-changes --json`
 - `gh run watch 27335890558 --repo ymeiri/engram --exit-status --interval 30`
 - `scripts/native-claude-gate-preflight.sh --json`
+- `scripts/native-claude-gate-preflight.sh --json --require-ready` (expected exit code `2`)
 - `gh run watch 27340971819 --repo ymeiri/engram --exit-status --interval 30`
 - `git diff --check`
 - `bash -n scripts/render-homebrew-formula.sh`
