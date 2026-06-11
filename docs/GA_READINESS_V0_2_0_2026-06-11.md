@@ -153,6 +153,16 @@ provenance, Cargo.lock hash provenance, and each packaged file hash through stru
 This keeps local package rehearsals and published-release install verification from accepting
 malformed or misleading manifest JSON during the final `v0.2.0` artifact proof.
 
+## Release Manifest Build Guard
+
+`scripts/package-release.sh` now validates the generated `MANIFEST.json` with `jq` before the
+release archive is created. The release builder checks package identity, version, host triple,
+archive name, Git commit, dirty-state provenance, Cargo.lock hash, required package files, and
+SHA-256 shape before any tarball or checksum is written.
+
+This keeps final `v0.2.0` packaging from publishing an archive whose manifest is malformed or
+structurally inconsistent before the downstream install smoke ever runs.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -195,3 +205,5 @@ malformed or misleading manifest JSON during the final `v0.2.0` artifact proof.
   manifest parser change
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-git-head
   9204cdea38361acb6647ffb4c7b2399590c349f2 --json` (expected tag-commit failure)
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
+  package-release manifest build guard

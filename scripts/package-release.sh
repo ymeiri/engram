@@ -29,6 +29,11 @@ sha256_file() {
     shasum -a 256 "$1" | awk '{ print $1 }'
 }
 
+command -v jq >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: jq\n' >&2
+    exit 1
+}
+
 git_head="$(git rev-parse HEAD)"
 if git diff --quiet --ignore-submodules -- && git diff --cached --quiet --ignore-submodules --; then
     tracked_changes_present=false
@@ -92,6 +97,39 @@ cat >"$manifest" <<EOF
   ]
 }
 EOF
+
+jq -e \
+    --arg version "$package_version" \
+    --arg host_triple "$host_triple" \
+    --arg archive_name "$archive_name" \
+    --arg git_head "$git_head" \
+    --arg tracked_changes_present "$tracked_changes_present" \
+    --arg cargo_lock_sha256 "$cargo_lock_sha256" \
+    '
+        .package == "engram"
+        and .version == $version
+        and .host_triple == $host_triple
+        and .archive_name == $archive_name
+        and .git_head == $git_head
+        and (.git_head | test("^[0-9a-f]{40}$"))
+        and .tracked_changes_present == ($tracked_changes_present == "true")
+        and .cargo_lock_sha256 == $cargo_lock_sha256
+        and (.cargo_lock_sha256 | test("^[0-9a-f]{64}$"))
+        and (.files | type == "array")
+        and ([.files[].path] | sort == [
+            "CHANGELOG.md",
+            "LICENSE",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "engram"
+        ])
+        and all(.files[]; (.path | type == "string")
+            and (.sha256 | type == "string")
+            and (.sha256 | test("^[0-9a-f]{64}$")))
+    ' "$manifest" >/dev/null || {
+        printf 'error: generated package manifest is invalid: %s\n' "$manifest" >&2
+        exit 1
+    }
 
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"

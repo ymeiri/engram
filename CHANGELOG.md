@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release tag that peels to the expected packaged Git commit.
 - Hardened package install smoke verification so `MANIFEST.json` is parsed with `jq` instead of
   ad hoc text matching when checking release metadata and packaged file hashes.
+- Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
+  release archive is created.
 
 ## [0.2.0-beta.2] - 2026-06-09
 
