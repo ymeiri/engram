@@ -2,13 +2,13 @@
 
 Date: 2026-06-11
 Status: GA preparation in progress
-Latest validated checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
+Validated release-code checkpoint: `b650a307793b576b523828a9ca2886fa41058b54`
 
 ## Summary
 
 The expected GA target remains `v0.2.0`. Repo and release evidence show no `v0.2.0`
 tag or GitHub release yet. The latest published prerelease is `v0.2.0-beta.2`, and
-the latest validated checkpoint is five commits past that tag.
+the validated release-code checkpoint is five commits past that tag.
 
 `v0.2.0-beta.1` is verified as a signed local tag and published GitHub prerelease.
 `v0.2.0-beta.2` is also verified as a signed local tag and published GitHub
@@ -24,7 +24,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `ec2e263`.
 - GitHub releases: `v0.2.0-beta.1` and `v0.2.0-beta.2` are published
   prereleases; `v0.1.0` remains the stable/latest release.
-- Current hosted CI: main push run `27335890558` for `b650a30` completed
+- Checkpoint hosted CI: main push run `27335890558` for `b650a30` completed
   successfully on 2026-06-11. The `Test` job ran
   `cargo test --locked --all-targets --jobs 1` and completed in `27m45s`.
 - Workspace versions: every Engram workspace package resolves to
@@ -44,7 +44,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
 | Versioning | Partially validated | Workspace metadata and lockfile are consistent at `0.2.0-beta.2`. | Bump workspace version and lockfile to `0.2.0` only after GA blockers are closed. |
-| Hosted CI | Validated for latest checkpoint | Main push CI run `27335890558` passed for `b650a30`. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Hosted CI | Validated for release-code checkpoint | Main push CI run `27335890558` passed for `b650a30`. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
 | Local runtime | Validated for beta.2 source | Release build passed; installed binary and daemon now match `0.2.0-beta.2`. | Repeat install/daemon smoke on the final GA versioned head. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
@@ -81,6 +81,8 @@ all passed; the serialized Test job completed in `27m45s`.
 
 This proves the `b650a30` readiness checkpoint. Any later docs, version, package, or release commit
 still needs its own exact-head CI evidence before it can be used as a final GA release head.
+This document intentionally treats its own later maintenance commits as evidence updates, not as
+the release-code checkpoint.
 
 ## Validation Run
 
