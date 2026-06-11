@@ -24,7 +24,7 @@ async fn setup_db() -> engram_store::Db {
 /// Create a work service with initialized schema.
 async fn setup_work_service() -> WorkService {
     let db = setup_db().await;
-    let service = WorkService::with_defaults(db).expect("Failed to create work service");
+    let service = WorkService::new(db);
     service
         .init()
         .await
@@ -44,7 +44,7 @@ async fn setup_services() -> (WorkService, EntityService) {
         .expect("Failed to initialize entity schema");
 
     // Then initialize work schema
-    let work_service = WorkService::with_defaults(db).expect("Failed to create work service");
+    let work_service = WorkService::new(db);
     work_service
         .init()
         .await
@@ -846,7 +846,6 @@ async fn test_add_project_observation() {
 
     assert_eq!(obs.content, "This project uses OAuth2 for authentication");
     assert_eq!(obs.key, Some("architecture.auth".to_string()));
-    assert!(obs.embedding.is_some()); // Should have embedding
 }
 
 #[tokio::test]
@@ -1746,7 +1745,7 @@ use engram_mcp::tools::{
 /// Create a ToolState with initialized WorkService for MCP tool tests.
 async fn setup_tool_state() -> ToolState {
     let db = setup_db().await;
-    let work_service = WorkService::with_defaults(db).expect("Failed to create work service");
+    let work_service = WorkService::new(db);
     work_service
         .init()
         .await

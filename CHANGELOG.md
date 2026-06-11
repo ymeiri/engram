@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence.
 
 ### Fixed
+- Kept work-management integration tests offline-deterministic by using the no-embedder
+  `WorkService` fixture for CRUD and MCP coverage, avoiding incidental model downloads on hosted
+  CI.
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one
   daemon per test concurrently and time out waiting for `/health`.
 

@@ -303,6 +303,11 @@ Local validation on the version-bump worktree confirmed:
 - `scripts/render-homebrew-formula.sh` rendered a `v0.2.0` macOS Apple Silicon formula from that
   archive; `ruby -c` reported `Syntax OK`, and targeted search found no beta-specific Homebrew
   wording.
+- Hosted CI run `27378308443` for the initial version-bump head failed in `work_tests` because
+  CRUD/MCP work-management fixtures used `WorkService::with_defaults`, which tried to retrieve
+  `model.onnx` on an empty hosted embedding cache. The follow-up test hardening changes those
+  fixtures to `WorkService::new` so non-embedding work tests stay offline-deterministic; explicit
+  model-dependent semantic tests remain opt-in/ignored.
 
 Before this head can be used for release-owner review, it must still pass exact-head hosted CI and
 the full GA release gate on the clean committed head. The release notes scope acknowledgements for
