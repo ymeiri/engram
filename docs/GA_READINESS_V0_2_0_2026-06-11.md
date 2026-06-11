@@ -70,7 +70,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the pre-GA `0.2.0-beta.2` workspace. Local release packaging now fails closed on tracked changes by default. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
 | Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
-| Memory lifecycle / M6 | Risky | Legacy layers remain substrate; broad lifecycle cleanup and M6 write-apply expansion are not proven GA-complete. | Either close specific lifecycle/M6 gates with evidence or explicitly scope them out of `v0.2.0` GA claims. |
+| Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
 | Git release mechanics | Partially hardened | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga` now supports current-main release-owner evidence without depending on the merged beta PR #3 and remains version-blocked while the workspace package version is `0.2.0-beta.2`. | Bump to `0.2.0`, rerun exact-head CI and the full GA release gate, then tag, publish, and verify only after final validation passes. |
 
 ## First GA Slice Completed
@@ -276,6 +276,13 @@ version to `0.2.0`, emits `workspace_version_matches_release=false`, and keeps
 `release_gate_state=version_bump_required`. This prevents pre-GA evidence from suggesting a
 `tag_v0.2.0-beta.2` action for the GA path.
 
+The GA report also verifies release-note scope acknowledgements for high-risk items that remain
+outside the current `v0.2.0` claim: native Claude prompt-bearing/live `/hooks` proof and broad
+legacy lifecycle/M6 mutation. If those acknowledgements are removed before the final release gate,
+the report emits `release_scope.state=incomplete` and blocks with
+`release_gate_state=release_scope_acknowledgement_required` instead of marking the release ready
+for owner review.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -346,6 +353,16 @@ version to `0.2.0`, emits `workspace_version_matches_release=false`, and keeps
   expected `release_version=0.2.0`, `workspace_version_matches_release=false`,
   `release_gate_state=version_bump_required`, and no `tag_v0.2.0-beta.2`
   remaining action
+- `scripts/release-gate-report.sh --target ga --hosted-run 27373857951 --quick
+  --allow-tracked-changes --json`
+  expected `release_scope.state=complete`, native Claude proof limits acknowledged,
+  lifecycle/M6 limits acknowledged, `release_gate_state=version_bump_required`, and no
+  `tag_v0.2.0-beta.2` remaining action
+- `RELEASE_NOTES_PATH=<temp-empty-file> scripts/release-gate-report.sh --target ga
+  --release-version 0.2.0-beta.2 --hosted-run 27373857951 --quick --allow-tracked-changes --json`
+  expected `release_scope.state=incomplete`,
+  `release_gate_state=release_scope_acknowledgement_required`, and remaining action
+  `restore_release_notes_ga_scope_acknowledgements`
 - `scripts/native-claude-gate-preflight.sh --json | jq .`
   expected `head=a082a63969df1be1179f38a75a02ee23ff815166`,
   `gate_state=blocked`, vault `2888/2888`, no tracked changes, no extra untracked files, and

@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the beta PR gate command as a compatibility wrapper.
 - Hardened the GA release gate report so the intended release version is distinct from the current
   workspace package version and the gate remains version-blocked until the `0.2.0` bump lands.
+- Hardened the GA release gate report so final release notes must retain explicit scope limits for
+  native Claude proof and broad lifecycle/M6 mutation claims before owner review.
 
 ### Fixed
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one

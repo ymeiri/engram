@@ -11,6 +11,7 @@ expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
 expected_event="${EXPECTED_EVENT:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
+release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
 run_local_ci=1
 run_package_smoke=1
 allow_tracked_changes=0
@@ -36,6 +37,10 @@ Options:
   --allow-tracked-changes       Allow tracked working-tree/index changes during development
   --json                        Emit final evidence as machine-readable JSON
   -h, --help                    Show this help
+
+Environment overrides:
+  RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
+  EXPECTED_EVENT, RELEASE_VERSION, RELEASE_NOTES_PATH.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
@@ -188,6 +193,9 @@ fi
 hosted_ci_state="unknown"
 hosted_ci_verifier_json="null"
 pr_report_json="null"
+release_scope_state="not_applicable"
+release_scope_native_claude_ack=false
+release_scope_lifecycle_m6_ack=false
 
 collect_hosted_run_checks() {
     if [[ -z "$hosted_run_id" ]]; then
@@ -248,6 +256,25 @@ collect_hosted_run_checks() {
 }
 
 if [[ "$target" == "ga" ]]; then
+    release_scope_state="incomplete"
+    if [[ -f "$release_notes_path" ]]; then
+        if grep -Fq "Native Claude prompt-bearing proof" "$release_notes_path" &&
+            grep -Fq "live \`/hooks\` effective-hook visibility" "$release_notes_path"; then
+            release_scope_native_claude_ack=true
+        fi
+        if grep -Fq "v0.2.0 does not claim" "$release_notes_path" &&
+            grep -Fq "broad legacy deprecation" "$release_notes_path" &&
+            grep -Fq "unrestricted automated" "$release_notes_path"; then
+            release_scope_lifecycle_m6_ack=true
+        fi
+        if [[ "$release_scope_native_claude_ack" == "true" &&
+            "$release_scope_lifecycle_m6_ack" == "true" ]]; then
+            release_scope_state="complete"
+        fi
+    else
+        release_scope_state="missing_release_notes"
+    fi
+
     collect_hosted_run_checks
 else
     gh pr view "$pr_number" \
@@ -334,6 +361,8 @@ hosted_ci_fallback_decision_required=false
 
 if [[ "$target" == "ga" && "$package_version" != "$release_version" ]]; then
     release_gate_state="version_bump_required"
+elif [[ "$target" == "ga" && "$release_scope_state" != "complete" ]]; then
+    release_gate_state="release_scope_acknowledgement_required"
 elif [[ "$local_ci_state" == "passed" && "$package_smoke_state" == "passed" ]]; then
     if [[ "$hosted_ci_state" == "passing" ]]; then
         release_gate_state="hosted_ci_passing_release_owner_review_required"
@@ -410,6 +439,11 @@ remaining_release_actions_json="$(
                 "publish_homebrew_tap",
                 "verify_published_release_install"
             ]
+        elif $state == "release_scope_acknowledgement_required" and $target == "ga" then
+            [
+                "restore_release_notes_ga_scope_acknowledgements",
+                "rerun_ga_release_gate_report"
+            ]
         elif $state == "hosted_ci_passing_release_owner_review_required" then
             [
                 "release_owner_approve_release",
@@ -443,6 +477,10 @@ if [[ "$json_output" == "1" ]]; then
         --arg hosted_run_id "$hosted_run_id" \
         --arg local_ci "$local_ci_state" \
         --arg package_install_smoke "$package_smoke_state" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg release_scope_state "$release_scope_state" \
+        --arg release_scope_native_claude "$release_scope_native_claude_ack" \
+        --arg release_scope_lifecycle_m6 "$release_scope_lifecycle_m6_ack" \
         --arg release_gate_state "$release_gate_state" \
         --arg ready_for_review "$ready_for_release_owner_review" \
         --arg fallback_decision "$hosted_ci_fallback_decision_required" \
@@ -473,6 +511,12 @@ if [[ "$json_output" == "1" ]]; then
             },
             local_ci: $local_ci,
             package_install_smoke: $package_install_smoke,
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: $release_scope_state,
+                native_claude_proof_limits_acknowledged: ($release_scope_native_claude == "true"),
+                lifecycle_m6_limits_acknowledged: ($release_scope_lifecycle_m6 == "true")
+            },
             release_gate_state: $release_gate_state,
             ready_for_release_owner_review: ($ready_for_review == "true"),
             hosted_ci_fallback_decision_required: ($fallback_decision == "true"),
@@ -502,6 +546,13 @@ else
     printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
     printf '  local_ci: %s\n' "$local_ci_state"
     printf '  package_install_smoke: %s\n' "$package_smoke_state"
+    if [[ "$target" == "ga" ]]; then
+        printf '  release_scope_state: %s\n' "$release_scope_state"
+        printf '  release_scope_native_claude_proof_limits_acknowledged: %s\n' \
+            "$release_scope_native_claude_ack"
+        printf '  release_scope_lifecycle_m6_limits_acknowledged: %s\n' \
+            "$release_scope_lifecycle_m6_ack"
+    fi
     printf '  release_gate_state: %s\n' "$release_gate_state"
     printf '  ready_for_release_owner_review: %s\n' "$ready_for_release_owner_review"
     printf '  hosted_ci_fallback_decision_required: %s\n' \
