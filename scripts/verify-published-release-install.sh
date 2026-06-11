@@ -138,6 +138,7 @@ if [[ "$resolved_expected_prerelease" == "auto" ]]; then
     fi
 fi
 downloaded_assets=false
+tag_commit=""
 release_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-view.XXXXXX")"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-release-install.XXXXXX")"
 
@@ -170,6 +171,12 @@ if [[ -z "$asset_dir" ]]; then
         fail "release is still a draft: $tag"
     [[ "$release_prerelease" == "$resolved_expected_prerelease" ]] ||
         fail "release prerelease state mismatch for $tag: expected $resolved_expected_prerelease, got $release_prerelease"
+
+    if ! tag_commit="$(git rev-parse "${tag}^{commit}" 2>/dev/null)"; then
+        fail "local git tag is missing or not peelable: $tag"
+    fi
+    [[ "$tag_commit" == "$expected_git_head" ]] ||
+        fail "release tag commit mismatch for $tag: expected $expected_git_head, got $tag_commit"
 
     run_step "download release assets" gh release download "$tag" \
         --repo "$repo" \
@@ -209,10 +216,12 @@ if [[ "$json_output" == "1" ]]; then
         --arg expected_tracked_changes_present "$expected_tracked_changes_present" \
         --arg expected_prerelease "$resolved_expected_prerelease" \
         --arg downloaded_assets "$downloaded_assets" \
+        --arg tag_commit "$tag_commit" \
         --slurpfile release "$release_json" \
         '{
             repo: $repo,
             tag: $tag,
+            tag_commit: (if $tag_commit == "" then null else $tag_commit end),
             version: $version,
             host_triple: $host_triple,
             assets: {
@@ -234,6 +243,9 @@ else
     printf '\nPublished release install evidence collected:\n'
     printf '  repo: %s\n' "$repo"
     printf '  tag: %s\n' "$tag"
+    if [[ -n "$tag_commit" ]]; then
+        printf '  tag_commit: %s\n' "$tag_commit"
+    fi
     printf '  version: %s\n' "$package_version"
     printf '  host_triple: %s\n' "$host_triple"
     printf '  expected_prerelease: %s\n' "$resolved_expected_prerelease"

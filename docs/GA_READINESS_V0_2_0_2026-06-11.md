@@ -134,14 +134,15 @@ a dirty rehearsal archive, including manifest verification and packaged HTTP `/h
 ## Published Release Verification Guard
 
 `scripts/verify-published-release-install.sh` now verifies release identity before downloading
-assets. The requested tag must match the workspace package version, draft releases fail closed, and
-prerelease state must match `--expected-prerelease` or the default tag-based inference. Tags with a
-suffix such as `v0.2.0-beta.2` infer prerelease `true`; stable tags such as `v0.2.0` infer
-prerelease `false`.
+assets. The requested tag must match the workspace package version, the local tag must peel to the
+expected packaged Git commit, draft releases fail closed, and prerelease state must match
+`--expected-prerelease` or the default tag-based inference. Tags with a suffix such as
+`v0.2.0-beta.2` infer prerelease `true`; stable tags such as `v0.2.0` infer prerelease `false`.
 
 This keeps the final `v0.2.0` post-publish verifier from accepting a draft or prerelease GitHub
-release even if the archive assets install successfully, and it prevents `v0.2.0` evidence from
-being collected on an unbumped `0.2.0-beta.2` checkout.
+release even if the archive assets install successfully. It also prevents `v0.2.0` evidence from
+being collected on an unbumped `0.2.0-beta.2` checkout, or from a published archive whose manifest
+commit does not match the local release tag.
 
 ## Package Manifest Verification Guard
 
@@ -188,6 +189,9 @@ malformed or misleading manifest JSON during the final `v0.2.0` artifact proof.
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh`
 - `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir <temp> --json` (expected failure)
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-prerelease false --json` (expected failure)
-- `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --json`
+- `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-git-head
+  ec2e263541f149fbbbbe8408d3546f4b183e0d02 --json`
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the `jq`
   manifest parser change
+- `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-git-head
+  9204cdea38361acb6647ffb4c7b2399590c349f2 --json` (expected tag-commit failure)
