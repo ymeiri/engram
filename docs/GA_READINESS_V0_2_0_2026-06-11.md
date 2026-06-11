@@ -71,7 +71,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Risky | Legacy layers remain substrate; broad lifecycle cleanup and M6 write-apply expansion are not proven GA-complete. | Either close specific lifecycle/M6 gates with evidence or explicitly scope them out of `v0.2.0` GA claims. |
-| Git release mechanics | Partially hardened | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga` now supports current-main release-owner evidence without depending on the merged beta PR #3. | Tag, publish, and verify only after final validation passes. |
+| Git release mechanics | Partially hardened | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga` now supports current-main release-owner evidence without depending on the merged beta PR #3 and remains version-blocked while the workspace package version is `0.2.0-beta.2`. | Bump to `0.2.0`, rerun exact-head CI and the full GA release gate, then tag, publish, and verify only after final validation passes. |
 
 ## First GA Slice Completed
 
@@ -266,6 +266,12 @@ head without requiring a PR. `scripts/beta-release-gate-report.sh` remains as a 
 wrapper for beta PR gates. The script remains evidence-only: it does not accept fallbacks, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
 
+GA mode also separates the current workspace package version from the intended release version.
+While the workspace still reports `0.2.0-beta.2`, the report defaults the intended GA release
+version to `0.2.0`, emits `workspace_version_matches_release=false`, and keeps
+`release_gate_state=version_bump_required`. This prevents pre-GA evidence from suggesting a
+`tag_v0.2.0-beta.2` action for the GA path.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -331,3 +337,8 @@ PR ready, merge, tag, publish, mutate harness state, or change release scope.
 - `scripts/release-gate-report.sh --target ga --quick --allow-tracked-changes --json`
 - `scripts/release-gate-report.sh --target ga --hosted-run 27367795100 --quick`
   with tracked development changes present (expected failure)
+- `scripts/release-gate-report.sh --target ga --hosted-run 27370049604 --quick
+  --allow-tracked-changes --json`
+  expected `release_version=0.2.0`, `workspace_version_matches_release=false`,
+  `release_gate_state=version_bump_required`, and no `tag_v0.2.0-beta.2`
+  remaining action

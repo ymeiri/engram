@@ -10,6 +10,7 @@ hosted_run_id="${HOSTED_RUN_ID:-}"
 expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
 expected_event="${EXPECTED_EVENT:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
+release_version="${RELEASE_VERSION:-}"
 run_local_ci=1
 run_package_smoke=1
 allow_tracked_changes=0
@@ -26,6 +27,8 @@ Options:
   --target <ga|beta>            Release target type (default: RELEASE_TARGET or ga)
   --pr <number>                 GitHub PR number to inspect for beta targets
   --hosted-run <id>             Hosted CI run ID to verify for the current head
+  --release-version <version>   Intended release version (default: current version for beta,
+                                prerelease suffix stripped for GA)
   --expected-event <event>      Expected GitHub Actions event (default: push for GA, pull_request for beta)
   --quick                       Skip local CI and package/install smoke
   --skip-local-ci               Skip ./scripts/local-ci.sh
@@ -81,6 +84,11 @@ while [[ $# -gt 0 ]]; do
             hosted_run_id="$2"
             shift 2
             ;;
+        --release-version)
+            [[ $# -ge 2 ]] || fail "--release-version requires a version"
+            release_version="$2"
+            shift 2
+            ;;
         --expected-event)
             [[ $# -ge 2 ]] || fail "--expected-event requires an event name"
             expected_event="$2"
@@ -132,6 +140,14 @@ fi
 
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then
     pr_number=3
+fi
+
+if [[ -z "$release_version" ]]; then
+    if [[ "$target" == "ga" ]]; then
+        release_version="${package_version%%-*}"
+    else
+        release_version="$package_version"
+    fi
 fi
 
 require_tool git
@@ -316,7 +332,9 @@ release_gate_state="evidence_incomplete"
 ready_for_release_owner_review=false
 hosted_ci_fallback_decision_required=false
 
-if [[ "$local_ci_state" == "passed" && "$package_smoke_state" == "passed" ]]; then
+if [[ "$target" == "ga" && "$package_version" != "$release_version" ]]; then
+    release_gate_state="version_bump_required"
+elif [[ "$local_ci_state" == "passed" && "$package_smoke_state" == "passed" ]]; then
     if [[ "$hosted_ci_state" == "passing" ]]; then
         release_gate_state="hosted_ci_passing_release_owner_review_required"
         ready_for_release_owner_review=true
@@ -366,13 +384,20 @@ remaining_release_actions_json="$(
     jq -n \
         --arg target "$target" \
         --arg state "$release_gate_state" \
-        --arg version "$package_version" \
-        'if $state == "fallback_release_owner_decision_required" then
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        'if $target == "ga" and $package_version != $release_version then
+            [
+                "bump_workspace_version_to_\($release_version)",
+                "rerun_exact_head_hosted_ci",
+                "run_full_ga_release_gate_report_with_local_ci_and_package_smoke"
+            ]
+        elif $state == "fallback_release_owner_decision_required" then
             [
                 "release_owner_accept_hosted_ci_fallback_or_restore_hosted_ci",
                 "mark_pr_ready",
                 "merge_pr",
-                "tag_v\($version)",
+                "tag_v\($release_version)",
                 "publish_release_artifacts",
                 "publish_homebrew_tap",
                 "verify_published_release_install"
@@ -380,7 +405,7 @@ remaining_release_actions_json="$(
         elif $state == "hosted_ci_passing_release_owner_review_required" and $target == "ga" then
             [
                 "release_owner_approve_release",
-                "tag_v\($version)",
+                "tag_v\($release_version)",
                 "publish_release_artifacts",
                 "publish_homebrew_tap",
                 "verify_published_release_install"
@@ -390,7 +415,7 @@ remaining_release_actions_json="$(
                 "release_owner_approve_release",
                 "mark_pr_ready",
                 "merge_pr",
-                "tag_v\($version)",
+                "tag_v\($release_version)",
                 "publish_release_artifacts",
                 "publish_homebrew_tap",
                 "verify_published_release_install"
@@ -406,6 +431,7 @@ if [[ "$json_output" == "1" ]]; then
     jq -n \
         --arg target "$target" \
         --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
         --arg branch "$branch" \
         --arg upstream "$upstream" \
         --arg ahead "$ahead_count" \
@@ -427,6 +453,8 @@ if [[ "$json_output" == "1" ]]; then
         '{
             target: $target,
             package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
             branch: $branch,
             upstream: {
                 name: $upstream,
@@ -456,6 +484,9 @@ else
     release_target_label="$([[ "$target" == "ga" ]] && printf 'GA' || printf 'Beta')"
     printf '\n%s release gate evidence collected:\n' "$release_target_label"
     printf '  package_version: %s\n' "$package_version"
+    printf '  release_version: %s\n' "$release_version"
+    printf '  workspace_version_matches_release: %s\n' \
+        "$([[ "$package_version" == "$release_version" ]] && printf true || printf false)"
     printf '  branch: %s\n' "$branch"
     printf '  upstream: %s (ahead=%s behind=%s)\n' "$upstream" "$ahead_count" "$behind_count"
     printf '  head: %s\n' "$head_sha"
