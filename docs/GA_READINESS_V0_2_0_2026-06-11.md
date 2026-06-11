@@ -57,7 +57,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Codex setup/runtime path | Partially validated | Beta.2 docs and setup support Codex; current task used native Codex MCP `orient` successfully. | Run a final supported-path setup/orient smoke on the GA head. |
 | Cursor setup/runtime path | Implemented / needs validation | Beta.2 adds guided setup for Cursor. | Run or explicitly defer Cursor smoke before GA support claims. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
-| Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the pre-GA `0.2.0-beta.2` workspace. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
+| Package artifacts | Partially validated | Beta.2 GitHub release has archive and checksum assets; local package-install smoke passed in an isolated temp `DIST_DIR` for the pre-GA `0.2.0-beta.2` workspace. Local release packaging now fails closed on tracked changes by default. | Run `scripts/package-release.sh`, `scripts/package-install-smoke.sh`, and publish/verify assets for final `v0.2.0`. |
 | Homebrew | Implemented / needs GA validation | Homebrew rendering exists; formula errors and release-facing packaging docs now use GA-neutral wording while preserving the macOS Apple Silicon scope. A local beta.2 formula render produced Ruby-valid formula text with no remaining beta-specific Homebrew wording. | Render/audit the formula against the final GA archive and update the tap if publishing allows it. |
 | Docs consistency | Risky | README and MCP setup are beta.2-oriented; historical docs contain many beta-specific caveats by design. | Update only release-facing docs for GA; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Risky | Legacy layers remain substrate; broad lifecycle cleanup and M6 write-apply expansion are not proven GA-complete. | Either close specific lifecycle/M6 gates with evidence or explicitly scope them out of `v0.2.0` GA claims. |
@@ -120,6 +120,17 @@ remaining `Homebrew beta`, `beta Homebrew`, or `Homebrew beta currently` wording
 formula. This is rehearsal evidence only; the final `v0.2.0` archive still needs the same package
 and Homebrew checks after the workspace version bump.
 
+## Release Packaging Dirty-State Guard
+
+`scripts/package-release.sh` now refuses to build an archive when tracked working-tree or index
+changes are present unless `ALLOW_TRACKED_CHANGES=1` is set. This keeps final release artifacts
+fail-closed by default while preserving explicit local rehearsal support.
+
+The guard was checked against the development diff for this slice: default `scripts/package-release.sh`
+exited with the tracked-change error before building, while
+`ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` still built and validated
+a dirty rehearsal archive, including manifest verification and packaged HTTP `/health`.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
@@ -152,3 +163,5 @@ and Homebrew checks after the workspace version bump.
 - `DIST_DIR=<temp> FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
 - `ruby -c <temp>/homebrew/Formula/engram.rb`
 - `if rg -n "Homebrew beta|beta Homebrew|Homebrew beta currently" <temp>/homebrew/Formula/engram.rb; then exit 1; fi`
+- `scripts/package-release.sh` with tracked development changes present (expected failure)
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh`

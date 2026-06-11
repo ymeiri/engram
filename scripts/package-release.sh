@@ -10,6 +10,7 @@ release_notes_slug="$(printf '%s' "$package_version" | tr '[:lower:]' '[:upper:]
 release_notes_source="$repo_root/docs/RELEASE_NOTES_V${release_notes_slug}.md"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"
+allow_tracked_changes="${ALLOW_TRACKED_CHANGES:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-package.XXXXXX")"
 
 cleanup() {
@@ -27,6 +28,19 @@ run_step() {
 sha256_file() {
     shasum -a 256 "$1" | awk '{ print $1 }'
 }
+
+git_head="$(git rev-parse HEAD)"
+if git diff --quiet --ignore-submodules -- && git diff --cached --quiet --ignore-submodules --; then
+    tracked_changes_present=false
+else
+    tracked_changes_present=true
+fi
+
+if [[ "$tracked_changes_present" == "true" && "$allow_tracked_changes" != "1" ]]; then
+    printf 'error: tracked working-tree or index changes are present; commit changes first\n' >&2
+    printf 'hint: set ALLOW_TRACKED_CHANGES=1 only for local development rehearsals\n' >&2
+    exit 1
+fi
 
 run_step "build release binary" cargo build --locked --release -p engram-cli
 
@@ -57,12 +71,6 @@ cp README.md LICENSE CHANGELOG.md "$staging_dir/"
 cp "$release_notes_source" "$staging_dir/RELEASE_NOTES.md"
 chmod 755 "$staging_dir/engram"
 
-git_head="$(git rev-parse HEAD)"
-if git diff --quiet --ignore-submodules -- && git diff --cached --quiet --ignore-submodules --; then
-    tracked_changes_present=false
-else
-    tracked_changes_present=true
-fi
 cargo_lock_sha256="$(sha256_file Cargo.lock)"
 
 manifest="$staging_dir/MANIFEST.json"

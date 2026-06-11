@@ -411,6 +411,9 @@ cargo fmt
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 
+Release package builds fail on tracked working-tree or index changes by default. Set
+`ALLOW_TRACKED_CHANGES=1` only for local development rehearsals.
+
 Embedding model files are cached under `~/.engram/cache/fastembed` by default. Set
 `ENGRAM_EMBED_CACHE_DIR` to use a pre-warmed or shared cache; upstream `FASTEMBED_CACHE_DIR` and
 `HF_HOME` are also honored. If the cache is cold, `engram serve`, `engram index`, `engram search`,

@@ -193,7 +193,12 @@ else
 fi
 
 if [[ "$run_package_smoke" == "1" ]]; then
-    run_step "package/install smoke validation" "$repo_root/scripts/package-install-smoke.sh"
+    if [[ "$allow_tracked_changes" == "1" ]]; then
+        run_step "package/install smoke validation" env ALLOW_TRACKED_CHANGES=1 \
+            "$repo_root/scripts/package-install-smoke.sh"
+    else
+        run_step "package/install smoke validation" "$repo_root/scripts/package-install-smoke.sh"
+    fi
 else
     if [[ "$json_output" == "1" ]]; then
         printf '\n==> package/install smoke validation\nskipped\n' >&2
