@@ -122,6 +122,10 @@ require_tool cargo
 require_tool rustc
 require_tool jq
 
+expected_tag="v${package_version}"
+[[ "$tag" == "$expected_tag" ]] ||
+    fail "release tag version mismatch: expected $expected_tag for workspace package version $package_version, got $tag"
+
 archive_name="engram-${package_version}-${host_triple}"
 tarball_name="${archive_name}.tar.gz"
 checksum_name="${tarball_name}.sha256"

@@ -133,13 +133,15 @@ a dirty rehearsal archive, including manifest verification and packaged HTTP `/h
 
 ## Published Release Verification Guard
 
-`scripts/verify-published-release-install.sh` now verifies GitHub release metadata before downloading
-assets: draft releases fail closed, and prerelease state must match `--expected-prerelease` or the
-default tag-based inference. Tags with a suffix such as `v0.2.0-beta.2` infer prerelease `true`;
-stable tags such as `v0.2.0` infer prerelease `false`.
+`scripts/verify-published-release-install.sh` now verifies release identity before downloading
+assets. The requested tag must match the workspace package version, draft releases fail closed, and
+prerelease state must match `--expected-prerelease` or the default tag-based inference. Tags with a
+suffix such as `v0.2.0-beta.2` infer prerelease `true`; stable tags such as `v0.2.0` infer
+prerelease `false`.
 
 This keeps the final `v0.2.0` post-publish verifier from accepting a draft or prerelease GitHub
-release even if the archive assets install successfully.
+release even if the archive assets install successfully, and it prevents `v0.2.0` evidence from
+being collected on an unbumped `0.2.0-beta.2` checkout.
 
 ## Validation Run
 
@@ -175,5 +177,6 @@ release even if the archive assets install successfully.
 - `if rg -n "Homebrew beta|beta Homebrew|Homebrew beta currently" <temp>/homebrew/Formula/engram.rb; then exit 1; fi`
 - `scripts/package-release.sh` with tracked development changes present (expected failure)
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh`
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir <temp> --json` (expected failure)
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-prerelease false --json` (expected failure)
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --json`

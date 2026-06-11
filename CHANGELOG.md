@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ALLOW_TRACKED_CHANGES=1` reserved for explicit development rehearsals.
 - Hardened published release install verification so GitHub release checks fail on draft releases
   or unexpected prerelease/stable state before downloading assets.
+- Hardened published release install verification so release tags must match the workspace package
+  version before release metadata or asset validation runs.
 
 ## [0.2.0-beta.2] - 2026-06-09
 

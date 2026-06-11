@@ -24,9 +24,9 @@ live cross-harness proof is still pending.
 - Improved daemon provenance reporting, stale-runtime diagnostics, RocksDB lock
   recovery guidance, and daemon startup error output.
 - Added release packaging, package install smoke tests, Homebrew formula
-  rendering, published-release install verification with draft/prerelease checks,
-  hosted-CI verifier evidence, beta/GA readiness reports, and native Claude
-  preflight evidence scripts.
+  rendering, published-release install verification with tag/version and
+  draft/prerelease checks, hosted-CI verifier evidence, beta/GA readiness
+  reports, and native Claude preflight evidence scripts.
 
 ## Install
 
