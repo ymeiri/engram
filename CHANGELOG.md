@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release tag that peels to the expected packaged Git commit.
 - Hardened package install smoke verification so `MANIFEST.json` is parsed with `jq` instead of
   ad hoc text matching when checking release metadata and packaged file hashes.
+- Hardened package install smoke verification so `.sha256` files must contain exactly one
+  SHA-256 line naming the expected release archive.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
   release archive is created.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and

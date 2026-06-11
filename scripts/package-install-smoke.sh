@@ -34,6 +34,43 @@ sha256_file() {
     shasum -a 256 "$1" | awk '{ print $1 }'
 }
 
+validate_checksum_file() {
+    local checksum_file="$1"
+    local expected_name="$2"
+    local line_count
+    local digest
+    local filename
+    local extra
+
+    line_count="$(wc -l <"$checksum_file" | tr -d '[:space:]')"
+    if [[ "$line_count" != "1" ]]; then
+        printf 'error: checksum file must contain exactly one line: %s\n' \
+            "$checksum_file" >&2
+        exit 1
+    fi
+
+    read -r digest filename extra <"$checksum_file" || {
+        printf 'error: checksum file is unreadable: %s\n' "$checksum_file" >&2
+        exit 1
+    }
+
+    if [[ -n "${extra:-}" ]]; then
+        printf 'error: checksum file has unexpected extra fields: %s\n' \
+            "$checksum_file" >&2
+        exit 1
+    fi
+    if [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+        printf 'error: checksum digest is not a SHA-256 hex value: %s\n' \
+            "$checksum_file" >&2
+        exit 1
+    fi
+    if [[ "$filename" != "$expected_name" ]]; then
+        printf 'error: checksum filename mismatch: expected %s, got %s\n' \
+            "$expected_name" "$filename" >&2
+        exit 1
+    fi
+}
+
 manifest_string_value() {
     local manifest="$1"
     local key="$2"
@@ -145,6 +182,8 @@ fi
 cp "$tarball" "$checksum" "$work_dir/"
 cd "$work_dir"
 
+run_step "inspect checksum file" validate_checksum_file "$(basename "$checksum")" \
+    "$(basename "$tarball")"
 run_step "verify checksum" shasum -a 256 -c "$(basename "$checksum")"
 run_step "inspect archive paths" validate_archive_paths "$(basename "$tarball")" \
     "$work_dir/archive-contents.txt"
