@@ -4,7 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
+default_expected_workflow="CI"
+expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
+allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
 expected_event="${EXPECTED_EVENT:-pull_request}"
 expected_head="${EXPECTED_HEAD_SHA:-$(git rev-parse HEAD)}"
 expected_jobs=(Check Test Format Clippy Docs)
@@ -41,6 +43,8 @@ Options:
 Environment overrides:
   EXPECTED_HEAD_SHA       Expected run head (default: git rev-parse HEAD)
   EXPECTED_WORKFLOW_NAME  Expected workflow name (default: CI)
+  ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE
+                          Allow non-CI workflow names for explicit local rehearsals
   EXPECTED_EVENT          Expected run event (default: pull_request)
   GITHUB_RUN_ID           Run ID when no positional run-id is supplied
 
@@ -77,6 +81,31 @@ done
 
 if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
     fail "GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got $run_id"
+fi
+case "$allow_expected_workflow_override" in
+    0 | 1) ;;
+    *)
+        workflow_override_error="ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE must be 0 or 1"
+        workflow_override_error+=", got $allow_expected_workflow_override"
+        fail "$workflow_override_error"
+        ;;
+esac
+if [[ -z "$expected_workflow" ]]; then
+    fail "EXPECTED_WORKFLOW_NAME must not be empty"
+fi
+workflow_name_pattern='^[A-Za-z0-9_. -]+$'
+if [[ ! "$expected_workflow" =~ $workflow_name_pattern ]]; then
+    workflow_name_error="EXPECTED_WORKFLOW_NAME must contain only letters, numbers, spaces,"
+    workflow_name_error+=" dot, underscore, and hyphen; got $expected_workflow"
+    fail "$workflow_name_error"
+fi
+if [[ "$expected_workflow" != "$default_expected_workflow" &&
+    "$allow_expected_workflow_override" != "1" ]]; then
+    printf 'error: EXPECTED_WORKFLOW_NAME override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_expected_workflow" >&2
+    printf 'got: %s\n' "$expected_workflow" >&2
+    printf 'hint: set ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
 fi
 event_name_pattern='^[A-Za-z0-9_]+$'
 if [[ ! "$expected_event" =~ $event_name_pattern ]]; then

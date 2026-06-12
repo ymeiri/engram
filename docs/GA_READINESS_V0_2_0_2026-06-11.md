@@ -608,6 +608,32 @@ Hosted CI expected-event inputs are now validated before GitHub run discovery or
 be GitHub event-name tokens such as `push` or `pull_request`; malformed values fail closed instead
 of querying for ambiguous run evidence.
 
+Hosted CI workflow-name selection is also default-deny for release evidence. Both the GA release
+gate and the hosted CI pre-step verifier default to the repo's `CI` workflow and reject
+`EXPECTED_WORKFLOW_NAME` drift before GitHub run discovery or inspection unless
+`ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1` is set for an explicit local rehearsal. Workflow names
+must be non-empty and limited to letters, numbers, spaces, dot, underscore, and hyphen.
+
+Validation on the workflow-name guard:
+
+- `EXPECTED_WORKFLOW_NAME=CI-copy scripts/release-gate-report.sh --target ga --hosted-run
+  27442002997 --quick --json` failed before hosted run inspection with
+  `EXPECTED_WORKFLOW_NAME override requires explicit approval`.
+- `ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=yes EXPECTED_WORKFLOW_NAME=CI-copy
+  scripts/release-gate-report.sh --target ga --hosted-run 27442002997 --quick --json` failed with
+  `ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE must be 0 or 1, got yes`.
+- `ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1 EXPECTED_WORKFLOW_NAME=CI/extra
+  scripts/release-gate-report.sh --target ga --hosted-run 27442002997 --quick --json` failed with
+  `EXPECTED_WORKFLOW_NAME must contain only letters, numbers, spaces, dot, underscore, and hyphen`.
+- `EXPECTED_WORKFLOW_NAME= scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before
+  GitHub run discovery with `EXPECTED_WORKFLOW_NAME must not be empty`.
+- `EXPECTED_WORKFLOW_NAME=CI-copy scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before
+  GitHub run discovery with `EXPECTED_WORKFLOW_NAME override requires explicit approval`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27442002997 --quick
+  --allow-tracked-changes --json` still accepted the default `CI` workflow path and reported
+  `hosted_ci.state=passing`, `hosted_ci.run.workflowName=CI`, and
+  `release_gate_state=evidence_incomplete` without release actions.
+
 ## GA Version Bump Checkpoint
 
 This release slice moves workspace package metadata from the validated

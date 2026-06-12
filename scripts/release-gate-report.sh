@@ -7,7 +7,9 @@ cd "$repo_root"
 target="${RELEASE_TARGET:-ga}"
 pr_number="${PR_NUMBER:-}"
 hosted_run_id="${HOSTED_RUN_ID:-}"
-expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
+default_expected_workflow="CI"
+expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
+allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
 expected_event="${EXPECTED_EVENT:-}"
 expected_branch="${EXPECTED_BRANCH:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
@@ -52,8 +54,9 @@ Options:
 
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
-  EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH,
-  ALLOW_RELEASE_NOTES_PATH_OVERRIDE, RELEASE_REPOSITORY, ALLOW_RELEASE_REPOSITORY_OVERRIDE,
+  ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE, EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION,
+  RELEASE_NOTES_PATH, ALLOW_RELEASE_NOTES_PATH_OVERRIDE, RELEASE_REPOSITORY,
+  ALLOW_RELEASE_REPOSITORY_OVERRIDE,
   RELEASE_GATE_MIN_FREE_KIB, ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
@@ -158,6 +161,32 @@ case "$target" in
     ga | beta) ;;
     *) fail "--target must be ga or beta" ;;
 esac
+
+case "$allow_expected_workflow_override" in
+    0 | 1) ;;
+    *)
+        workflow_override_error="ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE must be 0 or 1"
+        workflow_override_error+=", got $allow_expected_workflow_override"
+        fail "$workflow_override_error"
+        ;;
+esac
+if [[ -z "$expected_workflow" ]]; then
+    fail "EXPECTED_WORKFLOW_NAME must not be empty"
+fi
+workflow_name_pattern='^[A-Za-z0-9_. -]+$'
+if [[ ! "$expected_workflow" =~ $workflow_name_pattern ]]; then
+    workflow_name_error="EXPECTED_WORKFLOW_NAME must contain only letters, numbers, spaces,"
+    workflow_name_error+=" dot, underscore, and hyphen; got $expected_workflow"
+    fail "$workflow_name_error"
+fi
+if [[ "$expected_workflow" != "$default_expected_workflow" &&
+    "$allow_expected_workflow_override" != "1" ]]; then
+    printf 'error: EXPECTED_WORKFLOW_NAME override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_expected_workflow" >&2
+    printf 'got: %s\n' "$expected_workflow" >&2
+    printf 'hint: set ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 if [[ -z "$expected_event" ]]; then
     if [[ "$target" == "ga" ]]; then
