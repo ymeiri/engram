@@ -10,7 +10,9 @@ host_triple="${HOMEBREW_HOST_TRIPLE:-$(rustc -vV | awk '/^host:/ { print $2 }')}
 archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
-output="${FORMULA_OUTPUT:-$dist_dir/homebrew/Formula/engram.rb}"
+default_output="$dist_dir/homebrew/Formula/engram.rb"
+output="${FORMULA_OUTPUT-$default_output}"
+allow_formula_output_override="${ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE:-0}"
 default_release_base_url="https://github.com/ymeiri/engram/releases/download/v${package_version}"
 release_base_url="${HOMEBREW_RELEASE_BASE_URL:-$default_release_base_url}"
 allow_release_base_url_override="${ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE:-0}"
@@ -19,6 +21,28 @@ command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
 }
+
+if [[ "$allow_formula_output_override" != "0" &&
+    "$allow_formula_output_override" != "1" ]]; then
+    printf 'error: ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE must be 0 or 1, got %s\n' \
+        "$allow_formula_output_override" >&2
+    exit 1
+fi
+if [[ -z "$output" ]]; then
+    printf 'error: FORMULA_OUTPUT must not be empty\n' >&2
+    exit 1
+fi
+if [[ "$(basename "$output")" != "engram.rb" ]]; then
+    printf 'error: FORMULA_OUTPUT must end with engram.rb, got %s\n' "$output" >&2
+    exit 1
+fi
+if [[ "$output" != "$default_output" && "$allow_formula_output_override" != "1" ]]; then
+    printf 'error: FORMULA_OUTPUT override requires explicit approval\n' >&2
+    printf 'expected default formula output: %s\n' "$default_output" >&2
+    printf 'got: %s\n' "$output" >&2
+    printf 'hint: set ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 if [[ "$host_triple" != "aarch64-apple-darwin" ]]; then
     printf 'error: Homebrew formula currently supports aarch64-apple-darwin only, got %s\n' \

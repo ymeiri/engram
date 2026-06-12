@@ -468,6 +468,42 @@ This keeps the final tap formula from silently pointing at a wrong repository, t
 because of an ambient environment override. The explicit override remains available for local
 rehearsals, not final release-owner evidence.
 
+## Homebrew Formula Output Guard
+
+`scripts/render-homebrew-formula.sh` now fails closed if `FORMULA_OUTPUT` points anywhere other
+than the default `<dist>/homebrew/Formula/engram.rb` path unless
+`ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1` is set for an explicit local rehearsal. The output path
+must be non-empty and must end with `engram.rb`.
+
+This keeps final tap evidence from silently writing the generated formula to the wrong file or an
+ambient Homebrew tap checkout. Intentional temp-output rehearsals remain available, but they must
+name the approval flag and still write a file named `engram.rb`.
+
+Targeted validation for this guard:
+
+- `FORMULA_OUTPUT=/tmp/engram.rb scripts/render-homebrew-formula.sh` failed before release asset
+  reads or formula writes with `FORMULA_OUTPUT override requires explicit approval`.
+- `ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=yes FORMULA_OUTPUT=/tmp/engram.rb
+  scripts/render-homebrew-formula.sh` failed with
+  `ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE must be 0 or 1, got yes`.
+- `FORMULA_OUTPUT= scripts/render-homebrew-formula.sh` failed with
+  `FORMULA_OUTPUT must not be empty`.
+- `ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 FORMULA_OUTPUT=/tmp/not-engram.txt
+  scripts/render-homebrew-formula.sh` failed with
+  `FORMULA_OUTPUT must end with engram.rb`.
+- `DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+  EXPECTED_TRACKED_CHANGES_PRESENT=false
+  EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
+  scripts/render-homebrew-formula.sh` rendered the default temp formula path and `ruby -c` reported
+  `Syntax OK`.
+- `ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 FORMULA_OUTPUT=<temp>/Formula/engram.rb
+  DIST_DIR=<temp>
+  EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+  EXPECTED_TRACKED_CHANGES_PRESENT=false
+  EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
+  scripts/render-homebrew-formula.sh` rendered an explicitly approved temp formula path and
+  `ruby -c` reported `Syntax OK`.
+
 ## Hosted CI Multi-Session Test Stabilization
 
 GitHub Actions run `27358951202` for commit `900101f` failed in the `Test` job while Format,
