@@ -13,6 +13,7 @@ expected_branch="${EXPECTED_BRANCH:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
 release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
+min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB:-10485760}"
 run_local_ci=1
 run_package_smoke=1
 run_homebrew_render=1
@@ -44,7 +45,8 @@ Options:
 
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
-  EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH.
+  EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH,
+  RELEASE_GATE_MIN_FREE_KIB.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
@@ -175,6 +177,8 @@ fi
 require_tool git
 require_tool gh
 require_tool jq
+[[ "$min_free_space_kib" =~ ^[0-9]+$ ]] ||
+    fail "RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer"
 
 pr_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-pr.XXXXXX")"
 checks_file="$(mktemp "${TMPDIR:-/tmp}/engram-release-checks.XXXXXX")"
@@ -218,6 +222,34 @@ release_scope_native_claude_ack=false
 release_scope_lifecycle_m6_ack=false
 homebrew_formula_state="not_applicable"
 homebrew_formula_output="$repo_root/dist/homebrew/Formula/engram.rb"
+disk_space_state="not_checked"
+free_space_kib=""
+
+check_free_space_for_local_steps() {
+    if [[ "$run_local_ci" != "1" && "$run_package_smoke" != "1" ]]; then
+        disk_space_state="skipped"
+        printf 'skipped: local CI and package/install smoke are disabled\n'
+        return
+    fi
+
+    free_space_kib="$(df -Pk "$repo_root" | awk 'NR == 2 { print $4 }')"
+    [[ "$free_space_kib" =~ ^[0-9]+$ ]] ||
+        fail "could not determine free disk space for $repo_root"
+
+    printf 'free_space_kib=%s\n' "$free_space_kib"
+    printf 'min_required_kib=%s\n' "$min_free_space_kib"
+
+    if (( free_space_kib < min_free_space_kib )); then
+        disk_space_state="insufficient"
+        fail \
+            "insufficient free disk space for local release validation:" \
+            "have ${free_space_kib} KiB, require ${min_free_space_kib} KiB under $repo_root." \
+            "Free generated build/cache space, then rerun;" \
+            "use --skip-local-ci/--skip-package-smoke only for partial evidence."
+    fi
+
+    disk_space_state="passed"
+}
 
 collect_hosted_run_checks() {
     if [[ -z "$hosted_run_id" ]]; then
@@ -356,6 +388,8 @@ else
         hosted_ci_state="pre_step_blocker_verified"
     fi
 fi
+
+run_step "disk space preflight" check_free_space_for_local_steps
 
 if [[ "$run_local_ci" == "1" ]]; then
     run_step "local CI-equivalent validation" "$repo_root/scripts/local-ci.sh"
@@ -534,6 +568,9 @@ if [[ "$json_output" == "1" ]]; then
         --arg package_install_smoke "$package_smoke_state" \
         --arg homebrew_formula_render "$homebrew_formula_state" \
         --arg homebrew_formula_output "$homebrew_formula_output" \
+        --arg disk_space_state "$disk_space_state" \
+        --arg free_space_kib "$free_space_kib" \
+        --arg min_free_space_kib "$min_free_space_kib" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -569,6 +606,15 @@ if [[ "$json_output" == "1" ]]; then
             },
             local_ci: $local_ci,
             package_install_smoke: $package_install_smoke,
+            disk_space: {
+                state: $disk_space_state,
+                free_kib: (
+                    if $free_space_kib == "" then null
+                    else ($free_space_kib | tonumber)
+                    end
+                ),
+                min_required_kib: ($min_free_space_kib | tonumber)
+            },
             homebrew_formula_render: $homebrew_formula_render,
             homebrew_formula: {
                 output: (if $homebrew_formula_render == "not_applicable" then null else $homebrew_formula_output end)
@@ -609,6 +655,11 @@ else
     printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
     printf '  local_ci: %s\n' "$local_ci_state"
     printf '  package_install_smoke: %s\n' "$package_smoke_state"
+    printf '  disk_space_preflight: %s' "$disk_space_state"
+    if [[ -n "$free_space_kib" ]]; then
+        printf ' (free_kib=%s min_required_kib=%s)' "$free_space_kib" "$min_free_space_kib"
+    fi
+    printf '\n'
     if [[ "$target" == "ga" ]]; then
         printf '  homebrew_formula_render: %s\n' "$homebrew_formula_state"
         if [[ "$homebrew_formula_state" == "passed" ]]; then

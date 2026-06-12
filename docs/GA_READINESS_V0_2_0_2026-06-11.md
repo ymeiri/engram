@@ -448,6 +448,21 @@ Targeted validation for this guard:
 This branch-guard slice changes release-facing code and docs. If it becomes the final release head,
 rerun exact-head hosted CI and the full GA release gate before tag, publish, or Homebrew tap update.
 
+## Local Disk-Space Release Gate Preflight
+
+`scripts/release-gate-report.sh --target ga` now checks local free space before running local CI or
+package/install smoke. Full local owner-review evidence uses the default
+`RELEASE_GATE_MIN_FREE_KIB=10485760` threshold (10 GiB) and reports `disk_space.state`,
+`disk_space.free_kib`, and `disk_space.min_required_kib` in JSON once the preflight runs. The
+override is available for controlled rehearsals, but lowering it weakens local release evidence.
+
+This closes the current local validation failure mode where Cargo can spend substantial time in
+`cargo check`, clippy, or tests before surfacing `No space left on device`. On current head
+`13c08294a838e19e7497e893bea2bcb301449bdf`, hosted CI run `27393027654` is green, but the full
+local GA gate remains pending because the filesystem has less than 1 GiB free while `target/` is
+about 99 GiB. Cleanup of generated build artifacts still requires explicit approval before rerunning
+the full gate and refreshing GA `dist/` assets.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
