@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Ruby syntax, and beta-wording validation after package/install smoke.
 - Hardened the GA release gate so owner-review evidence defaults to the `main` branch and reports
   the expected branch in text and JSON output.
+- Hardened the GA release gate so non-`main` expected-branch overrides require explicit approval
+  and branch names are validated before release evidence is collected.
 - Hardened the GA release gate with a disk-space preflight before local CI/package smoke, so low
   free space fails early with an actionable cleanup message instead of surfacing later as Cargo
   build errors.

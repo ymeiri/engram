@@ -575,10 +575,12 @@ merged and no longer points at current `main`, so it cannot validate the current
 `scripts/release-gate-report.sh` now supports an explicit `--target ga` mode that verifies the
 current branch, upstream sync, tracked-change state, and a hosted push CI run for the exact current
 head without requiring a PR. GA mode defaults the expected branch to `main` and fails closed on a
-branch mismatch; `--expected-branch` or `EXPECTED_BRANCH` must be explicit if a future release uses
-a non-main release branch. `scripts/beta-release-gate-report.sh` remains as a compatibility wrapper
-for beta PR gates. The script remains evidence-only: it does not accept fallbacks, mark a PR ready,
-merge, tag, publish, mutate harness state, or change release scope.
+branch mismatch; `--expected-branch` or `EXPECTED_BRANCH` values that target a non-`main` branch
+now require `ALLOW_EXPECTED_BRANCH_OVERRIDE=1` for an explicit local rehearsal. Branch names are
+validated with Git before any release evidence is collected. `scripts/beta-release-gate-report.sh`
+remains as a compatibility wrapper for beta PR gates. The script remains evidence-only: it does not
+accept fallbacks, mark a PR ready, merge, tag, publish, mutate harness state, or change release
+scope.
 
 GA mode also separates the current workspace package version from the intended release version.
 While the workspace still reports `0.2.0-beta.2`, the report defaults the intended GA release
@@ -727,8 +729,11 @@ full GA release gate before tag, publish, or Homebrew tap update.
 
 `scripts/release-gate-report.sh --target ga` now defaults the expected branch to `main`, emits
 `expected_branch` in text and JSON evidence, and fails before accepting evidence if the current
-branch does not match. This closes a release-management gap where a synced non-main branch with an
-exact-head hosted run could otherwise look like GA owner-review evidence.
+branch does not match. Non-`main` expected-branch overrides now also require
+`ALLOW_EXPECTED_BRANCH_OVERRIDE=1` and the supplied branch name must pass `git check-ref-format`.
+This closes a release-management gap where an accidental `EXPECTED_BRANCH`/`--expected-branch`
+override could make a synced non-main branch with an exact-head hosted run look like GA
+owner-review evidence.
 
 Targeted validation for this guard:
 
@@ -742,6 +747,19 @@ Targeted validation for this guard:
 - `EXPECTED_BRANCH=release/0.2 scripts/release-gate-report.sh --target ga --hosted-run
   27390228134 --quick --allow-tracked-changes --json`, expected failure with
   `branch mismatch: expected release/0.2, got main`.
+- `EXPECTED_BRANCH=release/0.2 scripts/release-gate-report.sh --target ga --hosted-run
+  27443650460 --quick --json` failed before release-target lookup or hosted run inspection with
+  `EXPECTED_BRANCH override requires explicit approval`.
+- `ALLOW_EXPECTED_BRANCH_OVERRIDE=yes EXPECTED_BRANCH=release/0.2
+  scripts/release-gate-report.sh --target ga --hosted-run 27443650460 --quick --json` failed with
+  `ALLOW_EXPECTED_BRANCH_OVERRIDE must be 0 or 1, got yes`.
+- `ALLOW_EXPECTED_BRANCH_OVERRIDE=1 EXPECTED_BRANCH=bad..branch
+  scripts/release-gate-report.sh --target ga --hosted-run 27443650460 --quick --json` failed with
+  `EXPECTED_BRANCH/--expected-branch must be a valid Git branch name, got bad..branch`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27443650460 --quick
+  --allow-tracked-changes --json` still accepted the default `main` branch path and reported
+  `branch=main`, `expected_branch=main`, hosted CI passing, `release_target.state=available`,
+  `release_gate_state=evidence_incomplete`, and no release actions.
 
 This branch-guard slice changes release-facing code and docs. If it becomes the final release head,
 rerun exact-head hosted CI and the full GA release gate before tag, publish, or Homebrew tap update.

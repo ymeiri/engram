@@ -12,6 +12,7 @@ expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
 allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
 expected_event="${EXPECTED_EVENT:-}"
 expected_branch="${EXPECTED_BRANCH:-}"
+allow_expected_branch_override="${ALLOW_EXPECTED_BRANCH_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
 default_release_notes_path="$repo_root/docs/RELEASE_NOTES_V0_2_0.md"
@@ -54,7 +55,8 @@ Options:
 
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
-  ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE, EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION,
+  ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE, EXPECTED_EVENT, EXPECTED_BRANCH,
+  ALLOW_EXPECTED_BRANCH_OVERRIDE, RELEASE_VERSION,
   RELEASE_NOTES_PATH, ALLOW_RELEASE_NOTES_PATH_OVERRIDE, RELEASE_REPOSITORY,
   ALLOW_RELEASE_REPOSITORY_OVERRIDE,
   RELEASE_GATE_MIN_FREE_KIB, ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE.
@@ -201,9 +203,6 @@ if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
     expected_event_error+=", got $expected_event"
     fail "$expected_event_error"
 fi
-if [[ -z "$expected_branch" && "$target" == "ga" ]]; then
-    expected_branch="main"
-fi
 
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then
     pr_number=3
@@ -234,6 +233,29 @@ fi
 require_tool git
 require_tool gh
 require_tool jq
+default_expected_branch=""
+if [[ "$target" == "ga" ]]; then
+    default_expected_branch="main"
+fi
+case "$allow_expected_branch_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_EXPECTED_BRANCH_OVERRIDE must be 0 or 1, got $allow_expected_branch_override" ;;
+esac
+if [[ "$target" == "ga" && -z "$expected_branch" ]]; then
+    expected_branch="$default_expected_branch"
+fi
+if [[ -n "$expected_branch" ]]; then
+    git check-ref-format --branch "$expected_branch" >/dev/null 2>&1 ||
+        fail "EXPECTED_BRANCH/--expected-branch must be a valid Git branch name, got $expected_branch"
+fi
+if [[ "$target" == "ga" && "$expected_branch" != "$default_expected_branch" &&
+    "$allow_expected_branch_override" != "1" ]]; then
+    printf 'error: EXPECTED_BRANCH override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_expected_branch" >&2
+    printf 'got: %s\n' "$expected_branch" >&2
+    printf 'hint: set ALLOW_EXPECTED_BRANCH_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 case "$allow_release_notes_path_override" in
     0 | 1) ;;
     *)
