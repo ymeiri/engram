@@ -59,18 +59,20 @@ current `main` line, exact-head hosted CI and the quick GA gate are green, but t
 gate still fails before local CI/package smoke because this host is below the default 10 GiB
 release-gate free-space threshold.
 
-The latest observed disk-preflight failure reported:
+The latest exact-head full-gate rehearsal still failed closed at the disk preflight after reporting
+the intended release target as available:
 
 ```text
 release_gate_state=disk_space_cleanup_required
 failure.kind=disk_space_preflight
 release_target.state=available
-free_space_kib=6148164
 min_required_kib=10485760
-shortfall_kib=4337596
 cleanup_candidate: path=target size_kib=103776236
 cleanup_candidate: path=dist size_kib=74608
 ```
+
+The exact `free_space_kib` and `shortfall_kib` values are host-local and can move between
+rehearsals; use the final full gate JSON as the authoritative disk evidence.
 
 Those cleanup candidates are non-destructive evidence only. This runbook does not authorize
 deleting `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below

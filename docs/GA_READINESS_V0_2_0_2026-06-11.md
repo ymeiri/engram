@@ -83,9 +83,9 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `release_actions_performed=false`.
 - The default GA gate on this host still fails before local CI/package smoke with
   `release_gate_state=disk_space_cleanup_required`, `failure.kind=disk_space_preflight`,
-  `release_target.state=available`, `free_space_kib=6148164`,
-  `min_required_kib=10485760`, `shortfall_kib=4337596`, and non-destructive cleanup candidates
-  `target=103776236 KiB` and `dist=74608 KiB`.
+  `release_target.state=available`, `min_required_kib=10485760`, and non-destructive cleanup
+  candidates `target=103776236 KiB` and `dist=74608 KiB`. Exact `free_space_kib` and
+  `shortfall_kib` values are host-local and should be read from the final gate JSON.
 - Local runtime before refresh: installed `engram` and daemon still reported
   `0.2.0-beta.1`.
 - Local runtime after refresh: installed binary hash
@@ -536,8 +536,8 @@ Validation on this checkpoint:
   27401954970 --quick --json` passed as partial exact-head evidence with no release actions.
 - The default full gate still fails closed at disk preflight on this host with
   `release_gate_state=disk_space_cleanup_required`, `release_target.state=available`,
-  `free_space_kib=6148164`, `shortfall_kib=4337596`, `target=103776236 KiB`, and
-  `dist=74608 KiB`.
+  `target=103776236 KiB`, and `dist=74608 KiB`. Exact `free_space_kib` and `shortfall_kib`
+  values are host-local and should be read from the gate JSON emitted for the final release head.
 - A fresh `git fetch --tags --prune origin` followed by
   `git rev-list --left-right --count main...origin/main` returned `0 0`, so the
   recurring divergent-branch pull hint is not current evidence to run `git pull`,
