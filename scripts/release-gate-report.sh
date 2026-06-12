@@ -216,6 +216,7 @@ fi
 
 hosted_ci_state="unknown"
 hosted_ci_verifier_json="null"
+hosted_run_report_json="null"
 pr_report_json="null"
 release_scope_state="not_applicable"
 release_scope_native_claude_ack=false
@@ -223,32 +224,138 @@ release_scope_lifecycle_m6_ack=false
 homebrew_formula_state="not_applicable"
 homebrew_formula_output="$repo_root/dist/homebrew/Formula/engram.rb"
 disk_space_state="not_checked"
+disk_space_error=""
 free_space_kib=""
+
+preflight_log() {
+    if [[ "$json_output" == "1" ]]; then
+        printf '%s\n' "$*" >&2
+    else
+        printf '%s\n' "$*"
+    fi
+}
 
 check_free_space_for_local_steps() {
     if [[ "$run_local_ci" != "1" && "$run_package_smoke" != "1" ]]; then
         disk_space_state="skipped"
-        printf 'skipped: local CI and package/install smoke are disabled\n'
-        return
+        preflight_log "skipped: local CI and package/install smoke are disabled"
+        return 0
     fi
 
     free_space_kib="$(df -Pk "$repo_root" | awk 'NR == 2 { print $4 }')"
     [[ "$free_space_kib" =~ ^[0-9]+$ ]] ||
         fail "could not determine free disk space for $repo_root"
 
-    printf 'free_space_kib=%s\n' "$free_space_kib"
-    printf 'min_required_kib=%s\n' "$min_free_space_kib"
+    preflight_log "free_space_kib=$free_space_kib"
+    preflight_log "min_required_kib=$min_free_space_kib"
 
     if (( free_space_kib < min_free_space_kib )); then
         disk_space_state="insufficient"
-        fail \
-            "insufficient free disk space for local release validation:" \
-            "have ${free_space_kib} KiB, require ${min_free_space_kib} KiB under $repo_root." \
-            "Free generated build/cache space, then rerun;" \
-            "use --skip-local-ci/--skip-package-smoke only for partial evidence."
+        disk_space_error="insufficient free disk space for local release validation: "
+        disk_space_error+="have ${free_space_kib} KiB, require ${min_free_space_kib} KiB "
+        disk_space_error+="under $repo_root. Free generated build/cache space, then rerun; "
+        disk_space_error+="use --skip-local-ci/--skip-package-smoke only for partial evidence."
+        return 1
     fi
 
     disk_space_state="passed"
+    return 0
+}
+
+emit_disk_space_failure_json() {
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
+        --arg upstream "$upstream" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg expected_event "$expected_event" \
+        --arg hosted_ci_state "$hosted_ci_state" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg disk_space_state "$disk_space_state" \
+        --arg free_space_kib "$free_space_kib" \
+        --arg min_free_space_kib "$min_free_space_kib" \
+        --arg disk_space_error "$disk_space_error" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg release_scope_state "$release_scope_state" \
+        --arg release_scope_native_claude "$release_scope_native_claude_ack" \
+        --arg release_scope_lifecycle_m6 "$release_scope_lifecycle_m6_ack" \
+        --argjson pr "$pr_report_json" \
+        --argjson hosted_run "$hosted_run_report_json" \
+        --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        '{
+            target: $target,
+            package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
+            branch: $branch,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: {
+                name: $upstream,
+                ahead: ($ahead | tonumber),
+                behind: ($behind | tonumber)
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            pr: $pr,
+            hosted_ci: {
+                state: $hosted_ci_state,
+                expected_event: $expected_event,
+                run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
+                run: $hosted_run,
+                verifier: $hosted_ci_verifier
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: $disk_space_state,
+                free_kib: ($free_space_kib | tonumber),
+                min_required_kib: ($min_free_space_kib | tonumber)
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: $release_scope_state,
+                native_claude_proof_limits_acknowledged: ($release_scope_native_claude == "true"),
+                lifecycle_m6_limits_acknowledged: ($release_scope_lifecycle_m6 == "true")
+            },
+            release_gate_state: "disk_space_cleanup_required",
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: [
+                "free_local_disk_space_or_get_cleanup_approval",
+                "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
+            ],
+            failure: {
+                kind: "disk_space_preflight",
+                message: $disk_space_error
+            },
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+}
+
+run_disk_space_preflight() {
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> disk space preflight\n' >&2
+    else
+        printf '\n==> disk space preflight\n'
+    fi
+
+    if ! check_free_space_for_local_steps; then
+        if [[ "$json_output" == "1" ]]; then
+            emit_disk_space_failure_json
+        fi
+        fail "$disk_space_error"
+    fi
 }
 
 collect_hosted_run_checks() {
@@ -338,6 +445,7 @@ if [[ "$target" == "ga" ]]; then
     fi
 
     collect_hosted_run_checks
+    hosted_run_report_json="$(jq -c '.' "$hosted_run_json")"
 else
     gh pr view "$pr_number" \
         --json number,url,isDraft,headRefOid,mergeStateStatus,statusCheckRollup >"$pr_json"
@@ -389,7 +497,7 @@ else
     fi
 fi
 
-run_step "disk space preflight" check_free_space_for_local_steps
+run_disk_space_preflight
 
 if [[ "$run_local_ci" == "1" ]]; then
     run_step "local CI-equivalent validation" "$repo_root/scripts/local-ci.sh"
@@ -487,9 +595,7 @@ if [[ "$target" == "beta" ]]; then
     )"
 fi
 
-if [[ "$target" == "ga" ]]; then
-    hosted_run_report_json="$(jq -c '.' "$hosted_run_json")"
-else
+if [[ "$target" != "ga" ]]; then
     hosted_run_report_json="null"
 fi
 

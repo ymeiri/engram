@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened the GA release gate with a disk-space preflight before local CI/package smoke, so low
   free space fails early with an actionable cleanup message instead of surfacing later as Cargo
   build errors.
+- Hardened the GA release gate disk-space preflight so `--json` mode emits structured failure
+  evidence before exiting nonzero when local cleanup is required.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only

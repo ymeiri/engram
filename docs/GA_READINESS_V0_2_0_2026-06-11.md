@@ -455,13 +455,16 @@ package/install smoke. Full local owner-review evidence uses the default
 `RELEASE_GATE_MIN_FREE_KIB=10485760` threshold (10 GiB) and reports `disk_space.state`,
 `disk_space.free_kib`, and `disk_space.min_required_kib` in JSON once the preflight runs. The
 override is available for controlled rehearsals, but lowering it weakens local release evidence.
+If the preflight fails in `--json` mode, the command still exits nonzero but now writes structured
+failure evidence with `release_gate_state=disk_space_cleanup_required`, `local_ci=not_run`,
+`package_install_smoke=not_run`, and `failure.kind=disk_space_preflight`.
 
 This closes the current local validation failure mode where Cargo can spend substantial time in
-`cargo check`, clippy, or tests before surfacing `No space left on device`. On current head
-`13c08294a838e19e7497e893bea2bcb301449bdf`, hosted CI run `27393027654` is green, but the full
-local GA gate remains pending because the filesystem has less than 1 GiB free while `target/` is
-about 99 GiB. Cleanup of generated build artifacts still requires explicit approval before rerunning
-the full gate and refreshing GA `dist/` assets.
+`cargo check`, clippy, or tests before surfacing `No space left on device`. On this host, recent
+exact-head hosted CI has been green, but the full local GA gate remains pending because the
+filesystem has less than 1 GiB free while `target/` is about 99 GiB. Cleanup of generated build
+artifacts still requires explicit approval before rerunning the full gate and refreshing GA `dist/`
+assets.
 
 ## Validation Run
 
