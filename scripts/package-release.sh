@@ -131,6 +131,28 @@ jq -e \
         exit 1
     }
 
+for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
+    actual_sha256="$(sha256_file "$staging_dir/$package_file")"
+    if ! manifest_sha256="$(
+        jq -er --arg path "$package_file" '
+            .files[]
+            | select(.path == $path)
+            | .sha256
+            | select(test("^[0-9a-f]{64}$"))
+        ' "$manifest"
+    )"; then
+        printf 'error: manifest is missing a valid SHA-256 entry for %s\n' \
+            "$package_file" >&2
+        exit 1
+    fi
+
+    if [[ "$manifest_sha256" != "$actual_sha256" ]]; then
+        printf 'error: manifest hash mismatch for %s: expected %s, got %s\n' \
+            "$package_file" "$actual_sha256" "$manifest_sha256" >&2
+        exit 1
+    fi
+done
+
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
 rm -f "$tarball" "$checksum"

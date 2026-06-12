@@ -228,10 +228,13 @@ malformed or misleading manifest JSON during the final `v0.2.0` artifact proof.
 `scripts/package-release.sh` now validates the generated `MANIFEST.json` with `jq` before the
 release archive is created. The release builder checks package identity, version, host triple,
 archive name, Git commit, dirty-state provenance, Cargo.lock hash, required package files, and
-SHA-256 shape before any tarball or checksum is written.
+SHA-256 shape before any tarball or checksum is written. It also recomputes the staged payload
+hashes for `engram`, `README.md`, `LICENSE`, `CHANGELOG.md`, and `RELEASE_NOTES.md` and fails if
+any manifest entry does not match the staged file.
 
 This keeps final `v0.2.0` packaging from publishing an archive whose manifest is malformed or
-structurally inconsistent before the downstream install smoke ever runs.
+structurally inconsistent with the actual staged payload before the downstream install smoke ever
+runs.
 
 ## Package Checksum Filename Guard
 
@@ -666,6 +669,12 @@ before tag, publish, or Homebrew tap update.
   `remote tag object mismatch`
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
   package-release manifest build guard
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the package-release
+  producer payload-hash guard, followed by `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
+  EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh`
+- `scripts/package-release.sh` with a temporary `shasum` wrapper returning a second, mismatched
+  `README.md` digest, expected failure with `manifest hash mismatch for README.md` and no tarball
+  written
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew manifest
   identity guard
 - `DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
