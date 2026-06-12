@@ -235,6 +235,7 @@ disk_cleanup_candidates_json="[]"
 free_space_kib=""
 release_target_state="not_applicable"
 release_target_local_tag_exists=false
+release_target_remote_tag_exists=false
 release_target_github_release_exists=false
 release_target_error=""
 
@@ -268,13 +269,29 @@ check_release_target_available() {
         return 1
     fi
 
+    if git ls-remote --tags "https://github.com/${release_repo}.git" \
+        "$release_tag" "${release_tag}^{}" >"$release_target_file" 2>"$release_target_error_file"; then
+        if [[ -s "$release_target_file" ]]; then
+            release_target_remote_tag_exists=true
+            release_target_state="unavailable"
+        fi
+    else
+        release_target_state="unknown"
+        release_target_error="could not check remote Git tag $release_tag in $release_repo"
+        return 1
+    fi
+
     preflight_log "local_tag_exists=$release_target_local_tag_exists"
+    preflight_log "remote_git_tag_exists=$release_target_remote_tag_exists"
     preflight_log "github_release_exists=$release_target_github_release_exists"
 
     if [[ "$release_target_state" == "unavailable" ]]; then
         release_target_error="release target $release_tag is unavailable:"
         if [[ "$release_target_local_tag_exists" == "true" ]]; then
             release_target_error+=" local tag exists;"
+        fi
+        if [[ "$release_target_remote_tag_exists" == "true" ]]; then
+            release_target_error+=" remote Git tag exists in $release_repo;"
         fi
         if [[ "$release_target_github_release_exists" == "true" ]]; then
             release_target_error+=" GitHub release exists in $release_repo;"
@@ -364,6 +381,7 @@ emit_release_target_failure_json() {
         --arg release_repo "$release_repo" \
         --arg release_target_state "$release_target_state" \
         --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_remote_tag "$release_target_remote_tag_exists" \
         --arg release_target_github_release "$release_target_github_release_exists" \
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
@@ -404,6 +422,7 @@ emit_release_target_failure_json() {
                 repository: $release_repo,
                 state: $release_target_state,
                 local_tag_exists: ($release_target_local_tag == "true"),
+                remote_git_tag_exists: ($release_target_remote_tag == "true"),
                 github_release_exists: ($release_target_github_release == "true")
             },
             pr: $pr,
@@ -439,7 +458,7 @@ emit_release_target_failure_json() {
             remaining_release_actions: (
                 if $release_target_state == "unknown" then
                     [
-                        "restore_github_release_lookup_access",
+                        "restore_release_target_lookup_access",
                         "rerun_ga_release_gate_report"
                     ]
                 else
@@ -468,6 +487,7 @@ emit_disk_space_failure_json() {
         --arg release_repo "$release_repo" \
         --arg release_target_state "$release_target_state" \
         --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_remote_tag "$release_target_remote_tag_exists" \
         --arg release_target_github_release "$release_target_github_release_exists" \
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
@@ -511,6 +531,7 @@ emit_disk_space_failure_json() {
                 repository: $release_repo,
                 state: $release_target_state,
                 local_tag_exists: ($release_target_local_tag == "true"),
+                remote_git_tag_exists: ($release_target_remote_tag == "true"),
                 github_release_exists: ($release_target_github_release == "true")
             },
             pr: $pr,
@@ -895,6 +916,7 @@ if [[ "$json_output" == "1" ]]; then
         --arg release_repo "$release_repo" \
         --arg release_target_state "$release_target_state" \
         --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_remote_tag "$release_target_remote_tag_exists" \
         --arg release_target_github_release "$release_target_github_release_exists" \
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
@@ -945,6 +967,7 @@ if [[ "$json_output" == "1" ]]; then
                 repository: $release_repo,
                 state: $release_target_state,
                 local_tag_exists: ($release_target_local_tag == "true"),
+                remote_git_tag_exists: ($release_target_remote_tag == "true"),
                 github_release_exists: ($release_target_github_release == "true")
             },
             pr: $pr,
@@ -1012,6 +1035,8 @@ else
         printf '  release_target_repository: %s\n' "$release_repo"
         printf '  release_target_state: %s\n' "$release_target_state"
         printf '  release_target_local_tag_exists: %s\n' "$release_target_local_tag_exists"
+        printf '  release_target_remote_git_tag_exists: %s\n' \
+            "$release_target_remote_tag_exists"
         printf '  release_target_github_release_exists: %s\n' \
             "$release_target_github_release_exists"
     fi

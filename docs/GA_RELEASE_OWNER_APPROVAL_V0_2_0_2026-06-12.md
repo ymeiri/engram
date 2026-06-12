@@ -93,8 +93,8 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
    Homebrew formula render, including archive checksum, manifest identity, root, and payload-hash
    checks, and
    release-scope proof.
-5. Accept that the full GA release gate reported the intended `v0.2.0` tag and GitHub release as
-   unavailable before owner review.
+5. Accept that the full GA release gate reported the intended `v0.2.0` local tag, remote Git tag,
+   and GitHub release as unavailable before owner review.
 6. Accept that the post-publish verifier must prove the signed local tag and remote Git tag both
    resolve to the accepted release head before published assets count as release evidence.
 7. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
@@ -139,6 +139,7 @@ jq -e '
   and .release_target.repository == "ymeiri/engram"
   and .release_target.state == "available"
   and .release_target.local_tag_exists == false
+  and .release_target.remote_git_tag_exists == false
   and .release_target.github_release_exists == false
   and .hosted_ci.state == "passing"
   and .disk_space.state == "passed"
@@ -160,6 +161,11 @@ test "$(git rev-parse HEAD)" = "$release_head"
 # Retain this as a race check after the gate reports release_target.state=available.
 if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
   echo "${tag} tag already exists" >&2
+  exit 1
+fi
+remote_tag_refs="$(git ls-remote --tags https://github.com/ymeiri/engram.git "$tag" "${tag}^{}")"
+if test -n "$remote_tag_refs"; then
+  echo "${tag} remote Git tag already exists" >&2
   exit 1
 fi
 if gh release view "$tag" --repo ymeiri/engram >/dev/null 2>&1; then

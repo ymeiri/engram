@@ -55,8 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence before exiting nonzero when local cleanup is required.
 - Added non-destructive disk cleanup evidence to the GA release gate: low-space JSON now reports the
   local shortfall and generated artifact candidate sizes before requiring cleanup approval.
-- Hardened the GA release gate so owner-review evidence checks that the intended `v0.2.0` tag and
-  GitHub release are still unavailable before local release validation or publication steps.
+- Hardened the GA release gate so owner-review evidence checks that the intended `v0.2.0` local
+  tag, remote Git tag, and GitHub release are all still unavailable before local release validation
+  or publication steps.
 - Hardened hosted CI tests by restoring and warming the fastembed model cache before serialized
   integration tests start daemon processes.
 - Refreshed the GA readiness matrix so the latest `0cdc0cd` hardening head is clearly separated

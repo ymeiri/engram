@@ -565,35 +565,41 @@ GA package/Homebrew assets are still blocked by local disk cleanup approval.
 `scripts/release-gate-report.sh --target ga` now checks the intended release target before local
 CI, package/install smoke, or Homebrew formula validation can contribute owner-review evidence. For
 the GA path, JSON output reports `release_target.tag`, `release_target.repository`,
-`release_target.state`, `release_target.local_tag_exists`, and
-`release_target.github_release_exists`, while text output reports the corresponding
-`release_target_*` fields. The gate fails closed with
-`release_gate_state=release_target_unavailable` if either the local tag or GitHub release already
-exists, and with `release_gate_state=release_target_check_failed` if GitHub release lookup cannot
-distinguish absence from an access or transport error.
+`release_target.state`, `release_target.local_tag_exists`,
+`release_target.remote_git_tag_exists`, and `release_target.github_release_exists`, while text
+output reports the corresponding `release_target_*` fields. The gate fails closed with
+`release_gate_state=release_target_unavailable` if the local tag, remote Git tag, or GitHub release
+already exists, and with `release_gate_state=release_target_check_failed` if GitHub release lookup
+or remote Git tag lookup cannot distinguish absence from an access or transport error.
 
 Targeted validation for this guard:
 
 - `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
-- `scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
+- `scripts/release-gate-report.sh --target ga --hosted-run 27414400008 --quick
   --allow-tracked-changes --json`, with a JSON assertion requiring exact head
-  `2aac9ad04518f75d856886f2996dca1d28042a5b`, hosted CI state `passing`,
+  `f1c6c6287d32c424d08460f11c63f5a1202fc2ac`, hosted CI state `passing`,
   `release_target.tag=v0.2.0`, `release_target.repository=ymeiri/engram`,
-  `release_target.state=available`, no local tag, no GitHub release, no owner-review readiness,
-  and no release actions.
-- `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
-  27408174338 --quick --allow-tracked-changes --json`, expected failure with
-  `release_gate_state=release_target_unavailable`, `failure.kind=release_target_preflight`,
-  `release_target.local_tag_exists=true`, `release_target.github_release_exists=true`,
-  `local_ci=not_run`, `package_install_smoke=not_run`, `disk_space.state=not_checked`, no
+  `release_target.state=available`, no local tag, no remote Git tag, no GitHub release, no
   owner-review readiness, and no release actions.
+- `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
+  27414400008 --quick --allow-tracked-changes --json`, expected failure with
+  `release_gate_state=release_target_unavailable`, `failure.kind=release_target_preflight`,
+  `release_target.local_tag_exists=true`, `release_target.remote_git_tag_exists=true`,
+  `release_target.github_release_exists=true`, `local_ci=not_run`, `package_install_smoke=not_run`,
+  `disk_space.state=not_checked`, no owner-review readiness, and no release actions.
+- `scripts/release-gate-report.sh --target ga --release-version 0.2.0-remote-only --hosted-run
+  27414400008 --quick --allow-tracked-changes --json` with a mocked `git ls-remote`, expected
+  failure with `release_gate_state=release_target_unavailable`,
+  `release_target.local_tag_exists=false`, `release_target.remote_git_tag_exists=true`,
+  `release_target.github_release_exists=false`, `disk_space.state=not_checked`, and no release
+  actions.
 - `RELEASE_REPOSITORY=ymeiri/engram-does-not-exist scripts/release-gate-report.sh --target ga
-  --hosted-run 27408174338 --quick --allow-tracked-changes --json`, expected failure with
+  --hosted-run 27414400008 --quick --allow-tracked-changes --json`, expected failure with
   `release_gate_state=release_target_check_failed`, `release_target.state=unknown`,
   `disk_space.state=not_checked`, no owner-review readiness, and no release actions.
 
-This target-availability guard is development-diff validation on top of the `2aac9ad` head. If
-this guard becomes part of the release head, rerun exact-head hosted CI and the full GA release gate
+The remote Git tag extension is development-diff validation on top of the `f1c6c62` head. If this
+guard becomes part of the release head, rerun exact-head hosted CI and the full GA release gate
 before tag, publish, or Homebrew tap update.
 
 ## Validation Run
