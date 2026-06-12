@@ -332,10 +332,12 @@ Targeted validation for this package identity expectation guard on a development
 - `EXPECTED_CARGO_LOCK_SHA256=abc SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-identity-override-test scripts/package-install-smoke.sh` failed before
   release asset reads with `EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got abc`.
-- `EXPECTED_PACKAGE_GIT_HEAD=abc DIST_DIR=/tmp/engram-no-assets-test
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 EXPECTED_PACKAGE_GIT_HEAD=abc
+  DIST_DIR=/tmp/engram-no-assets-test
   scripts/render-homebrew-formula.sh` failed before archive reads with
   `EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got abc`.
-- `EXPECTED_CARGO_LOCK_SHA256=abc DIST_DIR=/tmp/engram-no-assets-test
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 EXPECTED_CARGO_LOCK_SHA256=abc
+  DIST_DIR=/tmp/engram-no-assets-test
   scripts/render-homebrew-formula.sh` failed before archive reads with
   `EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got abc`.
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=/tmp/engram-identity-override-test
@@ -343,7 +345,8 @@ Targeted validation for this package identity expectation guard on a development
 - `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-identity-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
   local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
-- `DIST_DIR=/tmp/engram-identity-override-test EXPECTED_TRACKED_CHANGES_PRESENT=true
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  DIST_DIR=/tmp/engram-identity-override-test EXPECTED_TRACKED_CHANGES_PRESENT=true
   FORMULA_OUTPUT=/tmp/engram-identity-override-test/homebrew/Formula/engram.rb
   scripts/render-homebrew-formula.sh` rendered a formula from the same archive, and `ruby -c`
   accepted the result.
@@ -495,16 +498,52 @@ Targeted validation for this guard:
 - `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1 HOMEBREW_HOST_TRIPLE=x86_64-apple-darwin
   scripts/render-homebrew-formula.sh` failed with
   `Homebrew formula currently supports aarch64-apple-darwin only`.
-- `DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1
+  DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
   EXPECTED_TRACKED_CHANGES_PRESENT=false
   EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
   scripts/render-homebrew-formula.sh` rendered the default temp formula path and `ruby -c` reported
   `Syntax OK`.
-- `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1 HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1
+  HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin
   DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
   EXPECTED_TRACKED_CHANGES_PRESENT=false
   EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
   scripts/render-homebrew-formula.sh` rendered the supported host-triple rehearsal formula and
+  `ruby -c` reported `Syntax OK`.
+
+## Homebrew Dist Directory Guard
+
+`scripts/render-homebrew-formula.sh` now fails closed if `DIST_DIR` points anywhere other than the
+repository `dist` directory unless `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1` is set for an explicit
+local rehearsal. The dist path must be non-empty.
+
+This keeps final formula evidence from silently reading release assets from, or writing the default
+formula under, an ambient temp directory or tap checkout. Intentional temp-archive rehearsals remain
+available, but they must name the approval flag; independent `FORMULA_OUTPUT` overrides still need
+their own approval flag.
+
+Targeted validation for this guard:
+
+- `DIST_DIR=/tmp/engram-homebrew-dist-test scripts/render-homebrew-formula.sh` failed before
+  release asset reads or formula writes with `DIST_DIR override requires explicit Homebrew
+  approval`.
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=yes DIST_DIR=/tmp/engram-homebrew-dist-test
+  scripts/render-homebrew-formula.sh` failed with
+  `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE must be 0 or 1, got yes`.
+- `DIST_DIR= scripts/render-homebrew-formula.sh` failed with `DIST_DIR must not be empty`.
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>
+  EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+  EXPECTED_TRACKED_CHANGES_PRESENT=false
+  EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
+  scripts/render-homebrew-formula.sh` rendered the explicitly approved temp dist formula and
+  `ruby -c` reported `Syntax OK`.
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  FORMULA_OUTPUT=<temp>/Formula/engram.rb DIST_DIR=<temp>
+  EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+  EXPECTED_TRACKED_CHANGES_PRESENT=false
+  EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
+  scripts/render-homebrew-formula.sh` rendered the explicitly approved temp formula output and
   `ruby -c` reported `Syntax OK`.
 
 ## Homebrew Formula Output Guard
@@ -530,12 +569,14 @@ Targeted validation for this guard:
 - `ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 FORMULA_OUTPUT=/tmp/not-engram.txt
   scripts/render-homebrew-formula.sh` failed with
   `FORMULA_OUTPUT must end with engram.rb`.
-- `DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1
+  DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
   EXPECTED_TRACKED_CHANGES_PRESENT=false
   EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
   scripts/render-homebrew-formula.sh` rendered the default temp formula path and `ruby -c` reported
   `Syntax OK`.
-- `ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 FORMULA_OUTPUT=<temp>/Formula/engram.rb
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  FORMULA_OUTPUT=<temp>/Formula/engram.rb
   DIST_DIR=<temp>
   EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
   EXPECTED_TRACKED_CHANGES_PRESENT=false
@@ -1079,7 +1120,9 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
 - `bash -n scripts/package-install-smoke.sh`
 - `cargo fmt --all --check`
 - `DIST_DIR=<temp> scripts/package-install-smoke.sh`
-- `DIST_DIR=<temp> FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  DIST_DIR=<temp> FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
+  HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
 - `ruby -c <temp>/homebrew/Formula/engram.rb`
 - `if rg -n "Homebrew beta|beta Homebrew|Homebrew beta currently" <temp>/homebrew/Formula/engram.rb; then exit 1; fi`
 - `scripts/package-release.sh` with tracked development changes present (expected failure)
@@ -1130,16 +1173,19 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   CI/package/Homebrew steps, and no release actions)
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew manifest
   identity guard
-- `DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
 - `ruby -c <temp>/homebrew/Formula/engram.rb`
-- `EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000 DIST_DIR=<temp>
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000 DIST_DIR=<temp>
   EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh` (expected failure:
   manifest git head mismatch)
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew archive
   payload guard
-- `DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
+- `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
+  DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
 - `ruby -c <temp>/homebrew/Formula/engram.rb`
 - Repacked the temp archive with a corrupted `README.md` manifest hash and recomputed its

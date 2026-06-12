@@ -4,7 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-dist_dir="${DIST_DIR:-$repo_root/dist}"
+default_dist_dir="$repo_root/dist"
+dist_dir="${DIST_DIR-$default_dist_dir}"
+allow_dist_dir_override="${ALLOW_HOMEBREW_DIST_DIR_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 default_host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 host_triple="${HOMEBREW_HOST_TRIPLE-$default_host_triple}"
@@ -23,6 +25,24 @@ command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
 }
+
+if [[ "$allow_dist_dir_override" != "0" &&
+    "$allow_dist_dir_override" != "1" ]]; then
+    printf 'error: ALLOW_HOMEBREW_DIST_DIR_OVERRIDE must be 0 or 1, got %s\n' \
+        "$allow_dist_dir_override" >&2
+    exit 1
+fi
+if [[ -z "$dist_dir" ]]; then
+    printf 'error: DIST_DIR must not be empty\n' >&2
+    exit 1
+fi
+if [[ "$dist_dir" != "$default_dist_dir" && "$allow_dist_dir_override" != "1" ]]; then
+    printf 'error: DIST_DIR override requires explicit Homebrew approval\n' >&2
+    printf 'expected default dist dir: %s\n' "$default_dist_dir" >&2
+    printf 'got: %s\n' "$dist_dir" >&2
+    printf 'hint: set ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 if [[ "$allow_host_triple_override" != "0" &&
     "$allow_host_triple_override" != "1" ]]; then

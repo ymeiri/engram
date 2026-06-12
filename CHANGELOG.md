@@ -62,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   closed unless explicitly allowed for local rehearsals.
 - Hardened Homebrew formula rendering so `HOMEBREW_HOST_TRIPLE` cannot select a non-default
   release archive unless explicitly allowed for local rehearsals.
+- Hardened Homebrew formula rendering so `DIST_DIR` cannot redirect release asset reads or default
+  formula writes away from the repository `dist` directory unless explicitly allowed for local
+  rehearsals.
 - Hardened Homebrew formula rendering so `FORMULA_OUTPUT` cannot redirect writes away from the
   default formula path unless explicitly allowed for local rehearsals.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` and checked
