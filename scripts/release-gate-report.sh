@@ -181,6 +181,13 @@ if [[ -z "$release_version" ]]; then
 fi
 release_tag="v${release_version}"
 
+if [[ -n "$hosted_run_id" && ! "$hosted_run_id" =~ ^[0-9]+$ ]]; then
+    fail "HOSTED_RUN_ID/--hosted-run must be a numeric GitHub Actions run id, got $hosted_run_id"
+fi
+if [[ -n "$pr_number" && ! "$pr_number" =~ ^[0-9]+$ ]]; then
+    fail "PR_NUMBER/--pr must be a numeric GitHub pull request number, got $pr_number"
+fi
+
 require_tool git
 require_tool gh
 require_tool jq

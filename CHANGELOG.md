@@ -76,6 +76,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened the GA release gate so owner-review evidence checks that the intended `v0.2.0` local
   tag, remote Git tag, and GitHub release are all still unavailable before local release validation
   or publication steps.
+- Hardened release evidence collection so malformed `HOSTED_RUN_ID`, `--hosted-run`,
+  `GITHUB_RUN_ID`, pre-step verifier positional run IDs, `PR_NUMBER`, and `--pr` fail closed
+  before GitHub run or pull-request queries.
 - Hardened hosted CI tests by restoring and warming the fastembed model cache before serialized
   integration tests start daemon processes.
 - Refreshed the GA readiness matrix so the latest `0cdc0cd` hardening head is clearly separated

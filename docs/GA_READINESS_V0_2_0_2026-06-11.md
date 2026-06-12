@@ -343,6 +343,39 @@ Targeted validation for this package identity expectation guard on a development
   scripts/render-homebrew-formula.sh` rendered a formula from the same archive, and `ruby -c`
   accepted the result.
 
+## Hosted CI Run ID Guard
+
+`scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now validate
+explicit hosted CI run IDs before querying GitHub run metadata. `HOSTED_RUN_ID`, `--hosted-run`,
+`GITHUB_RUN_ID`, and the pre-step verifier positional run ID must be numeric GitHub Actions run
+IDs. `scripts/release-gate-report.sh` also requires `PR_NUMBER` and `--pr` to be numeric before
+beta pull-request metadata is queried. This keeps release-owner evidence collection and hosted-CI
+fallback evidence from turning operator typos into ambiguous `gh` failures or malformed JSON
+conversion later in the gate.
+
+Targeted validation for this hosted CI run ID guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
+  scripts/render-homebrew-formula.sh scripts/release-gate-report.sh
+  scripts/beta-release-gate-report.sh scripts/verify-hosted-ci-prestep-blocker.sh`
+- `HOSTED_RUN_ID=abc scripts/release-gate-report.sh --target ga --quick
+  --allow-tracked-changes --json` failed before GitHub run queries with
+  `HOSTED_RUN_ID/--hosted-run must be a numeric GitHub Actions run id, got abc`.
+- `scripts/release-gate-report.sh --target ga --hosted-run abc --quick
+  --allow-tracked-changes --json` failed with the same run-id validation error.
+- `GITHUB_RUN_ID=abc scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub run
+  queries with
+  `GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got abc`.
+- `scripts/verify-hosted-ci-prestep-blocker.sh abc --json` failed with the same verifier run-id
+  validation error.
+- `scripts/release-gate-report.sh --target beta --pr abc --quick --allow-tracked-changes --json`
+  failed before GitHub PR queries with
+  `PR_NUMBER/--pr must be a numeric GitHub pull request number, got abc`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27433543559 --quick
+  --allow-tracked-changes --json` still accepted a numeric run ID and produced quick GA evidence
+  for head `a9fa497dbae5cd8e16f8d557d79872dfd71b3e58` with hosted CI passing, release target
+  available, and no release actions.
+
 ## Release Manifest Build Guard
 
 `scripts/package-release.sh` now validates the generated `MANIFEST.json` with `jq` before the

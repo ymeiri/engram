@@ -75,6 +75,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
+    fail "GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got $run_id"
+fi
+
 require_tool gh
 require_tool jq
 
@@ -94,6 +98,9 @@ if [[ -z "$run_id" ]]; then
 fi
 
 [[ -n "$run_id" ]] || fail "no hosted CI run id was provided or discovered"
+if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+    fail "hosted run id must be a numeric GitHub Actions run id, got $run_id"
+fi
 
 gh run view "$run_id" \
     --json databaseId,headSha,status,conclusion,workflowName,event,jobs,url >"$run_json"
