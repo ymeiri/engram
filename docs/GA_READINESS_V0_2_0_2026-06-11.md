@@ -227,6 +227,26 @@ Targeted validation for this override guard on a development diff:
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` verified the archive,
   installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 
+`scripts/package-install-smoke.sh` now also validates its own release-rehearsal overrides before
+package extraction or packaged server startup. `SKIP_PACKAGE_BUILD` must be exactly `0` or `1`,
+and an explicit `EXPECTED_TRACKED_CHANGES_PRESENT` value must be exactly `true` or `false`.
+This keeps post-publish verifier and local `--asset-dir` rehearsals from silently accepting typoed
+override intent.
+
+Targeted validation for this smoke override guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
+  scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `SKIP_PACKAGE_BUILD=yes DIST_DIR=/tmp/engram-smoke-override-test
+  scripts/package-install-smoke.sh` failed with
+  `SKIP_PACKAGE_BUILD must be 0 or 1, got yes`.
+- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-override-test
+  EXPECTED_TRACKED_CHANGES_PRESENT=maybe scripts/package-install-smoke.sh` failed with
+  `EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got maybe`.
+- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-override-test
+  EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
+  local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
+
 ## Published Release Verification Guard
 
 `scripts/verify-published-release-install.sh` now verifies release identity before downloading
@@ -856,6 +876,11 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the package-release
   producer payload-hash guard, followed by `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh`
+- `SKIP_PACKAGE_BUILD=yes DIST_DIR=<temp> scripts/package-install-smoke.sh`, expected failure
+  before package extraction with `SKIP_PACKAGE_BUILD must be 0 or 1`
+- `SKIP_PACKAGE_BUILD=1 DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=maybe
+  scripts/package-install-smoke.sh`, expected failure before package extraction with
+  `EXPECTED_TRACKED_CHANGES_PRESENT must be true or false`
 - `scripts/package-release.sh` with a temporary `shasum` wrapper returning a second, mismatched
   `README.md` digest, expected failure with `manifest hash mismatch for README.md` and no tarball
   written

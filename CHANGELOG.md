@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ad hoc text matching when checking release metadata and packaged file hashes.
 - Hardened package install smoke verification so `.sha256` files must contain exactly one
   SHA-256 line naming the expected release archive.
+- Hardened package install smoke verification so malformed `SKIP_PACKAGE_BUILD` and
+  `EXPECTED_TRACKED_CHANGES_PRESENT` override values fail closed before package extraction or
+  server startup.
 - Hardened Homebrew formula rendering so it requires the adjacent `.sha256` asset to name and
   hash the same release archive before formula text is written.
 - Hardened Homebrew formula rendering so it verifies the packaged `MANIFEST.json` release identity,
@@ -78,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with exact-head `6ba403e` disk-threshold override guard
   evidence and local release-packaging override validation.
+- Refreshed the GA readiness matrix with package install-smoke override guard validation while
+  preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only

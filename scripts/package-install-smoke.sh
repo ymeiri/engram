@@ -11,6 +11,7 @@ archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
 embed_cache_dir="${ENGRAM_EMBED_CACHE_DIR:-$repo_root/.fastembed_cache}"
+skip_package_build="${SKIP_PACKAGE_BUILD:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-install-smoke.XXXXXX")"
 server_pid=""
 
@@ -166,7 +167,23 @@ command -v jq >/dev/null 2>&1 || {
     exit 1
 }
 
-if [[ "${SKIP_PACKAGE_BUILD:-0}" != "1" ]]; then
+case "$skip_package_build" in
+    0 | 1) ;;
+    *)
+        printf 'error: SKIP_PACKAGE_BUILD must be 0 or 1, got %s\n' \
+            "$skip_package_build" >&2
+        exit 1
+        ;;
+esac
+if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" &&
+    "$EXPECTED_TRACKED_CHANGES_PRESENT" != "true" &&
+    "$EXPECTED_TRACKED_CHANGES_PRESENT" != "false" ]]; then
+    printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got %s\n' \
+        "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
+    exit 1
+fi
+
+if [[ "$skip_package_build" != "1" ]]; then
     run_step "build release package" "$repo_root/scripts/package-release.sh"
 fi
 
