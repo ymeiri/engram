@@ -18,8 +18,8 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/verify-published-release-install.sh [options]
 
-Verify published release assets by downloading the archive/checksum and running
-the package install smoke against those assets.
+Verify release archive/checksum assets by running the package install smoke
+against downloaded GitHub release assets or a local pre-publish asset directory.
 
 Options:
   --repo <owner/name>                    GitHub repository (default: GITHUB_REPOSITORY or ymeiri/engram)
@@ -236,11 +236,16 @@ if [[ "$json_output" == "1" ]]; then
             expected_tracked_changes_present: ($expected_tracked_changes_present == "true"),
             expected_prerelease: ($expected_prerelease == "true"),
             install_smoke: "passed",
-            published_install_verified: true,
+            asset_install_verified: true,
+            published_install_verified: ($downloaded_assets == "true"),
             release_actions_performed: false
         }'
 else
-    printf '\nPublished release install evidence collected:\n'
+    if [[ "$downloaded_assets" == "true" ]]; then
+        printf '\nPublished release install evidence collected:\n'
+    else
+        printf '\nLocal release asset install evidence collected:\n'
+    fi
     printf '  repo: %s\n' "$repo"
     printf '  tag: %s\n' "$tag"
     if [[ -n "$tag_commit" ]]; then
@@ -254,6 +259,8 @@ else
     printf '  archive: %s\n' "$tarball_name"
     printf '  checksum: %s\n' "$checksum_name"
     printf '  install_smoke: passed\n'
-    printf '  published_install_verified: true\n'
+    printf '  asset_install_verified: true\n'
+    printf '  published_install_verified: %s\n' \
+        "$([[ "$downloaded_assets" == "true" ]] && printf true || printf false)"
     printf '  release_actions_performed: false\n'
 fi

@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version before release metadata or asset validation runs.
 - Hardened published release install verification so downloaded release assets must match a local
   release tag that peels to the expected packaged Git commit.
+- Hardened published release install verification so local `--asset-dir` rehearsals report asset
+  install evidence without claiming published install verification.
 - Hardened package install smoke verification so `MANIFEST.json` is parsed with `jq` instead of
   ad hoc text matching when checking release metadata and packaged file hashes.
 - Hardened package install smoke verification so `.sha256` files must contain exactly one

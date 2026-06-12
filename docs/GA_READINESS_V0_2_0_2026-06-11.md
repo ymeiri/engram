@@ -66,7 +66,9 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir dist --json`
   passed with `assets.source=asset_dir`,
   `expected_git_head=809426945cb7e0d78950552165691e29aa0191bc`, `install_smoke=passed`,
-  and `release_actions_performed=false`.
+  and `release_actions_performed=false`. Newer verifier output distinguishes this local
+  rehearsal from published-release proof with `asset_install_verified=true` and
+  `published_install_verified=false` when `assets.downloaded=false`.
 - Local runtime before refresh: installed `engram` and daemon still reported
   `0.2.0-beta.1`.
 - Local runtime after refresh: installed binary hash
@@ -83,7 +85,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
 | Versioning | Validated on Homebrew-gated owner-review head / gate command authoritative | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version on head `8094269`; full GA gate confirmed `workspace_version_matches_release=true`. | Rerun exact-head CI and the full GA gate after this readiness refresh or any other release-facing change. |
 | Hosted CI | Validated on Homebrew-gated owner-review head / gate command authoritative | Main push CI run `27388790648` passed for head `8094269`; earlier runs `27379891728`, `27372009309`, `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for prior release-owner, release-gate, setup-path docs, release-hardening, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
-| Local runtime | Validated for GA package smoke / installed global still beta.2 | Full GA gate package/install smoke passed for `engram 0.2.0` on `8094269`; local asset-dir verification also passed without downloads or publishing. The previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | After release publication, verify the published install path and then refresh local runtime evidence if desired. |
+| Local runtime | Validated for GA package smoke / installed global still beta.2 | Full GA gate package/install smoke passed for `engram 0.2.0` on `8094269`; local asset-dir verification also passed without downloads or publishing. Local `--asset-dir` verifier output now reports `asset_install_verified=true` while keeping `published_install_verified=false`. The previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | After release publication, verify the published install path and then refresh local runtime evidence if desired. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
 | Generated vault | Validated | Canonical vault status after memory updates reports `generated_file_count=2902`, `expected_generated_file_count=2902`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
@@ -178,6 +180,10 @@ This keeps the final `v0.2.0` post-publish verifier from accepting a draft or pr
 release even if the archive assets install successfully. It also prevents `v0.2.0` evidence from
 being collected on an unbumped `0.2.0-beta.2` checkout, or from a published archive whose manifest
 commit does not match the local release tag.
+
+The verifier also distinguishes local pre-publish rehearsals from actual published-install proof:
+`--asset-dir` mode can prove `asset_install_verified=true`, but it now keeps
+`published_install_verified=false` because no GitHub release assets were downloaded.
 
 ## Package Manifest Verification Guard
 
@@ -408,7 +414,10 @@ Evidence collected on this head:
 - `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir dist --json`
   passed as a non-publishing local asset-dir verifier with `assets.source=asset_dir`,
   `expected_git_head=809426945cb7e0d78950552165691e29aa0191bc`,
-  `install_smoke=passed`, and `release_actions_performed=false`.
+  `install_smoke=passed`, and `release_actions_performed=false`. On the hardened verifier
+  contract, local `--asset-dir` evidence reports `asset_install_verified=true` and
+  `published_install_verified=false`; only downloaded GitHub release assets can set
+  `published_install_verified=true`.
 - `git tag --list 'v0.2.0'` returned no tag, and
   `gh release view v0.2.0 --repo ymeiri/engram` still reported `release not found`.
 
