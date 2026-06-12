@@ -64,9 +64,10 @@ The latest observed disk-preflight failure reported:
 ```text
 release_gate_state=disk_space_cleanup_required
 failure.kind=disk_space_preflight
-free_space_kib=6724872
+release_target.state=available
+free_space_kib=6148164
 min_required_kib=10485760
-shortfall_kib=3760888
+shortfall_kib=4337596
 cleanup_candidate: path=target size_kib=103776236
 cleanup_candidate: path=dist size_kib=74608
 ```
@@ -90,12 +91,14 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
    Homebrew formula render, including archive checksum, manifest identity, root, and payload-hash
    checks, and
    release-scope proof.
-5. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
-6. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
+5. Accept that the full GA release gate reported the intended `v0.2.0` tag and GitHub release as
+   unavailable before owner review.
+6. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
+7. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
    live Claude host-label proof are explicitly not claimed by this release.
-7. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
+8. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
    mutation are explicitly not claimed by this release.
-8. Approve the post-approval command sequence below.
+9. Approve the post-approval command sequence below.
 
 ## Post-Approval Command Sequence
 
@@ -128,6 +131,11 @@ jq -e '
   and .upstream.ahead == 0
   and .upstream.behind == 0
   and .tracked_changes_present == false
+  and .release_target.tag == "v0.2.0"
+  and .release_target.repository == "ymeiri/engram"
+  and .release_target.state == "available"
+  and .release_target.local_tag_exists == false
+  and .release_target.github_release_exists == false
   and .hosted_ci.state == "passing"
   and .disk_space.state == "passed"
   and (.disk_space.free_kib >= .disk_space.min_required_kib)
@@ -145,6 +153,7 @@ release_head="$(jq -r '.head' "$gate_json")"
 tag="v${release_version}"
 test "$(git rev-parse HEAD)" = "$release_head"
 
+# Retain this as a race check after the gate reports release_target.state=available.
 if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
   echo "${tag} tag already exists" >&2
   exit 1

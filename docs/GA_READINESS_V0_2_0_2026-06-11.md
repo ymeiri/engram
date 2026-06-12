@@ -83,8 +83,9 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `release_actions_performed=false`.
 - The default GA gate on this host still fails before local CI/package smoke with
   `release_gate_state=disk_space_cleanup_required`, `failure.kind=disk_space_preflight`,
-  `free_space_kib=6724872`, `min_required_kib=10485760`, `shortfall_kib=3760888`,
-  and non-destructive cleanup candidates `target=103776236 KiB` and `dist=74608 KiB`.
+  `release_target.state=available`, `free_space_kib=6148164`,
+  `min_required_kib=10485760`, `shortfall_kib=4337596`, and non-destructive cleanup candidates
+  `target=103776236 KiB` and `dist=74608 KiB`.
 - Local runtime before refresh: installed `engram` and daemon still reported
   `0.2.0-beta.1`.
 - Local runtime after refresh: installed binary hash
@@ -114,7 +115,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, and checks packaged payload hashes before writing formula text. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
-| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The `4978711` hardening baseline has exact-head hosted CI and quick-gate evidence, but the default full gate correctly reports `disk_space_cleanup_required` on this host. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup, and fresh exact-head gate evidence. |
+| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The `4978711` hardening baseline has exact-head hosted CI and quick-gate evidence, but the default full gate correctly reports `disk_space_cleanup_required` on this host. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, and it now reports `release_target.state=available` only when the intended tag and GitHub release are both absent. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup, fresh exact-head gate evidence, and release-target availability evidence. |
 
 ## First GA Slice Completed
 
@@ -534,8 +535,9 @@ Validation on this checkpoint:
 - `RELEASE_GATE_MIN_FREE_KIB=1 scripts/release-gate-report.sh --target ga --hosted-run
   27401954970 --quick --json` passed as partial exact-head evidence with no release actions.
 - The default full gate still fails closed at disk preflight on this host with
-  `release_gate_state=disk_space_cleanup_required`, `free_space_kib=6724872`,
-  `shortfall_kib=3760888`, `target=103776236 KiB`, and `dist=74608 KiB`.
+  `release_gate_state=disk_space_cleanup_required`, `release_target.state=available`,
+  `free_space_kib=6148164`, `shortfall_kib=4337596`, `target=103776236 KiB`, and
+  `dist=74608 KiB`.
 - A fresh `git fetch --tags --prune origin` followed by
   `git rev-list --left-right --count main...origin/main` returned `0 0`, so the
   recurring divergent-branch pull hint is not current evidence to run `git pull`,
@@ -545,6 +547,42 @@ Validation on this checkpoint:
 
 This checkpoint is not final owner-review evidence because the full local GA gate and refreshed
 GA package/Homebrew assets are still blocked by local disk cleanup approval.
+
+## GA Release Target Availability Guard
+
+`scripts/release-gate-report.sh --target ga` now checks the intended release target before local
+CI, package/install smoke, or Homebrew formula validation can contribute owner-review evidence. For
+the GA path, JSON output reports `release_target.tag`, `release_target.repository`,
+`release_target.state`, `release_target.local_tag_exists`, and
+`release_target.github_release_exists`, while text output reports the corresponding
+`release_target_*` fields. The gate fails closed with
+`release_gate_state=release_target_unavailable` if either the local tag or GitHub release already
+exists, and with `release_gate_state=release_target_check_failed` if GitHub release lookup cannot
+distinguish absence from an access or transport error.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
+  --allow-tracked-changes --json`, with a JSON assertion requiring exact head
+  `2aac9ad04518f75d856886f2996dca1d28042a5b`, hosted CI state `passing`,
+  `release_target.tag=v0.2.0`, `release_target.repository=ymeiri/engram`,
+  `release_target.state=available`, no local tag, no GitHub release, no owner-review readiness,
+  and no release actions.
+- `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
+  27408174338 --quick --allow-tracked-changes --json`, expected failure with
+  `release_gate_state=release_target_unavailable`, `failure.kind=release_target_preflight`,
+  `release_target.local_tag_exists=true`, `release_target.github_release_exists=true`,
+  `local_ci=not_run`, `package_install_smoke=not_run`, `disk_space.state=not_checked`, no
+  owner-review readiness, and no release actions.
+- `RELEASE_REPOSITORY=ymeiri/engram-does-not-exist scripts/release-gate-report.sh --target ga
+  --hosted-run 27408174338 --quick --allow-tracked-changes --json`, expected failure with
+  `release_gate_state=release_target_check_failed`, `release_target.state=unknown`,
+  `disk_space.state=not_checked`, no owner-review readiness, and no release actions.
+
+This target-availability guard is development-diff validation on top of the `2aac9ad` head. If
+this guard becomes part of the release head, rerun exact-head hosted CI and the full GA release gate
+before tag, publish, or Homebrew tap update.
 
 ## Validation Run
 
@@ -612,6 +650,15 @@ GA package/Homebrew assets are still blocked by local disk cleanup approval.
 - Repacked the temp archive with an extra `other/` root and recomputed its `.sha256`;
   `scripts/render-homebrew-formula.sh` failed with `release archive member is outside expected
   root`
+- `scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
+  --allow-tracked-changes --json` after the release-target availability guard, expected
+  `release_target.state=available` for `v0.2.0`
+- `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
+  27408174338 --quick --allow-tracked-changes --json` after the release-target availability guard,
+  expected `release_gate_state=release_target_unavailable` before disk or local validation
+- `RELEASE_REPOSITORY=ymeiri/engram-does-not-exist scripts/release-gate-report.sh --target ga
+  --hosted-run 27408174338 --quick --allow-tracked-changes --json` after the release-target
+  availability guard, expected `release_gate_state=release_target_check_failed`
 - `cargo test -p engram-tests --test multi_session_tests`
 - `target/debug/engram setup --agent codex --root /tmp/engram-codex-setup.BWMgtQ --write --yes`
 - `target/debug/engram harness status --harness codex --root /tmp/engram-codex-setup.BWMgtQ

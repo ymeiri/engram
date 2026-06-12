@@ -13,6 +13,7 @@ expected_branch="${EXPECTED_BRANCH:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
 release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
+release_repo="${RELEASE_REPOSITORY:-ymeiri/engram}"
 min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB:-10485760}"
 run_local_ci=1
 run_package_smoke=1
@@ -46,7 +47,7 @@ Options:
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
   EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH,
-  RELEASE_GATE_MIN_FREE_KIB.
+  RELEASE_REPOSITORY, RELEASE_GATE_MIN_FREE_KIB.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
@@ -173,6 +174,7 @@ if [[ -z "$release_version" ]]; then
         release_version="$package_version"
     fi
 fi
+release_tag="v${release_version}"
 
 require_tool git
 require_tool gh
@@ -184,8 +186,11 @@ pr_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-pr.XXXXXX")"
 checks_file="$(mktemp "${TMPDIR:-/tmp}/engram-release-checks.XXXXXX")"
 hosted_run_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-hosted-run.XXXXXX")"
 hosted_verifier_file="$(mktemp "${TMPDIR:-/tmp}/engram-release-hosted-verifier.XXXXXX")"
+release_target_file="$(mktemp "${TMPDIR:-/tmp}/engram-release-target.XXXXXX")"
+release_target_error_file="$(mktemp "${TMPDIR:-/tmp}/engram-release-target-error.XXXXXX")"
 cleanup() {
-    rm -f "$pr_json" "$checks_file" "$hosted_run_json" "$hosted_verifier_file"
+    rm -f "$pr_json" "$checks_file" "$hosted_run_json" "$hosted_verifier_file" \
+        "$release_target_file" "$release_target_error_file"
 }
 trap cleanup EXIT
 
@@ -228,6 +233,10 @@ disk_space_error=""
 disk_space_shortfall_kib=""
 disk_cleanup_candidates_json="[]"
 free_space_kib=""
+release_target_state="not_applicable"
+release_target_local_tag_exists=false
+release_target_github_release_exists=false
+release_target_error=""
 
 preflight_log() {
     if [[ "$json_output" == "1" ]]; then
@@ -235,6 +244,46 @@ preflight_log() {
     else
         printf '%s\n' "$*"
     fi
+}
+
+check_release_target_available() {
+    [[ "$target" == "ga" ]] || return 0
+
+    release_target_state="available"
+    preflight_log "tag=$release_tag"
+    preflight_log "repository=$release_repo"
+
+    if git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null 2>&1; then
+        release_target_local_tag_exists=true
+        release_target_state="unavailable"
+    fi
+
+    if gh release view "$release_tag" --repo "$release_repo" \
+        --json tagName >"$release_target_file" 2>"$release_target_error_file"; then
+        release_target_github_release_exists=true
+        release_target_state="unavailable"
+    elif ! grep -Fq "release not found" "$release_target_error_file"; then
+        release_target_state="unknown"
+        release_target_error="could not check GitHub release target $release_tag in $release_repo"
+        return 1
+    fi
+
+    preflight_log "local_tag_exists=$release_target_local_tag_exists"
+    preflight_log "github_release_exists=$release_target_github_release_exists"
+
+    if [[ "$release_target_state" == "unavailable" ]]; then
+        release_target_error="release target $release_tag is unavailable:"
+        if [[ "$release_target_local_tag_exists" == "true" ]]; then
+            release_target_error+=" local tag exists;"
+        fi
+        if [[ "$release_target_github_release_exists" == "true" ]]; then
+            release_target_error+=" GitHub release exists in $release_repo;"
+        fi
+        release_target_error+=" resolve the release-target conflict before owner review."
+        return 1
+    fi
+
+    return 0
 }
 
 collect_disk_cleanup_candidates() {
@@ -301,11 +350,125 @@ check_free_space_for_local_steps() {
     return 0
 }
 
+emit_release_target_failure_json() {
+    local failure_gate_state="release_target_unavailable"
+    if [[ "$release_target_state" == "unknown" ]]; then
+        failure_gate_state="release_target_check_failed"
+    fi
+
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg release_target_state "$release_target_state" \
+        --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_github_release "$release_target_github_release_exists" \
+        --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
+        --arg upstream "$upstream" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg expected_event "$expected_event" \
+        --arg hosted_ci_state "$hosted_ci_state" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg min_free_space_kib "$min_free_space_kib" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg release_scope_state "$release_scope_state" \
+        --arg release_scope_native_claude "$release_scope_native_claude_ack" \
+        --arg release_scope_lifecycle_m6 "$release_scope_lifecycle_m6_ack" \
+        --arg release_gate_state "$failure_gate_state" \
+        --arg release_target_error "$release_target_error" \
+        --argjson pr "$pr_report_json" \
+        --argjson hosted_run "$hosted_run_report_json" \
+        --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        '{
+            target: $target,
+            package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
+            branch: $branch,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: {
+                name: $upstream,
+                ahead: ($ahead | tonumber),
+                behind: ($behind | tonumber)
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: $release_target_state,
+                local_tag_exists: ($release_target_local_tag == "true"),
+                github_release_exists: ($release_target_github_release == "true")
+            },
+            pr: $pr,
+            hosted_ci: {
+                state: $hosted_ci_state,
+                expected_event: $expected_event,
+                run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
+                run: $hosted_run,
+                verifier: $hosted_ci_verifier
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: "not_checked",
+                free_kib: null,
+                min_required_kib: ($min_free_space_kib | tonumber),
+                shortfall_kib: null,
+                cleanup_candidates: []
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: $release_scope_state,
+                native_claude_proof_limits_acknowledged: ($release_scope_native_claude == "true"),
+                lifecycle_m6_limits_acknowledged: ($release_scope_lifecycle_m6 == "true")
+            },
+            release_gate_state: $release_gate_state,
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: (
+                if $release_target_state == "unknown" then
+                    [
+                        "restore_github_release_lookup_access",
+                        "rerun_ga_release_gate_report"
+                    ]
+                else
+                    [
+                        "inspect_existing_release_target",
+                        "resolve_release_target_conflict_before_owner_review",
+                        "rerun_ga_release_gate_report"
+                    ]
+                end
+            ),
+            failure: {
+                kind: "release_target_preflight",
+                message: $release_target_error
+            },
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+}
+
 emit_disk_space_failure_json() {
     jq -n \
         --arg target "$target" \
         --arg package_version "$package_version" \
         --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg release_target_state "$release_target_state" \
+        --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_github_release "$release_target_github_release_exists" \
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
         --arg upstream "$upstream" \
@@ -343,6 +506,13 @@ emit_disk_space_failure_json() {
             },
             head: $head,
             tracked_changes_present: ($tracked == "true"),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: $release_target_state,
+                local_tag_exists: ($release_target_local_tag == "true"),
+                github_release_exists: ($release_target_github_release == "true")
+            },
             pr: $pr,
             hosted_ci: {
                 state: $hosted_ci_state,
@@ -384,6 +554,23 @@ emit_disk_space_failure_json() {
             release_owner_decision_required: true,
             release_actions_performed: false
         }'
+}
+
+run_release_target_preflight() {
+    [[ "$target" == "ga" ]] || return 0
+
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> release target availability\n' >&2
+    else
+        printf '\n==> release target availability\n'
+    fi
+
+    if ! check_release_target_available; then
+        if [[ "$json_output" == "1" ]]; then
+            emit_release_target_failure_json
+        fi
+        fail "$release_target_error"
+    fi
 }
 
 run_disk_space_preflight() {
@@ -540,6 +727,7 @@ else
     fi
 fi
 
+run_release_target_preflight
 run_disk_space_preflight
 
 if [[ "$run_local_ci" == "1" ]]; then
@@ -703,6 +891,11 @@ if [[ "$json_output" == "1" ]]; then
         --arg target "$target" \
         --arg package_version "$package_version" \
         --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg release_target_state "$release_target_state" \
+        --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_github_release "$release_target_github_release_exists" \
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
         --arg upstream "$upstream" \
@@ -747,6 +940,13 @@ if [[ "$json_output" == "1" ]]; then
             },
             head: $head,
             tracked_changes_present: ($tracked == "true"),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: $release_target_state,
+                local_tag_exists: ($release_target_local_tag == "true"),
+                github_release_exists: ($release_target_github_release == "true")
+            },
             pr: $pr,
             hosted_ci: {
                 state: $hosted_ci_state,
@@ -808,6 +1008,12 @@ else
     else
         printf '  hosted_run: %s\n' "$hosted_run_id"
         printf '  hosted_event: %s\n' "$expected_event"
+        printf '  release_target_tag: %s\n' "$release_tag"
+        printf '  release_target_repository: %s\n' "$release_repo"
+        printf '  release_target_state: %s\n' "$release_target_state"
+        printf '  release_target_local_tag_exists: %s\n' "$release_target_local_tag_exists"
+        printf '  release_target_github_release_exists: %s\n' \
+            "$release_target_github_release_exists"
     fi
     printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
     printf '  local_ci: %s\n' "$local_ci_state"
