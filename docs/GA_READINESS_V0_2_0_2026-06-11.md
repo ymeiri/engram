@@ -661,14 +661,58 @@ Targeted validation for this guard:
   `release_target.local_tag_exists=false`, `release_target.remote_git_tag_exists=true`,
   `release_target.github_release_exists=false`, `disk_space.state=not_checked`, and no release
   actions.
-- `RELEASE_REPOSITORY=ymeiri/engram-does-not-exist scripts/release-gate-report.sh --target ga
-  --hosted-run 27414400008 --quick --allow-tracked-changes --json`, expected failure with
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 RELEASE_REPOSITORY=ymeiri/engram-does-not-exist
+  scripts/release-gate-report.sh --target ga --hosted-run 27414400008 --quick
+  --allow-tracked-changes --json`, expected failure with
   `release_gate_state=release_target_check_failed`, `release_target.state=unknown`,
   `disk_space.state=not_checked`, no owner-review readiness, and no release actions.
 
 The remote Git tag extension is development-diff validation on top of the `f1c6c62` head. If this
 guard becomes part of the release head, rerun exact-head hosted CI and the full GA release gate
 before tag, publish, or Homebrew tap update.
+
+## Release Repository Override Guard
+
+`scripts/release-gate-report.sh` and `scripts/verify-published-release-install.sh` now default the
+release repository to `ymeiri/engram` and fail closed when an ambient repository override points
+elsewhere. `RELEASE_REPOSITORY` in the GA gate and `GITHUB_REPOSITORY` or `--repo` in the
+published-release verifier require `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1` before they can target a
+different repository, and the effective repository must still be an `owner/name` value.
+
+This prevents final `v0.2.0` gate, tag, or published-asset evidence from being accidentally
+collected against a fork, scratch repository, or malformed repository string. Overrides remain
+available for explicit local rehearsals, not final release-owner evidence.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/verify-published-release-install.sh
+  scripts/package-release.sh scripts/package-install-smoke.sh scripts/render-homebrew-formula.sh`
+- `RELEASE_REPOSITORY=example/engram scripts/release-gate-report.sh --target ga --hosted-run
+  27421217595 --quick --json` failed before release-target lookup with
+  `RELEASE_REPOSITORY override requires explicit approval`.
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=yes RELEASE_REPOSITORY=example/engram
+  scripts/release-gate-report.sh --target ga --hosted-run 27421217595 --quick --json` failed with
+  `ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got yes`.
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 RELEASE_REPOSITORY=bad/repo/extra
+  scripts/release-gate-report.sh --target ga --hosted-run 27421217595 --quick --json` failed with
+  `release repository must be owner/name`.
+- `GITHUB_REPOSITORY=example/engram scripts/verify-published-release-install.sh --tag v0.2.0
+  --asset-dir /tmp/engram-no-such-assets` failed with
+  `release repository override requires explicit approval`.
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 GITHUB_REPOSITORY=bad/repo/extra
+  scripts/verify-published-release-install.sh --tag v0.2.0
+  --asset-dir /tmp/engram-no-such-assets` failed with
+  `release repository must be owner/name`.
+- The default-repository quick GA gate with hosted run `27421217595` passed for head `a1a7da5`
+  while reporting `release_target.repository=ymeiri/engram`,
+  `release_target.state=available`, no `v0.2.0` local tag, no remote Git tag, no GitHub release,
+  and no release actions.
+- A local asset-dir verifier rehearsal from `/tmp/engram-repo-guard-assets.X4Vj1a` passed with
+  `repo=ymeiri/engram`, `assets.source=asset_dir`, `asset_install_verified=true`,
+  `published_install_verified=false`, and no release actions.
+
+This is development-diff validation on top of head `a1a7da5`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
 ## Validation Run
 
@@ -777,9 +821,10 @@ before tag, publish, or Homebrew tap update.
 - `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
   27408174338 --quick --allow-tracked-changes --json` after the release-target availability guard,
   expected `release_gate_state=release_target_unavailable` before disk or local validation
-- `RELEASE_REPOSITORY=ymeiri/engram-does-not-exist scripts/release-gate-report.sh --target ga
-  --hosted-run 27408174338 --quick --allow-tracked-changes --json` after the release-target
-  availability guard, expected `release_gate_state=release_target_check_failed`
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 RELEASE_REPOSITORY=ymeiri/engram-does-not-exist
+  scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
+  --allow-tracked-changes --json` after the release-target availability guard, expected
+  `release_gate_state=release_target_check_failed`
 - `cargo test -p engram-tests --test multi_session_tests`
 - `target/debug/engram setup --agent codex --root /tmp/engram-codex-setup.BWMgtQ --write --yes`
 - `target/debug/engram harness status --harness codex --root /tmp/engram-codex-setup.BWMgtQ

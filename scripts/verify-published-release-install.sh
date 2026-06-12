@@ -4,7 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-repo="${GITHUB_REPOSITORY:-ymeiri/engram}"
+default_repo="ymeiri/engram"
+repo="${GITHUB_REPOSITORY:-$default_repo}"
+allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 tag="v${package_version}"
@@ -33,6 +35,9 @@ Options:
   --asset-dir <path>                     Validate existing archive/checksum directory instead of downloading
   --json                                 Emit final evidence as machine-readable JSON
   -h, --help                             Show this help
+
+Environment overrides:
+  GITHUB_REPOSITORY, ALLOW_RELEASE_REPOSITORY_OVERRIDE.
 
 This script is evidence only. It does not create a GitHub release, upload assets,
 accept a hosted-CI fallback, mark a PR ready, merge, tag, publish, or mutate release state.
@@ -214,6 +219,21 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+case "$allow_release_repo_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;
+esac
+if [[ "$repo" != "$default_repo" && "$allow_release_repo_override" != "1" ]]; then
+    printf 'error: release repository override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_repo" >&2
+    printf 'got: %s\n' "$repo" >&2
+    printf 'hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    fail "release repository must be owner/name, got $repo"
+fi
 
 require_tool cargo
 require_tool rustc

@@ -13,7 +13,9 @@ expected_branch="${EXPECTED_BRANCH:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
 release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
-release_repo="${RELEASE_REPOSITORY:-ymeiri/engram}"
+default_release_repo="ymeiri/engram"
+release_repo="${RELEASE_REPOSITORY:-$default_release_repo}"
+allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
 min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB:-10485760}"
 run_local_ci=1
 run_package_smoke=1
@@ -47,7 +49,8 @@ Options:
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
   EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH,
-  RELEASE_REPOSITORY, RELEASE_GATE_MIN_FREE_KIB.
+  RELEASE_REPOSITORY, ALLOW_RELEASE_REPOSITORY_OVERRIDE,
+  RELEASE_GATE_MIN_FREE_KIB.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
@@ -179,6 +182,21 @@ release_tag="v${release_version}"
 require_tool git
 require_tool gh
 require_tool jq
+case "$allow_release_repo_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;
+esac
+if [[ "$release_repo" != "$default_release_repo" &&
+    "$allow_release_repo_override" != "1" ]]; then
+    printf 'error: RELEASE_REPOSITORY override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_release_repo" >&2
+    printf 'got: %s\n' "$release_repo" >&2
+    printf 'hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ ! "$release_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    fail "release repository must be owner/name, got $release_repo"
+fi
 [[ "$min_free_space_kib" =~ ^[0-9]+$ ]] ||
     fail "RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer"
 
