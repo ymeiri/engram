@@ -52,20 +52,49 @@ This snapshot is evidence for the prior candidate head only. If this runbook or 
 change is included in the release head, rerun exact-head hosted CI and the full GA release gate on
 the new head before tagging.
 
+## Current Disk Preflight Blocker
+
+The latest release-facing head is newer than the historical full-gate candidate above. On the
+current `main` line, exact-head hosted CI and the quick GA gate are green, but the default full GA
+gate still fails before local CI/package smoke because this host is below the default 10 GiB
+release-gate free-space threshold.
+
+The latest observed disk-preflight failure reported:
+
+```text
+release_gate_state=disk_space_cleanup_required
+failure.kind=disk_space_preflight
+free_space_kib=6747056
+min_required_kib=10485760
+shortfall_kib=3738704
+cleanup_candidate: path=target size_kib=103776236
+cleanup_candidate: path=dist size_kib=74608
+```
+
+Those cleanup candidates are non-destructive evidence only. This runbook does not authorize
+deleting `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below
+can produce final owner-review proof on this host, the release owner must either approve generated
+artifact cleanup or provide another disk-space remedy, then rerun the full GA release gate and
+confirm that its `disk_space.state` is `passed`.
+
 ## Release-Owner Signoff Checklist
 
 Before tagging or publishing `v0.2.0`, the release owner should explicitly confirm:
 
 1. Accept the current `main` head reported by the full GA release gate as the GA release head.
 2. Accept the hosted CI run named in the full GA release gate as exact-head hosted CI proof.
-3. Accept the full GA release gate as local CI, package/install, Homebrew formula render, and
+3. Accept that generated-artifact cleanup or another disk-space remedy was explicitly approved
+   before collecting final local release evidence, if the default gate had reported
+   `disk_space_cleanup_required`.
+4. Accept the full GA release gate as disk-space preflight, local CI, package/install,
+   Homebrew formula render, and
    release-scope proof.
-4. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
-5. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
+5. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
+6. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
    live Claude host-label proof are explicitly not claimed by this release.
-6. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
+7. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
    mutation are explicitly not claimed by this release.
-7. Approve the post-approval command sequence below.
+8. Approve the post-approval command sequence below.
 
 ## Post-Approval Command Sequence
 
@@ -99,6 +128,9 @@ jq -e '
   and .upstream.behind == 0
   and .tracked_changes_present == false
   and .hosted_ci.state == "passing"
+  and .disk_space.state == "passed"
+  and (.disk_space.free_kib >= .disk_space.min_required_kib)
+  and .disk_space.shortfall_kib == 0
   and .local_ci == "passed"
   and .package_install_smoke == "passed"
   and .homebrew_formula_render == "passed"

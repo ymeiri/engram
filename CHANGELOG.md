@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   integration tests start daemon processes.
 - Refreshed the GA readiness matrix so the latest `0cdc0cd` hardening head is clearly separated
   from historical full-gate evidence while disk cleanup still blocks final owner-review proof.
+- Hardened the GA release-owner approval runbook so the current disk-space blocker is explicit and
+  final post-approval gate assertions require `disk_space.state=passed`.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only
