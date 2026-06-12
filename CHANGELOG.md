@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from historical full-gate evidence while disk cleanup still blocks final owner-review proof.
 - Hardened the GA release-owner approval runbook so the current disk-space blocker is explicit and
   final post-approval gate assertions require `disk_space.state=passed`.
-- Refreshed the GA readiness matrix with current `4978711` exact-head hosted CI and disk-preflight
+- Refreshed the GA readiness matrix with recent `4978711` exact-head hosted CI and disk-preflight
   evidence while preserving the release-owner cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
