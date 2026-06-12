@@ -87,10 +87,56 @@ if [[ "$expected_tracked_changes_present" != "true" &&
     exit 1
 fi
 
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-homebrew-archive.XXXXXX")"
+trap 'rm -rf "$work_dir"' EXIT
+archive_listing="$work_dir/archive-contents.txt"
+if ! tar -tzf "$tarball" >"$archive_listing"; then
+    printf 'error: release archive is unreadable: %s\n' "$tarball" >&2
+    exit 1
+fi
+if [[ ! -s "$archive_listing" ]]; then
+    printf 'error: release archive is empty: %s\n' "$tarball" >&2
+    exit 1
+fi
+
+while IFS= read -r member; do
+    if [[ -z "$member" ]]; then
+        printf 'error: release archive contains an empty member path\n' >&2
+        exit 1
+    fi
+    if [[ "$member" = /* || "$member" == "../"* || "$member" == *"/../"* ||
+        "$member" == "." || "$member" == ".." || "$member" == *"/.." ]]; then
+        printf 'error: release archive contains unsafe member path: %s\n' "$member" >&2
+        exit 1
+    fi
+
+    case "$member" in
+        "$archive_name" | "$archive_name/" | "$archive_name/"*) ;;
+        *)
+            printf 'error: release archive member is outside expected root %s: %s\n' \
+                "$archive_name" "$member" >&2
+            exit 1
+            ;;
+    esac
+done <"$archive_listing"
+
+for required_member in \
+    "$archive_name/engram" \
+    "$archive_name/README.md" \
+    "$archive_name/LICENSE" \
+    "$archive_name/CHANGELOG.md" \
+    "$archive_name/RELEASE_NOTES.md" \
+    "$archive_name/MANIFEST.json"
+do
+    if ! grep -Fxq "$required_member" "$archive_listing"; then
+        printf 'error: release archive is missing required member: %s\n' \
+            "$required_member" >&2
+        exit 1
+    fi
+done
+
 manifest_member="$archive_name/MANIFEST.json"
-manifest_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-homebrew-manifest.XXXXXX")"
-trap 'rm -rf "$manifest_dir"' EXIT
-manifest="$manifest_dir/MANIFEST.json"
+manifest="$work_dir/MANIFEST.json"
 if ! tar -xzOf "$tarball" "$manifest_member" >"$manifest"; then
     printf 'error: release archive is missing required member: %s\n' \
         "$manifest_member" >&2
@@ -146,6 +192,41 @@ if [[ "$manifest_cargo_lock_sha256" != "$expected_cargo_lock_sha256" ]]; then
         "$expected_cargo_lock_sha256" "$manifest_cargo_lock_sha256" >&2
     exit 1
 fi
+
+payload_dir="$work_dir/payload"
+mkdir -p "$payload_dir"
+for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
+    payload="$payload_dir/$package_file"
+    if ! tar -xzOf "$tarball" "$archive_name/$package_file" >"$payload"; then
+        printf 'error: release archive is missing required member: %s\n' \
+            "$archive_name/$package_file" >&2
+        exit 1
+    fi
+    if [[ ! -s "$payload" ]]; then
+        printf 'error: expected packaged file is missing or empty: %s\n' \
+            "$archive_name/$package_file" >&2
+        exit 1
+    fi
+
+    actual_sha256="$(shasum -a 256 "$payload" | awk '{ print $1 }')"
+    if ! manifest_sha256="$(
+        jq -er --arg path "$package_file" '
+            .files[]
+            | select(.path == $path)
+            | .sha256
+            | select(test("^[0-9a-f]{64}$"))
+        ' "$manifest"
+    )"; then
+        printf 'error: manifest is missing a valid SHA-256 entry for %s\n' \
+            "$package_file" >&2
+        exit 1
+    fi
+    if [[ "$manifest_sha256" != "$actual_sha256" ]]; then
+        printf 'error: manifest hash mismatch for %s: expected %s, got %s\n' \
+            "$package_file" "$actual_sha256" "$manifest_sha256" >&2
+        exit 1
+    fi
+done
 
 mkdir -p "$(dirname "$output")"
 

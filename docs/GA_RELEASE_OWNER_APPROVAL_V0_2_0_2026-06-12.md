@@ -87,7 +87,8 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
    before collecting final local release evidence, if the default gate had reported
    `disk_space_cleanup_required`.
 4. Accept the full GA release gate as disk-space preflight, local CI, package/install,
-   Homebrew formula render, and
+   Homebrew formula render, including archive checksum, manifest identity, root, and payload-hash
+   checks, and
    release-scope proof.
 5. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
 6. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and

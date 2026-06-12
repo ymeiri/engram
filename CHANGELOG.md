@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hash the same release archive before formula text is written.
 - Hardened Homebrew formula rendering so it verifies the packaged `MANIFEST.json` release identity,
   tracked-change provenance, and `Cargo.lock` hash before formula text is written.
+- Hardened Homebrew formula rendering so it rejects unsafe archive members and verifies packaged
+  payload hashes against `MANIFEST.json` before formula text is written.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
   release archive is created.
 - Hardened the GA release gate so full owner-review evidence includes Homebrew formula render,
