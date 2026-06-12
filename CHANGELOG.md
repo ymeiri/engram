@@ -78,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened the GA release gate so owner-review evidence checks that the intended `v0.2.0` local
   tag, remote Git tag, and GitHub release are all still unavailable before local release validation
   or publication steps.
+- Hardened the GA release gate so malformed `RELEASE_VERSION` and `--release-version` values fail
+  closed before release tag construction or remote release-target checks.
 - Hardened release evidence collection so malformed `HOSTED_RUN_ID`, `--hosted-run`,
   `GITHUB_RUN_ID`, pre-step verifier positional run IDs, `PR_NUMBER`, and `--pr` fail closed
   before GitHub run or pull-request queries.

@@ -586,6 +586,11 @@ version to `0.2.0`, emits `workspace_version_matches_release=false`, and keeps
 `release_gate_state=version_bump_required`. This prevents pre-GA evidence from suggesting a
 `tag_v0.2.0-beta.2` action for the GA path.
 
+The intended release version is validated before the report constructs the release tag or checks
+local/remote release-target availability. `RELEASE_VERSION` and `--release-version` must be
+`x.y.z` with an optional prerelease suffix such as `-beta.2`; malformed values fail closed instead
+of producing ambiguous release-owner evidence for malformed tags.
+
 The GA report also verifies release-note scope acknowledgements for high-risk items that remain
 outside the current `v0.2.0` claim: native Claude prompt-bearing/live `/hooks` proof and broad
 legacy lifecycle/M6 mutation. If those acknowledgements are removed before the final release gate,
@@ -1026,6 +1031,16 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
 - `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
   27408174338 --quick --allow-tracked-changes --json` after the release-target availability guard,
   expected `release_gate_state=release_target_unavailable` before disk or local validation
+- `scripts/release-gate-report.sh --target ga --release-version nope --hosted-run 27437010801
+  --quick --allow-tracked-changes --json` failed before release-target checks with
+  `RELEASE_VERSION/--release-version must be x.y.z with an optional prerelease suffix, got nope`
+- `scripts/release-gate-report.sh --target ga --release-version v0.2.0 --hosted-run 27437010801
+  --quick --allow-tracked-changes --json` failed before release-target checks with
+  `RELEASE_VERSION/--release-version must be x.y.z with an optional prerelease suffix, got
+  v0.2.0`
+- `RELEASE_VERSION=0.2 scripts/release-gate-report.sh --target ga --hosted-run 27437010801
+  --quick --allow-tracked-changes --json` failed before release-target checks with
+  `RELEASE_VERSION/--release-version must be x.y.z with an optional prerelease suffix, got 0.2`
 - `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 RELEASE_REPOSITORY=ymeiri/engram-does-not-exist
   scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
   --allow-tracked-changes --json` after the release-target availability guard, expected

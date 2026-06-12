@@ -179,6 +179,12 @@ if [[ -z "$release_version" ]]; then
         release_version="$package_version"
     fi
 fi
+release_version_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
+if [[ ! "$release_version" =~ $release_version_pattern ]]; then
+    release_version_error="RELEASE_VERSION/--release-version must be x.y.z"
+    release_version_error+=" with an optional prerelease suffix, got $release_version"
+    fail "$release_version_error"
+fi
 release_tag="v${release_version}"
 
 if [[ -n "$hosted_run_id" && ! "$hosted_run_id" =~ ^[0-9]+$ ]]; then
