@@ -301,6 +301,17 @@ checks each packaged payload hash against the corresponding `MANIFEST.json` entr
 This keeps the final tap update from being rendered from a tampered or structurally wrong archive
 even when the archive checksum and release-identity manifest fields are otherwise consistent.
 
+## Homebrew Release URL Guard
+
+`scripts/render-homebrew-formula.sh` now fails closed if `HOMEBREW_RELEASE_BASE_URL` differs from
+the default `https://github.com/ymeiri/engram/releases/download/v<package_version>` URL base unless
+`ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE=1` is set. Any rendered URL base must also use `https://`
+and must not end with a slash.
+
+This keeps the final tap formula from silently pointing at a wrong repository, tag, or release path
+because of an ambient environment override. The explicit override remains available for local
+rehearsals, not final release-owner evidence.
+
 ## Hosted CI Multi-Session Test Stabilization
 
 GitHub Actions run `27358951202` for commit `900101f` failed in the `Test` job while Format,
@@ -754,6 +765,12 @@ before tag, publish, or Homebrew tap update.
 - Repacked the temp archive with an extra `other/` root and recomputed its `.sha256`;
   `scripts/render-homebrew-formula.sh` failed with `release archive member is outside expected
   root`
+- `HOMEBREW_RELEASE_BASE_URL=https://example.com/engram scripts/render-homebrew-formula.sh`
+  failed before reading release assets with `HOMEBREW_RELEASE_BASE_URL override requires explicit
+  approval`
+- `ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE=1 HOMEBREW_RELEASE_BASE_URL=https://example.com/engram/
+  scripts/render-homebrew-formula.sh` failed before reading release assets with `Homebrew release
+  URL base must not end with a slash`
 - `scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
   --allow-tracked-changes --json` after the release-target availability guard, expected
   `release_target.state=available` for `v0.2.0`

@@ -11,7 +11,9 @@ archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
 output="${FORMULA_OUTPUT:-$dist_dir/homebrew/Formula/engram.rb}"
-release_base_url="${HOMEBREW_RELEASE_BASE_URL:-https://github.com/ymeiri/engram/releases/download/v${package_version}}"
+default_release_base_url="https://github.com/ymeiri/engram/releases/download/v${package_version}"
+release_base_url="${HOMEBREW_RELEASE_BASE_URL:-$default_release_base_url}"
+allow_release_base_url_override="${ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE:-0}"
 
 command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
@@ -21,6 +23,30 @@ command -v jq >/dev/null 2>&1 || {
 if [[ "$host_triple" != "aarch64-apple-darwin" ]]; then
     printf 'error: Homebrew formula currently supports aarch64-apple-darwin only, got %s\n' \
         "$host_triple" >&2
+    exit 1
+fi
+
+if [[ "$allow_release_base_url_override" != "0" &&
+    "$allow_release_base_url_override" != "1" ]]; then
+    printf 'error: ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE must be 0 or 1, got %s\n' \
+        "$allow_release_base_url_override" >&2
+    exit 1
+fi
+if [[ "$release_base_url" != "$default_release_base_url" &&
+    "$allow_release_base_url_override" != "1" ]]; then
+    printf 'error: HOMEBREW_RELEASE_BASE_URL override requires explicit approval\n' >&2
+    printf 'expected default release URL base: %s\n' "$default_release_base_url" >&2
+    printf 'got: %s\n' "$release_base_url" >&2
+    printf 'hint: set ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ "$release_base_url" != https://* ]]; then
+    printf 'error: Homebrew release URL base must use https: %s\n' "$release_base_url" >&2
+    exit 1
+fi
+if [[ "$release_base_url" == */ ]]; then
+    printf 'error: Homebrew release URL base must not end with a slash: %s\n' \
+        "$release_base_url" >&2
     exit 1
 fi
 
