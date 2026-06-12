@@ -12,7 +12,9 @@ expected_event="${EXPECTED_EVENT:-}"
 expected_branch="${EXPECTED_BRANCH:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
-release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
+default_release_notes_path="$repo_root/docs/RELEASE_NOTES_V0_2_0.md"
+release_notes_path="${RELEASE_NOTES_PATH-$default_release_notes_path}"
+allow_release_notes_path_override="${ALLOW_RELEASE_NOTES_PATH_OVERRIDE:-0}"
 default_release_repo="ymeiri/engram"
 release_repo="${RELEASE_REPOSITORY:-$default_release_repo}"
 allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
@@ -51,7 +53,7 @@ Options:
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
   EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH,
-  RELEASE_REPOSITORY, ALLOW_RELEASE_REPOSITORY_OVERRIDE,
+  ALLOW_RELEASE_NOTES_PATH_OVERRIDE, RELEASE_REPOSITORY, ALLOW_RELEASE_REPOSITORY_OVERRIDE,
   RELEASE_GATE_MIN_FREE_KIB, ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
@@ -197,6 +199,25 @@ fi
 require_tool git
 require_tool gh
 require_tool jq
+case "$allow_release_notes_path_override" in
+    0 | 1) ;;
+    *)
+        release_notes_override_error="ALLOW_RELEASE_NOTES_PATH_OVERRIDE must be 0 or 1"
+        release_notes_override_error+=", got $allow_release_notes_path_override"
+        fail "$release_notes_override_error"
+        ;;
+esac
+if [[ -z "$release_notes_path" ]]; then
+    fail "RELEASE_NOTES_PATH must not be empty"
+fi
+if [[ "$release_notes_path" != "$default_release_notes_path" &&
+    "$allow_release_notes_path_override" != "1" ]]; then
+    printf 'error: RELEASE_NOTES_PATH override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_release_notes_path" >&2
+    printf 'got: %s\n' "$release_notes_path" >&2
+    printf 'hint: set ALLOW_RELEASE_NOTES_PATH_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 case "$allow_release_repo_override" in
     0 | 1) ;;
     *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;

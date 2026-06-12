@@ -598,6 +598,11 @@ the report emits `release_scope.state=incomplete` and blocks with
 `release_gate_state=release_scope_acknowledgement_required` instead of marking the release ready
 for owner review.
 
+The release notes source is now default-deny as release-owner evidence. `RELEASE_NOTES_PATH`
+overrides fail before release-scope checks unless `ALLOW_RELEASE_NOTES_PATH_OVERRIDE=1` is set for
+an explicit local rehearsal, so accidental environment drift cannot point the GA gate at the wrong
+scope document.
+
 ## GA Version Bump Checkpoint
 
 This release slice moves workspace package metadata from the validated
@@ -1041,6 +1046,14 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
 - `RELEASE_VERSION=0.2 scripts/release-gate-report.sh --target ga --hosted-run 27437010801
   --quick --allow-tracked-changes --json` failed before release-target checks with
   `RELEASE_VERSION/--release-version must be x.y.z with an optional prerelease suffix, got 0.2`
+- `RELEASE_NOTES_PATH=/tmp/engram-release-notes.md scripts/release-gate-report.sh --target ga
+  --hosted-run 27438605838 --quick --json` failed before release-scope checks with
+  `RELEASE_NOTES_PATH override requires explicit approval`
+- `ALLOW_RELEASE_NOTES_PATH_OVERRIDE=maybe RELEASE_NOTES_PATH=/tmp/engram-release-notes.md
+  scripts/release-gate-report.sh --target ga --hosted-run 27438605838 --quick --json` failed
+  before release-scope checks with `ALLOW_RELEASE_NOTES_PATH_OVERRIDE must be 0 or 1`
+- `RELEASE_NOTES_PATH= scripts/release-gate-report.sh --target ga --hosted-run 27438605838
+  --quick --json` failed before release-scope checks with `RELEASE_NOTES_PATH must not be empty`
 - `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 RELEASE_REPOSITORY=ymeiri/engram-does-not-exist
   scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
   --allow-tracked-changes --json` after the release-target availability guard, expected
@@ -1074,8 +1087,9 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   expected `release_scope.state=complete`, native Claude proof limits acknowledged,
   lifecycle/M6 limits acknowledged, `release_gate_state=version_bump_required`, and no
   `tag_v0.2.0-beta.2` remaining action
-- `RELEASE_NOTES_PATH=<temp-empty-file> scripts/release-gate-report.sh --target ga
-  --release-version 0.2.0-beta.2 --hosted-run 27373857951 --quick --allow-tracked-changes --json`
+- `ALLOW_RELEASE_NOTES_PATH_OVERRIDE=1 RELEASE_NOTES_PATH=<temp-empty-file>
+  scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
+  27373857951 --quick --allow-tracked-changes --json`
   expected `release_scope.state=incomplete`,
   `release_gate_state=release_scope_acknowledgement_required`, and remaining action
   `restore_release_notes_ga_scope_acknowledgements`
