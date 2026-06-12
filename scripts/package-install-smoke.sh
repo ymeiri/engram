@@ -186,6 +186,18 @@ if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" &&
         "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
     exit 1
 fi
+if [[ -n "${EXPECTED_PACKAGE_GIT_HEAD:-}" &&
+    ! "$EXPECTED_PACKAGE_GIT_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+    printf 'error: EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got %s\n' \
+        "$EXPECTED_PACKAGE_GIT_HEAD" >&2
+    exit 1
+fi
+if [[ -n "${EXPECTED_CARGO_LOCK_SHA256:-}" &&
+    ! "$EXPECTED_CARGO_LOCK_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    printf 'error: EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got %s\n' \
+        "$EXPECTED_CARGO_LOCK_SHA256" >&2
+    exit 1
+fi
 if [[ -n "${SMOKE_PORT:-}" ]]; then
     if [[ ! "$SMOKE_PORT" =~ ^[0-9]+$ ]]; then
         printf 'error: SMOKE_PORT must be a numeric TCP port, got %s\n' \

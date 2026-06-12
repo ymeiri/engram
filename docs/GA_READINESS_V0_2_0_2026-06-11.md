@@ -309,6 +309,40 @@ provenance, Cargo.lock hash provenance, and each packaged file hash through stru
 This keeps local package rehearsals and published-release install verification from accepting
 malformed or misleading manifest JSON during the final `v0.2.0` artifact proof.
 
+`scripts/package-install-smoke.sh` and `scripts/render-homebrew-formula.sh` now also validate
+explicit package identity expectation overrides before package identity evidence is collected.
+`EXPECTED_PACKAGE_GIT_HEAD` must be a 40-character Git SHA, and
+`EXPECTED_CARGO_LOCK_SHA256` must be a 64-character SHA-256 hex value. This keeps local package
+rehearsals, published-release install verification, and Homebrew formula rendering from treating
+malformed operator-supplied expectations as meaningful release evidence.
+
+Targeted validation for this package identity expectation guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
+  scripts/render-homebrew-formula.sh scripts/release-gate-report.sh
+  scripts/beta-release-gate-report.sh`
+- `EXPECTED_PACKAGE_GIT_HEAD=abc SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-identity-override-test scripts/package-install-smoke.sh` failed before
+  release asset reads with `EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got abc`.
+- `EXPECTED_CARGO_LOCK_SHA256=abc SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-identity-override-test scripts/package-install-smoke.sh` failed before
+  release asset reads with `EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got abc`.
+- `EXPECTED_PACKAGE_GIT_HEAD=abc DIST_DIR=/tmp/engram-no-assets-test
+  scripts/render-homebrew-formula.sh` failed before archive reads with
+  `EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got abc`.
+- `EXPECTED_CARGO_LOCK_SHA256=abc DIST_DIR=/tmp/engram-no-assets-test
+  scripts/render-homebrew-formula.sh` failed before archive reads with
+  `EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got abc`.
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=/tmp/engram-identity-override-test
+  scripts/package-release.sh` built a local rehearsal archive.
+- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-identity-override-test
+  EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
+  local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
+- `DIST_DIR=/tmp/engram-identity-override-test EXPECTED_TRACKED_CHANGES_PRESENT=true
+  FORMULA_OUTPUT=/tmp/engram-identity-override-test/homebrew/Formula/engram.rb
+  scripts/render-homebrew-formula.sh` rendered a formula from the same archive, and `ruby -c`
+  accepted the result.
+
 ## Release Manifest Build Guard
 
 `scripts/package-release.sh` now validates the generated `MANIFEST.json` with `jq` before the

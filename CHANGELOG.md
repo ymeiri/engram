@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before package extraction or server startup.
 - Hardened package install smoke verification so explicit `SMOKE_PORT` overrides fail closed when
   the requested local port is already in use.
+- Hardened package install smoke and Homebrew formula verification so malformed
+  `EXPECTED_PACKAGE_GIT_HEAD` and `EXPECTED_CARGO_LOCK_SHA256` values fail closed before package
+  identity evidence is collected.
 - Hardened Homebrew formula rendering so it requires the adjacent `.sha256` asset to name and
   hash the same release archive before formula text is written.
 - Hardened Homebrew formula rendering so it verifies the packaged `MANIFEST.json` release identity,
@@ -90,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refreshed the GA readiness matrix with package install-smoke port override guard validation
   while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with package install-smoke occupied-port guard validation while
+  preserving the disk cleanup approval gate.
+- Refreshed the GA readiness matrix with package identity expectation override validation while
   preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.

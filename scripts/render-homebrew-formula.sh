@@ -50,6 +50,24 @@ if [[ "$release_base_url" == */ ]]; then
     exit 1
 fi
 
+expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD:-$(git rev-parse HEAD)}"
+expected_cargo_lock_sha256="$(
+    shasum -a 256 Cargo.lock | awk '{ print $1 }'
+)"
+if [[ -n "${EXPECTED_CARGO_LOCK_SHA256:-}" ]]; then
+    expected_cargo_lock_sha256="$EXPECTED_CARGO_LOCK_SHA256"
+fi
+if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
+    printf 'error: EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got %s\n' \
+        "$expected_git_head" >&2
+    exit 1
+fi
+if [[ ! "$expected_cargo_lock_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    printf 'error: EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got %s\n' \
+        "$expected_cargo_lock_sha256" >&2
+    exit 1
+fi
+
 if [[ ! -f "$tarball" ]]; then
     printf 'error: release tarball not found at %s\n' "$tarball" >&2
     printf 'hint: run scripts/package-release.sh first\n' >&2
@@ -91,13 +109,6 @@ if [[ "$checksum_sha256" != "$sha256" ]]; then
     exit 1
 fi
 
-expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD:-$(git rev-parse HEAD)}"
-expected_cargo_lock_sha256="$(
-    shasum -a 256 Cargo.lock | awk '{ print $1 }'
-)"
-if [[ -n "${EXPECTED_CARGO_LOCK_SHA256:-}" ]]; then
-    expected_cargo_lock_sha256="$EXPECTED_CARGO_LOCK_SHA256"
-fi
 if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" ]]; then
     expected_tracked_changes_present="$EXPECTED_TRACKED_CHANGES_PRESENT"
 elif git diff --quiet --ignore-submodules -- &&
