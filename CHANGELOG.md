@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renderer can produce GA-ready formula text after the final version bump.
 - Made local release packaging fail closed on tracked changes by default, with
   `ALLOW_TRACKED_CHANGES=1` reserved for explicit development rehearsals.
+- Hardened local release packaging so malformed `ALLOW_TRACKED_CHANGES` values fail closed before
+  release binary builds or artifact writes.
 - Hardened published release install verification so GitHub release checks fail on draft releases
   or unexpected prerelease/stable state before downloading assets.
 - Hardened published release install verification so release tags must match the workspace package
@@ -74,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence while preserving the release-owner cleanup approval gate.
 - Refreshed the GA readiness matrix with exact-head `35a5b9c` package manifest payload-hash guard
   evidence while preserving the disk cleanup approval gate.
+- Refreshed the GA readiness matrix with exact-head `6ba403e` disk-threshold override guard
+  evidence and local release-packaging override validation.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only

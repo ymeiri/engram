@@ -14,6 +14,8 @@ GA hardening evidence baseline for this refresh:
 `4978711b5bc27d350f0d57983698758d331a3f16`
 Release-packaging payload-hash guard checkpoint:
 `35a5b9ca6ebb790ed8987ac6425d29e3e2e6e402`
+Release-gate disk threshold override guard checkpoint:
+`6ba403efce7dc0893a1fd40aa6fddc39fbaa6fe5`
 
 ## Summary
 
@@ -93,7 +95,15 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   passed for exact head `35a5b9c` with hosted CI passing, release target
   `v0.2.0` still available, no local/remote tag, no GitHub release, no owner-review
   readiness, and no release actions.
-- The default GA gate on this host still fails before local CI/package smoke with
+- Release-gate disk threshold override guard CI: main push run `27425319893` for
+  `6ba403efce7dc0893a1fd40aa6fddc39fbaa6fe5` completed successfully on
+  2026-06-12 for Check, Test, Clippy, Docs, and Format.
+- Release-gate disk threshold override quick gate:
+  `scripts/release-gate-report.sh --target ga --hosted-run 27425319893 --quick --json`
+  passed for exact head `6ba403e` with hosted CI passing, release target
+  `v0.2.0` still available, no local/remote tag, no GitHub release,
+  `disk_space.min_required_kib=10485760`, no owner-review readiness, and no release actions.
+- The latest default GA gate on this host still fails before local CI/package smoke with
   `release_gate_state=disk_space_cleanup_required`, `failure.kind=disk_space_preflight`,
   `release_target.state=available`, `min_required_kib=10485760`, and non-destructive cleanup
   candidates `target=103776236 KiB` and `dist=74608 KiB`. Exact `free_space_kib` and
@@ -112,8 +122,8 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | --- | --- | --- | --- |
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
-| Versioning | Validated historically / fresh full local gate pending | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version on head `8094269`; full GA gate confirmed `workspace_version_matches_release=true`. The `35a5b9c` release-packaging guard checkpoint has exact-head hosted CI and quick-gate evidence, but not a full local gate because disk preflight blocks before local CI/package smoke. | Free local disk with release-owner-approved cleanup, then rerun exact-head CI if needed and the full GA gate on the final release head. |
-| Hosted CI | Validated on release-packaging guard checkpoint | Main push CI run `27417397670` passed for head `35a5b9c`. Earlier runs `27401954970`, `27399073606`, `27388790648`, `27379891728`, `27372009309`, `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for prior hardening, owner-review, release-gate, setup-path docs, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Versioning | Validated historically / fresh full local gate pending | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version on head `8094269`; full GA gate confirmed `workspace_version_matches_release=true`. The `6ba403e` disk-threshold override guard checkpoint has exact-head hosted CI and quick-gate evidence, but not a full local gate because disk preflight blocks before local CI/package smoke. | Free local disk with release-owner-approved cleanup, then rerun exact-head CI if needed and the full GA gate on the final release head. |
+| Hosted CI | Validated on disk-threshold override guard checkpoint | Main push CI run `27425319893` passed for head `6ba403e`. Earlier runs `27417397670`, `27401954970`, `27399073606`, `27388790648`, `27379891728`, `27372009309`, `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for prior hardening, owner-review, release-gate, setup-path docs, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
 | Local runtime | Validated for GA package smoke / installed global still beta.2 | Full GA gate package/install smoke passed for `engram 0.2.0` on `8094269`; local asset-dir verification also passed without downloads or publishing. Local `--asset-dir` verifier output now reports `asset_install_verified=true` while keeping `published_install_verified=false`. The previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | After release publication, verify the published install path and then refresh local runtime evidence if desired. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
@@ -127,7 +137,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, and checks packaged payload hashes before writing formula text. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
-| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The `35a5b9c` release-packaging guard checkpoint has exact-head hosted CI and quick-gate evidence, but the default full gate correctly reports `disk_space_cleanup_required` on this host. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, and it now reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup, fresh exact-head gate evidence, and release-target availability evidence. |
+| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The `6ba403e` disk-threshold override guard checkpoint has exact-head hosted CI and quick-gate evidence, but the default full gate correctly reports `disk_space_cleanup_required` on this host. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, and it now reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup, fresh exact-head gate evidence, and release-target availability evidence. |
 
 ## First GA Slice Completed
 
@@ -196,6 +206,26 @@ The guard was checked against the development diff for this slice: default `scri
 exited with the tracked-change error before building, while
 `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` still built and validated
 a dirty rehearsal archive, including manifest verification and packaged HTTP `/health`.
+
+`scripts/package-release.sh` now also validates `ALLOW_TRACKED_CHANGES` itself as exactly `0` or
+`1` before release binary builds or artifact writes. This keeps the dirty-state escape hatch
+consistent with the release-gate and Homebrew override guards: typos fail closed instead of being
+silently treated as some third mode.
+
+Targeted validation for this override guard on a development diff:
+
+- `bash -n scripts/package-release.sh scripts/package-install-smoke.sh
+  scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `ALLOW_TRACKED_CHANGES=yes DIST_DIR=/tmp/engram-invalid-allow-test
+  scripts/package-release.sh` failed with
+  `ALLOW_TRACKED_CHANGES must be 0 or 1, got yes`.
+- `DIST_DIR=/tmp/engram-default-dirty-test scripts/package-release.sh` still failed with the
+  tracked-change guard and no release artifact write.
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=/tmp/engram-allow-tracked-package-test
+  scripts/package-release.sh` built a local rehearsal archive.
+- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-allow-tracked-package-test
+  EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` verified the archive,
+  installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 
 ## Published Release Verification Guard
 
@@ -606,6 +636,14 @@ Targeted validation for this guard:
 
 This is development-diff validation on top of head `760fb29`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
+After this guard was committed as `6ba403efce7dc0893a1fd40aa6fddc39fbaa6fe5`, GitHub Actions main
+push run `27425319893` passed for Check, Test, Clippy, Docs, and Format. The exact-head quick GA
+gate with hosted run `27425319893` passed with `release_target.state=available`, no local or
+remote `v0.2.0` tag, no GitHub release, default `disk_space.min_required_kib=10485760`, no
+owner-review readiness, and no release actions. The exact-head full GA gate still failed closed at
+disk preflight with default threshold evidence before local CI, package/install smoke, Homebrew
+render, or any release action.
 
 ## GA Hardening Evidence Baseline
 

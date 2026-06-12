@@ -34,6 +34,15 @@ command -v jq >/dev/null 2>&1 || {
     exit 1
 }
 
+case "$allow_tracked_changes" in
+    0 | 1) ;;
+    *)
+        printf 'error: ALLOW_TRACKED_CHANGES must be 0 or 1, got %s\n' \
+            "$allow_tracked_changes" >&2
+        exit 1
+        ;;
+esac
+
 git_head="$(git rev-parse HEAD)"
 if git diff --quiet --ignore-submodules -- && git diff --cached --quiet --ignore-submodules --; then
     tracked_changes_present=false
