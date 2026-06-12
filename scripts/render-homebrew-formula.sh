@@ -13,6 +13,11 @@ checksum="$tarball.sha256"
 output="${FORMULA_OUTPUT:-$dist_dir/homebrew/Formula/engram.rb}"
 release_base_url="${HOMEBREW_RELEASE_BASE_URL:-https://github.com/ymeiri/engram/releases/download/v${package_version}}"
 
+command -v jq >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: jq\n' >&2
+    exit 1
+}
+
 if [[ "$host_triple" != "aarch64-apple-darwin" ]]; then
     printf 'error: Homebrew formula currently supports aarch64-apple-darwin only, got %s\n' \
         "$host_triple" >&2
@@ -59,6 +64,89 @@ if [[ "$checksum_sha256" != "$sha256" ]]; then
         "$tarball" "$sha256" "$checksum_sha256" >&2
     exit 1
 fi
+
+expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD:-$(git rev-parse HEAD)}"
+expected_cargo_lock_sha256="$(
+    shasum -a 256 Cargo.lock | awk '{ print $1 }'
+)"
+if [[ -n "${EXPECTED_CARGO_LOCK_SHA256:-}" ]]; then
+    expected_cargo_lock_sha256="$EXPECTED_CARGO_LOCK_SHA256"
+fi
+if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" ]]; then
+    expected_tracked_changes_present="$EXPECTED_TRACKED_CHANGES_PRESENT"
+elif git diff --quiet --ignore-submodules -- &&
+    git diff --cached --quiet --ignore-submodules --; then
+    expected_tracked_changes_present=false
+else
+    expected_tracked_changes_present=true
+fi
+if [[ "$expected_tracked_changes_present" != "true" &&
+    "$expected_tracked_changes_present" != "false" ]]; then
+    printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got %s\n' \
+        "$expected_tracked_changes_present" >&2
+    exit 1
+fi
+
+manifest_member="$archive_name/MANIFEST.json"
+manifest_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-homebrew-manifest.XXXXXX")"
+trap 'rm -rf "$manifest_dir"' EXIT
+manifest="$manifest_dir/MANIFEST.json"
+if ! tar -xzOf "$tarball" "$manifest_member" >"$manifest"; then
+    printf 'error: release archive is missing required member: %s\n' \
+        "$manifest_member" >&2
+    exit 1
+fi
+if [[ ! -s "$manifest" ]]; then
+    printf 'error: packaged manifest is empty: %s\n' "$manifest_member" >&2
+    exit 1
+fi
+
+manifest_package="$(jq -er '.package | strings' "$manifest")"
+manifest_version="$(jq -er '.version | strings' "$manifest")"
+manifest_host_triple="$(jq -er '.host_triple | strings' "$manifest")"
+manifest_archive_name="$(jq -er '.archive_name | strings' "$manifest")"
+manifest_git_head="$(jq -er '.git_head | strings' "$manifest")"
+manifest_tracked_changes_present="$(
+    jq -er '.tracked_changes_present | booleans | tostring' "$manifest"
+)"
+manifest_cargo_lock_sha256="$(jq -er '.cargo_lock_sha256 | strings' "$manifest")"
+
+if [[ "$manifest_package" != "engram" ]]; then
+    printf 'error: manifest package mismatch: expected engram, got %s\n' \
+        "$manifest_package" >&2
+    exit 1
+fi
+if [[ "$manifest_version" != "$package_version" ]]; then
+    printf 'error: manifest version mismatch: expected %s, got %s\n' \
+        "$package_version" "$manifest_version" >&2
+    exit 1
+fi
+if [[ "$manifest_host_triple" != "$host_triple" ]]; then
+    printf 'error: manifest host triple mismatch: expected %s, got %s\n' \
+        "$host_triple" "$manifest_host_triple" >&2
+    exit 1
+fi
+if [[ "$manifest_archive_name" != "$archive_name" ]]; then
+    printf 'error: manifest archive name mismatch: expected %s, got %s\n' \
+        "$archive_name" "$manifest_archive_name" >&2
+    exit 1
+fi
+if [[ "$manifest_git_head" != "$expected_git_head" ]]; then
+    printf 'error: manifest git head mismatch: expected %s, got %s\n' \
+        "$expected_git_head" "$manifest_git_head" >&2
+    exit 1
+fi
+if [[ "$manifest_tracked_changes_present" != "$expected_tracked_changes_present" ]]; then
+    printf 'error: manifest tracked-changes flag mismatch: expected %s, got %s\n' \
+        "$expected_tracked_changes_present" "$manifest_tracked_changes_present" >&2
+    exit 1
+fi
+if [[ "$manifest_cargo_lock_sha256" != "$expected_cargo_lock_sha256" ]]; then
+    printf 'error: manifest Cargo.lock hash mismatch: expected %s, got %s\n' \
+        "$expected_cargo_lock_sha256" "$manifest_cargo_lock_sha256" >&2
+    exit 1
+fi
+
 mkdir -p "$(dirname "$output")"
 
 cat >"$output" <<EOF
