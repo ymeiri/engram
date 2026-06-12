@@ -225,6 +225,8 @@ homebrew_formula_state="not_applicable"
 homebrew_formula_output="$repo_root/dist/homebrew/Formula/engram.rb"
 disk_space_state="not_checked"
 disk_space_error=""
+disk_space_shortfall_kib=""
+disk_cleanup_candidates_json="[]"
 free_space_kib=""
 
 preflight_log() {
@@ -233,6 +235,33 @@ preflight_log() {
     else
         printf '%s\n' "$*"
     fi
+}
+
+collect_disk_cleanup_candidates() {
+    local candidates_json="[]"
+    local rel_path abs_path size_kib
+
+    for rel_path in target dist; do
+        abs_path="$repo_root/$rel_path"
+        if [[ -e "$abs_path" ]]; then
+            size_kib="$(du -sk "$abs_path" | awk '{ print $1 }')"
+            if [[ "$size_kib" =~ ^[0-9]+$ ]]; then
+                candidates_json="$(
+                    jq -c \
+                        --arg path "$rel_path" \
+                        --arg absolute_path "$abs_path" \
+                        --arg size_kib "$size_kib" \
+                        '. + [{
+                            path: $path,
+                            absolute_path: $absolute_path,
+                            size_kib: ($size_kib | tonumber)
+                        }]' <<<"$candidates_json"
+                )"
+            fi
+        fi
+    done
+
+    disk_cleanup_candidates_json="$candidates_json"
 }
 
 check_free_space_for_local_steps() {
@@ -251,6 +280,15 @@ check_free_space_for_local_steps() {
 
     if (( free_space_kib < min_free_space_kib )); then
         disk_space_state="insufficient"
+        disk_space_shortfall_kib=$((min_free_space_kib - free_space_kib))
+        collect_disk_cleanup_candidates
+        preflight_log "shortfall_kib=$disk_space_shortfall_kib"
+        jq -r '
+            .[]
+            | "cleanup_candidate: path=\(.path) size_kib=\(.size_kib)"
+        ' <<<"$disk_cleanup_candidates_json" | while IFS= read -r candidate; do
+            preflight_log "$candidate"
+        done
         disk_space_error="insufficient free disk space for local release validation: "
         disk_space_error+="have ${free_space_kib} KiB, require ${min_free_space_kib} KiB "
         disk_space_error+="under $repo_root. Free generated build/cache space, then rerun; "
@@ -259,6 +297,7 @@ check_free_space_for_local_steps() {
     fi
 
     disk_space_state="passed"
+    disk_space_shortfall_kib=0
     return 0
 }
 
@@ -280,6 +319,7 @@ emit_disk_space_failure_json() {
         --arg disk_space_state "$disk_space_state" \
         --arg free_space_kib "$free_space_kib" \
         --arg min_free_space_kib "$min_free_space_kib" \
+        --arg disk_space_shortfall_kib "$disk_space_shortfall_kib" \
         --arg disk_space_error "$disk_space_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
@@ -288,6 +328,7 @@ emit_disk_space_failure_json() {
         --argjson pr "$pr_report_json" \
         --argjson hosted_run "$hosted_run_report_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -315,7 +356,9 @@ emit_disk_space_failure_json() {
             disk_space: {
                 state: $disk_space_state,
                 free_kib: ($free_space_kib | tonumber),
-                min_required_kib: ($min_free_space_kib | tonumber)
+                min_required_kib: ($min_free_space_kib | tonumber),
+                shortfall_kib: ($disk_space_shortfall_kib | tonumber),
+                cleanup_candidates: $disk_cleanup_candidates
             },
             homebrew_formula_render: "not_run",
             homebrew_formula: {
@@ -677,6 +720,7 @@ if [[ "$json_output" == "1" ]]; then
         --arg disk_space_state "$disk_space_state" \
         --arg free_space_kib "$free_space_kib" \
         --arg min_free_space_kib "$min_free_space_kib" \
+        --arg disk_space_shortfall_kib "$disk_space_shortfall_kib" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -687,6 +731,7 @@ if [[ "$json_output" == "1" ]]; then
         --argjson pr "$pr_report_json" \
         --argjson hosted_run "$hosted_run_report_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
         --argjson remaining_release_actions "$remaining_release_actions_json" \
         '{
             target: $target,
@@ -719,7 +764,13 @@ if [[ "$json_output" == "1" ]]; then
                     else ($free_space_kib | tonumber)
                     end
                 ),
-                min_required_kib: ($min_free_space_kib | tonumber)
+                min_required_kib: ($min_free_space_kib | tonumber),
+                shortfall_kib: (
+                    if $disk_space_shortfall_kib == "" then null
+                    else ($disk_space_shortfall_kib | tonumber)
+                    end
+                ),
+                cleanup_candidates: $disk_cleanup_candidates
             },
             homebrew_formula_render: $homebrew_formula_render,
             homebrew_formula: {
@@ -764,8 +815,15 @@ else
     printf '  disk_space_preflight: %s' "$disk_space_state"
     if [[ -n "$free_space_kib" ]]; then
         printf ' (free_kib=%s min_required_kib=%s)' "$free_space_kib" "$min_free_space_kib"
+        if [[ -n "$disk_space_shortfall_kib" ]]; then
+            printf ' shortfall_kib=%s' "$disk_space_shortfall_kib"
+        fi
     fi
     printf '\n'
+    jq -r '
+        .[]
+        | "  disk_cleanup_candidate: \(.path) size_kib=\(.size_kib)"
+    ' <<<"$disk_cleanup_candidates_json"
     if [[ "$target" == "ga" ]]; then
         printf '  homebrew_formula_render: %s\n' "$homebrew_formula_state"
         if [[ "$homebrew_formula_state" == "passed" ]]; then

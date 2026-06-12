@@ -453,7 +453,8 @@ rerun exact-head hosted CI and the full GA release gate before tag, publish, or 
 `scripts/release-gate-report.sh --target ga` now checks local free space before running local CI or
 package/install smoke. Full local owner-review evidence uses the default
 `RELEASE_GATE_MIN_FREE_KIB=10485760` threshold (10 GiB) and reports `disk_space.state`,
-`disk_space.free_kib`, and `disk_space.min_required_kib` in JSON once the preflight runs. The
+`disk_space.free_kib`, `disk_space.min_required_kib`, `disk_space.shortfall_kib`, and
+`disk_space.cleanup_candidates` in JSON once the preflight runs. The
 override is available for controlled rehearsals, but lowering it weakens local release evidence.
 If the preflight fails in `--json` mode, the command still exits nonzero but now writes structured
 failure evidence with `release_gate_state=disk_space_cleanup_required`, `local_ci=not_run`,
@@ -464,7 +465,9 @@ This closes the current local validation failure mode where Cargo can spend subs
 exact-head hosted CI has been green, but the full local GA gate remains pending because the
 filesystem has less than 1 GiB free while `target/` is about 99 GiB. Cleanup of generated build
 artifacts still requires explicit approval before rerunning the full gate and refreshing GA `dist/`
-assets.
+assets. The cleanup candidate list is intentionally non-destructive evidence for that approval or
+triage step; it is not authorization for the release gate to delete `target/`, `dist/`, or other
+local artifacts.
 
 ## Validation Run
 
