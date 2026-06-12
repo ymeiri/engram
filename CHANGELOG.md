@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ad hoc text matching when checking release metadata and packaged file hashes.
 - Hardened package install smoke verification so `.sha256` files must contain exactly one
   SHA-256 line naming the expected release archive.
+- Hardened Homebrew formula rendering so it requires the adjacent `.sha256` asset to name and
+  hash the same release archive before formula text is written.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
   release archive is created.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
