@@ -64,9 +64,9 @@ The latest observed disk-preflight failure reported:
 ```text
 release_gate_state=disk_space_cleanup_required
 failure.kind=disk_space_preflight
-free_space_kib=6747056
+free_space_kib=6724872
 min_required_kib=10485760
-shortfall_kib=3738704
+shortfall_kib=3760888
 cleanup_candidate: path=target size_kib=103776236
 cleanup_candidate: path=dist size_kib=74608
 ```
