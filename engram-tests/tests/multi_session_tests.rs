@@ -5,6 +5,7 @@
 
 use anyhow::{bail, Context, Result};
 use serde_json::json;
+use std::fs;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
@@ -19,6 +20,9 @@ use tokio::sync::{Mutex as TokioMutex, OwnedMutexGuard};
 static PORT_COUNTER: AtomicU16 = AtomicU16::new(19000);
 static ENGRAM_BIN: OnceLock<PathBuf> = OnceLock::new();
 static DAEMON_TEST_LOCK: OnceLock<Arc<TokioMutex<()>>> = OnceLock::new();
+const DAEMON_HEALTH_TIMEOUT: Duration = Duration::from_secs(120);
+const DAEMON_HEALTH_STABILITY_DELAY: Duration = Duration::from_millis(250);
+const DAEMON_LOG_TAIL_LINES: usize = 40;
 
 /// Get a unique port for testing.
 fn get_test_port() -> u16 {
@@ -98,8 +102,11 @@ fn resolve_engram_bin() -> PathBuf {
 /// Test daemon manager for integration tests.
 struct TestDaemon {
     port: u16,
+    pid: u32,
     child: Child,
     _data_dir: TempDir,
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
     _lock: OwnedMutexGuard<()>,
 }
 
@@ -114,6 +121,12 @@ impl TestDaemon {
     async fn start_on_port(port: u16) -> Result<Self> {
         let lock = daemon_test_lock().lock_owned().await;
         let data_dir = TempDir::new().context("Failed to create temp dir")?;
+        let stdout_path = data_dir.path().join("daemon.stdout.log");
+        let stderr_path = data_dir.path().join("daemon.stderr.log");
+        let stdout =
+            fs::File::create(&stdout_path).context("Failed to create daemon stdout log")?;
+        let stderr =
+            fs::File::create(&stderr_path).context("Failed to create daemon stderr log")?;
 
         let child = Command::new(engram_bin())
             .args(["serve", "--http", "--port", &port.to_string(), "--memory"])
@@ -121,45 +134,98 @@ impl TestDaemon {
             .env("ENGRAM_EMBED_CACHE_DIR", test_embed_cache_dir())
             .env("RUST_LOG", "warn")
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
             .kill_on_drop(true) // Critical: cleanup on test failure
             .spawn()
             .context("Failed to spawn daemon")?;
 
-        let daemon = Self {
+        let pid = child.id().unwrap_or_default();
+        let mut daemon = Self {
             port,
+            pid,
             child,
             _data_dir: data_dir,
+            stdout_path,
+            stderr_path,
             _lock: lock,
         };
 
         // Wait for daemon to be ready
-        daemon.wait_for_health(Duration::from_secs(30)).await?;
+        daemon.wait_for_health(DAEMON_HEALTH_TIMEOUT).await?;
 
         Ok(daemon)
     }
 
     /// Wait for the daemon to respond to health checks.
-    async fn wait_for_health(&self, timeout_duration: Duration) -> Result<()> {
+    async fn wait_for_health(&mut self, timeout_duration: Duration) -> Result<()> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_millis(500))
             .build()?;
 
         let start = std::time::Instant::now();
         let url = format!("http://127.0.0.1:{}/health", self.port);
+        let mut last_health_error = None;
 
         while start.elapsed() < timeout_duration {
-            if client.get(&url).send().await.is_ok() {
-                return Ok(());
+            self.ensure_child_running()?;
+
+            match client.get(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    tokio::time::sleep(DAEMON_HEALTH_STABILITY_DELAY).await;
+                    self.ensure_child_running()?;
+                    return Ok(());
+                }
+                Ok(response) => {
+                    last_health_error =
+                        Some(format!("health endpoint returned {}", response.status()));
+                }
+                Err(err) => {
+                    last_health_error = Some(err.to_string());
+                }
             }
+
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
+        let health_context = last_health_error
+            .map(|err| format!("\nlast health error: {err}"))
+            .unwrap_or_default();
         bail!(
-            "Daemon failed to become healthy within {:?}",
-            timeout_duration
+            "Daemon failed to become healthy within {:?}{}{}",
+            timeout_duration,
+            health_context,
+            self.daemon_output_tail()
         )
+    }
+
+    fn ensure_child_running(&mut self) -> Result<()> {
+        if let Some(status) = self
+            .child
+            .try_wait()
+            .context("Failed to inspect daemon process")?
+        {
+            bail!(
+                "Daemon process {} exited before health check succeeded: {}{}",
+                self.pid,
+                status,
+                self.daemon_output_tail()
+            );
+        }
+        Ok(())
+    }
+
+    fn daemon_output_tail(&self) -> String {
+        let mut output = String::new();
+        if let Some(stdout) = recent_log_tail(&self.stdout_path, DAEMON_LOG_TAIL_LINES) {
+            output.push_str("\n\nRecent daemon stdout:\n");
+            output.push_str(&stdout);
+        }
+        if let Some(stderr) = recent_log_tail(&self.stderr_path, DAEMON_LOG_TAIL_LINES) {
+            output.push_str("\n\nRecent daemon stderr:\n");
+            output.push_str(&stderr);
+        }
+        output
     }
 
     /// Get the MCP endpoint URL.
@@ -179,6 +245,16 @@ impl Drop for TestDaemon {
         // Ensure cleanup even if test panics
         let _ = self.child.start_kill();
     }
+}
+
+fn recent_log_tail(path: &Path, max_lines: usize) -> Option<String> {
+    let content = fs::read_to_string(path).ok()?;
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let start = lines.len().saturating_sub(max_lines);
+    Some(lines[start..].join("\n"))
 }
 
 /// Test HTTP client for sending MCP requests directly to daemon.

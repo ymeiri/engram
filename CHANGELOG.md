@@ -63,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CI.
 - Serialized the multi-session daemon integration test harness so hosted CI does not start one
   daemon per test concurrently and time out waiting for `/health`.
+- Hardened the multi-session daemon integration test harness so daemon startup failures include
+  child-process status and daemon stdout/stderr tails, with a longer readiness window for cold CI
+  runners.
 
 ## [0.2.0-beta.2] - 2026-06-09
 
