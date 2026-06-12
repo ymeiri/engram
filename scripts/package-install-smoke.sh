@@ -166,6 +166,10 @@ command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
 }
+command -v nc >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: nc\n' >&2
+    exit 1
+}
 
 case "$skip_package_build" in
     0 | 1) ;;
@@ -190,6 +194,11 @@ if [[ -n "${SMOKE_PORT:-}" ]]; then
     fi
     if (( 10#$SMOKE_PORT < 1 || 10#$SMOKE_PORT > 65535 )); then
         printf 'error: SMOKE_PORT must be between 1 and 65535, got %s\n' \
+            "$SMOKE_PORT" >&2
+        exit 1
+    fi
+    if nc -z 127.0.0.1 "$SMOKE_PORT" >/dev/null 2>&1; then
+        printf 'error: SMOKE_PORT is already in use on 127.0.0.1: %s\n' \
             "$SMOKE_PORT" >&2
         exit 1
     fi

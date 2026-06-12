@@ -250,7 +250,9 @@ Targeted validation for this smoke override guard on a development diff:
 `scripts/package-install-smoke.sh` now also validates explicit `SMOKE_PORT` overrides before
 package extraction or packaged server startup. The value must be a numeric TCP port in
 `1..65535`; otherwise the smoke fails closed before it can produce ambiguous server or health-check
-evidence. Automatic port selection remains the default when `SMOKE_PORT` is unset.
+evidence. If the requested port is already in use on `127.0.0.1`, the smoke also fails closed
+before release asset reads, avoiding ambiguous `/health` evidence from a pre-existing local
+service. Automatic port selection remains the default when `SMOKE_PORT` is unset.
 
 Targeted validation for this smoke port override guard on a development diff:
 
@@ -262,6 +264,9 @@ Targeted validation for this smoke port override guard on a development diff:
 - `SMOKE_PORT=70000 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
   scripts/package-install-smoke.sh` failed with
   `SMOKE_PORT must be between 1 and 65535, got 70000`.
+- `SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+  scripts/package-install-smoke.sh` while a temporary local server occupied the port failed before
+  release asset reads with `SMOKE_PORT is already in use on 127.0.0.1: 8766`.
 - `SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
   local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
