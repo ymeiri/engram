@@ -26,6 +26,7 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_DEV_DEBUG: 0
+      ENGRAM_EMBED_CACHE_DIR: ${{ github.workspace }}/engram-tests/.fastembed_cache
     steps:
       - uses: actions/checkout@v5
       - name: Free runner disk space
@@ -41,6 +42,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: false
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: engram-tests/.fastembed_cache
+          key: ${{ runner.os }}-fastembed-all-MiniLM-L6-v2-v1
+      - name: Warm embedding model cache
+        run: |
+          for attempt in 1 2 3; do
+            if cargo run --locked -p engram-cli --bin engram -- warmup embeddings \
+              --cache-dir "$ENGRAM_EMBED_CACHE_DIR"; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          exit 1
       - run: cargo test --locked --all-targets --jobs 1
 
   fmt:

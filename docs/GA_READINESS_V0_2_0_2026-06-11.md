@@ -239,6 +239,19 @@ The follow-up commit `eb0e3a9` has exact-head hosted CI evidence: run `273612336
 successfully for Format, Docs, Check, Clippy, and Test. This makes `eb0e3a9` the validated
 release-hardening checkpoint before any future GA version, package, or release publication changes.
 
+## Hosted CI Embedding Cache Warmup
+
+GitHub Actions run `27396872082` for commit `b192c60` failed in the `Test` job while Format,
+Check, Docs, and Clippy passed. The failure was isolated to daemon startup in
+`engram-tests/tests/multi_session_tests.rs`: the hosted runner used an empty fastembed cache at
+`engram-tests/.fastembed_cache`, then daemon startup failed with `Failed to retrieve model.onnx`.
+
+The test job now sets `ENGRAM_EMBED_CACHE_DIR` to that deterministic cache path, restores it with
+`actions/cache`, and runs `engram warmup embeddings` with retries before
+`cargo test --locked --all-targets --jobs 1`. This keeps hosted multi-session tests from depending
+on every daemon test process being able to download the ONNX model during startup. The cache warmup
+is CI validation hardening only; it does not change release artifacts or publish anything.
+
 ## Supported Setup Path Rehearsal
 
 Codex and Cursor setup paths were rehearsed in isolated temp roots so the validation did not modify

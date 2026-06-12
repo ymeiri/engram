@@ -47,6 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evidence before exiting nonzero when local cleanup is required.
 - Added non-destructive disk cleanup evidence to the GA release gate: low-space JSON now reports the
   local shortfall and generated artifact candidate sizes before requiring cleanup approval.
+- Hardened hosted CI tests by restoring and warming the fastembed model cache before serialized
+  integration tests start daemon processes.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only
