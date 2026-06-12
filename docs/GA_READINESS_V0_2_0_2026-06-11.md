@@ -468,6 +468,45 @@ This keeps the final tap formula from silently pointing at a wrong repository, t
 because of an ambient environment override. The explicit override remains available for local
 rehearsals, not final release-owner evidence.
 
+## Homebrew Host Triple Guard
+
+`scripts/render-homebrew-formula.sh` now fails closed if `HOMEBREW_HOST_TRIPLE` selects a target
+triple other than the local `rustc -vV` host unless `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1` is set
+for an explicit local rehearsal. The host triple must be non-empty, must look like a Rust target
+triple token, and the renderer still only supports `aarch64-apple-darwin`.
+
+This keeps final formula evidence from silently reading a stale or wrong-platform archive because
+of an ambient target override. Intentional cross-host archive rehearsals remain possible, but they
+must opt in explicitly and still target the only supported Homebrew package triple.
+
+Targeted validation for this guard:
+
+- `HOMEBREW_HOST_TRIPLE=x86_64-apple-darwin scripts/render-homebrew-formula.sh` failed before
+  release asset reads or formula writes with `HOMEBREW_HOST_TRIPLE override requires explicit
+  approval`.
+- `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=yes HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin
+  scripts/render-homebrew-formula.sh` failed with
+  `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE must be 0 or 1, got yes`.
+- `HOMEBREW_HOST_TRIPLE= scripts/render-homebrew-formula.sh` failed with
+  `HOMEBREW_HOST_TRIPLE must not be empty`.
+- `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1 HOMEBREW_HOST_TRIPLE=bad/triple
+  scripts/render-homebrew-formula.sh` failed with
+  `HOMEBREW_HOST_TRIPLE must be a Rust target triple`.
+- `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1 HOMEBREW_HOST_TRIPLE=x86_64-apple-darwin
+  scripts/render-homebrew-formula.sh` failed with
+  `Homebrew formula currently supports aarch64-apple-darwin only`.
+- `DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+  EXPECTED_TRACKED_CHANGES_PRESENT=false
+  EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
+  scripts/render-homebrew-formula.sh` rendered the default temp formula path and `ruby -c` reported
+  `Syntax OK`.
+- `ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1 HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin
+  DIST_DIR=<temp> EXPECTED_PACKAGE_GIT_HEAD=6a0d5c32b0ae3ad40835116ece1386c0428d3222
+  EXPECTED_TRACKED_CHANGES_PRESENT=false
+  EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
+  scripts/render-homebrew-formula.sh` rendered the supported host-triple rehearsal formula and
+  `ruby -c` reported `Syntax OK`.
+
 ## Homebrew Formula Output Guard
 
 `scripts/render-homebrew-formula.sh` now fails closed if `FORMULA_OUTPUT` points anywhere other

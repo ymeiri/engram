@@ -6,7 +6,9 @@ cd "$repo_root"
 
 dist_dir="${DIST_DIR:-$repo_root/dist}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
-host_triple="${HOMEBREW_HOST_TRIPLE:-$(rustc -vV | awk '/^host:/ { print $2 }')}"
+default_host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
+host_triple="${HOMEBREW_HOST_TRIPLE-$default_host_triple}"
+allow_host_triple_override="${ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE:-0}"
 archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
@@ -21,6 +23,31 @@ command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
 }
+
+if [[ "$allow_host_triple_override" != "0" &&
+    "$allow_host_triple_override" != "1" ]]; then
+    printf 'error: ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE must be 0 or 1, got %s\n' \
+        "$allow_host_triple_override" >&2
+    exit 1
+fi
+if [[ -z "$host_triple" ]]; then
+    printf 'error: HOMEBREW_HOST_TRIPLE must not be empty\n' >&2
+    exit 1
+fi
+host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
+    printf 'error: HOMEBREW_HOST_TRIPLE must be a Rust target triple, got %s\n' \
+        "$host_triple" >&2
+    exit 1
+fi
+if [[ "$host_triple" != "$default_host_triple" &&
+    "$allow_host_triple_override" != "1" ]]; then
+    printf 'error: HOMEBREW_HOST_TRIPLE override requires explicit approval\n' >&2
+    printf 'expected default host triple: %s\n' "$default_host_triple" >&2
+    printf 'got: %s\n' "$host_triple" >&2
+    printf 'hint: set ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 if [[ "$allow_formula_output_override" != "0" &&
     "$allow_formula_output_override" != "1" ]]; then
