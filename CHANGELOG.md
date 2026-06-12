@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   final post-approval gate assertions require `disk_space.state=passed`.
 - Refreshed the GA readiness matrix with recent `4978711` exact-head hosted CI and disk-preflight
   evidence while preserving the release-owner cleanup approval gate.
+- Refreshed the GA readiness matrix with exact-head `35a5b9c` package manifest payload-hash guard
+  evidence while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only
