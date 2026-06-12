@@ -16,7 +16,9 @@ release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.m
 default_release_repo="ymeiri/engram"
 release_repo="${RELEASE_REPOSITORY:-$default_release_repo}"
 allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
-min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB:-10485760}"
+default_min_free_space_kib=10485760
+min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB:-$default_min_free_space_kib}"
+allow_min_free_space_override="${ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE:-0}"
 run_local_ci=1
 run_package_smoke=1
 run_homebrew_render=1
@@ -50,7 +52,7 @@ Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
   EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH,
   RELEASE_REPOSITORY, ALLOW_RELEASE_REPOSITORY_OVERRIDE,
-  RELEASE_GATE_MIN_FREE_KIB.
+  RELEASE_GATE_MIN_FREE_KIB, ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
@@ -197,8 +199,20 @@ fi
 if [[ ! "$release_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     fail "release repository must be owner/name, got $release_repo"
 fi
+case "$allow_min_free_space_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE must be 0 or 1, got $allow_min_free_space_override" ;;
+esac
 [[ "$min_free_space_kib" =~ ^[0-9]+$ ]] ||
     fail "RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer"
+if [[ "$min_free_space_kib" != "$default_min_free_space_kib" &&
+    "$allow_min_free_space_override" != "1" ]]; then
+    printf 'error: RELEASE_GATE_MIN_FREE_KIB override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_min_free_space_kib" >&2
+    printf 'got: %s\n' "$min_free_space_kib" >&2
+    printf 'hint: set ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 pr_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-pr.XXXXXX")"
 checks_file="$(mktemp "${TMPDIR:-/tmp}/engram-release-checks.XXXXXX")"

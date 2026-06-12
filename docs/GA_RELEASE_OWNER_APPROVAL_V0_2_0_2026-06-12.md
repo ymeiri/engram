@@ -78,7 +78,8 @@ Those cleanup candidates are non-destructive evidence only. This runbook does no
 deleting `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below
 can produce final owner-review proof on this host, the release owner must either approve generated
 artifact cleanup or provide another disk-space remedy, then rerun the full GA release gate and
-confirm that its `disk_space.state` is `passed`.
+confirm that its `disk_space.state` is `passed` with the default
+`disk_space.min_required_kib=10485760` threshold.
 
 ## Release-Owner Signoff Checklist
 
@@ -143,6 +144,7 @@ jq -e '
   and .release_target.github_release_exists == false
   and .hosted_ci.state == "passing"
   and .disk_space.state == "passed"
+  and .disk_space.min_required_kib == 10485760
   and (.disk_space.free_kib >= .disk_space.min_required_kib)
   and .disk_space.shortfall_kib == 0
   and .local_ci == "passed"

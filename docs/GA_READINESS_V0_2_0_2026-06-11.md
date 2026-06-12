@@ -78,8 +78,9 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   2026-06-12 for Check, Test, Clippy, Docs, and Format. The `Test` job restored
   and warmed `engram-tests/.fastembed_cache` before running
   `cargo test --locked --all-targets --jobs 1`.
-- GA hardening baseline quick gate: `RELEASE_GATE_MIN_FREE_KIB=1
-  scripts/release-gate-report.sh --target ga --hosted-run 27401954970 --quick --json`
+- GA hardening baseline quick gate: `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1
+  RELEASE_GATE_MIN_FREE_KIB=1 scripts/release-gate-report.sh --target ga --hosted-run
+  27401954970 --quick --json`
   passed for exact head `4978711`, with hosted CI passing, local CI/package smoke,
   Homebrew formula render, and disk checks intentionally skipped, and
   `release_actions_performed=false`.
@@ -556,7 +557,9 @@ package/install smoke. Full local owner-review evidence uses the default
 `RELEASE_GATE_MIN_FREE_KIB=10485760` threshold (10 GiB) and reports `disk_space.state`,
 `disk_space.free_kib`, `disk_space.min_required_kib`, `disk_space.shortfall_kib`, and
 `disk_space.cleanup_candidates` in JSON once the preflight runs. The
-override is available for controlled rehearsals, but lowering it weakens local release evidence.
+override is available only for controlled rehearsals with
+`ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1`; lowering it weakens local release evidence and is not
+final owner-review proof.
 If the preflight fails in `--json` mode, the command still exits nonzero but now writes structured
 failure evidence with `release_gate_state=disk_space_cleanup_required`, `local_ci=not_run`,
 `package_install_smoke=not_run`, and `failure.kind=disk_space_preflight`.
@@ -571,6 +574,39 @@ candidate list is intentionally
 non-destructive evidence for that approval or triage step; it is not authorization for the release
 gate to delete `target/`, `dist/`, or other local artifacts.
 
+## Disk Threshold Override Guard
+
+`scripts/release-gate-report.sh` now fails closed if `RELEASE_GATE_MIN_FREE_KIB` differs from the
+default `10485760` threshold unless `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1` is set for an explicit
+local rehearsal. The allow flag must be exactly `0` or `1`, and the threshold must remain a
+non-negative integer. Final owner-review evidence must use the default threshold; the release-owner
+runbook now asserts `disk_space.min_required_kib == 10485760`.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `RELEASE_GATE_MIN_FREE_KIB=1 scripts/release-gate-report.sh --target ga --hosted-run
+  27423199238 --quick --json` failed before release-target lookup with
+  `RELEASE_GATE_MIN_FREE_KIB override requires explicit approval`.
+- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=yes RELEASE_GATE_MIN_FREE_KIB=1
+  scripts/release-gate-report.sh --target ga --hosted-run 27423199238 --quick --json` failed with
+  `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE must be 0 or 1, got yes`.
+- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 RELEASE_GATE_MIN_FREE_KIB=abc
+  scripts/release-gate-report.sh --target ga --hosted-run 27423199238 --quick --json` failed with
+  `RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer`.
+- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 RELEASE_GATE_MIN_FREE_KIB=1
+  scripts/release-gate-report.sh --target ga --hosted-run 27423199238 --quick
+  --allow-tracked-changes --json` passed as rehearsal evidence with
+  `disk_space.state=skipped`, `disk_space.min_required_kib=1`,
+  `release_gate_state=evidence_incomplete`, and no release actions.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27423199238 --quick
+  --allow-tracked-changes --json` passed with the default
+  `disk_space.min_required_kib=10485760`, `release_target.repository=ymeiri/engram`,
+  `release_target.state=available`, and no release actions.
+
+This is development-diff validation on top of head `760fb29`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## GA Hardening Evidence Baseline
 
 The release-facing hardening baseline used by this matrix refresh is
@@ -583,8 +619,9 @@ Validation on this checkpoint:
 - GitHub Actions main push run `27401954970` passed for Check, Test, Clippy, Docs, and Format.
 - The Test job restored and warmed `engram-tests/.fastembed_cache`, then ran
   `cargo test --locked --all-targets --jobs 1`.
-- `RELEASE_GATE_MIN_FREE_KIB=1 scripts/release-gate-report.sh --target ga --hosted-run
-  27401954970 --quick --json` passed as partial exact-head evidence with no release actions.
+- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 RELEASE_GATE_MIN_FREE_KIB=1
+  scripts/release-gate-report.sh --target ga --hosted-run 27401954970 --quick --json` passed as
+  partial exact-head rehearsal evidence with no release actions.
 - The default full gate still fails closed at disk preflight on this host with
   `release_gate_state=disk_space_cleanup_required`, `release_target.state=available`,
   `target=103776236 KiB`, and `dist=74608 KiB`. Exact `free_space_kib` and `shortfall_kib`

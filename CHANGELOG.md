@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build errors.
 - Hardened the GA release gate disk-space preflight so `--json` mode emits structured failure
   evidence before exiting nonzero when local cleanup is required.
+- Hardened the GA release gate disk-space threshold so `RELEASE_GATE_MIN_FREE_KIB` overrides fail
+  closed unless explicitly allowed for local rehearsals.
 - Added non-destructive disk cleanup evidence to the GA release gate: low-space JSON now reports the
   local shortfall and generated artifact candidate sizes before requiring cleanup approval.
 - Hardened the GA release gate so owner-review evidence checks that the intended `v0.2.0` local
