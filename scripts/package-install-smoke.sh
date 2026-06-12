@@ -182,6 +182,18 @@ if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" &&
         "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
     exit 1
 fi
+if [[ -n "${SMOKE_PORT:-}" ]]; then
+    if [[ ! "$SMOKE_PORT" =~ ^[0-9]+$ ]]; then
+        printf 'error: SMOKE_PORT must be a numeric TCP port, got %s\n' \
+            "$SMOKE_PORT" >&2
+        exit 1
+    fi
+    if (( 10#$SMOKE_PORT < 1 || 10#$SMOKE_PORT > 65535 )); then
+        printf 'error: SMOKE_PORT must be between 1 and 65535, got %s\n' \
+            "$SMOKE_PORT" >&2
+        exit 1
+    fi
+fi
 
 if [[ "$skip_package_build" != "1" ]]; then
     run_step "build release package" "$repo_root/scripts/package-release.sh"

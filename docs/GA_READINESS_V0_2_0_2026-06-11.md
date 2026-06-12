@@ -247,6 +247,25 @@ Targeted validation for this smoke override guard on a development diff:
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
   local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 
+`scripts/package-install-smoke.sh` now also validates explicit `SMOKE_PORT` overrides before
+package extraction or packaged server startup. The value must be a numeric TCP port in
+`1..65535`; otherwise the smoke fails closed before it can produce ambiguous server or health-check
+evidence. Automatic port selection remains the default when `SMOKE_PORT` is unset.
+
+Targeted validation for this smoke port override guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
+  scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `SMOKE_PORT=abc SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+  scripts/package-install-smoke.sh` failed with
+  `SMOKE_PORT must be a numeric TCP port, got abc`.
+- `SMOKE_PORT=70000 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+  scripts/package-install-smoke.sh` failed with
+  `SMOKE_PORT must be between 1 and 65535, got 70000`.
+- `SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+  EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
+  local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
+
 ## Published Release Verification Guard
 
 `scripts/verify-published-release-install.sh` now verifies release identity before downloading
