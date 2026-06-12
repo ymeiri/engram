@@ -166,6 +166,12 @@ if [[ -z "$expected_event" ]]; then
         expected_event="pull_request"
     fi
 fi
+event_name_pattern='^[A-Za-z0-9_]+$'
+if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
+    expected_event_error="EXPECTED_EVENT/--expected-event must be a GitHub event name token"
+    expected_event_error+=", got $expected_event"
+    fail "$expected_event_error"
+fi
 if [[ -z "$expected_branch" && "$target" == "ga" ]]; then
     expected_branch="main"
 fi

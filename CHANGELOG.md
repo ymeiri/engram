@@ -82,6 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   closed before release tag construction or remote release-target checks.
 - Hardened the GA release gate so `RELEASE_NOTES_PATH` overrides fail closed unless explicitly
   allowed for local rehearsals.
+- Hardened release evidence collection so malformed `EXPECTED_EVENT`, `--expected-event`, and
+  hosted CI pre-step `--event` values fail closed before GitHub run discovery or inspection.
 - Hardened release evidence collection so malformed `HOSTED_RUN_ID`, `--hosted-run`,
   `GITHUB_RUN_ID`, pre-step verifier positional run IDs, `PR_NUMBER`, and `--pr` fail closed
   before GitHub run or pull-request queries.

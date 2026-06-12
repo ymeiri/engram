@@ -603,6 +603,11 @@ overrides fail before release-scope checks unless `ALLOW_RELEASE_NOTES_PATH_OVER
 an explicit local rehearsal, so accidental environment drift cannot point the GA gate at the wrong
 scope document.
 
+Hosted CI expected-event inputs are now validated before GitHub run discovery or inspection.
+`EXPECTED_EVENT`, GA gate `--expected-event`, and hosted CI pre-step verifier `--event` values must
+be GitHub event-name tokens such as `push` or `pull_request`; malformed values fail closed instead
+of querying for ambiguous run evidence.
+
 ## GA Version Bump Checkpoint
 
 This release slice moves workspace package metadata from the validated
@@ -1054,6 +1059,11 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   before release-scope checks with `ALLOW_RELEASE_NOTES_PATH_OVERRIDE must be 0 or 1`
 - `RELEASE_NOTES_PATH= scripts/release-gate-report.sh --target ga --hosted-run 27438605838
   --quick --json` failed before release-scope checks with `RELEASE_NOTES_PATH must not be empty`
+- `EXPECTED_EVENT=pull-request scripts/release-gate-report.sh --target ga --hosted-run
+  27440399236 --quick --json` failed before GitHub run inspection with
+  `EXPECTED_EVENT/--expected-event must be a GitHub event name token, got pull-request`
+- `scripts/verify-hosted-ci-prestep-blocker.sh --event pull-request --json` failed before GitHub
+  run discovery with `EXPECTED_EVENT/--event must be a GitHub event name token, got pull-request`
 - `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 RELEASE_REPOSITORY=ymeiri/engram-does-not-exist
   scripts/release-gate-report.sh --target ga --hosted-run 27408174338 --quick
   --allow-tracked-changes --json` after the release-target availability guard, expected

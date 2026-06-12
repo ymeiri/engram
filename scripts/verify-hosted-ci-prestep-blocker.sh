@@ -78,6 +78,12 @@ done
 if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
     fail "GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got $run_id"
 fi
+event_name_pattern='^[A-Za-z0-9_]+$'
+if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
+    expected_event_error="EXPECTED_EVENT/--event must be a GitHub event name token"
+    expected_event_error+=", got $expected_event"
+    fail "$expected_event_error"
+fi
 if [[ ! "$expected_head" =~ ^[0-9a-f]{40}$ ]]; then
     fail "EXPECTED_HEAD_SHA must be a 40-character Git SHA, got $expected_head"
 fi
