@@ -184,7 +184,18 @@ gh release create "$tag" \
   --notes-file docs/RELEASE_NOTES_V0_2_0.md \
   --latest
 
-scripts/verify-published-release-install.sh --tag "$tag" --json
+verify_json="$(mktemp)"
+scripts/verify-published-release-install.sh --tag "$tag" --json | tee "$verify_json"
+jq -e '
+  .tag == "v0.2.0"
+  and .assets.source == "github_release"
+  and .assets.downloaded == true
+  and .assets.release_asset_list_verified == true
+  and .assets.release_asset_digests_verified == true
+  and .asset_install_verified == true
+  and .published_install_verified == true
+  and .release_actions_performed == false
+' "$verify_json"
 ```
 
 After the release assets verify, update the Homebrew tap:

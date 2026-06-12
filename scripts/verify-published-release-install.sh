@@ -61,6 +61,71 @@ run_step() {
     fi
 }
 
+sha256_file() {
+    shasum -a 256 "$1" | awk '{ print $1 }'
+}
+
+release_asset_digest() {
+    local asset_name="$1"
+
+    jq -er --arg name "$asset_name" '
+        .assets[]
+        | select(.name == $name)
+        | .digest
+        | strings
+    ' "$release_json"
+}
+
+validate_release_asset_list() {
+    if jq -e \
+        --arg archive "$tarball_name" \
+        --arg checksum "$checksum_name" \
+        '
+            (.assets | type == "array")
+            and ([.assets[].name] | sort == ([$archive, $checksum] | sort))
+            and all(.assets[];
+                .state == "uploaded"
+                and ((.size | type) == "number")
+                and (.size > 0)
+                and ((.digest | type) == "string")
+                and (.digest | test("^sha256:[0-9a-f]{64}$")))
+        ' "$release_json" >/dev/null; then
+        release_asset_list_verified=true
+        return 0
+    fi
+
+    printf 'error: GitHub release assets must be exactly the expected archive and checksum:\n' >&2
+    printf '  %s\n' "$tarball_name" >&2
+    printf '  %s\n' "$checksum_name" >&2
+    printf 'actual release assets:\n' >&2
+    jq -r '
+        (.assets // [])
+        | .[]
+        | "  name=\(.name // "<none>") state=\(.state // "<none>")"
+            + " size=\(.size // "<none>") digest=\(.digest // "<none>")"
+    ' "$release_json" >&2
+    exit 1
+}
+
+validate_downloaded_asset_digests() {
+    local asset_name expected_digest actual_digest file_path
+
+    for asset_name in "$tarball_name" "$checksum_name"; do
+        file_path="$asset_dir/$asset_name"
+        [[ -s "$file_path" ]] || fail "release asset is missing or empty: $file_path"
+
+        expected_digest="$(release_asset_digest "$asset_name")"
+        actual_digest="sha256:$(sha256_file "$file_path")"
+        if [[ "$actual_digest" != "$expected_digest" ]]; then
+            printf 'error: GitHub asset digest mismatch for %s: expected %s, got %s\n' \
+                "$asset_name" "$expected_digest" "$actual_digest" >&2
+            exit 1
+        fi
+    done
+
+    release_asset_digests_verified=true
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --repo)
@@ -138,6 +203,8 @@ if [[ "$resolved_expected_prerelease" == "auto" ]]; then
     fi
 fi
 downloaded_assets=false
+release_asset_list_verified=false
+release_asset_digests_verified=false
 tag_commit=""
 release_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-view.XXXXXX")"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-release-install.XXXXXX")"
@@ -160,7 +227,7 @@ if [[ -z "$asset_dir" ]]; then
     fi
     gh release view "$tag" \
         --repo "$repo" \
-        --json tagName,name,isDraft,isPrerelease,url,targetCommitish >"$release_json"
+        --json tagName,name,isDraft,isPrerelease,url,targetCommitish,assets >"$release_json"
 
     release_tag="$(jq -r '.tagName // empty' "$release_json")"
     release_draft="$(jq -r '.isDraft' "$release_json")"
@@ -178,12 +245,14 @@ if [[ -z "$asset_dir" ]]; then
     [[ "$tag_commit" == "$expected_git_head" ]] ||
         fail "release tag commit mismatch for $tag: expected $expected_git_head, got $tag_commit"
 
+    run_step "verify GitHub release asset list" validate_release_asset_list
     run_step "download release assets" gh release download "$tag" \
         --repo "$repo" \
         --pattern "$tarball_name" \
         --pattern "$checksum_name" \
         --dir "$asset_dir"
     downloaded_assets=true
+    run_step "verify GitHub release asset digests" validate_downloaded_asset_digests
 else
     [[ -d "$asset_dir" ]] || fail "asset directory does not exist: $asset_dir"
     printf '{}' >"$release_json"
@@ -216,6 +285,8 @@ if [[ "$json_output" == "1" ]]; then
         --arg expected_tracked_changes_present "$expected_tracked_changes_present" \
         --arg expected_prerelease "$resolved_expected_prerelease" \
         --arg downloaded_assets "$downloaded_assets" \
+        --arg release_asset_list_verified "$release_asset_list_verified" \
+        --arg release_asset_digests_verified "$release_asset_digests_verified" \
         --arg tag_commit "$tag_commit" \
         --slurpfile release "$release_json" \
         '{
@@ -225,11 +296,17 @@ if [[ "$json_output" == "1" ]]; then
             version: $version,
             host_triple: $host_triple,
             assets: {
-                source: (if $downloaded_assets == "true" then "github_release" else "asset_dir" end),
+                source: (
+                    if $downloaded_assets == "true" then "github_release"
+                    else "asset_dir"
+                    end
+                ),
                 directory: $asset_dir,
                 archive: $archive,
                 checksum: $checksum,
-                downloaded: ($downloaded_assets == "true")
+                downloaded: ($downloaded_assets == "true"),
+                release_asset_list_verified: ($release_asset_list_verified == "true"),
+                release_asset_digests_verified: ($release_asset_digests_verified == "true")
             },
             release: ($release[0] // {}),
             expected_git_head: $expected_git_head,
@@ -258,6 +335,8 @@ else
         "$([[ "$downloaded_assets" == "true" ]] && printf 'github_release' || printf 'asset_dir')"
     printf '  archive: %s\n' "$tarball_name"
     printf '  checksum: %s\n' "$checksum_name"
+    printf '  release_asset_list_verified: %s\n' "$release_asset_list_verified"
+    printf '  release_asset_digests_verified: %s\n' "$release_asset_digests_verified"
     printf '  install_smoke: passed\n'
     printf '  asset_install_verified: true\n'
     printf '  published_install_verified: %s\n' \

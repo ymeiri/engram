@@ -202,6 +202,12 @@ The verifier also distinguishes local pre-publish rehearsals from actual publish
 `--asset-dir` mode can prove `asset_install_verified=true`, but it now keeps
 `published_install_verified=false` because no GitHub release assets were downloaded.
 
+The published-release path also validates GitHub release asset metadata before downloading. The
+release must expose exactly the expected archive and checksum asset names, both assets must be in
+the uploaded state with nonzero size and `sha256:` digests, and the verifier checks the downloaded
+bytes against those GitHub asset digests before running package/install smoke. JSON evidence reports
+`assets.release_asset_list_verified` and `assets.release_asset_digests_verified`.
+
 ## Package Manifest Verification Guard
 
 `scripts/package-install-smoke.sh` now parses packaged `MANIFEST.json` with `jq` instead of
@@ -628,6 +634,14 @@ before tag, publish, or Homebrew tap update.
   manifest parser change
 - `scripts/verify-published-release-install.sh --tag v0.2.0-beta.2 --expected-git-head
   9204cdea38361acb6647ffb4c7b2399590c349f2 --json` (expected tag-commit failure)
+- `scripts/verify-published-release-install.sh` after the GitHub asset metadata guard with a mocked
+  matching GitHub release and local `0.2.0` assets, expected
+  `published_install_verified=true`, `assets.release_asset_list_verified=true`, and
+  `assets.release_asset_digests_verified=true`
+- `scripts/verify-published-release-install.sh` after the GitHub asset metadata guard with a mocked
+  extra release asset, expected failure before download with the exact-asset-list error
+- `scripts/verify-published-release-install.sh` after the GitHub asset metadata guard with a mocked
+  bad GitHub asset digest, expected `GitHub asset digest mismatch`
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
   package-release manifest build guard
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew manifest
