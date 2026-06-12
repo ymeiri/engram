@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exactly the expected archive/checksum assets and validates their GitHub asset digests.
 - Hardened published release install verification so published proof requires a verified local tag
   signature and a remote Git tag object/peeled commit matching the expected release head.
+- Hardened published release install verification so malformed `--expected-git-head` values fail
+  closed before release metadata or asset checks.
 - Hardened published release install verification so local `--asset-dir` rehearsals report asset
   install evidence without claiming published install verification.
 - Hardened release repository targeting so the GA release gate and published-release verifier reject
@@ -79,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened release evidence collection so malformed `HOSTED_RUN_ID`, `--hosted-run`,
   `GITHUB_RUN_ID`, pre-step verifier positional run IDs, `PR_NUMBER`, and `--pr` fail closed
   before GitHub run or pull-request queries.
+- Hardened hosted CI pre-step evidence so malformed `EXPECTED_HEAD_SHA` values fail closed before
+  GitHub run discovery or inspection.
 - Hardened hosted CI tests by restoring and warming the fastembed model cache before serialized
   integration tests start daemon processes.
 - Refreshed the GA readiness matrix so the latest `0cdc0cd` hardening head is clearly separated
@@ -99,6 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with package identity expectation override validation while
   preserving the disk cleanup approval gate.
+- Refreshed the GA readiness matrix with hosted CI and published-release expected-head validation
+  while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only

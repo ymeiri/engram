@@ -234,6 +234,9 @@ fi
 if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     fail "release repository must be owner/name, got $repo"
 fi
+if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "--expected-git-head must be a 40-character Git SHA, got $expected_git_head"
+fi
 
 require_tool cargo
 require_tool rustc

@@ -78,6 +78,9 @@ done
 if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
     fail "GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got $run_id"
 fi
+if [[ ! "$expected_head" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "EXPECTED_HEAD_SHA must be a 40-character Git SHA, got $expected_head"
+fi
 
 require_tool gh
 require_tool jq

@@ -300,6 +300,11 @@ signed tag object, and the remote peeled tag commit must match the expected rele
 evidence reports `tag_object`, `local_tag_signature_verified`, and
 `remote_tag.{object,commit,verified}`.
 
+The published-release verifier now also validates the expected release head before release metadata
+or asset checks. `--expected-git-head` must be a 40-character Git SHA, which keeps post-publish and
+local asset-verification rehearsals from treating malformed operator-supplied release-head
+expectations as meaningful evidence.
+
 ## Package Manifest Verification Guard
 
 `scripts/package-install-smoke.sh` now parses packaged `MANIFEST.json` with `jq` instead of
@@ -353,6 +358,10 @@ beta pull-request metadata is queried. This keeps release-owner evidence collect
 fallback evidence from turning operator typos into ambiguous `gh` failures or malformed JSON
 conversion later in the gate.
 
+The pre-step verifier also validates `EXPECTED_HEAD_SHA` before GitHub run discovery or inspection.
+It must be a 40-character Git SHA, so standalone fallback evidence cannot be gathered against a
+malformed expected head.
+
 Targeted validation for this hosted CI run ID guard on a development diff:
 
 - `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
@@ -371,9 +380,14 @@ Targeted validation for this hosted CI run ID guard on a development diff:
 - `scripts/release-gate-report.sh --target beta --pr abc --quick --allow-tracked-changes --json`
   failed before GitHub PR queries with
   `PR_NUMBER/--pr must be a numeric GitHub pull request number, got abc`.
-- `scripts/release-gate-report.sh --target ga --hosted-run 27433543559 --quick
+- `EXPECTED_HEAD_SHA=abc scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub
+  run discovery with `EXPECTED_HEAD_SHA must be a 40-character Git SHA, got abc`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --expected-git-head abc --json`
+  failed before release metadata or asset checks with
+  `--expected-git-head must be a 40-character Git SHA, got abc`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27435286033 --quick
   --allow-tracked-changes --json` still accepted a numeric run ID and produced quick GA evidence
-  for head `a9fa497dbae5cd8e16f8d557d79872dfd71b3e58` with hosted CI passing, release target
+  for head `89e784a8a566b1e1e16a4d60ad51ba072bd061ad` with hosted CI passing, release target
   available, and no release actions.
 
 ## Release Manifest Build Guard
