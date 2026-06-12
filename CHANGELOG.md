@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release archive is created.
 - Hardened the GA release gate so full owner-review evidence includes Homebrew formula render,
   Ruby syntax, and beta-wording validation after package/install smoke.
+- Hardened the GA release gate so owner-review evidence defaults to the `main` branch and reports
+  the expected branch in text and JSON output.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only

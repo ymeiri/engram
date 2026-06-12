@@ -79,6 +79,8 @@ gate_json="$(mktemp)"
 
 git fetch --tags --prune origin
 git status --branch --short
+test "$(git branch --show-current)" = "main"
+test "$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}')" = "origin/main"
 read ahead behind < <(git rev-list --left-right --count main...origin/main)
 test "$ahead" = "0" && test "$behind" = "0"
 git diff --quiet --ignore-submodules --
@@ -90,6 +92,11 @@ jq -e '
   and .package_version == "0.2.0"
   and .release_version == "0.2.0"
   and .workspace_version_matches_release == true
+  and .branch == "main"
+  and .expected_branch == "main"
+  and .upstream.name == "origin/main"
+  and .upstream.ahead == 0
+  and .upstream.behind == 0
   and .tracked_changes_present == false
   and .hosted_ci.state == "passing"
   and .local_ci == "passed"

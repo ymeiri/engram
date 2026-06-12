@@ -9,6 +9,7 @@ pr_number="${PR_NUMBER:-}"
 hosted_run_id="${HOSTED_RUN_ID:-}"
 expected_workflow="${EXPECTED_WORKFLOW_NAME:-CI}"
 expected_event="${EXPECTED_EVENT:-}"
+expected_branch="${EXPECTED_BRANCH:-}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version="${RELEASE_VERSION:-}"
 release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
@@ -32,6 +33,7 @@ Options:
   --release-version <version>   Intended release version (default: current version for beta,
                                 prerelease suffix stripped for GA)
   --expected-event <event>      Expected GitHub Actions event (default: push for GA, pull_request for beta)
+  --expected-branch <branch>    Expected current branch (default: main for GA, unset for beta)
   --quick                       Skip local CI and package/install smoke
   --skip-local-ci               Skip ./scripts/local-ci.sh
   --skip-package-smoke          Skip ./scripts/package-install-smoke.sh
@@ -42,7 +44,7 @@ Options:
 
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
-  EXPECTED_EVENT, RELEASE_VERSION, RELEASE_NOTES_PATH.
+  EXPECTED_EVENT, EXPECTED_BRANCH, RELEASE_VERSION, RELEASE_NOTES_PATH.
 
 This script is evidence only. It does not accept a hosted-CI fallback, mark a
 PR ready, merge, tag, publish, mutate harness state, or change release scope.
@@ -101,6 +103,11 @@ while [[ $# -gt 0 ]]; do
             expected_event="$2"
             shift 2
             ;;
+        --expected-branch)
+            [[ $# -ge 2 ]] || fail "--expected-branch requires a branch name"
+            expected_branch="$2"
+            shift 2
+            ;;
         --quick)
             run_local_ci=0
             run_package_smoke=0
@@ -149,6 +156,9 @@ if [[ -z "$expected_event" ]]; then
         expected_event="pull_request"
     fi
 fi
+if [[ -z "$expected_branch" && "$target" == "ga" ]]; then
+    expected_branch="main"
+fi
 
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then
     pr_number=3
@@ -177,6 +187,9 @@ trap cleanup EXIT
 
 branch="$(git branch --show-current)"
 [[ -n "$branch" ]] || fail "could not determine current branch"
+if [[ -n "$expected_branch" && "$branch" != "$expected_branch" ]]; then
+    fail "branch mismatch: expected $expected_branch, got $branch"
+fi
 head_sha="$(git rev-parse HEAD)"
 
 if git diff --quiet --ignore-submodules -- &&
@@ -508,6 +521,7 @@ if [[ "$json_output" == "1" ]]; then
         --arg package_version "$package_version" \
         --arg release_version "$release_version" \
         --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
         --arg upstream "$upstream" \
         --arg ahead "$ahead_count" \
         --arg behind "$behind_count" \
@@ -537,6 +551,7 @@ if [[ "$json_output" == "1" ]]; then
             release_version: $release_version,
             workspace_version_matches_release: ($package_version == $release_version),
             branch: $branch,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
             upstream: {
                 name: $upstream,
                 ahead: ($ahead | tonumber),
@@ -579,6 +594,7 @@ else
     printf '  workspace_version_matches_release: %s\n' \
         "$([[ "$package_version" == "$release_version" ]] && printf true || printf false)"
     printf '  branch: %s\n' "$branch"
+    printf '  expected_branch: %s\n' "${expected_branch:-<none>}"
     printf '  upstream: %s (ahead=%s behind=%s)\n' "$upstream" "$ahead_count" "$behind_count"
     printf '  head: %s\n' "$head_sha"
     printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
