@@ -208,6 +208,12 @@ the uploaded state with nonzero size and `sha256:` digests, and the verifier che
 bytes against those GitHub asset digests before running package/install smoke. JSON evidence reports
 `assets.release_asset_list_verified` and `assets.release_asset_digests_verified`.
 
+The published-release path also verifies the release tag itself before asset download. The local
+tag must pass `git tag -v`, the remote Git tag object in `ymeiri/engram` must match the local
+signed tag object, and the remote peeled tag commit must match the expected release head. JSON
+evidence reports `tag_object`, `local_tag_signature_verified`, and
+`remote_tag.{object,commit,verified}`.
+
 ## Package Manifest Verification Guard
 
 `scripts/package-install-smoke.sh` now parses packaged `MANIFEST.json` with `jq` instead of
@@ -642,6 +648,16 @@ before tag, publish, or Homebrew tap update.
   extra release asset, expected failure before download with the exact-asset-list error
 - `scripts/verify-published-release-install.sh` after the GitHub asset metadata guard with a mocked
   bad GitHub asset digest, expected `GitHub asset digest mismatch`
+- `scripts/verify-published-release-install.sh` after the published tag parity guard with a mocked
+  matching GitHub release and local `0.2.0` assets, expected
+  `local_tag_signature_verified=true`, `remote_tag.verified=true`, and
+  `remote_tag.commit` matching the expected release head
+- `scripts/verify-published-release-install.sh` after the published tag parity guard with a mocked
+  local tag signature failure, expected failure before asset download during
+  `verify local release tag signature`
+- `scripts/verify-published-release-install.sh` after the published tag parity guard with a mocked
+  remote tag object mismatch, expected failure before asset download with
+  `remote tag object mismatch`
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
   package-release manifest build guard
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew manifest

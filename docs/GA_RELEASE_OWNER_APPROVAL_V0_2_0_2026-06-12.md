@@ -95,12 +95,14 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
    release-scope proof.
 5. Accept that the full GA release gate reported the intended `v0.2.0` tag and GitHub release as
    unavailable before owner review.
-6. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
-7. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
+6. Accept that the post-publish verifier must prove the signed local tag and remote Git tag both
+   resolve to the accepted release head before published assets count as release evidence.
+7. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
+8. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
    live Claude host-label proof are explicitly not claimed by this release.
-8. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
+9. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
    mutation are explicitly not claimed by this release.
-9. Approve the post-approval command sequence below.
+10. Approve the post-approval command sequence below.
 
 ## Post-Approval Command Sequence
 
@@ -185,9 +187,17 @@ gh release create "$tag" \
   --latest
 
 verify_json="$(mktemp)"
-scripts/verify-published-release-install.sh --tag "$tag" --json | tee "$verify_json"
-jq -e '
+scripts/verify-published-release-install.sh \
+  --tag "$tag" \
+  --expected-git-head "$release_head" \
+  --json | tee "$verify_json"
+jq --arg release_head "$release_head" -e '
   .tag == "v0.2.0"
+  and .tag_object == .remote_tag.object
+  and .tag_commit == $release_head
+  and .local_tag_signature_verified == true
+  and .remote_tag.commit == $release_head
+  and .remote_tag.verified == true
   and .assets.source == "github_release"
   and .assets.downloaded == true
   and .assets.release_asset_list_verified == true

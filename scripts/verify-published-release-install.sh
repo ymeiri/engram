@@ -76,6 +76,38 @@ release_asset_digest() {
     ' "$release_json"
 }
 
+validate_local_release_tag_signature() {
+    git tag -v "$tag" >/dev/null
+    local_tag_signature_verified=true
+}
+
+validate_remote_release_tag() {
+    local remote_url="https://github.com/${repo}.git"
+    local refs tag_ref peeled_ref
+
+    tag_ref="refs/tags/${tag}"
+    peeled_ref="${tag_ref}^{}"
+    if ! refs="$(git ls-remote --tags "$remote_url" "$tag" "${tag}^{}")"; then
+        fail "could not inspect remote git tag $tag in $repo"
+    fi
+
+    remote_tag_object="$(
+        awk -v ref="$tag_ref" '$2 == ref { print $1 }' <<<"$refs" | tail -n 1
+    )"
+    remote_tag_commit="$(
+        awk -v ref="$peeled_ref" '$2 == ref { print $1 }' <<<"$refs" | tail -n 1
+    )"
+    [[ -n "$remote_tag_object" ]] || fail "remote git tag is missing: $tag in $repo"
+    [[ -n "$remote_tag_commit" ]] || remote_tag_commit="$remote_tag_object"
+
+    [[ "$remote_tag_object" == "$tag_object" ]] ||
+        fail "remote tag object mismatch for $tag: expected $tag_object, got $remote_tag_object"
+    [[ "$remote_tag_commit" == "$expected_git_head" ]] ||
+        fail "remote tag commit mismatch for $tag: expected $expected_git_head, got $remote_tag_commit"
+
+    remote_tag_verified=true
+}
+
 validate_release_asset_list() {
     if jq -e \
         --arg archive "$tarball_name" \
@@ -205,7 +237,12 @@ fi
 downloaded_assets=false
 release_asset_list_verified=false
 release_asset_digests_verified=false
+local_tag_signature_verified=false
+remote_tag_verified=false
+tag_object=""
 tag_commit=""
+remote_tag_object=""
+remote_tag_commit=""
 release_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-view.XXXXXX")"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-release-install.XXXXXX")"
 
@@ -239,12 +276,17 @@ if [[ -z "$asset_dir" ]]; then
     [[ "$release_prerelease" == "$resolved_expected_prerelease" ]] ||
         fail "release prerelease state mismatch for $tag: expected $resolved_expected_prerelease, got $release_prerelease"
 
+    if ! tag_object="$(git rev-parse "$tag" 2>/dev/null)"; then
+        fail "local git tag is missing: $tag"
+    fi
     if ! tag_commit="$(git rev-parse "${tag}^{commit}" 2>/dev/null)"; then
         fail "local git tag is missing or not peelable: $tag"
     fi
     [[ "$tag_commit" == "$expected_git_head" ]] ||
         fail "release tag commit mismatch for $tag: expected $expected_git_head, got $tag_commit"
 
+    run_step "verify local release tag signature" validate_local_release_tag_signature
+    run_step "verify remote release tag" validate_remote_release_tag
     run_step "verify GitHub release asset list" validate_release_asset_list
     run_step "download release assets" gh release download "$tag" \
         --repo "$repo" \
@@ -287,12 +329,24 @@ if [[ "$json_output" == "1" ]]; then
         --arg downloaded_assets "$downloaded_assets" \
         --arg release_asset_list_verified "$release_asset_list_verified" \
         --arg release_asset_digests_verified "$release_asset_digests_verified" \
+        --arg local_tag_signature_verified "$local_tag_signature_verified" \
+        --arg remote_tag_verified "$remote_tag_verified" \
+        --arg tag_object "$tag_object" \
         --arg tag_commit "$tag_commit" \
+        --arg remote_tag_object "$remote_tag_object" \
+        --arg remote_tag_commit "$remote_tag_commit" \
         --slurpfile release "$release_json" \
         '{
             repo: $repo,
             tag: $tag,
+            tag_object: (if $tag_object == "" then null else $tag_object end),
             tag_commit: (if $tag_commit == "" then null else $tag_commit end),
+            local_tag_signature_verified: ($local_tag_signature_verified == "true"),
+            remote_tag: {
+                object: (if $remote_tag_object == "" then null else $remote_tag_object end),
+                commit: (if $remote_tag_commit == "" then null else $remote_tag_commit end),
+                verified: ($remote_tag_verified == "true")
+            },
             version: $version,
             host_triple: $host_triple,
             assets: {
@@ -325,9 +379,20 @@ else
     fi
     printf '  repo: %s\n' "$repo"
     printf '  tag: %s\n' "$tag"
+    if [[ -n "$tag_object" ]]; then
+        printf '  tag_object: %s\n' "$tag_object"
+    fi
     if [[ -n "$tag_commit" ]]; then
         printf '  tag_commit: %s\n' "$tag_commit"
     fi
+    printf '  local_tag_signature_verified: %s\n' "$local_tag_signature_verified"
+    if [[ -n "$remote_tag_object" ]]; then
+        printf '  remote_tag_object: %s\n' "$remote_tag_object"
+    fi
+    if [[ -n "$remote_tag_commit" ]]; then
+        printf '  remote_tag_commit: %s\n' "$remote_tag_commit"
+    fi
+    printf '  remote_tag_verified: %s\n' "$remote_tag_verified"
     printf '  version: %s\n' "$package_version"
     printf '  host_triple: %s\n' "$host_triple"
     printf '  expected_prerelease: %s\n' "$resolved_expected_prerelease"

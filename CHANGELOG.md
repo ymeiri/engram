@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release tag that peels to the expected packaged Git commit.
 - Hardened published release install verification so downloaded GitHub release proof requires
   exactly the expected archive/checksum assets and validates their GitHub asset digests.
+- Hardened published release install verification so published proof requires a verified local tag
+  signature and a remote Git tag object/peeled commit matching the expected release head.
 - Hardened published release install verification so local `--asset-dir` rehearsals report asset
   install evidence without claiming published install verification.
 - Hardened package install smoke verification so `MANIFEST.json` is parsed with `jq` instead of
