@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hash the same release archive before formula text is written.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` before the
   release archive is created.
+- Hardened the GA release gate so full owner-review evidence includes Homebrew formula render,
+  Ruby syntax, and beta-wording validation after package/install smoke.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
   Cursor setup adapter install/status rehearsal results.
 - Refreshed the GA readiness matrix with setup-path hosted CI, canonical vault, and read-only

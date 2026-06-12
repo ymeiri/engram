@@ -14,6 +14,7 @@ release_version="${RELEASE_VERSION:-}"
 release_notes_path="${RELEASE_NOTES_PATH:-$repo_root/docs/RELEASE_NOTES_V0_2_0.md}"
 run_local_ci=1
 run_package_smoke=1
+run_homebrew_render=1
 allow_tracked_changes=0
 json_output=0
 expected_jobs=(Check Test Format Clippy Docs)
@@ -34,6 +35,7 @@ Options:
   --quick                       Skip local CI and package/install smoke
   --skip-local-ci               Skip ./scripts/local-ci.sh
   --skip-package-smoke          Skip ./scripts/package-install-smoke.sh
+  --skip-homebrew-render        Skip Homebrew formula render/syntax validation
   --allow-tracked-changes       Allow tracked working-tree/index changes during development
   --json                        Emit final evidence as machine-readable JSON
   -h, --help                    Show this help
@@ -102,6 +104,7 @@ while [[ $# -gt 0 ]]; do
         --quick)
             run_local_ci=0
             run_package_smoke=0
+            run_homebrew_render=0
             shift
             ;;
         --skip-local-ci)
@@ -110,6 +113,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-package-smoke)
             run_package_smoke=0
+            shift
+            ;;
+        --skip-homebrew-render)
+            run_homebrew_render=0
             shift
             ;;
         --allow-tracked-changes)
@@ -196,6 +203,8 @@ pr_report_json="null"
 release_scope_state="not_applicable"
 release_scope_native_claude_ack=false
 release_scope_lifecycle_m6_ack=false
+homebrew_formula_state="not_applicable"
+homebrew_formula_output="$repo_root/dist/homebrew/Formula/engram.rb"
 
 collect_hosted_run_checks() {
     if [[ -z "$hosted_run_id" ]]; then
@@ -253,6 +262,14 @@ collect_hosted_run_checks() {
         "$checks_file" || fail "hosted CI jobs are not all completed successfully"
 
     hosted_ci_state="passing"
+}
+
+validate_homebrew_formula_render() {
+    FORMULA_OUTPUT="$homebrew_formula_output" "$repo_root/scripts/render-homebrew-formula.sh"
+    ruby -c "$homebrew_formula_output"
+    if grep -E "Homebrew beta|beta Homebrew|Homebrew beta currently" "$homebrew_formula_output"; then
+        fail "rendered Homebrew formula contains beta-specific wording: $homebrew_formula_output"
+    fi
 }
 
 if [[ "$target" == "ga" ]]; then
@@ -352,6 +369,21 @@ else
     fi
 fi
 
+if [[ "$target" == "ga" ]]; then
+    if [[ "$run_homebrew_render" == "1" && "$run_package_smoke" == "1" ]]; then
+        require_tool ruby
+        run_step "Homebrew formula render validation" validate_homebrew_formula_render
+        homebrew_formula_state="passed"
+    else
+        homebrew_formula_state="skipped"
+        if [[ "$json_output" == "1" ]]; then
+            printf '\n==> Homebrew formula render validation\nskipped\n' >&2
+        else
+            printf '\n==> Homebrew formula render validation\nskipped\n'
+        fi
+    fi
+fi
+
 local_ci_state="$([[ "$run_local_ci" == "1" ]] && printf 'passed' || printf 'skipped')"
 package_smoke_state="$([[ "$run_package_smoke" == "1" ]] && printf 'passed' || printf 'skipped')"
 
@@ -363,10 +395,15 @@ if [[ "$target" == "ga" && "$package_version" != "$release_version" ]]; then
     release_gate_state="version_bump_required"
 elif [[ "$target" == "ga" && "$release_scope_state" != "complete" ]]; then
     release_gate_state="release_scope_acknowledgement_required"
+elif [[ "$target" == "ga" && "$local_ci_state" == "passed" &&
+    "$package_smoke_state" == "passed" && "$homebrew_formula_state" != "passed" ]]; then
+    release_gate_state="homebrew_formula_render_required"
 elif [[ "$local_ci_state" == "passed" && "$package_smoke_state" == "passed" ]]; then
     if [[ "$hosted_ci_state" == "passing" ]]; then
-        release_gate_state="hosted_ci_passing_release_owner_review_required"
-        ready_for_release_owner_review=true
+        if [[ "$target" != "ga" || "$homebrew_formula_state" == "passed" ]]; then
+            release_gate_state="hosted_ci_passing_release_owner_review_required"
+            ready_for_release_owner_review=true
+        fi
     elif [[ "$target" == "beta" && "$hosted_ci_state" == "pre_step_blocker_verified" ]]; then
         release_gate_state="fallback_release_owner_decision_required"
         ready_for_release_owner_review=true
@@ -444,6 +481,10 @@ remaining_release_actions_json="$(
                 "restore_release_notes_ga_scope_acknowledgements",
                 "rerun_ga_release_gate_report"
             ]
+        elif $state == "homebrew_formula_render_required" and $target == "ga" then
+            [
+                "rerun_ga_release_gate_report_with_homebrew_formula_render"
+            ]
         elif $state == "hosted_ci_passing_release_owner_review_required" then
             [
                 "release_owner_approve_release",
@@ -477,6 +518,8 @@ if [[ "$json_output" == "1" ]]; then
         --arg hosted_run_id "$hosted_run_id" \
         --arg local_ci "$local_ci_state" \
         --arg package_install_smoke "$package_smoke_state" \
+        --arg homebrew_formula_render "$homebrew_formula_state" \
+        --arg homebrew_formula_output "$homebrew_formula_output" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -511,6 +554,10 @@ if [[ "$json_output" == "1" ]]; then
             },
             local_ci: $local_ci,
             package_install_smoke: $package_install_smoke,
+            homebrew_formula_render: $homebrew_formula_render,
+            homebrew_formula: {
+                output: (if $homebrew_formula_render == "not_applicable" then null else $homebrew_formula_output end)
+            },
             release_scope: {
                 release_notes_path: $release_notes_path,
                 state: $release_scope_state,
@@ -546,6 +593,12 @@ else
     printf '  hosted_ci_state: %s\n' "$hosted_ci_state"
     printf '  local_ci: %s\n' "$local_ci_state"
     printf '  package_install_smoke: %s\n' "$package_smoke_state"
+    if [[ "$target" == "ga" ]]; then
+        printf '  homebrew_formula_render: %s\n' "$homebrew_formula_state"
+        if [[ "$homebrew_formula_state" == "passed" ]]; then
+            printf '  homebrew_formula_output: %s\n' "$homebrew_formula_output"
+        fi
+    fi
     if [[ "$target" == "ga" ]]; then
         printf '  release_scope_state: %s\n' "$release_scope_state"
         printf '  release_scope_native_claude_proof_limits_acknowledged: %s\n' \

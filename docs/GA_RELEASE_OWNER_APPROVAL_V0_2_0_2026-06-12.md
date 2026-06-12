@@ -58,7 +58,8 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
 
 1. Accept the current `main` head reported by the full GA release gate as the GA release head.
 2. Accept the hosted CI run named in the full GA release gate as exact-head hosted CI proof.
-3. Accept the full GA release gate as local CI, package/install, and release-scope proof.
+3. Accept the full GA release gate as local CI, package/install, Homebrew formula render, and
+   release-scope proof.
 4. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
 5. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
    live Claude host-label proof are explicitly not claimed by this release.
@@ -93,6 +94,7 @@ jq -e '
   and .hosted_ci.state == "passing"
   and .local_ci == "passed"
   and .package_install_smoke == "passed"
+  and .homebrew_formula_render == "passed"
   and .release_scope.state == "complete"
   and .release_gate_state == "hosted_ci_passing_release_owner_review_required"
   and .ready_for_release_owner_review == true
