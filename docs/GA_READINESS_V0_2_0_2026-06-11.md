@@ -1057,9 +1057,10 @@ full GA release gate before tag, publish, or Homebrew tap update.
 `expected_branch` in text and JSON evidence, and fails before accepting evidence if the current
 branch does not match. Non-`main` expected-branch overrides now also require
 `ALLOW_EXPECTED_BRANCH_OVERRIDE=1` and the supplied branch name must pass `git check-ref-format`.
-This closes a release-management gap where an accidental `EXPECTED_BRANCH`/`--expected-branch`
-override could make a synced non-main branch with an exact-head hosted run look like GA
-owner-review evidence.
+Explicitly empty `EXPECTED_BRANCH` and `--expected-branch` selectors now fail closed before the
+default `main` branch is applied. This closes a release-management gap where an accidental
+`EXPECTED_BRANCH`/`--expected-branch` override could make a synced non-main branch, or a miswired
+empty branch selector, look like GA owner-review evidence.
 
 Targeted validation for this guard:
 
@@ -1082,6 +1083,12 @@ Targeted validation for this guard:
 - `ALLOW_EXPECTED_BRANCH_OVERRIDE=1 EXPECTED_BRANCH=bad..branch
   scripts/release-gate-report.sh --target ga --hosted-run 27443650460 --quick --json` failed with
   `EXPECTED_BRANCH/--expected-branch must be a valid Git branch name, got bad..branch`.
+- `EXPECTED_BRANCH= scripts/release-gate-report.sh --target ga --hosted-run 27459091318 --quick
+  --json` failed before release-target lookup with
+  `EXPECTED_BRANCH/--expected-branch must not be empty`.
+- `scripts/release-gate-report.sh --target ga --expected-branch '' --hosted-run 27459091318
+  --quick --json` failed before release-target lookup with
+  `EXPECTED_BRANCH/--expected-branch must not be empty`.
 - `scripts/release-gate-report.sh --target ga --hosted-run 27443650460 --quick
   --allow-tracked-changes --json` still accepted the default `main` branch path and reported
   `branch=main`, `expected_branch=main`, hosted CI passing, `release_target.state=available`,

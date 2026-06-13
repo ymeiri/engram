@@ -97,6 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the expected branch in text and JSON output.
 - Hardened the GA release gate so non-`main` expected-branch overrides require explicit approval
   and branch names are validated before release evidence is collected.
+- Hardened the GA release gate so explicitly empty `EXPECTED_BRANCH` and `--expected-branch`
+  selectors fail closed instead of silently falling back to `main`.
 - Hardened the GA release gate with a disk-space preflight before local CI/package smoke, so low
   free space fails early with an actionable cleanup message instead of surfacing later as Cargo
   build errors.

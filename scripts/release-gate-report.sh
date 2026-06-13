@@ -27,7 +27,12 @@ if [[ "${EXPECTED_EVENT+x}" == "x" ]]; then
     expected_event_explicit=1
 fi
 allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
-expected_branch="${EXPECTED_BRANCH:-}"
+expected_branch=""
+expected_branch_explicit=0
+if [[ "${EXPECTED_BRANCH+x}" == "x" ]]; then
+    expected_branch="$EXPECTED_BRANCH"
+    expected_branch_explicit=1
+fi
 allow_expected_branch_override="${ALLOW_EXPECTED_BRANCH_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_version=""
@@ -149,7 +154,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --expected-branch)
             [[ $# -ge 2 ]] || fail "--expected-branch requires a branch name"
+            [[ -n "$2" ]] || fail "EXPECTED_BRANCH/--expected-branch must not be empty"
             expected_branch="$2"
+            expected_branch_explicit=1
             shift 2
             ;;
         --quick)
@@ -296,6 +303,9 @@ case "$allow_expected_branch_override" in
     0 | 1) ;;
     *) fail "ALLOW_EXPECTED_BRANCH_OVERRIDE must be 0 or 1, got $allow_expected_branch_override" ;;
 esac
+if [[ "$expected_branch_explicit" == "1" && -z "$expected_branch" ]]; then
+    fail "EXPECTED_BRANCH/--expected-branch must not be empty"
+fi
 if [[ "$target" == "ga" && -z "$expected_branch" ]]; then
     expected_branch="$default_expected_branch"
 fi
