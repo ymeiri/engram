@@ -81,6 +81,11 @@ artifact cleanup or provide another disk-space remedy, then rerun the full GA re
 confirm that its `disk_space.state` is `passed` with the default
 `disk_space.min_required_kib=10485760` threshold.
 
+`scripts/package-release.sh` also refuses to overwrite the expected release archive or checksum if
+they already exist in `dist/`. Treat that as stale generated-artifact evidence: remove the old
+files only after explicit cleanup approval, or use `ALLOW_PACKAGE_ASSET_OVERWRITE=1` only for a
+local rehearsal that is not final owner-review evidence.
+
 ## Release-Owner Signoff Checklist
 
 Before tagging or publishing `v0.2.0`, the release owner should explicitly confirm:

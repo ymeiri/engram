@@ -7,6 +7,7 @@ cd "$repo_root"
 default_dist_dir="$repo_root/dist"
 dist_dir="${DIST_DIR-$default_dist_dir}"
 allow_dist_dir_override="${ALLOW_PACKAGE_DIST_DIR_OVERRIDE:-0}"
+allow_asset_overwrite="${ALLOW_PACKAGE_ASSET_OVERWRITE:-0}"
 
 command -v cargo >/dev/null 2>&1 || {
     printf 'error: required tool is missing: cargo\n' >&2
@@ -82,6 +83,32 @@ if [[ "$dist_dir" != "$default_dist_dir" && "$allow_dist_dir_override" != "1" ]]
     printf 'expected default dist dir: %s\n' "$default_dist_dir" >&2
     printf 'got: %s\n' "$dist_dir" >&2
     printf 'hint: set ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+
+case "$allow_asset_overwrite" in
+    0 | 1) ;;
+    *)
+        printf 'error: ALLOW_PACKAGE_ASSET_OVERWRITE must be 0 or 1, got %s\n' \
+            "$allow_asset_overwrite" >&2
+        exit 1
+        ;;
+esac
+
+tarball="$dist_dir/$archive_name.tar.gz"
+checksum="$tarball.sha256"
+existing_outputs=()
+for output_path in "$tarball" "$checksum"; do
+    if [[ -e "$output_path" || -L "$output_path" ]]; then
+        existing_outputs+=("$output_path")
+    fi
+done
+if [[ "${#existing_outputs[@]}" -gt 0 && "$allow_asset_overwrite" != "1" ]]; then
+    printf 'error: release package output already exists; refusing to overwrite\n' >&2
+    printf 'existing outputs:\n' >&2
+    printf '  %s\n' "${existing_outputs[@]}" >&2
+    printf 'hint: remove stale generated assets after approval, or set ' >&2
+    printf 'ALLOW_PACKAGE_ASSET_OVERWRITE=1 only for local rehearsals\n' >&2
     exit 1
 fi
 
@@ -213,9 +240,9 @@ for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
     fi
 done
 
-tarball="$dist_dir/$archive_name.tar.gz"
-checksum="$tarball.sha256"
-rm -f "$tarball" "$checksum"
+if [[ "$allow_asset_overwrite" == "1" ]]; then
+    rm -f "$tarball" "$checksum"
+fi
 
 run_step "create archive" tar -C "$work_dir" -czf "$tarball" "$archive_name"
 (

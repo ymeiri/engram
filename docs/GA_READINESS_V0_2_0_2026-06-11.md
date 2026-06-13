@@ -1689,6 +1689,33 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `69aebc5`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Release Package Output Overwrite Guard
+
+`scripts/package-release.sh` now refuses to overwrite an existing release archive or adjacent
+checksum at the expected output path. The guard runs before the release binary build, so stale
+`dist/engram-<version>-<host>.tar.gz` or `.sha256` files stop packaging before new local evidence
+can replace old artifact evidence. Overwrite remains available only for explicit local rehearsals
+with `ALLOW_PACKAGE_ASSET_OVERWRITE=1`.
+
+This protects final owner-review packaging from accidentally replacing a previous archive/checksum
+while retaining the existing default `dist` path and `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` rehearsal
+escape hatch.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/package-release.sh`
+- `ALLOW_PACKAGE_ASSET_OVERWRITE=yes scripts/package-release.sh` failed before release binary
+  build with `ALLOW_PACKAGE_ASSET_OVERWRITE must be 0 or 1, got yes`.
+- With `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>` and a placeholder expected archive
+  already present, `scripts/package-release.sh` failed before release binary build with
+  `release package output already exists; refusing to overwrite`.
+- `scripts/package-release.sh` also failed before release binary build on the current checkout
+  because the default `dist/` directory still contains stale
+  `engram-0.2.0-aarch64-apple-darwin.tar.gz` and `.sha256` outputs from prior rehearsals.
+
+This is development-diff validation on top of head `fbab2b3`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`
