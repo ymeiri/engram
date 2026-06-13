@@ -34,7 +34,7 @@ if [[ "${EXPECTED_BRANCH+x}" == "x" ]]; then
     expected_branch_explicit=1
 fi
 allow_expected_branch_override="${ALLOW_EXPECTED_BRANCH_OVERRIDE:-0}"
-package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
+package_version=""
 release_version=""
 release_version_explicit=0
 if [[ "${RELEASE_VERSION+x}" == "x" ]]; then
@@ -267,6 +267,21 @@ if [[ "$target" == "beta" && -z "$pr_number" ]]; then
     pr_number=3
 fi
 
+require_tool cargo
+if ! package_id="$(cargo pkgid --locked -p engram-cli)"; then
+    fail "could not determine workspace package version with cargo pkgid"
+fi
+package_version="${package_id##*#}"
+package_version_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
+if [[ -z "$package_version" ]]; then
+    fail "workspace package version could not be determined from cargo pkgid"
+fi
+if [[ ! "$package_version" =~ $package_version_pattern ]]; then
+    package_version_error="workspace package version must be x.y.z"
+    package_version_error+=" with an optional prerelease suffix, got $package_version"
+    fail "$package_version_error"
+fi
+
 if [[ "$release_version_explicit" == "1" && -z "$release_version" ]]; then
     fail "RELEASE_VERSION/--release-version must not be empty"
 fi
@@ -277,7 +292,7 @@ if [[ -z "$release_version" ]]; then
         release_version="$package_version"
     fi
 fi
-release_version_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
+release_version_pattern="$package_version_pattern"
 if [[ ! "$release_version" =~ $release_version_pattern ]]; then
     release_version_error="RELEASE_VERSION/--release-version must be x.y.z"
     release_version_error+=" with an optional prerelease suffix, got $release_version"

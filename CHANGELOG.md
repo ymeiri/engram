@@ -119,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or publication steps.
 - Hardened the GA release gate so malformed `RELEASE_VERSION` and `--release-version` values fail
   closed before release tag construction or remote release-target checks.
+- Hardened the GA release gate so Cargo is required explicitly and malformed workspace package
+  versions fail closed before release-version defaults or release tags are derived.
 - Hardened the GA release gate so `RELEASE_NOTES_PATH` overrides fail closed unless explicitly
   allowed for local rehearsals.
 - Hardened release evidence collection so malformed `EXPECTED_EVENT`, `--expected-event`, and

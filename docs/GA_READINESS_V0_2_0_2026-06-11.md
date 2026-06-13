@@ -962,6 +962,36 @@ Validation on the workflow-name guard:
   `hosted_ci.state=passing`, `hosted_ci.run.workflowName=CI`, and
   `release_gate_state=evidence_incomplete` without release actions.
 
+## Release Gate Workspace Package Version Guard
+
+`scripts/release-gate-report.sh` now parses command-line options before requiring Cargo, so
+`--help` remains available without a Rust toolchain. For real evidence collection, the gate now
+requires `cargo` explicitly, derives the workspace package version with `cargo pkgid --locked -p
+engram-cli`, and validates that version as SemVer before deriving `RELEASE_VERSION` defaults or
+constructing a release tag.
+
+This closes a release-evidence gap where a missing Cargo binary or malformed package-version output
+could fail with an indirect shell error, or could be misreported as a release-version problem after
+release evidence had already started to initialize.
+
+Targeted validation for this guard on a development diff:
+
+- `env PATH=/usr/bin:/bin scripts/release-gate-report.sh --help` printed usage and exited `0`
+  without requiring Cargo.
+- `env PATH=/usr/bin:/bin scripts/release-gate-report.sh --target ga --quick` failed before
+  release evidence collection with `required tool is missing: cargo`.
+- With a fake `cargo pkgid` output of `file:///tmp/engram#not-a-version`,
+  `scripts/release-gate-report.sh --target ga --hosted-run 27461887713 --quick
+  --allow-tracked-changes --json` failed before release-target or hosted-run checks with
+  `workspace package version must be x.y.z with an optional prerelease suffix, got not-a-version`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27461887713 --quick
+  --allow-tracked-changes --json` still accepted the current workspace package version
+  `0.2.0`, reported `release_target.state=available`, and kept
+  `release_gate_state=evidence_incomplete` without release actions.
+
+This is development-diff validation on top of head `89ec467`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## GA Version Bump Checkpoint
 
 This release slice moves workspace package metadata from the validated
