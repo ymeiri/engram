@@ -60,6 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ALLOW_PACKAGE_BUILD_SKIP=1` before existing release assets are consumed.
 - Hardened package install smoke verification so malformed `SMOKE_PORT` overrides fail closed
   before package extraction or server startup.
+- Hardened package install smoke verification so an explicitly empty `SMOKE_PORT` fails closed
+  instead of silently falling back to automatic port selection.
 - Hardened package install smoke verification so explicit `SMOKE_PORT` overrides fail closed when
   the requested local port is already in use.
 - Hardened package install smoke verification so non-default `DIST_DIR` inputs require

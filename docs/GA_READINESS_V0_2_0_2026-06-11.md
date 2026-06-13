@@ -327,6 +327,8 @@ package extraction or packaged server startup. The value must be a numeric TCP p
 evidence. If the requested port is already in use on `127.0.0.1`, the smoke also fails closed
 before release asset reads, avoiding ambiguous `/health` evidence from a pre-existing local
 service. Automatic port selection remains the default when `SMOKE_PORT` is unset.
+An explicitly empty `SMOKE_PORT=` now fails before package extraction instead of being treated as
+unset.
 
 Targeted validation for this smoke port override guard on a development diff:
 
@@ -336,6 +338,9 @@ Targeted validation for this smoke port override guard on a development diff:
   DIST_DIR=/tmp/engram-smoke-port-test
   scripts/package-install-smoke.sh` failed with
   `SMOKE_PORT must be a numeric TCP port, got abc`.
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SMOKE_PORT= SKIP_PACKAGE_BUILD=1
+  scripts/package-install-smoke.sh` failed with
+  `SMOKE_PORT must not be empty`.
 - `ALLOW_PACKAGE_BUILD_SKIP=1 SMOKE_PORT=70000 SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-smoke-port-test
   scripts/package-install-smoke.sh` failed with

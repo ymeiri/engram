@@ -41,6 +41,10 @@ expected_tracked_changes_present_explicit=0
 if [[ "${EXPECTED_TRACKED_CHANGES_PRESENT+x}" == "x" ]]; then
     expected_tracked_changes_present_explicit=1
 fi
+smoke_port_explicit=0
+if [[ "${SMOKE_PORT+x}" == "x" ]]; then
+    smoke_port_explicit=1
+fi
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-install-smoke.XXXXXX")"
 server_pid=""
 
@@ -280,6 +284,10 @@ if [[ "$expected_cargo_lock_sha256" != "$default_expected_cargo_lock_sha256" &&
     printf 'expected default: %s\n' "$default_expected_cargo_lock_sha256" >&2
     printf 'got: %s\n' "$expected_cargo_lock_sha256" >&2
     printf 'hint: set ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ "$smoke_port_explicit" == "1" && -z "$SMOKE_PORT" ]]; then
+    printf 'error: SMOKE_PORT must not be empty\n' >&2
     exit 1
 fi
 if [[ -n "${SMOKE_PORT:-}" ]]; then
