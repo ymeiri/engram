@@ -254,6 +254,14 @@ expected_tag="v${package_version}"
 [[ "$tag" == "$expected_tag" ]] ||
     fail "release tag version mismatch: expected $expected_tag for workspace package version $package_version, got $tag"
 
+host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+if [[ -z "$host_triple" ]]; then
+    fail "host triple could not be determined from rustc -vV; pass --host-triple explicitly"
+fi
+if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
+    fail "--host-triple must be a Rust target triple, got $host_triple"
+fi
+
 archive_name="engram-${package_version}-${host_triple}"
 tarball_name="${archive_name}.tar.gz"
 checksum_name="${tarball_name}.sha256"

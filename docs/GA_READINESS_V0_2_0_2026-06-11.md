@@ -1343,6 +1343,36 @@ Targeted validation for this guard on a development diff:
   directory selector and reached the intended local validation error:
   `asset directory does not exist: /tmp/engram-no-such-assets`.
 
+## Published Release Verifier Host Triple Discovery Guard
+
+`scripts/verify-published-release-install.sh` now validates the final host triple before deriving
+release archive and checksum names. A missing host line from `rustc -vV` fails with an explicit
+message that asks the operator to pass `--host-triple`; malformed auto-detected or overridden host
+triples fail before GitHub release metadata inspection, asset download, or local asset validation.
+
+This prevents final published-install proof from looking for ambiguous asset names such as
+`engram-<version>-.tar.gz` or syntactically invalid host archives when local Rust toolchain output is
+unexpected.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/verify-published-release-install.sh`
+- With a fake `rustc -vV` output that omitted `host:`, `scripts/verify-published-release-install.sh
+  --tag v0.2.0 --asset-dir /tmp/engram-no-such-assets --json` failed with
+  `host triple could not be determined from rustc -vV; pass --host-triple explicitly`.
+- With a fake `rustc -vV` output containing `host: bad`, the same verifier command failed with
+  `--host-triple must be a Rust target triple, got bad`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --host-triple bad
+  --asset-dir /tmp/engram-no-such-assets --json` failed with
+  `--host-triple must be a Rust target triple, got bad`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0
+  --asset-dir /tmp/engram-no-such-assets --json` still accepted the current Rust host triple and
+  reached the intended local validation error:
+  `asset directory does not exist: /tmp/engram-no-such-assets`.
+
+This is development-diff validation on top of head `eae6924`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Event Override Guard
 
 `scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now fail closed
