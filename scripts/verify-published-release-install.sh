@@ -337,6 +337,7 @@ fi
 
 run_step "verify release install" env \
     ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 \
+    ALLOW_PACKAGE_BUILD_SKIP=1 \
     DIST_DIR="$asset_dir" \
     SKIP_PACKAGE_BUILD=1 \
     EXPECTED_PACKAGE_GIT_HEAD="$expected_git_head" \

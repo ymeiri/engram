@@ -50,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened package install smoke verification so malformed `SKIP_PACKAGE_BUILD` and
   `EXPECTED_TRACKED_CHANGES_PRESENT` override values fail closed before package extraction or
   server startup.
+- Hardened package install smoke verification so `SKIP_PACKAGE_BUILD=1` requires
+  `ALLOW_PACKAGE_BUILD_SKIP=1` before existing release assets are consumed.
 - Hardened package install smoke verification so malformed `SMOKE_PORT` overrides fail closed
   before package extraction or server startup.
 - Hardened package install smoke verification so explicit `SMOKE_PORT` overrides fail closed when

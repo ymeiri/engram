@@ -35,6 +35,7 @@ tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
 embed_cache_dir="${ENGRAM_EMBED_CACHE_DIR:-$repo_root/.fastembed_cache}"
 skip_package_build="${SKIP_PACKAGE_BUILD:-0}"
+allow_package_build_skip="${ALLOW_PACKAGE_BUILD_SKIP:-0}"
 allow_package_identity_override="${ALLOW_PACKAGE_IDENTITY_OVERRIDE:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-install-smoke.XXXXXX")"
 server_pid=""
@@ -208,6 +209,19 @@ case "$skip_package_build" in
         exit 1
         ;;
 esac
+case "$allow_package_build_skip" in
+    0 | 1) ;;
+    *)
+        printf 'error: ALLOW_PACKAGE_BUILD_SKIP must be 0 or 1, got %s\n' \
+            "$allow_package_build_skip" >&2
+        exit 1
+        ;;
+esac
+if [[ "$skip_package_build" == "1" && "$allow_package_build_skip" != "1" ]]; then
+    printf 'error: SKIP_PACKAGE_BUILD=1 requires explicit package build-skip approval\n' >&2
+    printf 'hint: set ALLOW_PACKAGE_BUILD_SKIP=1 only when validating existing assets\n' >&2
+    exit 1
+fi
 case "$allow_package_identity_override" in
     0 | 1) ;;
     *)

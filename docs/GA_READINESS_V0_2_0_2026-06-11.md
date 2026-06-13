@@ -237,7 +237,8 @@ Targeted validation for this override guard on a development diff:
 - `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
   DIST_DIR=/tmp/engram-allow-tracked-package-test
   scripts/package-release.sh` built a local rehearsal archive.
-- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-allow-tracked-package-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-allow-tracked-package-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` verified the archive,
   installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` also built and
@@ -253,10 +254,11 @@ falling back to the default. This keeps final package/install evidence from cons
 of an ambient temp directory or stale release checkout unless the run is explicitly marked as a
 local rehearsal.
 
-`scripts/verify-published-release-install.sh` passes `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` only for
-its internally managed asset directory, after it has either downloaded the exact GitHub release
-assets or accepted an explicit `--asset-dir` rehearsal. The normal GA release gate still runs
-package install smoke against the default repository `dist` directory.
+`scripts/verify-published-release-install.sh` passes `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` and
+`ALLOW_PACKAGE_BUILD_SKIP=1` only for its internally managed asset directory, after it has either
+downloaded the exact GitHub release assets or accepted an explicit `--asset-dir` rehearsal. The
+normal GA release gate still runs package install smoke against the default repository `dist`
+directory.
 
 Targeted validation for this smoke `DIST_DIR` guard on a development diff:
 
@@ -269,9 +271,28 @@ Targeted validation for this smoke `DIST_DIR` guard on a development diff:
 - `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=yes DIST_DIR=/tmp/engram-smoke-dist-test
   SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` failed with
   `ALLOW_PACKAGE_DIST_DIR_OVERRIDE must be 0 or 1, got yes`.
-- `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=/tmp/engram-smoke-dist-test
+- `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 ALLOW_PACKAGE_BUILD_SKIP=1
+  DIST_DIR=/tmp/engram-smoke-dist-test
   SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` passed the approval guard and then
   failed at the expected missing-tarball check.
+
+## Package Install Smoke Build-Skip Guard
+
+`scripts/package-install-smoke.sh` now requires `ALLOW_PACKAGE_BUILD_SKIP=1` whenever
+`SKIP_PACKAGE_BUILD=1` is used. This keeps final package/install evidence from accidentally
+validating stale assets already present in `dist/` instead of rebuilding the release archive for
+the current head. The published-release verifier still sets the approval because validating
+downloaded GitHub assets or an explicit local `--asset-dir` is its intended path.
+
+Targeted validation for this build-skip guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/verify-published-release-install.sh`
+- `SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` failed before release asset reads with
+  `SKIP_PACKAGE_BUILD=1 requires explicit package build-skip approval`.
+- `ALLOW_PACKAGE_BUILD_SKIP=yes SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` failed with
+  `ALLOW_PACKAGE_BUILD_SKIP must be 0 or 1, got yes`.
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` passed the
+  build-skip approval guard and then proceeded to existing release-asset validation.
 
 `scripts/package-install-smoke.sh` now also validates its own release-rehearsal overrides before
 package extraction or packaged server startup. `SKIP_PACKAGE_BUILD` must be exactly `0` or `1`,
@@ -286,10 +307,12 @@ Targeted validation for this smoke override guard on a development diff:
 - `SKIP_PACKAGE_BUILD=yes DIST_DIR=/tmp/engram-smoke-override-test
   scripts/package-install-smoke.sh` failed with
   `SKIP_PACKAGE_BUILD must be 0 or 1, got yes`.
-- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-override-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=maybe scripts/package-install-smoke.sh` failed with
   `EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got maybe`.
-- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-override-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
   local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 
@@ -304,16 +327,20 @@ Targeted validation for this smoke port override guard on a development diff:
 
 - `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
   scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
-- `SMOKE_PORT=abc SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SMOKE_PORT=abc SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-port-test
   scripts/package-install-smoke.sh` failed with
   `SMOKE_PORT must be a numeric TCP port, got abc`.
-- `SMOKE_PORT=70000 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SMOKE_PORT=70000 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-port-test
   scripts/package-install-smoke.sh` failed with
   `SMOKE_PORT must be between 1 and 65535, got 70000`.
-- `SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-port-test
   scripts/package-install-smoke.sh` while a temporary local server occupied the port failed before
   release asset reads with `SMOKE_PORT is already in use on 127.0.0.1: 8766`.
-- `SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-smoke-port-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SMOKE_PORT=8766 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-port-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
   local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 
@@ -372,10 +399,10 @@ Targeted validation for this package identity expectation guard on a development
 - `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
   scripts/render-homebrew-formula.sh scripts/release-gate-report.sh
   scripts/beta-release-gate-report.sh`
-- `EXPECTED_PACKAGE_GIT_HEAD=abc SKIP_PACKAGE_BUILD=1
+- `ALLOW_PACKAGE_BUILD_SKIP=1 EXPECTED_PACKAGE_GIT_HEAD=abc SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-identity-override-test scripts/package-install-smoke.sh` failed before
   release asset reads with `EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got abc`.
-- `EXPECTED_CARGO_LOCK_SHA256=abc SKIP_PACKAGE_BUILD=1
+- `ALLOW_PACKAGE_BUILD_SKIP=1 EXPECTED_CARGO_LOCK_SHA256=abc SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-identity-override-test scripts/package-install-smoke.sh` failed before
   release asset reads with `EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got abc`.
 - `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 EXPECTED_PACKAGE_GIT_HEAD=abc
@@ -389,7 +416,8 @@ Targeted validation for this package identity expectation guard on a development
 - `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
   DIST_DIR=/tmp/engram-identity-override-test
   scripts/package-release.sh` built a local rehearsal archive.
-- `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-identity-override-test
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-identity-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
   local rehearsal archive, installed `engram 0.2.0`, and checked packaged HTTP `/health`.
 - `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
@@ -417,18 +445,20 @@ Targeted validation for this guard:
 
 - `bash -n scripts/package-install-smoke.sh scripts/render-homebrew-formula.sh
   scripts/verify-published-release-install.sh`
-- `EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000 SKIP_PACKAGE_BUILD=1
+- `ALLOW_PACKAGE_BUILD_SKIP=1
+  EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000 SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed before release asset
   reads with `EXPECTED_PACKAGE_GIT_HEAD override requires explicit package identity approval`.
-- `EXPECTED_PACKAGE_GIT_HEAD= SKIP_PACKAGE_BUILD=1
+- `ALLOW_PACKAGE_BUILD_SKIP=1 EXPECTED_PACKAGE_GIT_HEAD= SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed before release asset
   reads with `EXPECTED_PACKAGE_GIT_HEAD must not be empty`.
 - `ALLOW_PACKAGE_IDENTITY_OVERRIDE=yes EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000
-  SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed
-  with `ALLOW_PACKAGE_IDENTITY_OVERRIDE must be 0 or 1, got yes`.
+  ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets
+  scripts/package-install-smoke.sh` failed with
+  `ALLOW_PACKAGE_IDENTITY_OVERRIDE must be 0 or 1, got yes`.
 - `EXPECTED_CARGO_LOCK_SHA256=0000000000000000000000000000000000000000000000000000000000000000
-  SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed
-  before release asset reads with
+  ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets
+  scripts/package-install-smoke.sh` failed before release asset reads with
   `EXPECTED_CARGO_LOCK_SHA256 override requires explicit package identity approval`.
 - `EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000
   scripts/render-homebrew-formula.sh` failed before release asset reads or formula writes with
@@ -437,8 +467,9 @@ Targeted validation for this guard:
   scripts/render-homebrew-formula.sh` failed before release asset reads or formula writes with
   `EXPECTED_CARGO_LOCK_SHA256 override requires explicit package identity approval`.
 - `ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000
-  SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` passed
-  the approval guard and then failed at the expected missing-tarball check.
+  ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets
+  scripts/package-install-smoke.sh` passed the approval guard and then failed at the expected
+  missing-tarball check.
 - `scripts/release-gate-report.sh --target ga --hosted-run 27451944394 --quick
   --allow-tracked-changes --json` still accepted the default package identity path, reported
   `release_target.state=available`, `release_gate_state=evidence_incomplete`, and no release
@@ -1095,9 +1126,10 @@ Validation on this checkpoint:
 
 - GitHub Actions main push run `27417397670` passed for Check, Test, Clippy, Docs, and Format.
 - Positive package evidence used `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
-  DIST_DIR=<temp> scripts/package-release.sh`, then `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
-  EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh`; the packaged binary
-  reported `engram 0.2.0` and packaged HTTP `/health` returned
+  DIST_DIR=<temp> scripts/package-release.sh`, then `ALLOW_PACKAGE_BUILD_SKIP=1 DIST_DIR=<temp>
+  SKIP_PACKAGE_BUILD=1 EXPECTED_TRACKED_CHANGES_PRESENT=true
+  scripts/package-install-smoke.sh`; the packaged binary reported `engram 0.2.0` and packaged
+  HTTP `/health` returned
   `{"status":"ok","service":"engram","version":"0.2.0"}`.
 - Negative package evidence used a temporary `shasum` wrapper that returned a second mismatched
   `README.md` digest; `scripts/package-release.sh` failed with
@@ -1332,13 +1364,13 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   package-release manifest build guard
 - `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>
   scripts/package-release.sh` after the package-release producer payload-hash guard, followed by
-  `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
+  `ALLOW_PACKAGE_BUILD_SKIP=1 DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh`
 - `SKIP_PACKAGE_BUILD=yes DIST_DIR=<temp> scripts/package-install-smoke.sh`, expected failure
   before package extraction with `SKIP_PACKAGE_BUILD must be 0 or 1`
-- `SKIP_PACKAGE_BUILD=1 DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=maybe
-  scripts/package-install-smoke.sh`, expected failure before package extraction with
-  `EXPECTED_TRACKED_CHANGES_PRESENT must be true or false`
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1 DIST_DIR=<temp>
+  EXPECTED_TRACKED_CHANGES_PRESENT=maybe scripts/package-install-smoke.sh`, expected failure
+  before package extraction with `EXPECTED_TRACKED_CHANGES_PRESENT must be true or false`
 - `scripts/package-release.sh` with a temporary `shasum` wrapper returning a second, mismatched
   `README.md` digest, expected failure with `manifest hash mismatch for README.md` and no tarball
   written

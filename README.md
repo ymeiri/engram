@@ -423,6 +423,8 @@ artifact paths. Use `ALLOW_*_OVERRIDE=1` flags only for explicit local rehearsal
 release-owner evidence.
 Set `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` only when intentionally building or validating package
 assets outside the repository `dist/` directory.
+Set `ALLOW_PACKAGE_BUILD_SKIP=1` only when intentionally validating existing release assets without
+rebuilding them, such as published-release verification or local asset-dir rehearsals.
 
 Package install smoke and Homebrew formula checks default to the current Git head and `Cargo.lock`
 hash. Set `ALLOW_PACKAGE_IDENTITY_OVERRIDE=1` only when rehearsing against explicitly chosen local
