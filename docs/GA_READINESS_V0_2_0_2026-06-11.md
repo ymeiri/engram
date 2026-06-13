@@ -212,20 +212,37 @@ a dirty rehearsal archive, including manifest verification and packaged HTTP `/h
 consistent with the release-gate and Homebrew override guards: typos fail closed instead of being
 silently treated as some third mode.
 
+`scripts/package-release.sh` now also fails closed if `DIST_DIR` points anywhere other than the
+repository `dist` directory unless `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` is set for an explicit local
+rehearsal. The dist path must be non-empty. This keeps final package/checksum evidence from
+silently landing in an ambient temp directory or old release-asset checkout. Package install smoke
+still supports temp package rehearsals by passing the producer approval flag only when it is
+building into a non-default `DIST_DIR`.
+
 Targeted validation for this override guard on a development diff:
 
 - `bash -n scripts/package-release.sh scripts/package-install-smoke.sh
   scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
-- `ALLOW_TRACKED_CHANGES=yes DIST_DIR=/tmp/engram-invalid-allow-test
+- `DIST_DIR=/tmp/engram-package-dist-test scripts/package-release.sh` failed before release binary
+  builds or artifact writes with `DIST_DIR override requires explicit package approval`.
+- `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=yes DIST_DIR=/tmp/engram-package-dist-test
   scripts/package-release.sh` failed with
+  `ALLOW_PACKAGE_DIST_DIR_OVERRIDE must be 0 or 1, got yes`.
+- `DIST_DIR= scripts/package-release.sh` failed with `DIST_DIR must not be empty`.
+- `ALLOW_TRACKED_CHANGES=yes scripts/package-release.sh` failed with
   `ALLOW_TRACKED_CHANGES must be 0 or 1, got yes`.
-- `DIST_DIR=/tmp/engram-default-dirty-test scripts/package-release.sh` still failed with the
+- `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=/tmp/engram-default-dirty-test
+  scripts/package-release.sh` still failed with the
   tracked-change guard and no release artifact write.
-- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=/tmp/engram-allow-tracked-package-test
+- `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
+  DIST_DIR=/tmp/engram-allow-tracked-package-test
   scripts/package-release.sh` built a local rehearsal archive.
 - `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-allow-tracked-package-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` verified the archive,
   installed `engram 0.2.0`, and checked packaged HTTP `/health`.
+- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` also built and
+  verified a temp package, proving the smoke harness preserves intentional temp-package rehearsals
+  without requiring direct producer runs to accept ambient `DIST_DIR` overrides.
 
 `scripts/package-install-smoke.sh` now also validates its own release-rehearsal overrides before
 package extraction or packaged server startup. `SKIP_PACKAGE_BUILD` must be exactly `0` or `1`,
@@ -340,7 +357,8 @@ Targeted validation for this package identity expectation guard on a development
   DIST_DIR=/tmp/engram-no-assets-test
   scripts/render-homebrew-formula.sh` failed before archive reads with
   `EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got abc`.
-- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=/tmp/engram-identity-override-test
+- `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
+  DIST_DIR=/tmp/engram-identity-override-test
   scripts/package-release.sh` built a local rehearsal archive.
 - `SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-identity-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
@@ -984,8 +1002,8 @@ that is about to be archived.
 Validation on this checkpoint:
 
 - GitHub Actions main push run `27417397670` passed for Check, Test, Clippy, Docs, and Format.
-- Positive package evidence used `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp>
-  scripts/package-release.sh`, then `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
+- Positive package evidence used `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
+  DIST_DIR=<temp> scripts/package-release.sh`, then `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh`; the packaged binary
   reported `engram 0.2.0` and packaged HTTP `/health` returned
   `{"status":"ok","service":"engram","version":"0.2.0"}`.
@@ -1155,8 +1173,9 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   `remote tag object mismatch`
 - `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-install-smoke.sh` after the
   package-release manifest build guard
-- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the package-release
-  producer payload-hash guard, followed by `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
+- `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>
+  scripts/package-release.sh` after the package-release producer payload-hash guard, followed by
+  `DIST_DIR=<temp> SKIP_PACKAGE_BUILD=1
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh`
 - `SKIP_PACKAGE_BUILD=yes DIST_DIR=<temp> scripts/package-install-smoke.sh`, expected failure
   before package extraction with `SKIP_PACKAGE_BUILD must be 0 or 1`
@@ -1171,8 +1190,8 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
 - `scripts/release-gate-report.sh --target ga --hosted-run 27417397670 --json` (expected
   disk-preflight failure with `release_gate_state=disk_space_cleanup_required`, no local
   CI/package/Homebrew steps, and no release actions)
-- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew manifest
-  identity guard
+- `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>
+  scripts/package-release.sh` after the Homebrew manifest identity guard
 - `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
   DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
@@ -1182,8 +1201,8 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh` (expected failure:
   manifest git head mismatch)
-- `ALLOW_TRACKED_CHANGES=1 DIST_DIR=<temp> scripts/package-release.sh` after the Homebrew archive
-  payload guard
+- `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>
+  scripts/package-release.sh` after the Homebrew archive payload guard
 - `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
   DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`

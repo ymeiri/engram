@@ -4,7 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-dist_dir="${DIST_DIR:-$repo_root/dist}"
+default_dist_dir="$repo_root/dist"
+dist_dir="${DIST_DIR:-$default_dist_dir}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"
@@ -217,7 +218,12 @@ if [[ -n "${SMOKE_PORT:-}" ]]; then
 fi
 
 if [[ "$skip_package_build" != "1" ]]; then
-    run_step "build release package" "$repo_root/scripts/package-release.sh"
+    if [[ "$dist_dir" != "$default_dist_dir" ]]; then
+        run_step "build release package" env ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 \
+            "$repo_root/scripts/package-release.sh"
+    else
+        run_step "build release package" "$repo_root/scripts/package-release.sh"
+    fi
 fi
 
 if [[ ! -f "$tarball" ]]; then

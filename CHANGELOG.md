@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ALLOW_TRACKED_CHANGES=1` reserved for explicit development rehearsals.
 - Hardened local release packaging so malformed `ALLOW_TRACKED_CHANGES` values fail closed before
   release binary builds or artifact writes.
+- Hardened local release packaging so `DIST_DIR` cannot redirect package/checksum writes away from
+  the repository `dist` directory unless explicitly allowed for local rehearsals.
 - Hardened published release install verification so GitHub release checks fail on draft releases
   or unexpected prerelease/stable state before downloading assets.
 - Hardened published release install verification so release tags must match the workspace package

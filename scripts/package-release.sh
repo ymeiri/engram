@@ -4,7 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-dist_dir="${DIST_DIR:-$repo_root/dist}"
+default_dist_dir="$repo_root/dist"
+dist_dir="${DIST_DIR-$default_dist_dir}"
+allow_dist_dir_override="${ALLOW_PACKAGE_DIST_DIR_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_notes_slug="$(printf '%s' "$package_version" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
 release_notes_source="$repo_root/docs/RELEASE_NOTES_V${release_notes_slug}.md"
@@ -33,6 +35,26 @@ command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
 }
+
+case "$allow_dist_dir_override" in
+    0 | 1) ;;
+    *)
+        printf 'error: ALLOW_PACKAGE_DIST_DIR_OVERRIDE must be 0 or 1, got %s\n' \
+            "$allow_dist_dir_override" >&2
+        exit 1
+        ;;
+esac
+if [[ -z "$dist_dir" ]]; then
+    printf 'error: DIST_DIR must not be empty\n' >&2
+    exit 1
+fi
+if [[ "$dist_dir" != "$default_dist_dir" && "$allow_dist_dir_override" != "1" ]]; then
+    printf 'error: DIST_DIR override requires explicit package approval\n' >&2
+    printf 'expected default dist dir: %s\n' "$default_dist_dir" >&2
+    printf 'got: %s\n' "$dist_dir" >&2
+    printf 'hint: set ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 case "$allow_tracked_changes" in
     0 | 1) ;;
