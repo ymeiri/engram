@@ -1,7 +1,7 @@
 # Engram v0.2.0 GA Readiness Matrix
 
 Date: 2026-06-11
-Last refreshed: 2026-06-12
+Last refreshed: 2026-06-13
 Status: GA preparation in progress
 Validated setup-path docs checkpoint: `86dd38d0ef56bad5aa0c999578313c7f4a133e41`
 Validated release-hardening checkpoint: `eb0e3a96b7a751a90d482dad95ab9ae31af76a7e`
@@ -493,6 +493,13 @@ beta pull-request metadata is queried. This keeps release-owner evidence collect
 fallback evidence from turning operator typos into ambiguous `gh` failures or malformed JSON
 conversion later in the gate.
 
+The pre-step verifier now distinguishes an unset `GITHUB_RUN_ID` from an explicitly empty
+`GITHUB_RUN_ID=`. Unset keeps the existing latest-run discovery behavior, while an explicitly empty
+value fails before discovery so CI or release automation cannot accidentally attach fallback
+evidence to an ambient latest run.
+
+The empty `GITHUB_RUN_ID` validation was checked on a development diff on top of head `111ad1f`.
+
 The pre-step verifier also validates `EXPECTED_HEAD_SHA` before GitHub run discovery or inspection.
 It must be a 40-character Git SHA, so standalone fallback evidence cannot be gathered against a
 malformed expected head. `EXPECTED_HEAD_SHA` now defaults to current `HEAD` only when the variable
@@ -511,6 +518,8 @@ Targeted validation for this hosted CI run ID guard on a development diff:
 - `GITHUB_RUN_ID=abc scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub run
   queries with
   `GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got abc`.
+- `GITHUB_RUN_ID= scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub run
+  discovery with `GITHUB_RUN_ID/positional run id must not be empty`.
 - `scripts/verify-hosted-ci-prestep-blocker.sh abc --json` failed with the same verifier run-id
   validation error.
 - `scripts/release-gate-report.sh --target beta --pr abc --quick --allow-tracked-changes --json`

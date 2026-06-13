@@ -127,6 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GitHub run discovery or inspection.
 - Hardened hosted CI pre-step evidence so an explicitly empty `EXPECTED_HEAD_SHA` fails closed
   instead of silently falling back to the current Git head.
+- Hardened hosted CI pre-step evidence so an explicitly empty `GITHUB_RUN_ID` fails closed instead
+  of silently falling back to latest-run discovery.
 - Hardened hosted CI tests by restoring and warming the fastembed model cache before serialized
   integration tests start daemon processes.
 - Refreshed the GA readiness matrix so the latest `0cdc0cd` hardening head is clearly separated

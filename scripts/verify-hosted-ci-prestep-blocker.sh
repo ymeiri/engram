@@ -15,7 +15,12 @@ fi
 allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
 expected_head="${EXPECTED_HEAD_SHA-$(git rev-parse HEAD)}"
 expected_jobs=(Check Test Format Clippy Docs)
-run_id="${GITHUB_RUN_ID:-}"
+run_id=""
+run_id_explicit=0
+if [[ "${GITHUB_RUN_ID+x}" == "x" ]]; then
+    run_id="$GITHUB_RUN_ID"
+    run_id_explicit=1
+fi
 json_output=0
 run_json="$(mktemp "${TMPDIR:-/tmp}/engram-hosted-ci-run.XXXXXX")"
 
@@ -81,11 +86,15 @@ while [[ $# -gt 0 ]]; do
         *)
             [[ -z "$run_id" ]] || fail "run id provided more than once"
             run_id="$1"
+            run_id_explicit=1
             shift
             ;;
     esac
 done
 
+if [[ "$run_id_explicit" == "1" && -z "$run_id" ]]; then
+    fail "GITHUB_RUN_ID/positional run id must not be empty"
+fi
 if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
     fail "GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got $run_id"
 fi
