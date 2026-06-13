@@ -54,9 +54,9 @@ the new head before tagging.
 
 ## Current Local Cleanup Blockers
 
-The latest release-facing head is newer than the historical full-gate candidate above. On the
-current `main` line, exact-head hosted CI run `27478418090` is green for
-`b970c07db3847571665eba878a90cd8f63c61a3a`, and the quick GA gate is green for
+The latest recorded release-facing checkpoint is newer than the historical full-gate candidate
+above. At that cleanup-runbook checkpoint, exact-head hosted CI run `27479860353` is green for
+`8396e92a6f44ea978862169f7bc8d866464c8913`, and the quick GA gate is green for
 the same head. The exact-head default full GA gate now passes the default 10 GiB disk preflight on
 this host, but still fails before local CI/package smoke because stale generated outputs already
 exist at the paths the full gate would write.
@@ -98,9 +98,11 @@ again, `disk_space_cleanup_required` may appear before generated-output cleanup.
 Those cleanup signals are non-destructive evidence only. This runbook does not authorize deleting
 `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below can
 produce final owner-review proof on this host, the release owner must approve generated-output
-cleanup for the listed `dist/` archive, checksum, and formula files. If the disk preflight
-regresses, the release owner must also approve disk cleanup or provide another disk-space remedy.
-Then rerun the full GA release gate and confirm that
+cleanup for the listed `dist/` archive, checksum, and formula files. The post-approval cleanup
+block below verifies the exact approved size and SHA-256 fingerprints before removing only those
+three ignored generated release outputs. If the disk preflight regresses, the release owner must
+also approve disk cleanup or provide another disk-space remedy. Then rerun the full GA release gate
+and confirm that
 `disk_space.state=passed`, `generated_outputs.state=clear`, and
 `disk_space.min_required_kib=10485760`.
 
