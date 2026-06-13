@@ -13,7 +13,7 @@ if [[ "${EXPECTED_EVENT+x}" == "x" ]]; then
     expected_event="$EXPECTED_EVENT"
 fi
 allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
-expected_head="${EXPECTED_HEAD_SHA:-$(git rev-parse HEAD)}"
+expected_head="${EXPECTED_HEAD_SHA-$(git rev-parse HEAD)}"
 expected_jobs=(Check Test Format Clippy Docs)
 run_id="${GITHUB_RUN_ID:-}"
 json_output=0

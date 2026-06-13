@@ -490,7 +490,8 @@ conversion later in the gate.
 
 The pre-step verifier also validates `EXPECTED_HEAD_SHA` before GitHub run discovery or inspection.
 It must be a 40-character Git SHA, so standalone fallback evidence cannot be gathered against a
-malformed expected head.
+malformed expected head. `EXPECTED_HEAD_SHA` now defaults to current `HEAD` only when the variable
+is unset; an explicitly empty value fails closed instead of silently falling back to current `HEAD`.
 
 Targeted validation for this hosted CI run ID guard on a development diff:
 
@@ -512,6 +513,8 @@ Targeted validation for this hosted CI run ID guard on a development diff:
   `PR_NUMBER/--pr must be a numeric GitHub pull request number, got abc`.
 - `EXPECTED_HEAD_SHA=abc scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub
   run discovery with `EXPECTED_HEAD_SHA must be a 40-character Git SHA, got abc`.
+- `EXPECTED_HEAD_SHA= scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub
+  run discovery with `EXPECTED_HEAD_SHA must be a 40-character Git SHA, got `.
 - `scripts/verify-published-release-install.sh --tag v0.2.0 --expected-git-head abc --json`
   failed before release metadata or asset checks with
   `--expected-git-head must be a 40-character Git SHA, got abc`.
