@@ -1808,26 +1808,37 @@ The structured failure state is `generated_outputs_cleanup_required`, with
 `ready_for_release_owner_review=false`, and remaining actions limited to cleanup approval plus
 rerunning the full gate.
 
+The generated-output inventory now also fingerprints existing regular files with `file_type`,
+`size_bytes`, and `sha256` in both JSON and text output. This keeps cleanup approval evidence
+non-destructive while still identifying exactly which stale archive, checksum, or formula files
+blocked final local proof. Missing outputs and non-regular paths keep null fingerprints rather than
+being treated as publishable artifact evidence.
+
 Development-diff validation for this guard:
 
 - `bash -n scripts/release-gate-report.sh`
-- `scripts/release-gate-report.sh --target ga --hosted-run 27470582568 --quick
+- `scripts/release-gate-report.sh --target ga --hosted-run 27476008417 --quick
   --allow-tracked-changes --json` still passed as partial evidence with
   `release_gate_state=evidence_incomplete`, `generated_outputs.state=cleanup_required`, and all
-  generated outputs reporting `will_write=false`.
-- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 RELEASE_GATE_MIN_FREE_KIB=1
-  scripts/release-gate-report.sh --target ga --hosted-run 27470582568 --skip-local-ci
-  --allow-tracked-changes --json` failed before package/Homebrew validation with
+  generated outputs reporting `will_write=false`; existing generated-output files report
+  `file_type=file`, nonzero `size_bytes`, and 64-character SHA-256 fingerprints.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27476008417
+  --allow-tracked-changes --json` failed before local CI, package, or Homebrew validation with
   `release_gate_state=generated_outputs_cleanup_required`, `failure.kind=generated_outputs_preflight`,
   `ready_for_release_owner_review=false`, and all three stale generated outputs reporting
-  `exists=true` and `will_write=true`.
+  `exists=true`, `will_write=true`, `file_type=file`, nonzero `size_bytes`, and SHA-256
+  fingerprints.
+- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 RELEASE_GATE_MIN_FREE_KIB=999999999999
+  scripts/release-gate-report.sh --target ga --hosted-run 27476008417
+  --allow-tracked-changes --json` failed at disk preflight while still fingerprinting the stale
+  generated outputs and keeping `generated_artifacts.state=not_checked`.
 - The exact-head default full gate now reaches this preflight on the current host:
   `release_gate_state=generated_outputs_cleanup_required`,
   `failure.kind=generated_outputs_preflight`, `generated_artifacts.state=not_checked`,
-  `disk_space.state=passed`, and all three stale generated outputs report `exists=true` and
-  `will_write=true`.
+  `disk_space.state=passed`, and all three stale generated outputs report `exists=true`,
+  `will_write=true`, and file fingerprints.
 
-This is development-diff validation on top of head `5621e09`; after this guard is committed, rerun
+This is development-diff validation on top of head `5029421`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
 ## Validation Run

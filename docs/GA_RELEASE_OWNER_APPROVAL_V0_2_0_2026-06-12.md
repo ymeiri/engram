@@ -81,6 +81,9 @@ package/Homebrew proof did not run, so the JSON must not claim publishable artif
 The forced disk-space and release-target conflict rehearsals on the same head also report
 `generated_artifacts.state=not_checked`, proving those preflight failures are not artifact
 publication evidence.
+The generated-output entries also report `file_type`, `size_bytes`, and `sha256` for existing
+regular files; use the final gate JSON as the authoritative stale-output fingerprint before
+approving cleanup.
 
 The exact `free_space_kib` value is host-local and can move between rehearsals; use the final full
 gate JSON as the authoritative disk evidence. If disk space drops below the default threshold

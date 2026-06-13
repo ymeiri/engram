@@ -578,6 +578,9 @@ append_generated_output() {
     local will_write="$3"
     local overwrite_env="$4"
     local exists=false
+    local file_type="missing"
+    local size_bytes=""
+    local sha256=""
     local rel_path="$abs_path"
 
     if [[ "$rel_path" == "$repo_root/"* ]]; then
@@ -586,6 +589,29 @@ append_generated_output() {
     if [[ -e "$abs_path" || -L "$abs_path" ]]; then
         exists=true
         generated_outputs_state="cleanup_required"
+    fi
+    if [[ -L "$abs_path" ]]; then
+        file_type="symlink"
+    elif [[ -f "$abs_path" ]]; then
+        file_type="file"
+        if ! size_bytes="$(wc -c <"$abs_path" | tr -d '[:space:]')"; then
+            size_bytes=""
+        fi
+        if [[ ! "$size_bytes" =~ ^[0-9]+$ ]]; then
+            size_bytes=""
+        fi
+        if command -v shasum >/dev/null 2>&1; then
+            if ! sha256="$(shasum -a 256 "$abs_path" | awk '{ print $1 }')"; then
+                sha256=""
+            fi
+            if [[ ! "$sha256" =~ ^[0-9a-f]{64}$ ]]; then
+                sha256=""
+            fi
+        fi
+    elif [[ -d "$abs_path" ]]; then
+        file_type="directory"
+    elif [[ -e "$abs_path" ]]; then
+        file_type="other"
     fi
 
     generated_outputs_json="$(
@@ -596,13 +622,27 @@ append_generated_output() {
             --arg will_write "$will_write" \
             --arg overwrite_env "$overwrite_env" \
             --arg exists "$exists" \
+            --arg file_type "$file_type" \
+            --arg size_bytes "$size_bytes" \
+            --arg sha256 "$sha256" \
             '. + [{
                 kind: $kind,
                 path: $path,
                 absolute_path: $absolute_path,
                 exists: ($exists == "true"),
                 will_write: ($will_write == "true"),
-                overwrite_env: $overwrite_env
+                overwrite_env: $overwrite_env,
+                file_type: $file_type,
+                size_bytes: (
+                    if $size_bytes == "" then null
+                    else ($size_bytes | tonumber)
+                    end
+                ),
+                sha256: (
+                    if $sha256 == "" then null
+                    else $sha256
+                    end
+                )
             }]' <<<"$generated_outputs_json"
     )"
 }
@@ -1829,6 +1869,9 @@ else
         .[]
         | "  generated_output: \(.path) kind=\(.kind) exists=\(.exists)"
             + " will_write=\(.will_write) overwrite_env=\(.overwrite_env)"
+            + " file_type=\(.file_type)"
+            + " size_bytes=\((.size_bytes // "null") | tostring)"
+            + " sha256=\(.sha256 // "null")"
     ' <<<"$generated_outputs_json"
     printf '  generated_artifacts_state: %s\n' "$generated_artifacts_state"
     if [[ -n "$generated_artifacts_error" ]]; then

@@ -197,6 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `generated_artifacts.state=not_checked` instead of omitting post-run artifact proof.
 - Refreshed the GA readiness matrix and release-owner runbook with current exact-head
   `d0454b9` hosted CI plus quick, generated-output, disk, and release-target gate evidence.
+- Hardened GA release-gate cleanup evidence so stale generated outputs report file type, byte size,
+  and SHA-256 fingerprints in JSON and text output.
 - Refreshed the GA readiness matrix with hosted CI and published-release expected-head validation
   while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
