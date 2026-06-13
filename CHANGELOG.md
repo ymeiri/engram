@@ -107,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rehearsals.
 - Hardened Homebrew formula rendering so `FORMULA_OUTPUT` cannot redirect writes away from the
   default formula path unless explicitly allowed for local rehearsals.
+- Hardened Homebrew formula rendering so existing formula output is not overwritten unless
+  explicitly allowed for local rehearsals.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` and checked
   against staged payload hashes before the release archive is created.
 - Hardened the GA release gate so full owner-review evidence includes Homebrew formula render,

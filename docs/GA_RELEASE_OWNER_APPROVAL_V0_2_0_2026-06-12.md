@@ -86,6 +86,11 @@ they already exist in `dist/`. Treat that as stale generated-artifact evidence: 
 files only after explicit cleanup approval, or use `ALLOW_PACKAGE_ASSET_OVERWRITE=1` only for a
 local rehearsal that is not final owner-review evidence.
 
+`scripts/render-homebrew-formula.sh` similarly refuses to overwrite
+`dist/homebrew/Formula/engram.rb` unless `ALLOW_HOMEBREW_FORMULA_OVERWRITE=1` is set. Treat an
+existing formula file as generated evidence that needs the same cleanup approval before final
+owner-review proof.
+
 ## Release-Owner Signoff Checklist
 
 Before tagging or publishing `v0.2.0`, the release owner should explicitly confirm:

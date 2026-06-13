@@ -7,6 +7,7 @@ cd "$repo_root"
 default_dist_dir="$repo_root/dist"
 dist_dir="${DIST_DIR-$default_dist_dir}"
 allow_dist_dir_override="${ALLOW_HOMEBREW_DIST_DIR_OVERRIDE:-0}"
+allow_formula_overwrite="${ALLOW_HOMEBREW_FORMULA_OVERWRITE:-0}"
 
 command -v cargo >/dev/null 2>&1 || {
     printf 'error: required tool is missing: cargo\n' >&2
@@ -121,6 +122,22 @@ if [[ "$output" != "$default_output" && "$allow_formula_output_override" != "1" 
     printf 'got: %s\n' "$output" >&2
     printf 'hint: set ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 only for local rehearsals\n' >&2
     exit 1
+fi
+
+if [[ "$allow_formula_overwrite" != "0" &&
+    "$allow_formula_overwrite" != "1" ]]; then
+    printf 'error: ALLOW_HOMEBREW_FORMULA_OVERWRITE must be 0 or 1, got %s\n' \
+        "$allow_formula_overwrite" >&2
+    exit 1
+fi
+if [[ -e "$output" || -L "$output" ]]; then
+    if [[ "$allow_formula_overwrite" != "1" ]]; then
+        printf 'error: Homebrew formula output already exists; refusing to overwrite\n' >&2
+        printf 'existing output: %s\n' "$output" >&2
+        printf 'hint: remove stale generated formula evidence after approval, or set ' >&2
+        printf 'ALLOW_HOMEBREW_FORMULA_OVERWRITE=1 only for local rehearsals\n' >&2
+        exit 1
+    fi
 fi
 
 archive_name="engram-${package_version}-${host_triple}"
@@ -413,6 +430,9 @@ for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
 done
 
 mkdir -p "$(dirname "$output")"
+if [[ "$allow_formula_overwrite" == "1" ]]; then
+    rm -f "$output"
+fi
 
 cat >"$output" <<EOF
 class Engram < Formula
