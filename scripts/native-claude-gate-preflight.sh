@@ -4,13 +4,25 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-expected_branch="${EXPECTED_BRANCH:-main}"
-expected_claude_bin="${CLAUDE_BIN:-/Users/yuval.meiri/.local/bin/claude}"
-expected_claude_target="${EXPECTED_CLAUDE_TARGET:-/Users/yuval.meiri/.local/share/claude/versions/2.1.173}"
-expected_claude_version="${EXPECTED_CLAUDE_VERSION:-2.1.173 (Claude Code)}"
-expected_claude_sha256="${EXPECTED_CLAUDE_SHA256:-235c1bacdcc7f9d8d92368c95a0c66c26fcac98f878f21b10c73af340bc331ab}"
-engram_bin="${ENGRAM_BIN:-/Users/yuval.meiri/.local/bin/engram}"
-vault_path="${ENGRAM_VAULT_PATH:-/Users/yuval.meiri/.engram/vault}"
+default_expected_branch="main"
+expected_branch="${EXPECTED_BRANCH-$default_expected_branch}"
+allow_expected_branch_override="${ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE:-0}"
+default_claude_bin="/Users/yuval.meiri/.local/bin/claude"
+expected_claude_bin="${CLAUDE_BIN-$default_claude_bin}"
+allow_claude_bin_override="${ALLOW_NATIVE_CLAUDE_BIN_OVERRIDE:-0}"
+default_claude_target="/Users/yuval.meiri/.local/share/claude/versions/2.1.174"
+default_claude_version="2.1.174 (Claude Code)"
+default_claude_sha256="20c5380b4423be9963c510f5464cc1f443235a9b4423179f9c01f28021b81bad"
+expected_claude_target="${EXPECTED_CLAUDE_TARGET-$default_claude_target}"
+expected_claude_version="${EXPECTED_CLAUDE_VERSION-$default_claude_version}"
+expected_claude_sha256="${EXPECTED_CLAUDE_SHA256-$default_claude_sha256}"
+allow_claude_identity_override="${ALLOW_NATIVE_CLAUDE_IDENTITY_OVERRIDE:-0}"
+default_engram_bin="/Users/yuval.meiri/.local/bin/engram"
+engram_bin="${ENGRAM_BIN-$default_engram_bin}"
+allow_engram_bin_override="${ALLOW_NATIVE_CLAUDE_ENGRAM_BIN_OVERRIDE:-0}"
+default_vault_path="/Users/yuval.meiri/.engram/vault"
+vault_path="${ENGRAM_VAULT_PATH-$default_vault_path}"
+allow_vault_path_override="${ALLOW_NATIVE_CLAUDE_VAULT_PATH_OVERRIDE:-0}"
 require_ready=0
 allow_worktree_changes=0
 json_output=0
@@ -32,7 +44,10 @@ Options:
 Environment overrides:
   EXPECTED_BRANCH, CLAUDE_BIN, EXPECTED_CLAUDE_TARGET,
   EXPECTED_CLAUDE_VERSION, EXPECTED_CLAUDE_SHA256, ENGRAM_BIN,
-  ENGRAM_VAULT_PATH.
+  ENGRAM_VAULT_PATH, ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE,
+  ALLOW_NATIVE_CLAUDE_BIN_OVERRIDE, ALLOW_NATIVE_CLAUDE_IDENTITY_OVERRIDE,
+  ALLOW_NATIVE_CLAUDE_ENGRAM_BIN_OVERRIDE,
+  ALLOW_NATIVE_CLAUDE_VAULT_PATH_OVERRIDE.
 
 This script is evidence only. It never launches Claude, sends /hooks or prompts,
 signals processes, mutates settings/adapters, accepts release fallback, marks a
@@ -97,6 +112,107 @@ require_tool jq
 require_tool ps
 require_tool realpath
 require_tool shasum
+
+case "$allow_expected_branch_override" in
+    0 | 1) ;;
+    *)
+        fail "ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE must be 0 or 1, got" \
+            "$allow_expected_branch_override"
+        ;;
+esac
+case "$allow_claude_bin_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_NATIVE_CLAUDE_BIN_OVERRIDE must be 0 or 1, got $allow_claude_bin_override" ;;
+esac
+case "$allow_claude_identity_override" in
+    0 | 1) ;;
+    *)
+        fail "ALLOW_NATIVE_CLAUDE_IDENTITY_OVERRIDE must be 0 or 1, got" \
+            "$allow_claude_identity_override"
+        ;;
+esac
+case "$allow_engram_bin_override" in
+    0 | 1) ;;
+    *)
+        fail "ALLOW_NATIVE_CLAUDE_ENGRAM_BIN_OVERRIDE must be 0 or 1, got" \
+            "$allow_engram_bin_override"
+        ;;
+esac
+case "$allow_vault_path_override" in
+    0 | 1) ;;
+    *)
+        fail "ALLOW_NATIVE_CLAUDE_VAULT_PATH_OVERRIDE must be 0 or 1, got" \
+            "$allow_vault_path_override"
+        ;;
+esac
+
+[[ -n "$expected_branch" ]] || fail "EXPECTED_BRANCH/--expected-branch must not be empty"
+git check-ref-format --branch "$expected_branch" >/dev/null 2>&1 ||
+    fail "EXPECTED_BRANCH/--expected-branch must be a valid Git branch name, got $expected_branch"
+if [[ "$expected_branch" != "$default_expected_branch" &&
+    "$allow_expected_branch_override" != "1" ]]; then
+    printf 'error: EXPECTED_BRANCH override requires explicit native Claude approval\n' >&2
+    printf 'expected default branch: %s\n' "$default_expected_branch" >&2
+    printf 'got: %s\n' "$expected_branch" >&2
+    printf 'hint: set ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+
+[[ -n "$expected_claude_bin" ]] || fail "CLAUDE_BIN must not be empty"
+[[ "$expected_claude_bin" == /* ]] ||
+    fail "CLAUDE_BIN must be an absolute path, got $expected_claude_bin"
+if [[ "$expected_claude_bin" != "$default_claude_bin" &&
+    "$allow_claude_bin_override" != "1" ]]; then
+    printf 'error: CLAUDE_BIN override requires explicit native Claude approval\n' >&2
+    printf 'expected default Claude binary: %s\n' "$default_claude_bin" >&2
+    printf 'got: %s\n' "$expected_claude_bin" >&2
+    printf 'hint: set ALLOW_NATIVE_CLAUDE_BIN_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+
+[[ -n "$expected_claude_target" ]] || fail "EXPECTED_CLAUDE_TARGET must not be empty"
+[[ "$expected_claude_target" == /* ]] ||
+    fail "EXPECTED_CLAUDE_TARGET must be an absolute path, got $expected_claude_target"
+[[ -n "$expected_claude_version" ]] || fail "EXPECTED_CLAUDE_VERSION must not be empty"
+if [[ ! "$expected_claude_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    fail "EXPECTED_CLAUDE_SHA256 must be a SHA-256 hex value, got $expected_claude_sha256"
+fi
+if { [[ "$expected_claude_target" != "$default_claude_target" ]] ||
+    [[ "$expected_claude_version" != "$default_claude_version" ]] ||
+    [[ "$expected_claude_sha256" != "$default_claude_sha256" ]]; } &&
+    [[ "$allow_claude_identity_override" != "1" ]]; then
+    printf 'error: Claude identity override requires explicit native Claude approval\n' >&2
+    printf 'expected target: %s\n' "$default_claude_target" >&2
+    printf 'expected version: %s\n' "$default_claude_version" >&2
+    printf 'expected sha256: %s\n' "$default_claude_sha256" >&2
+    printf 'got target: %s\n' "$expected_claude_target" >&2
+    printf 'got version: %s\n' "$expected_claude_version" >&2
+    printf 'got sha256: %s\n' "$expected_claude_sha256" >&2
+    printf 'hint: set ALLOW_NATIVE_CLAUDE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+
+[[ -n "$engram_bin" ]] || fail "ENGRAM_BIN must not be empty"
+[[ "$engram_bin" == /* ]] || fail "ENGRAM_BIN must be an absolute path, got $engram_bin"
+if [[ "$engram_bin" != "$default_engram_bin" &&
+    "$allow_engram_bin_override" != "1" ]]; then
+    printf 'error: ENGRAM_BIN override requires explicit native Claude approval\n' >&2
+    printf 'expected default Engram binary: %s\n' "$default_engram_bin" >&2
+    printf 'got: %s\n' "$engram_bin" >&2
+    printf 'hint: set ALLOW_NATIVE_CLAUDE_ENGRAM_BIN_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+
+[[ -n "$vault_path" ]] || fail "ENGRAM_VAULT_PATH must not be empty"
+[[ "$vault_path" == /* ]] || fail "ENGRAM_VAULT_PATH must be an absolute path, got $vault_path"
+if [[ "$vault_path" != "$default_vault_path" &&
+    "$allow_vault_path_override" != "1" ]]; then
+    printf 'error: ENGRAM_VAULT_PATH override requires explicit native Claude approval\n' >&2
+    printf 'expected default vault path: %s\n' "$default_vault_path" >&2
+    printf 'got: %s\n' "$vault_path" >&2
+    printf 'hint: set ALLOW_NATIVE_CLAUDE_VAULT_PATH_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
 
 [[ -x "$expected_claude_bin" ]] || fail "Claude binary is not executable: $expected_claude_bin"
 [[ -x "$engram_bin" ]] || fail "Engram binary is not executable: $engram_bin"

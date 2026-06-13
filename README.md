@@ -411,12 +411,15 @@ cargo fmt
 ./scripts/beta-release-gate-report.sh  # Compatibility wrapper for beta PR release gates
 ./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
 ./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; use --event push for main runs
-./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness; use --expected-branch for non-main checks
+./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 
 Release package builds fail on tracked working-tree or index changes by default. Set
 `ALLOW_TRACKED_CHANGES=1` only for local development rehearsals.
+
+Native Claude preflight evidence defaults to the canonical local branch, binaries, and vault path.
+Set the `ALLOW_NATIVE_CLAUDE_*_OVERRIDE` flags only for explicit local rehearsals.
 
 Embedding model files are cached under `~/.engram/cache/fastembed` by default. Set
 `ENGRAM_EMBED_CACHE_DIR` to use a pre-warmed or shared cache; upstream `FASTEMBED_CACHE_DIR` and
