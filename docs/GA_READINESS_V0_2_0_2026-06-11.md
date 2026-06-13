@@ -296,7 +296,8 @@ Targeted validation for this build-skip guard on a development diff:
 
 `scripts/package-install-smoke.sh` now also validates its own release-rehearsal overrides before
 package extraction or packaged server startup. `SKIP_PACKAGE_BUILD` must be exactly `0` or `1`,
-and an explicit `EXPECTED_TRACKED_CHANGES_PRESENT` value must be exactly `true` or `false`.
+and an explicit `EXPECTED_TRACKED_CHANGES_PRESENT` value must be non-empty and exactly `true` or
+`false`.
 This keeps post-publish verifier and local `--asset-dir` rehearsals from silently accepting typoed
 override intent.
 
@@ -311,6 +312,10 @@ Targeted validation for this smoke override guard on a development diff:
   DIST_DIR=/tmp/engram-smoke-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=maybe scripts/package-install-smoke.sh` failed with
   `EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got maybe`.
+- `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-smoke-override-test
+  EXPECTED_TRACKED_CHANGES_PRESENT= scripts/package-install-smoke.sh` failed before package
+  extraction with `EXPECTED_TRACKED_CHANGES_PRESENT must not be empty`.
 - `ALLOW_PACKAGE_BUILD_SKIP=1 SKIP_PACKAGE_BUILD=1
   DIST_DIR=/tmp/engram-smoke-override-test
   EXPECTED_TRACKED_CHANGES_PRESENT=true scripts/package-install-smoke.sh` still verified the
@@ -637,6 +642,16 @@ GitHub release URL base.
 This keeps the final tap formula from silently pointing at a wrong repository, tag, or release path
 because of an ambient environment override. The explicit override remains available for local
 rehearsals, not final release-owner evidence.
+
+## Tracked-Changes Expectation Empty Guard
+
+`scripts/package-install-smoke.sh` and `scripts/render-homebrew-formula.sh` now fail closed when
+`EXPECTED_TRACKED_CHANGES_PRESENT` is explicitly set to an empty value. Leaving it unset still
+derives the expected manifest flag from the current tracked working-tree state, while any explicit
+value must be either `true` or `false`.
+
+This keeps package smoke, published-release local asset rehearsals, and Homebrew formula rendering
+from silently converting an empty expectation into local default evidence.
 
 ## Homebrew Host Triple Guard
 
@@ -1461,6 +1476,8 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
   DIST_DIR=<temp> EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb
   HOMEBREW_HOST_TRIPLE=aarch64-apple-darwin scripts/render-homebrew-formula.sh`
 - `ruby -c <temp>/homebrew/Formula/engram.rb`
+- `EXPECTED_TRACKED_CHANGES_PRESENT= scripts/render-homebrew-formula.sh`, expected failure before
+  release asset validation with `EXPECTED_TRACKED_CHANGES_PRESENT must not be empty`
 - `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1
   EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000 DIST_DIR=<temp>
   EXPECTED_TRACKED_CHANGES_PRESENT=true FORMULA_OUTPUT=<temp>/homebrew/Formula/engram.rb

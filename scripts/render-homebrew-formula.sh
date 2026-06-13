@@ -21,6 +21,10 @@ default_release_base_url="https://github.com/ymeiri/engram/releases/download/v${
 release_base_url="${HOMEBREW_RELEASE_BASE_URL-$default_release_base_url}"
 allow_release_base_url_override="${ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE:-0}"
 allow_package_identity_override="${ALLOW_PACKAGE_IDENTITY_OVERRIDE:-0}"
+expected_tracked_changes_present_explicit=0
+if [[ "${EXPECTED_TRACKED_CHANGES_PRESENT+x}" == "x" ]]; then
+    expected_tracked_changes_present_explicit=1
+fi
 
 command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
@@ -174,6 +178,18 @@ if [[ "$expected_cargo_lock_sha256" != "$default_expected_cargo_lock_sha256" &&
     printf 'hint: set ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
     exit 1
 fi
+if [[ "$expected_tracked_changes_present_explicit" == "1" ]]; then
+    if [[ -z "$EXPECTED_TRACKED_CHANGES_PRESENT" ]]; then
+        printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must not be empty\n' >&2
+        exit 1
+    fi
+    if [[ "$EXPECTED_TRACKED_CHANGES_PRESENT" != "true" &&
+        "$EXPECTED_TRACKED_CHANGES_PRESENT" != "false" ]]; then
+        printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got %s\n' \
+            "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
+        exit 1
+    fi
+fi
 
 if [[ ! -f "$tarball" ]]; then
     printf 'error: release tarball not found at %s\n' "$tarball" >&2
@@ -216,7 +232,7 @@ if [[ "$checksum_sha256" != "$sha256" ]]; then
     exit 1
 fi
 
-if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" ]]; then
+if [[ "$expected_tracked_changes_present_explicit" == "1" ]]; then
     expected_tracked_changes_present="$EXPECTED_TRACKED_CHANGES_PRESENT"
 elif git diff --quiet --ignore-submodules -- &&
     git diff --cached --quiet --ignore-submodules --; then
@@ -224,13 +240,6 @@ elif git diff --quiet --ignore-submodules -- &&
 else
     expected_tracked_changes_present=true
 fi
-if [[ "$expected_tracked_changes_present" != "true" &&
-    "$expected_tracked_changes_present" != "false" ]]; then
-    printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got %s\n' \
-        "$expected_tracked_changes_present" >&2
-    exit 1
-fi
-
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-homebrew-archive.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 archive_listing="$work_dir/archive-contents.txt"

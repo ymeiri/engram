@@ -37,6 +37,10 @@ embed_cache_dir="${ENGRAM_EMBED_CACHE_DIR:-$repo_root/.fastembed_cache}"
 skip_package_build="${SKIP_PACKAGE_BUILD:-0}"
 allow_package_build_skip="${ALLOW_PACKAGE_BUILD_SKIP:-0}"
 allow_package_identity_override="${ALLOW_PACKAGE_IDENTITY_OVERRIDE:-0}"
+expected_tracked_changes_present_explicit=0
+if [[ "${EXPECTED_TRACKED_CHANGES_PRESENT+x}" == "x" ]]; then
+    expected_tracked_changes_present_explicit=1
+fi
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-install-smoke.XXXXXX")"
 server_pid=""
 
@@ -230,12 +234,17 @@ case "$allow_package_identity_override" in
         exit 1
         ;;
 esac
-if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" &&
-    "$EXPECTED_TRACKED_CHANGES_PRESENT" != "true" &&
-    "$EXPECTED_TRACKED_CHANGES_PRESENT" != "false" ]]; then
-    printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got %s\n' \
-        "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
-    exit 1
+if [[ "$expected_tracked_changes_present_explicit" == "1" ]]; then
+    if [[ -z "$EXPECTED_TRACKED_CHANGES_PRESENT" ]]; then
+        printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must not be empty\n' >&2
+        exit 1
+    fi
+    if [[ "$EXPECTED_TRACKED_CHANGES_PRESENT" != "true" &&
+        "$EXPECTED_TRACKED_CHANGES_PRESENT" != "false" ]]; then
+        printf 'error: EXPECTED_TRACKED_CHANGES_PRESENT must be true or false, got %s\n' \
+            "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
+        exit 1
+    fi
 fi
 if [[ -z "$expected_git_head" ]]; then
     printf 'error: EXPECTED_PACKAGE_GIT_HEAD must not be empty\n' >&2
@@ -341,7 +350,7 @@ fi
 manifest="$package_dir/MANIFEST.json"
 run_step "verify package manifest" true
 
-if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" ]]; then
+if [[ "$expected_tracked_changes_present_explicit" == "1" ]]; then
     expected_tracked_changes_present="$EXPECTED_TRACKED_CHANGES_PRESENT"
 elif git -C "$repo_root" diff --quiet --ignore-submodules -- &&
     git -C "$repo_root" diff --cached --quiet --ignore-submodules --; then
