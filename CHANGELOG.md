@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened package install smoke and Homebrew formula verification so malformed
   `EXPECTED_PACKAGE_GIT_HEAD` and `EXPECTED_CARGO_LOCK_SHA256` values fail closed before package
   identity evidence is collected.
+- Hardened package install smoke and Homebrew formula verification so valid non-default
+  `EXPECTED_PACKAGE_GIT_HEAD` and `EXPECTED_CARGO_LOCK_SHA256` values require
+  `ALLOW_PACKAGE_IDENTITY_OVERRIDE=1` before package identity evidence is collected.
 - Hardened Homebrew formula rendering so it requires the adjacent `.sha256` asset to name and
   hash the same release archive before formula text is written.
 - Hardened Homebrew formula rendering so it verifies the packaged `MANIFEST.json` release identity,

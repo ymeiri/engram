@@ -20,6 +20,7 @@ allow_formula_output_override="${ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE:-0}"
 default_release_base_url="https://github.com/ymeiri/engram/releases/download/v${package_version}"
 release_base_url="${HOMEBREW_RELEASE_BASE_URL:-$default_release_base_url}"
 allow_release_base_url_override="${ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE:-0}"
+allow_package_identity_override="${ALLOW_PACKAGE_IDENTITY_OVERRIDE:-0}"
 
 command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
@@ -121,21 +122,52 @@ if [[ "$release_base_url" == */ ]]; then
     exit 1
 fi
 
-expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD:-$(git rev-parse HEAD)}"
-expected_cargo_lock_sha256="$(
+default_expected_git_head="$(git rev-parse HEAD)"
+default_expected_cargo_lock_sha256="$(
     shasum -a 256 Cargo.lock | awk '{ print $1 }'
 )"
-if [[ -n "${EXPECTED_CARGO_LOCK_SHA256:-}" ]]; then
-    expected_cargo_lock_sha256="$EXPECTED_CARGO_LOCK_SHA256"
+expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD-$default_expected_git_head}"
+expected_cargo_lock_sha256="${EXPECTED_CARGO_LOCK_SHA256-$default_expected_cargo_lock_sha256}"
+if [[ "$allow_package_identity_override" != "0" &&
+    "$allow_package_identity_override" != "1" ]]; then
+    printf 'error: ALLOW_PACKAGE_IDENTITY_OVERRIDE must be 0 or 1, got %s\n' \
+        "$allow_package_identity_override" >&2
+    exit 1
+fi
+if [[ -z "$expected_git_head" ]]; then
+    printf 'error: EXPECTED_PACKAGE_GIT_HEAD must not be empty\n' >&2
+    exit 1
 fi
 if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
     printf 'error: EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got %s\n' \
         "$expected_git_head" >&2
     exit 1
 fi
+if [[ -z "$expected_cargo_lock_sha256" ]]; then
+    printf 'error: EXPECTED_CARGO_LOCK_SHA256 must not be empty\n' >&2
+    exit 1
+fi
 if [[ ! "$expected_cargo_lock_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'error: EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got %s\n' \
         "$expected_cargo_lock_sha256" >&2
+    exit 1
+fi
+if [[ "$expected_git_head" != "$default_expected_git_head" &&
+    "$allow_package_identity_override" != "1" ]]; then
+    printf '%s\n' \
+        'error: EXPECTED_PACKAGE_GIT_HEAD override requires explicit package identity approval' >&2
+    printf 'expected default: %s\n' "$default_expected_git_head" >&2
+    printf 'got: %s\n' "$expected_git_head" >&2
+    printf 'hint: set ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ "$expected_cargo_lock_sha256" != "$default_expected_cargo_lock_sha256" &&
+    "$allow_package_identity_override" != "1" ]]; then
+    printf '%s\n' \
+        'error: EXPECTED_CARGO_LOCK_SHA256 override requires explicit package identity approval' >&2
+    printf 'expected default: %s\n' "$default_expected_cargo_lock_sha256" >&2
+    printf 'got: %s\n' "$expected_cargo_lock_sha256" >&2
+    printf 'hint: set ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
     exit 1
 fi
 

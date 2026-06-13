@@ -13,6 +13,7 @@ tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"
 embed_cache_dir="${ENGRAM_EMBED_CACHE_DIR:-$repo_root/.fastembed_cache}"
 skip_package_build="${SKIP_PACKAGE_BUILD:-0}"
+allow_package_identity_override="${ALLOW_PACKAGE_IDENTITY_OVERRIDE:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-install-smoke.XXXXXX")"
 server_pid=""
 
@@ -172,11 +173,24 @@ command -v nc >/dev/null 2>&1 || {
     exit 1
 }
 
+default_expected_git_head="$(git -C "$repo_root" rev-parse HEAD)"
+default_expected_cargo_lock_sha256="$(sha256_file "$repo_root/Cargo.lock")"
+expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD-$default_expected_git_head}"
+expected_cargo_lock_sha256="${EXPECTED_CARGO_LOCK_SHA256-$default_expected_cargo_lock_sha256}"
+
 case "$skip_package_build" in
     0 | 1) ;;
     *)
         printf 'error: SKIP_PACKAGE_BUILD must be 0 or 1, got %s\n' \
             "$skip_package_build" >&2
+        exit 1
+        ;;
+esac
+case "$allow_package_identity_override" in
+    0 | 1) ;;
+    *)
+        printf 'error: ALLOW_PACKAGE_IDENTITY_OVERRIDE must be 0 or 1, got %s\n' \
+            "$allow_package_identity_override" >&2
         exit 1
         ;;
 esac
@@ -187,16 +201,40 @@ if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" &&
         "$EXPECTED_TRACKED_CHANGES_PRESENT" >&2
     exit 1
 fi
-if [[ -n "${EXPECTED_PACKAGE_GIT_HEAD:-}" &&
-    ! "$EXPECTED_PACKAGE_GIT_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
-    printf 'error: EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got %s\n' \
-        "$EXPECTED_PACKAGE_GIT_HEAD" >&2
+if [[ -z "$expected_git_head" ]]; then
+    printf 'error: EXPECTED_PACKAGE_GIT_HEAD must not be empty\n' >&2
     exit 1
 fi
-if [[ -n "${EXPECTED_CARGO_LOCK_SHA256:-}" &&
-    ! "$EXPECTED_CARGO_LOCK_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
+    printf 'error: EXPECTED_PACKAGE_GIT_HEAD must be a 40-character Git SHA, got %s\n' \
+        "$expected_git_head" >&2
+    exit 1
+fi
+if [[ -z "$expected_cargo_lock_sha256" ]]; then
+    printf 'error: EXPECTED_CARGO_LOCK_SHA256 must not be empty\n' >&2
+    exit 1
+fi
+if [[ ! "$expected_cargo_lock_sha256" =~ ^[0-9a-f]{64}$ ]]; then
     printf 'error: EXPECTED_CARGO_LOCK_SHA256 must be a SHA-256 hex value, got %s\n' \
-        "$EXPECTED_CARGO_LOCK_SHA256" >&2
+        "$expected_cargo_lock_sha256" >&2
+    exit 1
+fi
+if [[ "$expected_git_head" != "$default_expected_git_head" &&
+    "$allow_package_identity_override" != "1" ]]; then
+    printf '%s\n' \
+        'error: EXPECTED_PACKAGE_GIT_HEAD override requires explicit package identity approval' >&2
+    printf 'expected default: %s\n' "$default_expected_git_head" >&2
+    printf 'got: %s\n' "$expected_git_head" >&2
+    printf 'hint: set ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ "$expected_cargo_lock_sha256" != "$default_expected_cargo_lock_sha256" &&
+    "$allow_package_identity_override" != "1" ]]; then
+    printf '%s\n' \
+        'error: EXPECTED_CARGO_LOCK_SHA256 override requires explicit package identity approval' >&2
+    printf 'expected default: %s\n' "$default_expected_cargo_lock_sha256" >&2
+    printf 'got: %s\n' "$expected_cargo_lock_sha256" >&2
+    printf 'hint: set ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
     exit 1
 fi
 if [[ -n "${SMOKE_PORT:-}" ]]; then
@@ -267,8 +305,6 @@ fi
 manifest="$package_dir/MANIFEST.json"
 run_step "verify package manifest" true
 
-expected_git_head="${EXPECTED_PACKAGE_GIT_HEAD:-$(git -C "$repo_root" rev-parse HEAD)}"
-expected_cargo_lock_sha256="${EXPECTED_CARGO_LOCK_SHA256:-$(sha256_file "$repo_root/Cargo.lock")}"
 if [[ -n "${EXPECTED_TRACKED_CHANGES_PRESENT:-}" ]]; then
     expected_tracked_changes_present="$EXPECTED_TRACKED_CHANGES_PRESENT"
 elif git -C "$repo_root" diff --quiet --ignore-submodules -- &&

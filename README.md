@@ -422,6 +422,10 @@ Release evidence defaults to the repo's canonical branch, workflow, event, repos
 artifact paths. Use `ALLOW_*_OVERRIDE=1` flags only for explicit local rehearsals, not final
 release-owner evidence.
 
+Package install smoke and Homebrew formula checks default to the current Git head and `Cargo.lock`
+hash. Set `ALLOW_PACKAGE_IDENTITY_OVERRIDE=1` only when rehearsing against explicitly chosen local
+assets from another validated head.
+
 Native Claude preflight evidence defaults to the canonical local branch, binaries, and vault path.
 Set the `ALLOW_NATIVE_CLAUDE_*_OVERRIDE` flags only for explicit local rehearsals.
 

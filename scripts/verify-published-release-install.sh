@@ -330,11 +330,17 @@ if [[ ! -s "$asset_dir/$checksum_name" ]]; then
     fail "release checksum asset is missing or empty: $asset_dir/$checksum_name"
 fi
 
+package_smoke_identity_env=()
+if [[ "$expected_git_head" != "$(git rev-parse HEAD)" ]]; then
+    package_smoke_identity_env+=(ALLOW_PACKAGE_IDENTITY_OVERRIDE=1)
+fi
+
 run_step "verify release install" env \
     DIST_DIR="$asset_dir" \
     SKIP_PACKAGE_BUILD=1 \
     EXPECTED_PACKAGE_GIT_HEAD="$expected_git_head" \
     EXPECTED_TRACKED_CHANGES_PRESENT="$expected_tracked_changes_present" \
+    "${package_smoke_identity_env[@]}" \
     "$repo_root/scripts/package-install-smoke.sh"
 
 if [[ "$json_output" == "1" ]]; then

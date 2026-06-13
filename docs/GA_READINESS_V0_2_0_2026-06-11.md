@@ -369,6 +369,55 @@ Targeted validation for this package identity expectation guard on a development
   scripts/render-homebrew-formula.sh` rendered a formula from the same archive, and `ruby -c`
   accepted the result.
 
+## Package Identity Override Guard
+
+`scripts/package-install-smoke.sh` and `scripts/render-homebrew-formula.sh` now default package
+identity evidence to the current Git head and current `Cargo.lock` SHA-256. Valid non-default
+`EXPECTED_PACKAGE_GIT_HEAD` and `EXPECTED_CARGO_LOCK_SHA256` values require
+`ALLOW_PACKAGE_IDENTITY_OVERRIDE=1` before package identity evidence is collected, and explicit
+empty values fail instead of silently falling back to the default.
+
+This closes the gap left by the earlier malformed-input guard: final package and Homebrew evidence
+can no longer be redirected to a different, syntactically valid package identity by ambient
+environment values. Local asset rehearsals against a known older head remain possible, but they
+must be explicitly marked as rehearsals. The published-release verifier passes the approval through
+to the install smoke only when its own expected-head path differs from current `HEAD`; published
+verification still performs local and remote tag parity checks before package smoke.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/package-install-smoke.sh scripts/render-homebrew-formula.sh
+  scripts/verify-published-release-install.sh`
+- `EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000 SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed before release asset
+  reads with `EXPECTED_PACKAGE_GIT_HEAD override requires explicit package identity approval`.
+- `EXPECTED_PACKAGE_GIT_HEAD= SKIP_PACKAGE_BUILD=1
+  DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed before release asset
+  reads with `EXPECTED_PACKAGE_GIT_HEAD must not be empty`.
+- `ALLOW_PACKAGE_IDENTITY_OVERRIDE=yes EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000
+  SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed
+  with `ALLOW_PACKAGE_IDENTITY_OVERRIDE must be 0 or 1, got yes`.
+- `EXPECTED_CARGO_LOCK_SHA256=0000000000000000000000000000000000000000000000000000000000000000
+  SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` failed
+  before release asset reads with
+  `EXPECTED_CARGO_LOCK_SHA256 override requires explicit package identity approval`.
+- `EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000
+  scripts/render-homebrew-formula.sh` failed before release asset reads or formula writes with
+  `EXPECTED_PACKAGE_GIT_HEAD override requires explicit package identity approval`.
+- `EXPECTED_CARGO_LOCK_SHA256=0000000000000000000000000000000000000000000000000000000000000000
+  scripts/render-homebrew-formula.sh` failed before release asset reads or formula writes with
+  `EXPECTED_CARGO_LOCK_SHA256 override requires explicit package identity approval`.
+- `ALLOW_PACKAGE_IDENTITY_OVERRIDE=1 EXPECTED_PACKAGE_GIT_HEAD=0000000000000000000000000000000000000000
+  SKIP_PACKAGE_BUILD=1 DIST_DIR=/tmp/engram-no-assets scripts/package-install-smoke.sh` passed
+  the approval guard and then failed at the expected missing-tarball check.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27451944394 --quick
+  --allow-tracked-changes --json` still accepted the default package identity path, reported
+  `release_target.state=available`, `release_gate_state=evidence_incomplete`, and no release
+  actions.
+
+This is development-diff validation on top of head `30c29f5`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Run ID Guard
 
 `scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now validate
