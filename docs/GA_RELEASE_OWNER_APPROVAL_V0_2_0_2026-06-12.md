@@ -68,7 +68,6 @@ release_gate_state=generated_outputs_cleanup_required
 failure.kind=generated_outputs_preflight
 release_target.state=available
 disk_space.state=passed
-free_space_kib=179269440
 min_required_kib=10485760
 generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz exists=true will_write=true
 generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256 exists=true will_write=true

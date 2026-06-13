@@ -106,8 +106,8 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `v0.2.0` still available, no local/remote tag, no GitHub release,
   `disk_space.min_required_kib=10485760`, no owner-review readiness, and no release actions.
 - The latest exact-head default GA gate on this host passes disk preflight with
-  `disk_space.state=passed`, `free_space_kib=179269440`, and
-  `min_required_kib=10485760`, then fails before local CI/package smoke with
+  `disk_space.state=passed` and `min_required_kib=10485760`, then fails before local
+  CI/package smoke with
   `release_gate_state=generated_outputs_cleanup_required`,
   `failure.kind=generated_outputs_preflight`, and `release_target.state=available`.
   Exact `free_space_kib` values are host-local and should be read from the final gate JSON.
