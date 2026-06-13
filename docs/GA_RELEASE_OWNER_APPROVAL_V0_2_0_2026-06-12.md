@@ -166,6 +166,37 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
 
 Run these commands only after explicit release-owner approval.
 
+If the pre-approval gate reported `generated_outputs_cleanup_required`, first verify that the
+local stale outputs still match the approved fingerprints, then remove exactly those ignored
+generated release outputs. If any size or SHA-256 check fails, stop and rerun the quick GA gate to
+collect fresh cleanup evidence before approving deletion.
+
+```bash
+stale_archive="dist/engram-0.2.0-aarch64-apple-darwin.tar.gz"
+stale_checksum="${stale_archive}.sha256"
+stale_formula="dist/homebrew/Formula/engram.rb"
+
+test -f "$stale_archive"
+test -f "$stale_checksum"
+test -f "$stale_formula"
+
+test "$(wc -c <"$stale_archive" | tr -d '[:space:]')" = "25455708"
+test "$(wc -c <"$stale_checksum" | tr -d '[:space:]')" = "107"
+test "$(wc -c <"$stale_formula" | tr -d '[:space:]')" = "1110"
+
+test "$(shasum -a 256 "$stale_archive" | awk '{ print $1 }')" = \
+  "f48a9fb1f5d5d815b9dfcec0db71aaf0120f5e38fcffc625880c6a0972c2efc5"
+test "$(shasum -a 256 "$stale_checksum" | awk '{ print $1 }')" = \
+  "5aa7217ffe054bcd58b23c4014468c44575671d31b69a537d16313c121ab9c5d"
+test "$(shasum -a 256 "$stale_formula" | awk '{ print $1 }')" = \
+  "596b582ab3f603e6c4c5f098f8dec46db175e28ec85d16a0b5b67bcf6386beef"
+
+rm -- "$stale_archive" "$stale_checksum" "$stale_formula"
+test ! -e "$stale_archive"
+test ! -e "$stale_checksum"
+test ! -e "$stale_formula"
+```
+
 Set the hosted run ID to a completed push CI run for the exact head being released:
 
 ```bash
