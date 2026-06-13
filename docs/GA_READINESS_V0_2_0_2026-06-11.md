@@ -1435,6 +1435,36 @@ Targeted validation for this guard on a development diff:
 This is development-diff validation on top of head `23f3e87`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Package Producer Workspace Package Version Guard
+
+`scripts/package-release.sh` now validates the workspace package version returned by
+`cargo pkgid --locked -p engram-cli` before deriving the release notes path, archive name, staging
+directory, manifest version, tarball path, or checksum path. The package producer now fails closed
+if Cargo cannot resolve `engram-cli`, or if the discovered package version is not `x.y.z` with an
+optional prerelease suffix.
+
+This closes a local release-packaging gap where malformed package metadata could have been copied
+into artifact names such as `engram-not-a-version-<host>.tar.gz` before the release gate had a
+chance to reject it.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/package-release.sh scripts/package-install-smoke.sh
+  scripts/render-homebrew-formula.sh scripts/release-gate-report.sh
+  scripts/verify-published-release-install.sh scripts/verify-hosted-ci-prestep-blocker.sh`
+- With a temporary `cargo` wrapper returning `file:///tmp/engram#not-a-version`,
+  `scripts/package-release.sh` failed before host-triple discovery, release binary builds, or
+  artifact writes with
+  `workspace package version must be x.y.z with an optional prerelease suffix, got not-a-version`.
+- With a temporary `cargo` wrapper exiting nonzero, `scripts/package-release.sh` failed with
+  `could not determine workspace package version for engram-cli`.
+- With the current workspace package metadata, `scripts/package-release.sh` still reached the
+  intended tracked-worktree guard before building or writing release assets:
+  `tracked working-tree or index changes are present; commit changes first`.
+
+This is development-diff validation on top of head `93cd113`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Homebrew Host Triple Discovery Guard
 
 `scripts/render-homebrew-formula.sh` now validates the auto-detected Rust host triple before

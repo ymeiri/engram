@@ -17,7 +17,17 @@ command -v rustc >/dev/null 2>&1 || {
     exit 1
 }
 
-package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
+if ! package_id="$(cargo pkgid --locked -p engram-cli)"; then
+    printf 'error: could not determine workspace package version for engram-cli\n' >&2
+    exit 1
+fi
+package_version="${package_id##*#}"
+package_version_pattern='^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$'
+if [[ ! "$package_version" =~ $package_version_pattern ]]; then
+    printf 'error: workspace package version must be x.y.z with an optional prerelease suffix, got %s\n' \
+        "$package_version" >&2
+    exit 1
+fi
 release_notes_slug="$(printf '%s' "$package_version" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
 release_notes_source="$repo_root/docs/RELEASE_NOTES_V${release_notes_slug}.md"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"

@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release binary builds or artifact writes.
 - Hardened local release packaging so `DIST_DIR` cannot redirect package/checksum writes away from
   the repository `dist` directory unless explicitly allowed for local rehearsals.
+- Hardened local release packaging so malformed workspace package versions fail closed before
+  release notes paths or archive names are derived.
 - Hardened local release packaging and package install smoke verification so auto-detected host
   triples must be non-empty Rust target triples before local archive/checksum paths are built.
 - Hardened published release install verification so GitHub release checks fail on draft releases
