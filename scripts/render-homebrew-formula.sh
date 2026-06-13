@@ -21,6 +21,10 @@ command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
 }
+command -v ruby >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: ruby\n' >&2
+    exit 1
+}
 
 if ! package_id="$(cargo pkgid --locked -p engram-cli)"; then
     printf 'error: could not determine workspace package version for engram-cli\n' >&2
@@ -56,6 +60,18 @@ expected_tracked_changes_present_explicit=0
 if [[ "${EXPECTED_TRACKED_CHANGES_PRESENT+x}" == "x" ]]; then
     expected_tracked_changes_present_explicit=1
 fi
+work_dir=""
+tmp_formula=""
+
+cleanup() {
+    if [[ -n "$tmp_formula" ]]; then
+        rm -f "$tmp_formula"
+    fi
+    if [[ -n "$work_dir" ]]; then
+        rm -rf "$work_dir"
+    fi
+}
+trap cleanup EXIT
 
 if [[ "$allow_dist_dir_override" != "0" &&
     "$allow_dist_dir_override" != "1" ]]; then
@@ -114,6 +130,10 @@ if [[ -z "$output" ]]; then
 fi
 if [[ "$(basename "$output")" != "engram.rb" ]]; then
     printf 'error: FORMULA_OUTPUT must end with engram.rb, got %s\n' "$output" >&2
+    exit 1
+fi
+if [[ -d "$output" && ! -L "$output" ]]; then
+    printf 'error: FORMULA_OUTPUT must be a file path, got directory %s\n' "$output" >&2
     exit 1
 fi
 if [[ "$output" != "$default_output" && "$allow_formula_output_override" != "1" ]]; then
@@ -289,7 +309,6 @@ else
     expected_tracked_changes_present=true
 fi
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-homebrew-archive.XXXXXX")"
-trap 'rm -rf "$work_dir"' EXIT
 archive_listing="$work_dir/archive-contents.txt"
 if ! tar -tzf "$tarball" >"$archive_listing"; then
     printf 'error: release archive is unreadable: %s\n' "$tarball" >&2
@@ -429,12 +448,11 @@ for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
     fi
 done
 
-mkdir -p "$(dirname "$output")"
-if [[ "$allow_formula_overwrite" == "1" ]]; then
-    rm -f "$output"
-fi
+output_dir="$(dirname "$output")"
+mkdir -p "$output_dir"
+tmp_formula="$(mktemp "$output_dir/.engram.rb.XXXXXX")"
 
-cat >"$output" <<EOF
+cat >"$tmp_formula" <<EOF
 class Engram < Formula
   desc "Personal Knowledge Augmentation System for AI coding agents"
   homepage "https://github.com/ymeiri/engram"
@@ -468,6 +486,25 @@ class Engram < Formula
   end
 end
 EOF
+
+ruby -c "$tmp_formula" >/dev/null
+
+if [[ -e "$output" || -L "$output" ]]; then
+    if [[ -d "$output" && ! -L "$output" ]]; then
+        printf 'error: FORMULA_OUTPUT must be a file path, got directory %s\n' "$output" >&2
+        exit 1
+    fi
+    if [[ "$allow_formula_overwrite" != "1" ]]; then
+        printf 'error: Homebrew formula output appeared during rendering; refusing to overwrite\n' >&2
+        printf 'existing output: %s\n' "$output" >&2
+        printf 'hint: remove stale generated formula evidence after approval, or set ' >&2
+        printf 'ALLOW_HOMEBREW_FORMULA_OVERWRITE=1 only for local rehearsals\n' >&2
+        exit 1
+    fi
+fi
+
+mv "$tmp_formula" "$output"
+tmp_formula=""
 
 printf 'Homebrew formula rendered:\n'
 printf '  %s\n' "$output"

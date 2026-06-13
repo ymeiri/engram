@@ -142,7 +142,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
 | Package artifacts | Validated historically / unpublished | Beta.2 GitHub release has archive and checksum assets; full GA package-install smoke passed for `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum on clean head `8094269`. Local release packaging still fails closed on tracked changes by default, refuses stale archive/checksum overwrites, stages new archive/checksum outputs as temporary files, and checksum-verifies them before moving them into final `dist/` paths. The install smoke rejects checksum files that do not name exactly the expected archive. Later hardening heads have not refreshed `dist/` because local disk preflight blocks the full gate. | Publish and verify assets only after owner approval, disk cleanup, generated-output cleanup, and a fresh full gate on the release head. |
-| Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, checks packaged payload hashes before writing formula text, and now refuses to overwrite existing formula output unless explicitly allowed for local rehearsals. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, and published asset verification. |
+| Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, checks packaged payload hashes before writing formula text, refuses to overwrite existing formula output unless explicitly allowed for local rehearsals, and now stages formula text in a temporary file with Ruby syntax validation before moving it into the final output path. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, generated-output cleanup, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
 | Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The `6ba403e` disk-threshold override guard checkpoint has exact-head hosted CI and quick-gate evidence, but the default full gate correctly reports `disk_space_cleanup_required` on this host. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent, and reports generated archive/checksum/formula outputs so stale local evidence is visible before final proof. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup, generated-output cleanup, fresh exact-head gate evidence, and release-target availability evidence. |
@@ -787,6 +787,29 @@ Targeted validation for this guard:
   EXPECTED_CARGO_LOCK_SHA256=990db0cb3620338b48531fce661a6685f0765817700fc986210fbfe8c4c799b8
   scripts/render-homebrew-formula.sh` rendered an explicitly approved temp formula path and
   `ruby -c` reported `Syntax OK`.
+
+## Homebrew Formula Final Output Staging
+
+`scripts/render-homebrew-formula.sh` now writes formula text to a hidden temporary file beside the
+final `engram.rb`, runs `ruby -c` on that temporary file, then moves it into the final output path
+only after a final overwrite/race check. The renderer also rejects a directory named `engram.rb` as
+an output path.
+
+This keeps final tap evidence from leaving a partial formula at `dist/homebrew/Formula/engram.rb`
+after a failed or interrupted formula render.
+
+Development-diff validation for this guard:
+
+- `bash -n scripts/render-homebrew-formula.sh`
+- With a temporary failing `ruby` wrapper and `DIST_DIR=<temp>`,
+  `scripts/render-homebrew-formula.sh` failed during temporary formula syntax validation and left
+  no final formula or hidden temporary formula output.
+- With `DIST_DIR=<temp>`,
+  `scripts/render-homebrew-formula.sh` rendered an explicitly approved temp formula path and the
+  internal Ruby syntax check passed.
+
+This is development-diff validation on top of head `afb5865`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
 ## Hosted CI Multi-Session Test Stabilization
 

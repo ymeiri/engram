@@ -92,7 +92,10 @@ reports package/install smoke success.
 `scripts/render-homebrew-formula.sh` similarly refuses to overwrite
 `dist/homebrew/Formula/engram.rb` unless `ALLOW_HOMEBREW_FORMULA_OVERWRITE=1` is set. Treat an
 existing formula file as generated evidence that needs the same cleanup approval before final
-owner-review proof.
+owner-review proof. The formula renderer stages new formula text as a temporary file and runs
+`ruby -c` before moving it into `dist/homebrew/Formula/engram.rb`; do not accept formula evidence
+from a failed or interrupted render unless the full GA gate reruns and reports Homebrew formula
+render success.
 
 The full GA release gate reports these expected local outputs under `generated_outputs`. Final
 owner-review proof should require `generated_outputs.state=clear`; if it reports

@@ -111,6 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default formula path unless explicitly allowed for local rehearsals.
 - Hardened Homebrew formula rendering so existing formula output is not overwritten unless
   explicitly allowed for local rehearsals.
+- Hardened Homebrew formula rendering so formula text is staged as a temporary file and Ruby
+  syntax-checked before it is moved into the final output path.
 - Hardened release packaging so the generated `MANIFEST.json` is validated with `jq` and checked
   against staged payload hashes before the release archive is created.
 - Hardened the GA release gate so full owner-review evidence includes Homebrew formula render,
