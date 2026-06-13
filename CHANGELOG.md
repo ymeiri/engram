@@ -54,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   install evidence without claiming published install verification.
 - Hardened release repository targeting so the GA release gate and published-release verifier reject
   accidental repository overrides unless explicitly allowed for local rehearsals.
+- Hardened hosted CI release evidence so release-gate run/PR checks and pre-step blocker
+  verification target an explicit repository instead of ambient `gh` context.
 - Hardened package install smoke verification so `MANIFEST.json` is parsed with `jq` instead of
   ad hoc text matching when checking release metadata and packaged file hashes.
 - Hardened package install smoke verification so `.sha256` files must contain exactly one

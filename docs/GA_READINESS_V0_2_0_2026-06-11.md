@@ -1652,6 +1652,43 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `582d40d`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Hosted CI Repository Anchor Guard
+
+`scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run
+discovery, hosted CI run inspection, beta PR evidence, and hosted CI pre-step fallback verification.
+`scripts/verify-hosted-ci-prestep-blocker.sh` now accepts `--repo <owner/name>` or
+`GITHUB_REPOSITORY`, defaults to `ymeiri/engram`, and rejects non-default or malformed repository
+targets unless `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1` is set for an explicit local rehearsal.
+
+This keeps hosted CI, beta PR, and pre-step fallback evidence from depending on the ambient
+repository inferred by `gh`. Release-gate JSON now reports `hosted_ci.repository`; pre-step verifier
+JSON reports both top-level `repo` and `run.repo`. No release action is performed by either script.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/verify-hosted-ci-prestep-blocker.sh`
+- `GITHUB_REPOSITORY=example/engram scripts/verify-hosted-ci-prestep-blocker.sh --json` failed
+  before GitHub run discovery with `release repository override requires explicit approval`.
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=yes GITHUB_REPOSITORY=ymeiri/engram
+  scripts/verify-hosted-ci-prestep-blocker.sh --json` failed with
+  `ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got yes`.
+- `ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 GITHUB_REPOSITORY=bad/repo/extra
+  scripts/verify-hosted-ci-prestep-blocker.sh --json` failed with
+  `release repository must be owner/name, got bad/repo/extra`.
+- `GITHUB_REPOSITORY=ymeiri/engram EXPECTED_HEAD_SHA=69aebc5b4a947b6f4e20526038a6d3b45d66b754
+  EXPECTED_EVENT=push ALLOW_EXPECTED_EVENT_OVERRIDE=1
+  scripts/verify-hosted-ci-prestep-blocker.sh 27465917208 --json` reached the explicit
+  `ymeiri/engram` run and failed with `run conclusion is not failure: success`, as expected for a
+  passing run.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27465917208 --quick
+  --allow-tracked-changes --json` passed on head `69aebc5`, reported
+  `hosted_ci.repository=ymeiri/engram`, `hosted_ci.state=passing`,
+  `release_target.state=available`, `release_gate_state=evidence_incomplete`, and no release
+  actions.
+
+This is development-diff validation on top of head `69aebc5`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`

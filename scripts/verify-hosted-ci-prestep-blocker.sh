@@ -4,6 +4,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+default_repo="ymeiri/engram"
+repo="${GITHUB_REPOSITORY-$default_repo}"
+allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
 default_expected_workflow="CI"
 expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
 allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
@@ -46,11 +49,16 @@ Usage: scripts/verify-hosted-ci-prestep-blocker.sh [options] [run-id]
 Verify that a hosted CI run failed before workflow steps ran.
 
 Options:
+  --repo <owner/name>
+                GitHub repository (default: GITHUB_REPOSITORY or ymeiri/engram)
   --event <event>  Expected GitHub Actions event (default: EXPECTED_EVENT or pull_request)
   --json        Emit machine-readable JSON instead of text on success
   -h, --help    Show this help
 
 Environment overrides:
+  GITHUB_REPOSITORY      GitHub repository (default: ymeiri/engram)
+  ALLOW_RELEASE_REPOSITORY_OVERRIDE
+                         Allow non-default repositories for explicit local rehearsals
   EXPECTED_HEAD_SHA       Expected run head (default: git rev-parse HEAD)
   EXPECTED_WORKFLOW_NAME  Expected workflow name (default: CI)
   ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE
@@ -67,6 +75,12 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --repo)
+            [[ $# -ge 2 ]] || fail "--repo requires owner/name"
+            [[ -n "$2" ]] || fail "GITHUB_REPOSITORY/--repo must not be empty"
+            repo="$2"
+            shift 2
+            ;;
         --event)
             [[ $# -ge 2 ]] || fail "--event requires an event name"
             expected_event="$2"
@@ -97,6 +111,23 @@ if [[ "$run_id_explicit" == "1" && -z "$run_id" ]]; then
 fi
 if [[ -n "$run_id" && ! "$run_id" =~ ^[0-9]+$ ]]; then
     fail "GITHUB_RUN_ID/positional run id must be a numeric GitHub Actions run id, got $run_id"
+fi
+case "$allow_release_repo_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;
+esac
+if [[ -z "$repo" ]]; then
+    fail "GITHUB_REPOSITORY/--repo must not be empty"
+fi
+if [[ "$repo" != "$default_repo" && "$allow_release_repo_override" != "1" ]]; then
+    printf 'error: release repository override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_repo" >&2
+    printf 'got: %s\n' "$repo" >&2
+    printf 'hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    fail "release repository must be owner/name, got $repo"
 fi
 case "$allow_expected_workflow_override" in
     0 | 1) ;;
@@ -157,6 +188,7 @@ if [[ -z "$run_id" ]]; then
 
     run_id="$(
         gh run list \
+            --repo "$repo" \
             --workflow "$expected_workflow" \
             --branch "$current_branch" \
             --event "$expected_event" \
@@ -172,6 +204,7 @@ if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
 fi
 
 gh run view "$run_id" \
+    --repo "$repo" \
     --json databaseId,headSha,status,conclusion,workflowName,event,jobs,url >"$run_json"
 
 actual_run_id="$(jq -r '.databaseId // empty' "$run_json")"
@@ -235,6 +268,7 @@ if [[ "$json_output" == "1" ]]; then
 
     jq -n \
         --arg run_id "$actual_run_id" \
+        --arg repo "$repo" \
         --arg url "$actual_url" \
         --arg expected_head "$expected_head" \
         --arg head "$actual_head" \
@@ -248,8 +282,10 @@ if [[ "$json_output" == "1" ]]; then
         --argjson jobs "$jobs_json" \
         '{
             condition_verified: true,
+            repo: $repo,
             run: {
                 id: ($run_id | tonumber),
+                repo: $repo,
                 url: $url,
                 expected_head: $expected_head,
                 head: $head,
@@ -268,6 +304,7 @@ if [[ "$json_output" == "1" ]]; then
         }'
 else
     printf 'Hosted CI pre-step blocker verified:\n'
+    printf '  repo: %s\n' "$repo"
     printf '  run: %s\n' "$actual_run_id"
     printf '  url: %s\n' "$actual_url"
     printf '  head: %s\n' "$actual_head"

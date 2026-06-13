@@ -669,6 +669,7 @@ emit_release_target_failure_json() {
             pr: $pr,
             hosted_ci: {
                 state: $hosted_ci_state,
+                repository: $release_repo,
                 expected_event: $expected_event,
                 run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
                 run: $hosted_run,
@@ -785,6 +786,7 @@ emit_disk_space_failure_json() {
             pr: $pr,
             hosted_ci: {
                 state: $hosted_ci_state,
+                repository: $release_repo,
                 expected_event: $expected_event,
                 run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
                 run: $hosted_run,
@@ -861,6 +863,7 @@ collect_hosted_run_checks() {
     if [[ -z "$hosted_run_id" ]]; then
         hosted_run_id="$(
             gh run list \
+                --repo "$release_repo" \
                 --workflow "$expected_workflow" \
                 --branch "$branch" \
                 --event "$expected_event" \
@@ -873,6 +876,7 @@ collect_hosted_run_checks() {
     [[ -n "$hosted_run_id" ]] || fail "no hosted CI run id was provided or discovered"
 
     gh run view "$hosted_run_id" \
+        --repo "$release_repo" \
         --json databaseId,headSha,status,conclusion,workflowName,event,jobs,url >"$hosted_run_json"
 
     actual_run_id="$(jq -r '.databaseId // empty' "$hosted_run_json")"
@@ -947,6 +951,7 @@ if [[ "$target" == "ga" ]]; then
     hosted_run_report_json="$(jq -c '.' "$hosted_run_json")"
 else
     gh pr view "$pr_number" \
+        --repo "$release_repo" \
         --json number,url,isDraft,headRefOid,mergeStateStatus,statusCheckRollup >"$pr_json"
 
     pr_head="$(jq -r '.headRefOid // empty' "$pr_json")"
@@ -979,8 +984,10 @@ else
         if [[ "$json_output" == "1" ]]; then
             printf '\n==> verify hosted CI pre-step fallback\n' >&2
             env EXPECTED_HEAD_SHA="$head_sha" \
+                ALLOW_RELEASE_REPOSITORY_OVERRIDE="$allow_release_repo_override" \
                 "$repo_root/scripts/verify-hosted-ci-prestep-blocker.sh" \
-                --event "$expected_event" --json "${verify_args[@]}" >"$hosted_verifier_file"
+                --repo "$release_repo" --event "$expected_event" --json \
+                "${verify_args[@]}" >"$hosted_verifier_file"
             jq -e '.condition_verified == true' "$hosted_verifier_file" >/dev/null ||
                 fail "hosted CI pre-step verifier did not emit verified JSON"
             hosted_ci_verifier_json="$(jq -c '.' "$hosted_verifier_file")"
@@ -989,8 +996,9 @@ else
             fi
         else
             run_step "verify hosted CI pre-step fallback" env EXPECTED_HEAD_SHA="$head_sha" \
+                ALLOW_RELEASE_REPOSITORY_OVERRIDE="$allow_release_repo_override" \
                 "$repo_root/scripts/verify-hosted-ci-prestep-blocker.sh" \
-                --event "$expected_event" "${verify_args[@]}"
+                --repo "$release_repo" --event "$expected_event" "${verify_args[@]}"
         fi
         hosted_ci_state="pre_step_blocker_verified"
     fi
@@ -1228,6 +1236,7 @@ if [[ "$json_output" == "1" ]]; then
             pr: $pr,
             hosted_ci: {
                 state: $hosted_ci_state,
+                repository: $release_repo,
                 expected_event: $expected_event,
                 run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
                 run: $hosted_run,
