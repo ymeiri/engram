@@ -55,11 +55,12 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest recorded release-facing checkpoint is newer than the historical full-gate candidate
-above. At that cleanup-approval evidence checkpoint, exact-head hosted CI run `27480555463` is
-green for `e86d795b2bac56e5726e66835e361d863e83761e`, and the quick GA gate is green for the same
-head. The exact-head default full GA gate now passes the default 10 GiB disk preflight on this
-host, but still fails before local CI/package smoke because stale generated outputs already exist
-at the paths the full gate would write.
+above. At that cleanup-approval evidence checkpoint, exact-head hosted CI run `27481797605` is
+green for `0aa009a4d52292601dc39f41453f620151d6c9f6`, and the quick GA gate is green for the same
+head. That checkpoint also clarifies that branch-sync divergence is a stop-and-inspect condition,
+not approval to run `git pull`. The exact-head default full GA gate now passes the default 10 GiB
+disk preflight on this host, but still fails before local CI/package smoke because stale generated
+outputs already exist at the paths the full gate would write.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:
