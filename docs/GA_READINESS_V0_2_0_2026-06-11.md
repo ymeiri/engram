@@ -1502,6 +1502,33 @@ Targeted validation for this guard on a development diff:
 This is development-diff validation on top of head `93cd113`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Package Install Smoke Workspace Package Version Guard
+
+`scripts/package-install-smoke.sh` now captures `cargo pkgid --locked -p engram-cli` explicitly and
+validates the discovered workspace package version before deriving the local release archive name,
+tarball path, or checksum path. This closes the package-consumer side of the workspace metadata
+gap so malformed package versions cannot produce smoke-test paths such as
+`engram-not-a-version-<host>.tar.gz`.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/package-release.sh
+  scripts/render-homebrew-formula.sh scripts/release-gate-report.sh
+  scripts/verify-published-release-install.sh`
+- With a temporary `cargo` wrapper returning `file:///tmp/engram#not-a-version`,
+  `SKIP_PACKAGE_BUILD=1 ALLOW_PACKAGE_BUILD_SKIP=1
+  DIST_DIR=/tmp/engram-no-such-assets ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
+  scripts/package-install-smoke.sh` failed before host-triple discovery or asset lookup with
+  `workspace package version must be x.y.z with an optional prerelease suffix, got not-a-version`.
+- With a temporary `cargo` wrapper exiting nonzero, the same install-smoke command failed with
+  `could not determine workspace package version for engram-cli`.
+- With the current workspace package metadata, the same install-smoke command still reached the
+  intended missing-tarball validation error:
+  `release tarball not found at /tmp/engram-no-such-assets/engram-0.2.0-aarch64-apple-darwin.tar.gz`.
+
+This is development-diff validation on top of head `44bd867`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Homebrew Host Triple Discovery Guard
 
 `scripts/render-homebrew-formula.sh` now validates the auto-detected Rust host triple before
