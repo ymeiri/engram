@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   signature and a remote Git tag object/peeled commit matching the expected release head.
 - Hardened published release install verification so malformed `--expected-git-head` values fail
   closed before release metadata or asset checks.
+- Hardened published release install verification so explicitly empty repository, tag,
+  host-triple, expected-head, and asset-directory selectors fail closed before release metadata,
+  asset download, or local asset checks.
 - Hardened published release install verification so local `--asset-dir` rehearsals report asset
   install evidence without claiming published install verification.
 - Hardened release repository targeting so the GA release gate and published-release verifier reject

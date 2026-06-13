@@ -1269,6 +1269,42 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `a1a7da5`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Published Release Verifier Explicit-Empty Input Guard
+
+`scripts/verify-published-release-install.sh` now distinguishes unset post-publish verification
+selectors from explicitly empty selectors. Unset values keep their existing defaults, but explicit
+empty values fail before GitHub release metadata inspection, asset download, or local asset
+validation. This covers `GITHUB_REPOSITORY`, `--repo`, `--tag`, `--host-triple`,
+`--expected-git-head`, and `--asset-dir`.
+
+This prevents final published-install proof from accidentally verifying the default repository,
+default tag, current host triple, current `HEAD`, or downloaded GitHub release assets when an
+operator or automation supplied an empty value.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/verify-published-release-install.sh`
+- `GITHUB_REPOSITORY= scripts/verify-published-release-install.sh --tag v0.2.0
+  --asset-dir /tmp/engram-no-such-assets --json` failed with
+  `GITHUB_REPOSITORY/--repo must not be empty`.
+- `scripts/verify-published-release-install.sh --repo '' --tag v0.2.0
+  --asset-dir /tmp/engram-no-such-assets --json` failed with
+  `GITHUB_REPOSITORY/--repo must not be empty`.
+- `scripts/verify-published-release-install.sh --tag ''
+  --asset-dir /tmp/engram-no-such-assets --json` failed with `--tag must not be empty`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --host-triple ''
+  --asset-dir /tmp/engram-no-such-assets --json` failed with
+  `--host-triple must not be empty`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --expected-git-head ''
+  --asset-dir /tmp/engram-no-such-assets --json` failed with
+  `--expected-git-head must not be empty`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir '' --json` failed with
+  `--asset-dir must not be empty`.
+- `scripts/verify-published-release-install.sh --tag v0.2.0
+  --asset-dir /tmp/engram-no-such-assets --json` still accepted the non-empty local asset
+  directory selector and reached the intended local validation error:
+  `asset directory does not exist: /tmp/engram-no-such-assets`.
+
 ## Hosted CI Event Override Guard
 
 `scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now fail closed

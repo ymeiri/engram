@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 default_repo="ymeiri/engram"
-repo="${GITHUB_REPOSITORY:-$default_repo}"
+repo="${GITHUB_REPOSITORY-$default_repo}"
 allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
@@ -167,21 +167,25 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --repo)
             [[ $# -ge 2 ]] || fail "--repo requires owner/name"
+            [[ -n "$2" ]] || fail "GITHUB_REPOSITORY/--repo must not be empty"
             repo="$2"
             shift 2
             ;;
         --tag)
             [[ $# -ge 2 ]] || fail "--tag requires a tag"
+            [[ -n "$2" ]] || fail "--tag must not be empty"
             tag="$2"
             shift 2
             ;;
         --host-triple)
             [[ $# -ge 2 ]] || fail "--host-triple requires a host triple"
+            [[ -n "$2" ]] || fail "--host-triple must not be empty"
             host_triple="$2"
             shift 2
             ;;
         --expected-git-head)
             [[ $# -ge 2 ]] || fail "--expected-git-head requires a commit SHA"
+            [[ -n "$2" ]] || fail "--expected-git-head must not be empty"
             expected_git_head="$2"
             shift 2
             ;;
@@ -203,6 +207,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --asset-dir)
             [[ $# -ge 2 ]] || fail "--asset-dir requires a path"
+            [[ -n "$2" ]] || fail "--asset-dir must not be empty"
             asset_dir="$2"
             shift 2
             ;;
@@ -224,6 +229,9 @@ case "$allow_release_repo_override" in
     0 | 1) ;;
     *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;
 esac
+if [[ -z "$repo" ]]; then
+    fail "GITHUB_REPOSITORY/--repo must not be empty"
+fi
 if [[ "$repo" != "$default_repo" && "$allow_release_repo_override" != "1" ]]; then
     printf 'error: release repository override requires explicit approval\n' >&2
     printf 'expected default: %s\n' "$default_repo" >&2
