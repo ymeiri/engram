@@ -76,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` before local release assets are consumed.
 - Hardened package install smoke verification so malformed workspace package versions fail closed
   before release archive/checksum paths are derived.
+- Hardened Homebrew formula rendering so malformed workspace package versions fail closed before
+  release URL, archive, or checksum paths are derived.
 - Hardened package install smoke and Homebrew formula verification so malformed
   `EXPECTED_PACKAGE_GIT_HEAD` and `EXPECTED_CARGO_LOCK_SHA256` values fail closed before package
   identity evidence is collected.

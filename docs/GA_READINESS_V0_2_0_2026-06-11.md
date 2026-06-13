@@ -1529,6 +1529,34 @@ Targeted validation for this guard on a development diff:
 This is development-diff validation on top of head `44bd867`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Homebrew Workspace Package Version Guard
+
+`scripts/render-homebrew-formula.sh` now captures `cargo pkgid --locked -p engram-cli` explicitly
+and validates the discovered workspace package version before deriving the default GitHub release
+URL base, release archive name, tarball path, checksum path, or formula URL. This closes the
+Homebrew consumer side of the workspace metadata gap so malformed package versions cannot produce
+formula evidence for paths such as `engram-not-a-version-<host>.tar.gz` or release URLs such as
+`/download/vnot-a-version`.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/render-homebrew-formula.sh scripts/package-release.sh
+  scripts/package-install-smoke.sh scripts/release-gate-report.sh
+  scripts/verify-published-release-install.sh`
+- With a temporary `cargo` wrapper returning `file:///tmp/engram#not-a-version`,
+  `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 DIST_DIR=/tmp/engram-no-such-assets
+  scripts/render-homebrew-formula.sh` failed before host-triple discovery, release URL validation,
+  or asset lookup with
+  `workspace package version must be x.y.z with an optional prerelease suffix, got not-a-version`.
+- With a temporary `cargo` wrapper exiting nonzero, the same renderer command failed with
+  `could not determine workspace package version for engram-cli`.
+- With the current workspace package metadata, the same renderer command still reached the intended
+  missing-tarball validation error:
+  `release tarball not found at /tmp/engram-no-such-assets/engram-0.2.0-aarch64-apple-darwin.tar.gz`.
+
+This is development-diff validation on top of head `eba0d06`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Homebrew Host Triple Discovery Guard
 
 `scripts/render-homebrew-formula.sh` now validates the auto-detected Rust host triple before
