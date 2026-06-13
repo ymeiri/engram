@@ -201,6 +201,10 @@ test ! -e "$stale_formula"
 
 Set the hosted run ID to a completed push CI run for the exact head being released:
 
+Do not use `git pull` to satisfy the branch-sync checks below. If the ahead/behind check is
+nonzero, stop and inspect the local and remote commits first; any merge, rebase, or fast-forward
+changes the release head and requires fresh exact-head hosted CI plus a fresh full GA gate.
+
 ```bash
 hosted_run_id=<exact-head-ci-run-id>
 gate_json="$(mktemp)"
