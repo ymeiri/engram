@@ -123,8 +123,8 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
    `disk_space_cleanup_required`.
 4. Accept the full GA release gate as disk-space preflight, generated-output cleanup, local CI,
    package/install, Homebrew formula render, including archive checksum, manifest identity, root,
-   and payload-hash checks, and
-   release-scope proof.
+   and payload-hash checks, release-scope proof, and the source of the archive, checksum, and
+   formula files to publish.
 5. Accept that the full GA release gate reported the intended `v0.2.0` local tag, remote Git tag,
    and GitHub release as unavailable before owner review.
 6. Accept that the post-publish verifier must prove the signed local tag and remote Git tag both
@@ -207,21 +207,29 @@ if gh release view "$tag" --repo ymeiri/engram >/dev/null 2>&1; then
   echo "${tag} GitHub release already exists" >&2
   exit 1
 fi
+
+archive="dist/engram-${release_version}-aarch64-apple-darwin.tar.gz"
+checksum="${archive}.sha256"
+formula="dist/homebrew/Formula/engram.rb"
+test -f "$archive"
+test -f "$checksum"
+test -f "$formula"
+(cd dist && shasum -a 256 -c "$(basename "$checksum")")
+ruby -c "$formula"
 ```
 
-Create the signed tag and publish the GitHub release assets:
+Create the signed tag and publish the GitHub release assets that the full GA gate just produced.
+Do not rerun `scripts/package-release.sh` or `scripts/render-homebrew-formula.sh` here: the
+successful full gate already ran package/install smoke and Homebrew formula render, and the release
+scripts intentionally refuse to overwrite those generated outputs by default.
 
 ```bash
-scripts/package-release.sh
-scripts/render-homebrew-formula.sh
-ruby -c dist/homebrew/Formula/engram.rb
-
 git tag -s "$tag" -m "engram ${tag}" "$release_head"
 git push origin "$tag"
 
 gh release create "$tag" \
-  "dist/engram-${release_version}-aarch64-apple-darwin.tar.gz" \
-  "dist/engram-${release_version}-aarch64-apple-darwin.tar.gz.sha256" \
+  "$archive" \
+  "$checksum" \
   --repo ymeiri/engram \
   --title "engram ${tag}" \
   --notes-file docs/RELEASE_NOTES_V0_2_0.md \
