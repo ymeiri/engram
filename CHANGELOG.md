@@ -54,6 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before package extraction or server startup.
 - Hardened package install smoke verification so explicit `SMOKE_PORT` overrides fail closed when
   the requested local port is already in use.
+- Hardened package install smoke verification so non-default `DIST_DIR` inputs require
+  `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` before local release assets are consumed.
 - Hardened package install smoke and Homebrew formula verification so malformed
   `EXPECTED_PACKAGE_GIT_HEAD` and `EXPECTED_CARGO_LOCK_SHA256` values fail closed before package
   identity evidence is collected.

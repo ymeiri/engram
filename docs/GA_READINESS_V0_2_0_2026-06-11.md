@@ -244,6 +244,35 @@ Targeted validation for this override guard on a development diff:
   verified a temp package, proving the smoke harness preserves intentional temp-package rehearsals
   without requiring direct producer runs to accept ambient `DIST_DIR` overrides.
 
+## Package Install Smoke DIST_DIR Guard
+
+`scripts/package-install-smoke.sh` now also guards the consumer side of package asset selection:
+if `DIST_DIR` points outside the repository `dist` directory, the smoke requires
+`ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1`, and an explicit empty `DIST_DIR` fails instead of silently
+falling back to the default. This keeps final package/install evidence from consuming assets out
+of an ambient temp directory or stale release checkout unless the run is explicitly marked as a
+local rehearsal.
+
+`scripts/verify-published-release-install.sh` passes `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` only for
+its internally managed asset directory, after it has either downloaded the exact GitHub release
+assets or accepted an explicit `--asset-dir` rehearsal. The normal GA release gate still runs
+package install smoke against the default repository `dist` directory.
+
+Targeted validation for this smoke `DIST_DIR` guard on a development diff:
+
+- `bash -n scripts/package-install-smoke.sh scripts/verify-published-release-install.sh`
+- `DIST_DIR=/tmp/engram-smoke-dist-test SKIP_PACKAGE_BUILD=1
+  scripts/package-install-smoke.sh` failed before release asset reads with
+  `DIST_DIR override requires explicit package approval`.
+- `DIST_DIR= SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` failed before release asset
+  reads with `DIST_DIR must not be empty`.
+- `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=yes DIST_DIR=/tmp/engram-smoke-dist-test
+  SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` failed with
+  `ALLOW_PACKAGE_DIST_DIR_OVERRIDE must be 0 or 1, got yes`.
+- `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=/tmp/engram-smoke-dist-test
+  SKIP_PACKAGE_BUILD=1 scripts/package-install-smoke.sh` passed the approval guard and then
+  failed at the expected missing-tarball check.
+
 `scripts/package-install-smoke.sh` now also validates its own release-rehearsal overrides before
 package extraction or packaged server startup. `SKIP_PACKAGE_BUILD` must be exactly `0` or `1`,
 and an explicit `EXPECTED_TRACKED_CHANGES_PRESENT` value must be exactly `true` or `false`.

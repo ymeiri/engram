@@ -421,6 +421,8 @@ Release package builds fail on tracked working-tree or index changes by default.
 Release evidence defaults to the repo's canonical branch, workflow, event, repository, and
 artifact paths. Use `ALLOW_*_OVERRIDE=1` flags only for explicit local rehearsals, not final
 release-owner evidence.
+Set `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` only when intentionally building or validating package
+assets outside the repository `dist/` directory.
 
 Package install smoke and Homebrew formula checks default to the current Git head and `Cargo.lock`
 hash. Set `ALLOW_PACKAGE_IDENTITY_OVERRIDE=1` only when rehearsing against explicitly chosen local

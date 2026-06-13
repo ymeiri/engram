@@ -5,7 +5,29 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 default_dist_dir="$repo_root/dist"
-dist_dir="${DIST_DIR:-$default_dist_dir}"
+dist_dir="${DIST_DIR-$default_dist_dir}"
+allow_dist_dir_override="${ALLOW_PACKAGE_DIST_DIR_OVERRIDE:-0}"
+
+case "$allow_dist_dir_override" in
+    0 | 1) ;;
+    *)
+        printf 'error: ALLOW_PACKAGE_DIST_DIR_OVERRIDE must be 0 or 1, got %s\n' \
+            "$allow_dist_dir_override" >&2
+        exit 1
+        ;;
+esac
+if [[ -z "$dist_dir" ]]; then
+    printf 'error: DIST_DIR must not be empty\n' >&2
+    exit 1
+fi
+if [[ "$dist_dir" != "$default_dist_dir" && "$allow_dist_dir_override" != "1" ]]; then
+    printf 'error: DIST_DIR override requires explicit package approval\n' >&2
+    printf 'expected default: %s\n' "$default_dist_dir" >&2
+    printf 'got: %s\n' "$dist_dir" >&2
+    printf 'hint: set ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
+fi
+
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
 archive_name="engram-${package_version}-${host_triple}"

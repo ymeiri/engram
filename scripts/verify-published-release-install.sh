@@ -336,6 +336,7 @@ if [[ "$expected_git_head" != "$(git rev-parse HEAD)" ]]; then
 fi
 
 run_step "verify release install" env \
+    ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 \
     DIST_DIR="$asset_dir" \
     SKIP_PACKAGE_BUILD=1 \
     EXPECTED_PACKAGE_GIT_HEAD="$expected_git_head" \
