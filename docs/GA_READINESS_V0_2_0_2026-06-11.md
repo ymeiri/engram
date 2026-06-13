@@ -1405,6 +1405,33 @@ Targeted validation for this guard on a development diff:
 This is development-diff validation on top of head `23f3e87`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Homebrew Host Triple Discovery Guard
+
+`scripts/render-homebrew-formula.sh` now validates the auto-detected Rust host triple before
+deriving Homebrew release archive/checksum paths. The renderer already default-denies
+non-default `HOMEBREW_HOST_TRIPLE` archive selection; this additional guard closes the default
+toolchain-discovery path so malformed `rustc -vV` output cannot construct names such as
+`engram-<version>-.tar.gz` before failing.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/package-release.sh scripts/package-install-smoke.sh
+  scripts/verify-published-release-install.sh scripts/render-homebrew-formula.sh
+  scripts/release-gate-report.sh`
+- With a fake `rustc -vV` output that omitted `host:`,
+  `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 DIST_DIR=/tmp/engram-no-such-assets
+  scripts/render-homebrew-formula.sh` failed with
+  `host triple could not be determined from rustc -vV`.
+- With a fake `rustc -vV` output containing `host: bad`, the same renderer command failed with
+  `host triple must be a Rust target triple, got bad`.
+- With the current Rust host,
+  `ALLOW_HOMEBREW_DIST_DIR_OVERRIDE=1 DIST_DIR=/tmp/engram-no-such-assets
+  scripts/render-homebrew-formula.sh` still reached the intended missing-tarball validation error:
+  `release tarball not found at /tmp/engram-no-such-assets/engram-0.2.0-aarch64-apple-darwin.tar.gz`.
+
+This is development-diff validation on top of head `4916508`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Event Override Guard
 
 `scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now fail closed

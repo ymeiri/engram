@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   closed before release asset validation or formula rendering.
 - Hardened Homebrew formula rendering so `HOMEBREW_HOST_TRIPLE` cannot select a non-default
   release archive unless explicitly allowed for local rehearsals.
+- Hardened Homebrew formula rendering so auto-detected host triples must be non-empty Rust target
+  triples before release archive/checksum paths are built.
 - Hardened Homebrew formula rendering so `DIST_DIR` cannot redirect release asset reads or default
   formula writes away from the repository `dist` directory unless explicitly allowed for local
   rehearsals.

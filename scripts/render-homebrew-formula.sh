@@ -7,15 +7,35 @@ cd "$repo_root"
 default_dist_dir="$repo_root/dist"
 dist_dir="${DIST_DIR-$default_dist_dir}"
 allow_dist_dir_override="${ALLOW_HOMEBREW_DIST_DIR_OVERRIDE:-0}"
+
+command -v cargo >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: cargo\n' >&2
+    exit 1
+}
+command -v rustc >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: rustc\n' >&2
+    exit 1
+}
+command -v jq >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: jq\n' >&2
+    exit 1
+}
+
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 default_host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
+host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+if [[ -z "$default_host_triple" ]]; then
+    printf 'error: host triple could not be determined from rustc -vV\n' >&2
+    exit 1
+fi
+if [[ ! "$default_host_triple" =~ $host_triple_pattern ]]; then
+    printf 'error: host triple must be a Rust target triple, got %s\n' \
+        "$default_host_triple" >&2
+    exit 1
+fi
+
 host_triple="${HOMEBREW_HOST_TRIPLE-$default_host_triple}"
 allow_host_triple_override="${ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE:-0}"
-archive_name="engram-${package_version}-${host_triple}"
-tarball="$dist_dir/$archive_name.tar.gz"
-checksum="$tarball.sha256"
-default_output="$dist_dir/homebrew/Formula/engram.rb"
-output="${FORMULA_OUTPUT-$default_output}"
 allow_formula_output_override="${ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE:-0}"
 default_release_base_url="https://github.com/ymeiri/engram/releases/download/v${package_version}"
 release_base_url="${HOMEBREW_RELEASE_BASE_URL-$default_release_base_url}"
@@ -25,11 +45,6 @@ expected_tracked_changes_present_explicit=0
 if [[ "${EXPECTED_TRACKED_CHANGES_PRESENT+x}" == "x" ]]; then
     expected_tracked_changes_present_explicit=1
 fi
-
-command -v jq >/dev/null 2>&1 || {
-    printf 'error: required tool is missing: jq\n' >&2
-    exit 1
-}
 
 if [[ "$allow_dist_dir_override" != "0" &&
     "$allow_dist_dir_override" != "1" ]]; then
@@ -49,6 +64,9 @@ if [[ "$dist_dir" != "$default_dist_dir" && "$allow_dist_dir_override" != "1" ]]
     exit 1
 fi
 
+default_output="$dist_dir/homebrew/Formula/engram.rb"
+output="${FORMULA_OUTPUT-$default_output}"
+
 if [[ "$allow_host_triple_override" != "0" &&
     "$allow_host_triple_override" != "1" ]]; then
     printf 'error: ALLOW_HOMEBREW_HOST_TRIPLE_OVERRIDE must be 0 or 1, got %s\n' \
@@ -59,7 +77,6 @@ if [[ -z "$host_triple" ]]; then
     printf 'error: HOMEBREW_HOST_TRIPLE must not be empty\n' >&2
     exit 1
 fi
-host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
 if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
     printf 'error: HOMEBREW_HOST_TRIPLE must be a Rust target triple, got %s\n' \
         "$host_triple" >&2
@@ -95,6 +112,10 @@ if [[ "$output" != "$default_output" && "$allow_formula_output_override" != "1" 
     printf 'hint: set ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE=1 only for local rehearsals\n' >&2
     exit 1
 fi
+
+archive_name="engram-${package_version}-${host_triple}"
+tarball="$dist_dir/$archive_name.tar.gz"
+checksum="$tarball.sha256"
 
 if [[ "$host_triple" != "aarch64-apple-darwin" ]]; then
     printf 'error: Homebrew formula currently supports aarch64-apple-darwin only, got %s\n' \
