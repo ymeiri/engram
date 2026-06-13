@@ -18,7 +18,7 @@ default_output="$dist_dir/homebrew/Formula/engram.rb"
 output="${FORMULA_OUTPUT-$default_output}"
 allow_formula_output_override="${ALLOW_HOMEBREW_FORMULA_OUTPUT_OVERRIDE:-0}"
 default_release_base_url="https://github.com/ymeiri/engram/releases/download/v${package_version}"
-release_base_url="${HOMEBREW_RELEASE_BASE_URL:-$default_release_base_url}"
+release_base_url="${HOMEBREW_RELEASE_BASE_URL-$default_release_base_url}"
 allow_release_base_url_override="${ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE:-0}"
 allow_package_identity_override="${ALLOW_PACKAGE_IDENTITY_OVERRIDE:-0}"
 
@@ -102,6 +102,10 @@ if [[ "$allow_release_base_url_override" != "0" &&
     "$allow_release_base_url_override" != "1" ]]; then
     printf 'error: ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE must be 0 or 1, got %s\n' \
         "$allow_release_base_url_override" >&2
+    exit 1
+fi
+if [[ -z "$release_base_url" ]]; then
+    printf 'error: HOMEBREW_RELEASE_BASE_URL must not be empty\n' >&2
     exit 1
 fi
 if [[ "$release_base_url" != "$default_release_base_url" &&

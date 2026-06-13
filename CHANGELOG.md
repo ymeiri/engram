@@ -75,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   payload hashes against `MANIFEST.json` before formula text is written.
 - Hardened Homebrew formula rendering so accidental `HOMEBREW_RELEASE_BASE_URL` overrides fail
   closed unless explicitly allowed for local rehearsals.
+- Hardened Homebrew formula rendering so an explicitly empty `HOMEBREW_RELEASE_BASE_URL` fails
+  closed before release asset validation or formula rendering.
 - Hardened Homebrew formula rendering so `HOMEBREW_HOST_TRIPLE` cannot select a non-default
   release archive unless explicitly allowed for local rehearsals.
 - Hardened Homebrew formula rendering so `DIST_DIR` cannot redirect release asset reads or default

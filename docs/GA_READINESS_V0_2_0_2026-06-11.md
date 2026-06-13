@@ -630,7 +630,9 @@ even when the archive checksum and release-identity manifest fields are otherwis
 `scripts/render-homebrew-formula.sh` now fails closed if `HOMEBREW_RELEASE_BASE_URL` differs from
 the default `https://github.com/ymeiri/engram/releases/download/v<package_version>` URL base unless
 `ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE=1` is set. Any rendered URL base must also use `https://`
-and must not end with a slash.
+and must not end with a slash. An explicitly empty `HOMEBREW_RELEASE_BASE_URL` is also rejected
+before release asset validation or formula rendering; leaving it unset still uses the canonical
+GitHub release URL base.
 
 This keeps the final tap formula from silently pointing at a wrong repository, tag, or release path
 because of an ambient environment override. The explicit override remains available for local
@@ -1479,6 +1481,8 @@ exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update
 - `HOMEBREW_RELEASE_BASE_URL=https://example.com/engram scripts/render-homebrew-formula.sh`
   failed before reading release assets with `HOMEBREW_RELEASE_BASE_URL override requires explicit
   approval`
+- `HOMEBREW_RELEASE_BASE_URL= scripts/render-homebrew-formula.sh` failed before reading release
+  assets with `HOMEBREW_RELEASE_BASE_URL must not be empty`
 - `ALLOW_HOMEBREW_RELEASE_BASE_URL_OVERRIDE=1 HOMEBREW_RELEASE_BASE_URL=https://example.com/engram/
   scripts/render-homebrew-formula.sh` failed before reading release assets with `Homebrew release
   URL base must not end with a slash`
