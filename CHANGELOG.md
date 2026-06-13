@@ -193,6 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths.
 - Hardened the GA release gate so final JSON/text evidence distinguishes preflight
   `generated_outputs` cleanup checks from post-run `generated_artifacts` publication proof.
+- Stabilized GA release-gate failure JSON so preflight failures explicitly report
+  `generated_artifacts.state=not_checked` instead of omitting post-run artifact proof.
 - Refreshed the GA readiness matrix with hosted CI and published-release expected-head validation
   while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and

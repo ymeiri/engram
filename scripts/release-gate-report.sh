@@ -842,6 +842,9 @@ emit_release_target_failure_json() {
         --arg generated_outputs_state "$generated_outputs_state" \
         --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
         --arg generated_outputs_error "$generated_outputs_error" \
+        --arg generated_artifacts_state "$generated_artifacts_state" \
+        --arg generated_artifacts_host_triple "$generated_artifacts_host_triple" \
+        --arg generated_artifacts_error "$generated_artifacts_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -852,6 +855,7 @@ emit_release_target_failure_json() {
         --argjson hosted_run "$hosted_run_report_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         --argjson generated_outputs "$generated_outputs_json" \
+        --argjson generated_artifacts "$generated_artifacts_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -907,6 +911,20 @@ emit_release_target_failure_json() {
                 error: (
                     if $generated_outputs_error == "" then null
                     else $generated_outputs_error
+                    end
+                )
+            },
+            generated_artifacts: {
+                state: $generated_artifacts_state,
+                host_triple: (
+                    if $generated_artifacts_host_triple == "" then null
+                    else $generated_artifacts_host_triple
+                    end
+                ),
+                artifacts: $generated_artifacts,
+                error: (
+                    if $generated_artifacts_error == "" then null
+                    else $generated_artifacts_error
                     end
                 )
             },
@@ -978,6 +996,9 @@ emit_disk_space_failure_json() {
         --arg generated_outputs_state "$generated_outputs_state" \
         --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
         --arg generated_outputs_error "$generated_outputs_error" \
+        --arg generated_artifacts_state "$generated_artifacts_state" \
+        --arg generated_artifacts_host_triple "$generated_artifacts_host_triple" \
+        --arg generated_artifacts_error "$generated_artifacts_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -987,6 +1008,7 @@ emit_disk_space_failure_json() {
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
         --argjson generated_outputs "$generated_outputs_json" \
+        --argjson generated_artifacts "$generated_artifacts_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -1042,6 +1064,20 @@ emit_disk_space_failure_json() {
                 error: (
                     if $generated_outputs_error == "" then null
                     else $generated_outputs_error
+                    end
+                )
+            },
+            generated_artifacts: {
+                state: $generated_artifacts_state,
+                host_triple: (
+                    if $generated_artifacts_host_triple == "" then null
+                    else $generated_artifacts_host_triple
+                    end
+                ),
+                artifacts: $generated_artifacts,
+                error: (
+                    if $generated_artifacts_error == "" then null
+                    else $generated_artifacts_error
                     end
                 )
             },
@@ -1109,6 +1145,9 @@ emit_generated_outputs_failure_json() {
         --arg generated_outputs_state "$generated_outputs_state" \
         --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
         --arg generated_outputs_error "$generated_outputs_error" \
+        --arg generated_artifacts_state "$generated_artifacts_state" \
+        --arg generated_artifacts_host_triple "$generated_artifacts_host_triple" \
+        --arg generated_artifacts_error "$generated_artifacts_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -1118,6 +1157,7 @@ emit_generated_outputs_failure_json() {
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
         --argjson generated_outputs "$generated_outputs_json" \
+        --argjson generated_artifacts "$generated_artifacts_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -1175,6 +1215,20 @@ emit_generated_outputs_failure_json() {
                 ),
                 outputs: $generated_outputs,
                 error: $generated_outputs_error
+            },
+            generated_artifacts: {
+                state: $generated_artifacts_state,
+                host_triple: (
+                    if $generated_artifacts_host_triple == "" then null
+                    else $generated_artifacts_host_triple
+                    end
+                ),
+                artifacts: $generated_artifacts,
+                error: (
+                    if $generated_artifacts_error == "" then null
+                    else $generated_artifacts_error
+                    end
+                )
             },
             homebrew_formula_render: "not_run",
             homebrew_formula: {

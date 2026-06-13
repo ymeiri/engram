@@ -69,10 +69,14 @@ failure.kind=generated_outputs_preflight
 release_target.state=available
 disk_space.state=passed
 min_required_kib=10485760
+generated_artifacts.state=not_checked
 generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz exists=true will_write=true
 generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256 exists=true will_write=true
 generated_output: path=dist/homebrew/Formula/engram.rb exists=true will_write=true
 ```
+
+`generated_artifacts.state=not_checked` is intentional in this failure path: local
+package/Homebrew proof did not run, so the JSON must not claim publishable artifact evidence.
 
 The exact `free_space_kib` value is host-local and can move between rehearsals; use the final full
 gate JSON as the authoritative disk evidence. If disk space drops below the default threshold
