@@ -44,8 +44,27 @@ fi
 archive_name="engram-${package_version}-${host_triple}"
 allow_tracked_changes="${ALLOW_TRACKED_CHANGES:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-package.XXXXXX")"
+tmp_tarball=""
+tmp_checksum=""
+published_tarball=0
+published_checksum=0
+final_outputs_committed=0
 
 cleanup() {
+    if [[ "$final_outputs_committed" != "1" ]]; then
+        if [[ "$published_tarball" == "1" ]]; then
+            rm -f "$tarball"
+        fi
+        if [[ "$published_checksum" == "1" ]]; then
+            rm -f "$checksum"
+        fi
+    fi
+    if [[ -n "$tmp_tarball" ]]; then
+        rm -f "$tmp_tarball"
+    fi
+    if [[ -n "$tmp_checksum" ]]; then
+        rm -f "$tmp_checksum"
+    fi
     rm -rf "$work_dir"
 }
 trap cleanup EXIT
@@ -240,15 +259,43 @@ for package_file in engram README.md LICENSE CHANGELOG.md RELEASE_NOTES.md; do
     fi
 done
 
-if [[ "$allow_asset_overwrite" == "1" ]]; then
+tmp_tarball="$(mktemp "$dist_dir/.${archive_name}.tar.gz.XXXXXX")"
+tmp_checksum="$(mktemp "$dist_dir/.${archive_name}.tar.gz.sha256.XXXXXX")"
+
+run_step "create archive" tar -C "$work_dir" -czf "$tmp_tarball" "$archive_name"
+archive_sha256="$(sha256_file "$tmp_tarball")"
+printf '%s  %s\n' "$archive_sha256" "$(basename "$tarball")" >"$tmp_checksum"
+
+existing_outputs=()
+for output_path in "$tarball" "$checksum"; do
+    if [[ -e "$output_path" || -L "$output_path" ]]; then
+        existing_outputs+=("$output_path")
+    fi
+done
+if [[ "${#existing_outputs[@]}" -gt 0 ]]; then
+    if [[ "$allow_asset_overwrite" != "1" ]]; then
+        printf 'error: release package output appeared during packaging; refusing to overwrite\n' >&2
+        printf 'existing outputs:\n' >&2
+        printf '  %s\n' "${existing_outputs[@]}" >&2
+        printf 'hint: remove stale generated assets after approval, or set ' >&2
+        printf 'ALLOW_PACKAGE_ASSET_OVERWRITE=1 only for local rehearsals\n' >&2
+        exit 1
+    fi
     rm -f "$tarball" "$checksum"
 fi
 
-run_step "create archive" tar -C "$work_dir" -czf "$tarball" "$archive_name"
-(
-    cd "$dist_dir"
-    shasum -a 256 "$(basename "$tarball")" > "$(basename "$checksum")"
-)
+mv "$tmp_tarball" "$tarball"
+tmp_tarball=""
+published_tarball=1
+mv "$tmp_checksum" "$checksum"
+tmp_checksum=""
+published_checksum=1
+
+run_step "verify final checksum" bash -c '
+    cd "$1"
+    shasum -a 256 -c "$2"
+' _ "$dist_dir" "$(basename "$checksum")"
+final_outputs_committed=1
 
 printf '\nRelease package created:\n'
 printf '  %s\n' "$tarball"

@@ -141,7 +141,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
-| Package artifacts | Validated historically / unpublished | Beta.2 GitHub release has archive and checksum assets; full GA package-install smoke passed for `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum on clean head `8094269`. Local release packaging still fails closed on tracked changes by default, and the install smoke rejects checksum files that do not name exactly the expected archive. Later hardening heads have not refreshed `dist/` because local disk preflight blocks the full gate. | Publish and verify assets only after owner approval, disk cleanup, and a fresh full gate on the release head. |
+| Package artifacts | Validated historically / unpublished | Beta.2 GitHub release has archive and checksum assets; full GA package-install smoke passed for `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum on clean head `8094269`. Local release packaging still fails closed on tracked changes by default, refuses stale archive/checksum overwrites, stages new archive/checksum outputs as temporary files, and checksum-verifies them before moving them into final `dist/` paths. The install smoke rejects checksum files that do not name exactly the expected archive. Later hardening heads have not refreshed `dist/` because local disk preflight blocks the full gate. | Publish and verify assets only after owner approval, disk cleanup, generated-output cleanup, and a fresh full gate on the release head. |
 | Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, checks packaged payload hashes before writing formula text, and now refuses to overwrite existing formula output unless explicitly allowed for local rehearsals. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
@@ -1722,6 +1722,30 @@ Targeted validation for this guard:
   `engram-0.2.0-aarch64-apple-darwin.tar.gz` and `.sha256` outputs from prior rehearsals.
 
 This is development-diff validation on top of head `fbab2b3`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
+## Release Package Final Output Staging
+
+`scripts/package-release.sh` now writes the release archive and checksum as hidden temporary files
+under the selected `dist` directory, computes the checksum from the staged archive, and verifies the
+final checksum after moving both files into place. If archive creation, checksum creation, or final
+checksum verification fails, the cleanup trap removes temporary files and any final outputs created
+by that failed run.
+
+This keeps final owner-review packaging from leaving a partial archive or checksum at the canonical
+`dist/engram-<version>-<host>.tar.gz` paths after an interrupted or failed artifact write.
+
+Development-diff validation for this guard:
+
+- `bash -n scripts/package-release.sh`
+- With a temporary failing `tar` wrapper and `DIST_DIR=<temp>`, `scripts/package-release.sh`
+  failed during archive creation and left no final archive/checksum outputs in the temp `dist`
+  directory.
+- With `ALLOW_TRACKED_CHANGES=1 ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1 DIST_DIR=<temp>`,
+  `scripts/package-release.sh` created a local rehearsal archive/checksum and the final checksum
+  verification passed.
+
+This is development-diff validation on top of head `f0397a0`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
 ## Validation Run

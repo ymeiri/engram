@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the repository `dist` directory unless explicitly allowed for local rehearsals.
 - Hardened local release packaging so existing archive/checksum outputs are not overwritten unless
   explicitly allowed for local rehearsals.
+- Hardened local release packaging so archive/checksum outputs are staged as temporary files and
+  checksum-verified before they are moved into final `dist/` paths.
 - Hardened local release packaging so malformed workspace package versions fail closed before
   release notes paths or archive names are derived.
 - Hardened local release packaging and package install smoke verification so auto-detected host

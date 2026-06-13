@@ -84,7 +84,10 @@ confirm that its `disk_space.state` is `passed` with the default
 `scripts/package-release.sh` also refuses to overwrite the expected release archive or checksum if
 they already exist in `dist/`. Treat that as stale generated-artifact evidence: remove the old
 files only after explicit cleanup approval, or use `ALLOW_PACKAGE_ASSET_OVERWRITE=1` only for a
-local rehearsal that is not final owner-review evidence.
+local rehearsal that is not final owner-review evidence. The package script stages new archive and
+checksum outputs as temporary files and verifies the final checksum after moving them into `dist/`;
+do not accept package evidence from a failed or interrupted run unless the full GA gate reruns and
+reports package/install smoke success.
 
 `scripts/render-homebrew-formula.sh` similarly refuses to overwrite
 `dist/homebrew/Formula/engram.rb` unless `ALLOW_HOMEBREW_FORMULA_OVERWRITE=1` is set. Treat an
