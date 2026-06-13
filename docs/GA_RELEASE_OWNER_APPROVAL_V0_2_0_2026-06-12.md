@@ -91,6 +91,11 @@ local rehearsal that is not final owner-review evidence.
 existing formula file as generated evidence that needs the same cleanup approval before final
 owner-review proof.
 
+The full GA release gate reports these expected local outputs under `generated_outputs`. Final
+owner-review proof should require `generated_outputs.state=clear`; if it reports
+`cleanup_required`, the listed files need the same explicit cleanup approval or a local-only
+rehearsal overwrite decision before package/Homebrew evidence is final.
+
 ## Release-Owner Signoff Checklist
 
 Before tagging or publishing `v0.2.0`, the release owner should explicitly confirm:
@@ -100,9 +105,9 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
 3. Accept that generated-artifact cleanup or another disk-space remedy was explicitly approved
    before collecting final local release evidence, if the default gate had reported
    `disk_space_cleanup_required`.
-4. Accept the full GA release gate as disk-space preflight, local CI, package/install,
-   Homebrew formula render, including archive checksum, manifest identity, root, and payload-hash
-   checks, and
+4. Accept the full GA release gate as disk-space preflight, generated-output cleanup, local CI,
+   package/install, Homebrew formula render, including archive checksum, manifest identity, root,
+   and payload-hash checks, and
    release-scope proof.
 5. Accept that the full GA release gate reported the intended `v0.2.0` local tag, remote Git tag,
    and GitHub release as unavailable before owner review.
@@ -157,6 +162,8 @@ jq -e '
   and .disk_space.min_required_kib == 10485760
   and (.disk_space.free_kib >= .disk_space.min_required_kib)
   and .disk_space.shortfall_kib == 0
+  and .generated_outputs.state == "clear"
+  and all(.generated_outputs.outputs[]; .exists == false)
   and .local_ci == "passed"
   and .package_install_smoke == "passed"
   and .homebrew_formula_render == "passed"

@@ -462,6 +462,10 @@ release_scope_native_claude_ack=false
 release_scope_lifecycle_m6_ack=false
 homebrew_formula_state="not_applicable"
 homebrew_formula_output="$repo_root/dist/homebrew/Formula/engram.rb"
+generated_outputs_state="not_checked"
+generated_outputs_json="[]"
+generated_outputs_host_triple=""
+generated_outputs_error=""
 disk_space_state="not_checked"
 disk_space_error=""
 disk_space_shortfall_kib=""
@@ -564,6 +568,87 @@ collect_disk_cleanup_candidates() {
     disk_cleanup_candidates_json="$candidates_json"
 }
 
+append_generated_output() {
+    local kind="$1"
+    local abs_path="$2"
+    local will_write="$3"
+    local overwrite_env="$4"
+    local exists=false
+    local rel_path="$abs_path"
+
+    if [[ "$rel_path" == "$repo_root/"* ]]; then
+        rel_path="${rel_path#$repo_root/}"
+    fi
+    if [[ -e "$abs_path" || -L "$abs_path" ]]; then
+        exists=true
+        generated_outputs_state="cleanup_required"
+    fi
+
+    generated_outputs_json="$(
+        jq -c \
+            --arg kind "$kind" \
+            --arg path "$rel_path" \
+            --arg absolute_path "$abs_path" \
+            --arg will_write "$will_write" \
+            --arg overwrite_env "$overwrite_env" \
+            --arg exists "$exists" \
+            '. + [{
+                kind: $kind,
+                path: $path,
+                absolute_path: $absolute_path,
+                exists: ($exists == "true"),
+                will_write: ($will_write == "true"),
+                overwrite_env: $overwrite_env
+            }]' <<<"$generated_outputs_json"
+    )"
+}
+
+collect_generated_outputs() {
+    local host_triple
+    local host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+    local archive_name
+    local package_will_write=false
+    local homebrew_will_write=false
+
+    generated_outputs_state="clear"
+    generated_outputs_json="[]"
+    generated_outputs_host_triple=""
+    generated_outputs_error=""
+
+    if ! command -v rustc >/dev/null 2>&1; then
+        generated_outputs_state="unknown"
+        generated_outputs_error="required tool is missing for generated-output inventory: rustc"
+        return 0
+    fi
+
+    host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
+    if [[ -z "$host_triple" || ! "$host_triple" =~ $host_triple_pattern ]]; then
+        generated_outputs_state="unknown"
+        generated_outputs_error="could not determine a valid Rust host triple for generated-output inventory"
+        return 0
+    fi
+    generated_outputs_host_triple="$host_triple"
+    archive_name="engram-${package_version}-${host_triple}"
+
+    if [[ "$run_package_smoke" == "1" ]]; then
+        package_will_write=true
+    fi
+    append_generated_output "package_archive" \
+        "$repo_root/dist/${archive_name}.tar.gz" "$package_will_write" \
+        "ALLOW_PACKAGE_ASSET_OVERWRITE"
+    append_generated_output "package_checksum" \
+        "$repo_root/dist/${archive_name}.tar.gz.sha256" "$package_will_write" \
+        "ALLOW_PACKAGE_ASSET_OVERWRITE"
+
+    if [[ "$target" == "ga" ]]; then
+        if [[ "$run_homebrew_render" == "1" && "$run_package_smoke" == "1" ]]; then
+            homebrew_will_write=true
+        fi
+        append_generated_output "homebrew_formula" "$homebrew_formula_output" \
+            "$homebrew_will_write" "ALLOW_HOMEBREW_FORMULA_OVERWRITE"
+    fi
+}
+
 check_free_space_for_local_steps() {
     if [[ "$run_local_ci" != "1" && "$run_package_smoke" != "1" ]]; then
         disk_space_state="skipped"
@@ -631,6 +716,9 @@ emit_release_target_failure_json() {
         --arg hosted_ci_state "$hosted_ci_state" \
         --arg hosted_run_id "$hosted_run_id" \
         --arg min_free_space_kib "$min_free_space_kib" \
+        --arg generated_outputs_state "$generated_outputs_state" \
+        --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
+        --arg generated_outputs_error "$generated_outputs_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -640,6 +728,7 @@ emit_release_target_failure_json() {
         --argjson pr "$pr_report_json" \
         --argjson hosted_run "$hosted_run_report_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        --argjson generated_outputs "$generated_outputs_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -683,6 +772,20 @@ emit_release_target_failure_json() {
                 min_required_kib: ($min_free_space_kib | tonumber),
                 shortfall_kib: null,
                 cleanup_candidates: []
+            },
+            generated_outputs: {
+                state: $generated_outputs_state,
+                host_triple: (
+                    if $generated_outputs_host_triple == "" then null
+                    else $generated_outputs_host_triple
+                    end
+                ),
+                outputs: $generated_outputs,
+                error: (
+                    if $generated_outputs_error == "" then null
+                    else $generated_outputs_error
+                    end
+                )
             },
             homebrew_formula_render: "not_run",
             homebrew_formula: {
@@ -749,6 +852,9 @@ emit_disk_space_failure_json() {
         --arg min_free_space_kib "$min_free_space_kib" \
         --arg disk_space_shortfall_kib "$disk_space_shortfall_kib" \
         --arg disk_space_error "$disk_space_error" \
+        --arg generated_outputs_state "$generated_outputs_state" \
+        --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
+        --arg generated_outputs_error "$generated_outputs_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -757,6 +863,7 @@ emit_disk_space_failure_json() {
         --argjson hosted_run "$hosted_run_report_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
+        --argjson generated_outputs "$generated_outputs_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -801,6 +908,20 @@ emit_disk_space_failure_json() {
                 shortfall_kib: ($disk_space_shortfall_kib | tonumber),
                 cleanup_candidates: $disk_cleanup_candidates
             },
+            generated_outputs: {
+                state: $generated_outputs_state,
+                host_triple: (
+                    if $generated_outputs_host_triple == "" then null
+                    else $generated_outputs_host_triple
+                    end
+                ),
+                outputs: $generated_outputs,
+                error: (
+                    if $generated_outputs_error == "" then null
+                    else $generated_outputs_error
+                    end
+                )
+            },
             homebrew_formula_render: "not_run",
             homebrew_formula: {
                 output: null
@@ -814,10 +935,17 @@ emit_disk_space_failure_json() {
             release_gate_state: "disk_space_cleanup_required",
             ready_for_release_owner_review: false,
             hosted_ci_fallback_decision_required: false,
-            remaining_release_actions: [
-                "free_local_disk_space_or_get_cleanup_approval",
-                "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
-            ],
+            remaining_release_actions: (
+                ["free_local_disk_space_or_get_cleanup_approval"]
+                + (
+                    if $generated_outputs_state == "cleanup_required" then
+                        ["remove_stale_generated_release_outputs_or_get_cleanup_approval"]
+                    else
+                        []
+                    end
+                )
+                + ["rerun_full_release_gate_report_with_local_ci_and_package_smoke"]
+            ),
             failure: {
                 kind: "disk_space_preflight",
                 message: $disk_space_error
@@ -1004,6 +1132,7 @@ else
     fi
 fi
 
+collect_generated_outputs
 run_release_target_preflight
 run_disk_space_preflight
 
@@ -1113,10 +1242,17 @@ remaining_release_actions_json="$(
         --arg state "$release_gate_state" \
         --arg package_version "$package_version" \
         --arg release_version "$release_version" \
+        --arg generated_outputs_state "$generated_outputs_state" \
         'if $target == "ga" and $package_version != $release_version then
             [
                 "bump_workspace_version_to_\($release_version)",
                 "rerun_exact_head_hosted_ci",
+                "run_full_ga_release_gate_report_with_local_ci_and_package_smoke"
+            ]
+        elif $target == "ga" and $state == "evidence_incomplete"
+            and $generated_outputs_state == "cleanup_required" then
+            [
+                "remove_stale_generated_release_outputs_or_get_cleanup_approval",
                 "run_full_ga_release_gate_report_with_local_ci_and_package_smoke"
             ]
         elif $state == "fallback_release_owner_decision_required" then
@@ -1195,6 +1331,9 @@ if [[ "$json_output" == "1" ]]; then
         --arg free_space_kib "$free_space_kib" \
         --arg min_free_space_kib "$min_free_space_kib" \
         --arg disk_space_shortfall_kib "$disk_space_shortfall_kib" \
+        --arg generated_outputs_state "$generated_outputs_state" \
+        --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
+        --arg generated_outputs_error "$generated_outputs_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -1206,6 +1345,7 @@ if [[ "$json_output" == "1" ]]; then
         --argjson hosted_run "$hosted_run_report_json" \
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
+        --argjson generated_outputs "$generated_outputs_json" \
         --argjson remaining_release_actions "$remaining_release_actions_json" \
         '{
             target: $target,
@@ -1258,6 +1398,20 @@ if [[ "$json_output" == "1" ]]; then
                     end
                 ),
                 cleanup_candidates: $disk_cleanup_candidates
+            },
+            generated_outputs: {
+                state: $generated_outputs_state,
+                host_triple: (
+                    if $generated_outputs_host_triple == "" then null
+                    else $generated_outputs_host_triple
+                    end
+                ),
+                outputs: $generated_outputs,
+                error: (
+                    if $generated_outputs_error == "" then null
+                    else $generated_outputs_error
+                    end
+                )
             },
             homebrew_formula_render: $homebrew_formula_render,
             homebrew_formula: {
@@ -1321,6 +1475,18 @@ else
         .[]
         | "  disk_cleanup_candidate: \(.path) size_kib=\(.size_kib)"
     ' <<<"$disk_cleanup_candidates_json"
+    printf '  generated_outputs_state: %s\n' "$generated_outputs_state"
+    if [[ -n "$generated_outputs_host_triple" ]]; then
+        printf '  generated_outputs_host_triple: %s\n' "$generated_outputs_host_triple"
+    fi
+    if [[ -n "$generated_outputs_error" ]]; then
+        printf '  generated_outputs_error: %s\n' "$generated_outputs_error"
+    fi
+    jq -r '
+        .[]
+        | "  generated_output: \(.path) kind=\(.kind) exists=\(.exists)"
+            + " will_write=\(.will_write) overwrite_env=\(.overwrite_env)"
+    ' <<<"$generated_outputs_json"
     if [[ "$target" == "ga" ]]; then
         printf '  homebrew_formula_render: %s\n' "$homebrew_formula_state"
         if [[ "$homebrew_formula_state" == "passed" ]]; then

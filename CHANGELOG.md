@@ -130,6 +130,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   closed unless explicitly allowed for local rehearsals.
 - Added non-destructive disk cleanup evidence to the GA release gate: low-space JSON now reports the
   local shortfall and generated artifact candidate sizes before requiring cleanup approval.
+- Added read-only generated-output evidence to the GA release gate so JSON/text reports whether the
+  expected archive, checksum, and Homebrew formula outputs already exist before final local proof.
 - Hardened the GA release gate so owner-review evidence checks that the intended `v0.2.0` local
   tag, remote Git tag, and GitHub release are all still unavailable before local release validation
   or publication steps.
