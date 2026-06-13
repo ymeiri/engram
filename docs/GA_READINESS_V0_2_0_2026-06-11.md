@@ -105,11 +105,12 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   passed for exact head `6ba403e` with hosted CI passing, release target
   `v0.2.0` still available, no local/remote tag, no GitHub release,
   `disk_space.min_required_kib=10485760`, no owner-review readiness, and no release actions.
-- The latest default GA gate on this host still fails before local CI/package smoke with
-  `release_gate_state=disk_space_cleanup_required`, `failure.kind=disk_space_preflight`,
-  `release_target.state=available`, `min_required_kib=10485760`, and non-destructive cleanup
-  candidates `target=103776236 KiB` and `dist=74608 KiB`. Exact `free_space_kib` and
-  `shortfall_kib` values are host-local and should be read from the final gate JSON.
+- The latest exact-head default GA gate on this host passes disk preflight with
+  `disk_space.state=passed`, `free_space_kib=179269440`, and
+  `min_required_kib=10485760`, then fails before local CI/package smoke with
+  `release_gate_state=generated_outputs_cleanup_required`,
+  `failure.kind=generated_outputs_preflight`, and `release_target.state=available`.
+  Exact `free_space_kib` values are host-local and should be read from the final gate JSON.
 - Current generated release evidence in `dist/` includes stale `v0.2.0` archive/checksum assets
   and a rendered Homebrew formula. Local package and Homebrew render scripts now refuse to
   overwrite those outputs unless the corresponding local-rehearsal overwrite flag is explicit.
@@ -149,7 +150,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, checks packaged payload hashes before writing formula text, refuses to overwrite existing formula output unless explicitly allowed for local rehearsals, and now stages formula text in a temporary file with Ruby syntax validation before moving it into the final output path. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, generated-output cleanup, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
-| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The `6ba403e` disk-threshold override guard checkpoint has exact-head hosted CI and quick-gate evidence, but the default full gate correctly reports `disk_space_cleanup_required` on this host. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent, and fails with `generated_outputs_cleanup_required` if stale generated archive/checksum/formula outputs would be written by final proof. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup, generated-output cleanup, fresh exact-head gate evidence, and release-target availability evidence. |
+| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The exact-head post-CI full gate for `3fa8bbc` reports `release_target.state=available`, `disk_space.state=passed`, and `release_gate_state=generated_outputs_cleanup_required` before local CI/package/Homebrew proof because stale generated outputs still exist. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence and requires a fresh full gate on the release head. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent, and fails with `generated_outputs_cleanup_required` if stale generated archive/checksum/formula outputs would be written by final proof. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, disk cleanup if required, generated-output cleanup, fresh exact-head gate evidence, and release-target availability evidence. |
 
 ## First GA Slice Completed
 
@@ -1800,10 +1801,10 @@ Development-diff validation for this guard:
   `release_gate_state=generated_outputs_cleanup_required`, `failure.kind=generated_outputs_preflight`,
   `ready_for_release_owner_review=false`, and all three stale generated outputs reporting
   `exists=true` and `will_write=true`.
-- The default full gate on the current host still reports the real blocker first:
-  `release_gate_state=disk_space_cleanup_required`, `failure.kind=disk_space_preflight`,
-  `disk_space.state=insufficient`, and remaining actions for both disk cleanup and generated-output
-  cleanup approval.
+- The exact-head default full gate now reaches this preflight on the current host:
+  `release_gate_state=generated_outputs_cleanup_required`,
+  `failure.kind=generated_outputs_preflight`, `disk_space.state=passed`, and all three stale
+  generated outputs report `exists=true` and `will_write=true`.
 
 This is development-diff validation on top of head `5621e09`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.

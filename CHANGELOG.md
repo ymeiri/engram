@@ -185,6 +185,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with package identity expectation override validation while
   preserving the disk cleanup approval gate.
+- Refreshed the GA readiness matrix and release-owner runbook with exact-head
+  `generated_outputs_cleanup_required` evidence after the full gate reached the generated-output
+  preflight.
 - Refreshed the GA readiness matrix with hosted CI and published-release expected-head validation
   while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and

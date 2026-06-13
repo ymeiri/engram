@@ -52,34 +52,40 @@ This snapshot is evidence for the prior candidate head only. If this runbook or 
 change is included in the release head, rerun exact-head hosted CI and the full GA release gate on
 the new head before tagging.
 
-## Current Disk Preflight Blocker
+## Current Local Cleanup Blockers
 
 The latest release-facing head is newer than the historical full-gate candidate above. On the
-current `main` line, exact-head hosted CI and the quick GA gate are green, but the default full GA
-gate still fails before local CI/package smoke because this host is below the default 10 GiB
-release-gate free-space threshold.
+current `main` line, exact-head hosted CI and the quick GA gate are green. The exact-head default
+full GA gate now passes the default 10 GiB disk preflight on this host, but still fails before local
+CI/package smoke because stale generated outputs already exist at the paths the full gate would
+write.
 
-The latest exact-head full-gate rehearsal still failed closed at the disk preflight after reporting
-the intended release target as available:
+The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
+as available:
 
 ```text
-release_gate_state=disk_space_cleanup_required
-failure.kind=disk_space_preflight
+release_gate_state=generated_outputs_cleanup_required
+failure.kind=generated_outputs_preflight
 release_target.state=available
+disk_space.state=passed
+free_space_kib=179269440
 min_required_kib=10485760
-cleanup_candidate: path=target size_kib=103776236
-cleanup_candidate: path=dist size_kib=74608
+generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz exists=true will_write=true
+generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256 exists=true will_write=true
+generated_output: path=dist/homebrew/Formula/engram.rb exists=true will_write=true
 ```
 
-The exact `free_space_kib` and `shortfall_kib` values are host-local and can move between
-rehearsals; use the final full gate JSON as the authoritative disk evidence.
+The exact `free_space_kib` value is host-local and can move between rehearsals; use the final full
+gate JSON as the authoritative disk evidence. If disk space drops below the default threshold
+again, `disk_space_cleanup_required` may appear before generated-output cleanup.
 
-Those cleanup candidates are non-destructive evidence only. This runbook does not authorize
-deleting `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below
-can produce final owner-review proof on this host, the release owner must either approve generated
-artifact cleanup or provide another disk-space remedy, then rerun the full GA release gate and
-confirm that its `disk_space.state` is `passed` with the default
-`disk_space.min_required_kib=10485760` threshold.
+Those cleanup signals are non-destructive evidence only. This runbook does not authorize deleting
+`target/`, `dist/`, or any other local artifact. Before the post-approval sequence below can
+produce final owner-review proof on this host, the release owner must approve generated artifact
+cleanup and, if the disk preflight regresses, also approve disk cleanup or provide another
+disk-space remedy. Then rerun the full GA release gate and confirm that
+`disk_space.state=passed`, `generated_outputs.state=clear`, and
+`disk_space.min_required_kib=10485760`.
 
 `scripts/package-release.sh` also refuses to overwrite the expected release archive or checksum if
 they already exist in `dist/`. Treat that as stale generated-artifact evidence: remove the old
