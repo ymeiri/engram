@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names the post-approval commands, and preserves default-deny release boundaries.
 
 ### Changed
-- Refreshed GA readiness and release-owner approval evidence to exact-head `8396e92` hosted CI and
-  fingerprint-checked generated-output cleanup runbook evidence.
+- Refreshed GA readiness and release-owner approval evidence to exact-head `e86d795` hosted CI and
+  fingerprint-checked generated-output cleanup approval evidence.
 - Tightened the GA release-owner runbook with fingerprint-checked cleanup commands for the stale
   generated archive, checksum, and Homebrew formula outputs that currently block final local proof.
 - Refreshed the native Claude production-gate preflight baseline to the current Claude Code

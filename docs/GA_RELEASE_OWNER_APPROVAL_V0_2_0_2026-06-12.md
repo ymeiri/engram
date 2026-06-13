@@ -55,11 +55,11 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest recorded release-facing checkpoint is newer than the historical full-gate candidate
-above. At that cleanup-runbook checkpoint, exact-head hosted CI run `27479860353` is green for
-`8396e92a6f44ea978862169f7bc8d866464c8913`, and the quick GA gate is green for
-the same head. The exact-head default full GA gate now passes the default 10 GiB disk preflight on
-this host, but still fails before local CI/package smoke because stale generated outputs already
-exist at the paths the full gate would write.
+above. At that cleanup-approval evidence checkpoint, exact-head hosted CI run `27480555463` is
+green for `e86d795b2bac56e5726e66835e361d863e83761e`, and the quick GA gate is green for the same
+head. The exact-head default full GA gate now passes the default 10 GiB disk preflight on this
+host, but still fails before local CI/package smoke because stale generated outputs already exist
+at the paths the full gate would write.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:
