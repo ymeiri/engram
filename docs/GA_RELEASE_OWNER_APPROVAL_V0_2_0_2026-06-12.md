@@ -55,8 +55,8 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest release-facing head is newer than the historical full-gate candidate above. On the
-current `main` line, exact-head hosted CI run `27475243716` is green for
-`d0454b9c1ea0aeaa6ed0294d81017ea926bc92cb`, and the quick GA gate is green for
+current `main` line, exact-head hosted CI run `27478418090` is green for
+`b970c07db3847571665eba878a90cd8f63c61a3a`, and the quick GA gate is green for
 the same head. The exact-head default full GA gate now passes the default 10 GiB disk preflight on
 this host, but still fails before local CI/package smoke because stale generated outputs already
 exist at the paths the full gate would write.
@@ -72,8 +72,14 @@ disk_space.state=passed
 min_required_kib=10485760
 generated_artifacts.state=not_checked
 generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz exists=true will_write=true
+  file_type=file size_bytes=25455708
+  sha256=f48a9fb1f5d5d815b9dfcec0db71aaf0120f5e38fcffc625880c6a0972c2efc5
 generated_output: path=dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256 exists=true will_write=true
+  file_type=file size_bytes=107
+  sha256=5aa7217ffe054bcd58b23c4014468c44575671d31b69a537d16313c121ab9c5d
 generated_output: path=dist/homebrew/Formula/engram.rb exists=true will_write=true
+  file_type=file size_bytes=1110
+  sha256=596b582ab3f603e6c4c5f098f8dec46db175e28ec85d16a0b5b67bcf6386beef
 ```
 
 `generated_artifacts.state=not_checked` is intentional in this failure path: local
@@ -91,9 +97,10 @@ again, `disk_space_cleanup_required` may appear before generated-output cleanup.
 
 Those cleanup signals are non-destructive evidence only. This runbook does not authorize deleting
 `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below can
-produce final owner-review proof on this host, the release owner must approve generated artifact
-cleanup and, if the disk preflight regresses, also approve disk cleanup or provide another
-disk-space remedy. Then rerun the full GA release gate and confirm that
+produce final owner-review proof on this host, the release owner must approve generated-output
+cleanup for the listed `dist/` archive, checksum, and formula files. If the disk preflight
+regresses, the release owner must also approve disk cleanup or provide another disk-space remedy.
+Then rerun the full GA release gate and confirm that
 `disk_space.state=passed`, `generated_outputs.state=clear`, and
 `disk_space.min_required_kib=10485760`.
 
@@ -135,23 +142,25 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
 
 1. Accept the current `main` head reported by the full GA release gate as the GA release head.
 2. Accept the hosted CI run named in the full GA release gate as exact-head hosted CI proof.
-3. Accept that generated-artifact cleanup or another disk-space remedy was explicitly approved
-   before collecting final local release evidence, if the default gate had reported
-   `disk_space_cleanup_required`.
-4. Accept the full GA release gate as disk-space preflight, generated-output cleanup, local CI,
+3. Accept that generated-output cleanup was explicitly approved and completed before collecting
+   final local release evidence, if the default gate had reported
+   `generated_outputs_cleanup_required`.
+4. Accept that disk cleanup or another disk-space remedy was explicitly approved before collecting
+   final local release evidence, if the default gate had reported `disk_space_cleanup_required`.
+5. Accept the full GA release gate as disk-space preflight, generated-output cleanup, local CI,
    package/install, Homebrew formula render, including archive checksum, manifest identity, root,
    and payload-hash checks, release-scope proof, and the source of the archive, checksum, and
    formula files to publish.
-5. Accept that the full GA release gate reported the intended `v0.2.0` local tag, remote Git tag,
+6. Accept that the full GA release gate reported the intended `v0.2.0` local tag, remote Git tag,
    and GitHub release as unavailable before owner review.
-6. Accept that the post-publish verifier must prove the signed local tag and remote Git tag both
+7. Accept that the post-publish verifier must prove the signed local tag and remote Git tag both
    resolve to the accepted release head before published assets count as release evidence.
-7. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
-8. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
+8. Accept `docs/RELEASE_NOTES_V0_2_0.md` as the public release notes for this GA scope.
+9. Accept that native Claude prompt-bearing proof, live `/hooks` effective-hook visibility, and
    live Claude host-label proof are explicitly not claimed by this release.
-9. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
+10. Accept that broad legacy deprecation, destructive cleanup, and unrestricted automated lifecycle
    mutation are explicitly not claimed by this release.
-10. Approve the post-approval command sequence below.
+11. Approve the post-approval command sequence below.
 
 ## Post-Approval Command Sequence
 
