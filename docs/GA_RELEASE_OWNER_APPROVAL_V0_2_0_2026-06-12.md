@@ -126,7 +126,8 @@ gate, not as owner-review-ready evidence.
 After a successful full gate, `generated_artifacts` reports the artifacts produced for publication.
 Each existing regular artifact includes `file_type`, `size_bytes`, and `sha256`, so owner-review
 proof can verify the exact archive, checksum, and formula files that will be published instead of
-accepting path existence alone.
+accepting path existence alone. The gate reports `generated_artifacts_missing` if any required
+post-run artifact is missing, non-regular, empty, or lacks a SHA-256 fingerprint.
 
 ## Release-Owner Signoff Checklist
 

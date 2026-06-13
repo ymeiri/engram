@@ -201,6 +201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and SHA-256 fingerprints in JSON and text output.
 - Hardened GA release-gate publication evidence so post-run generated artifacts also report file
   type, byte size, and SHA-256 fingerprints in JSON and text output.
+- Hardened GA release-gate publication readiness so required post-run generated artifacts must be
+  regular nonempty files with SHA-256 fingerprints before owner review.
 - Refreshed the GA readiness matrix with hosted CI and published-release expected-head validation
   while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and

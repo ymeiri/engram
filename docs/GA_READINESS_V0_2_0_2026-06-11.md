@@ -165,7 +165,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
 | Release notes and changelog | Drafted / needs final validation | `docs/RELEASE_NOTES_V0_2_0.md` now exists with install, upgrade, first-run, and known-limitation text; changelog still has only Unreleased entries. | Review and finalize the notes on the versioned GA head, then promote changelog entries only after GA scope is fixed. |
-| Package artifacts | Validated historically / unpublished | Beta.2 GitHub release has archive and checksum assets; full GA package-install smoke passed for `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum on clean head `8094269`. Local release packaging still fails closed on tracked changes by default, refuses stale archive/checksum overwrites, stages new archive/checksum outputs as temporary files, and checksum-verifies them before moving them into final `dist/` paths. The install smoke rejects checksum files that do not name exactly the expected archive. Later hardening heads have not refreshed `dist/` because local disk preflight blocks the full gate; with disk forced through for rehearsal, the gate now fails before local package proof if stale generated outputs would be written. The GA release gate now separates preflight `generated_outputs` cleanup evidence from post-run `generated_artifacts` publication evidence, failure JSON reports artifact proof as `not_checked` until local proof runs, and successful post-run artifact proof fingerprints existing regular artifacts with `file_type`, `size_bytes`, and `sha256`. | Publish and verify assets only after owner approval, disk cleanup, generated-output cleanup, and a fresh full gate on the release head; require `generated_artifacts.state=present` with regular-file fingerprints and reuse the archive/checksum produced by that successful full gate instead of regenerating into guarded output paths. |
+| Package artifacts | Validated historically / unpublished | Beta.2 GitHub release has archive and checksum assets; full GA package-install smoke passed for `engram-0.2.0-aarch64-apple-darwin.tar.gz` plus checksum on clean head `8094269`. Local release packaging still fails closed on tracked changes by default, refuses stale archive/checksum overwrites, stages new archive/checksum outputs as temporary files, and checksum-verifies them before moving them into final `dist/` paths. The install smoke rejects checksum files that do not name exactly the expected archive. Later hardening heads have not refreshed `dist/` because local disk preflight blocks the full gate; with disk forced through for rehearsal, the gate now fails before local package proof if stale generated outputs would be written. The GA release gate now separates preflight `generated_outputs` cleanup evidence from post-run `generated_artifacts` publication evidence, failure JSON reports artifact proof as `not_checked` until local proof runs, successful post-run artifact proof fingerprints existing regular artifacts with `file_type`, `size_bytes`, and `sha256`, and owner-review readiness is blocked if required post-run artifacts are missing, non-regular, empty, or unfingerprinted. | Publish and verify assets only after owner approval, disk cleanup, generated-output cleanup, and a fresh full gate on the release head; require `generated_artifacts.state=present` with regular-file fingerprints and reuse the archive/checksum produced by that successful full gate instead of regenerating into guarded output paths. |
 | Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, checks packaged payload hashes before writing formula text, refuses to overwrite existing formula output unless explicitly allowed for local rehearsals, and now stages formula text in a temporary file with Ruby syntax validation before moving it into the final output path. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, generated-output cleanup, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
@@ -1817,33 +1817,35 @@ being treated as publishable artifact evidence.
 The post-run generated-artifact proof uses the same fingerprint fields for successful full-gate
 artifacts. Final owner-review evidence should require every required archive, checksum, and formula
 artifact to be a regular file with nonzero `size_bytes` and a 64-character SHA-256 `sha256`, so
-publication reuses an auditable artifact set instead of accepting path existence alone.
+publication reuses an auditable artifact set instead of accepting path existence alone. The gate now
+keeps owner-review readiness blocked with `generated_artifacts_missing` if a required post-run
+artifact is missing, non-regular, empty, or unfingerprinted.
 
 Development-diff validation for this guard:
 
-- `bash -n scripts/release-gate-report.sh`
-- `scripts/release-gate-report.sh --target ga --hosted-run 27476008417 --quick
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- Extracted and executed the real `append_generated_artifact` function in a temporary harness:
+  required regular nonempty files remain `present` with a 64-character SHA-256 fingerprint, while
+  missing paths, symlinks, directories, and zero-byte files set `generated_artifacts_state=missing`
+  with a path-specific reason.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27477567656 --quick
   --allow-tracked-changes --json` still passed as partial evidence with
   `release_gate_state=evidence_incomplete`, `generated_outputs.state=cleanup_required`, and all
   generated outputs reporting `will_write=false`; existing generated-output files report
   `file_type=file`, nonzero `size_bytes`, and 64-character SHA-256 fingerprints.
-- `scripts/release-gate-report.sh --target ga --hosted-run 27476008417
+- `scripts/release-gate-report.sh --target ga --hosted-run 27477567656
   --allow-tracked-changes --json` failed before local CI, package, or Homebrew validation with
   `release_gate_state=generated_outputs_cleanup_required`, `failure.kind=generated_outputs_preflight`,
+  `disk_space.state=passed`, `generated_artifacts.state=not_checked`,
   `ready_for_release_owner_review=false`, and all three stale generated outputs reporting
   `exists=true`, `will_write=true`, `file_type=file`, nonzero `size_bytes`, and SHA-256
   fingerprints.
-- `ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 RELEASE_GATE_MIN_FREE_KIB=999999999999
-  scripts/release-gate-report.sh --target ga --hosted-run 27476008417
-  --allow-tracked-changes --json` failed at disk preflight while still fingerprinting the stale
-  generated outputs and keeping `generated_artifacts.state=not_checked`.
-- The exact-head default full gate now reaches this preflight on the current host:
-  `release_gate_state=generated_outputs_cleanup_required`,
-  `failure.kind=generated_outputs_preflight`, `generated_artifacts.state=not_checked`,
-  `disk_space.state=passed`, and all three stale generated outputs report `exists=true`,
-  `will_write=true`, and file fingerprints.
+- `scripts/release-gate-report.sh --target ga --release-version 0.2.0-beta.2 --hosted-run
+  27477567656 --quick --allow-tracked-changes --json` failed with
+  `release_gate_state=release_target_unavailable`, `failure.kind=release_target_preflight`, and
+  `ready_for_release_owner_review=false`.
 
-This is development-diff validation on top of head `5029421`; after this guard is committed, rerun
+This is development-diff validation on top of head `4d67e5a`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
 ## Validation Run

@@ -702,6 +702,7 @@ append_generated_artifact() {
     local size_bytes=""
     local sha256=""
     local rel_path="$abs_path"
+    local artifact_issue=""
 
     if [[ "$rel_path" == "$repo_root/"* ]]; then
         rel_path="${rel_path#$repo_root/}"
@@ -732,14 +733,26 @@ append_generated_artifact() {
     elif [[ -e "$abs_path" ]]; then
         file_type="other"
     fi
-    if [[ "$required" == "true" && "$exists" != "true" ]]; then
-        generated_artifacts_state="missing"
-        if [[ -n "$generated_artifacts_error" ]]; then
-            generated_artifacts_error+=", "
-        else
-            generated_artifacts_error="required generated release artifacts are missing after local proof: "
+    if [[ "$required" == "true" ]]; then
+        if [[ "$exists" != "true" ]]; then
+            artifact_issue="missing"
+        elif [[ "$file_type" != "file" ]]; then
+            artifact_issue="file_type=$file_type"
+        elif [[ -z "$size_bytes" || "$size_bytes" == "0" ]]; then
+            artifact_issue="size_bytes=${size_bytes:-null}"
+        elif [[ -z "$sha256" ]]; then
+            artifact_issue="sha256=null"
         fi
-        generated_artifacts_error+="$rel_path"
+
+        if [[ -n "$artifact_issue" ]]; then
+            generated_artifacts_state="missing"
+            if [[ -n "$generated_artifacts_error" ]]; then
+                generated_artifacts_error+=", "
+            else
+                generated_artifacts_error="required generated release artifacts are missing or invalid after local proof: "
+            fi
+            generated_artifacts_error+="$rel_path ($artifact_issue)"
+        fi
     fi
 
     generated_artifacts_json="$(
