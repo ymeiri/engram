@@ -428,6 +428,31 @@ if [[ "$ahead_count" != "0" || "$behind_count" != "0" ]]; then
     fail "branch is not synced with $upstream: ahead=$ahead_count behind=$behind_count"
 fi
 
+branch_ref="refs/heads/$branch"
+upstream_remote="$(git for-each-ref --format='%(upstream:remotename)' "$branch_ref")"
+upstream_remote_ref="$(git for-each-ref --format='%(upstream:remoteref)' "$branch_ref")"
+[[ -n "$upstream_remote" ]] || fail "could not determine upstream remote for $branch"
+[[ -n "$upstream_remote_ref" ]] || fail "could not determine upstream remote ref for $branch"
+case "$upstream_remote_ref" in
+    refs/heads/*) ;;
+    *) fail "upstream for $branch is not a remote branch ref: $upstream_remote_ref" ;;
+esac
+if ! upstream_remote_refs="$(git ls-remote "$upstream_remote" "$upstream_remote_ref")"; then
+    fail "could not inspect upstream remote branch $upstream"
+fi
+upstream_remote_head="$(
+    awk -v ref="$upstream_remote_ref" '$2 == ref { print $1 }' <<<"$upstream_remote_refs" | tail -n 1
+)"
+[[ -n "$upstream_remote_head" ]] || fail "upstream remote branch is missing: $upstream"
+if [[ ! "$upstream_remote_head" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "upstream remote branch head must be a 40-character Git SHA, got $upstream_remote_head"
+fi
+if [[ "$upstream_remote_head" != "$head_sha" ]]; then
+    remote_branch_error="branch is not synced with remote $upstream:"
+    remote_branch_error+=" local HEAD=$head_sha remote HEAD=$upstream_remote_head"
+    fail "$remote_branch_error"
+fi
+
 hosted_ci_state="unknown"
 hosted_ci_verifier_json="null"
 hosted_run_report_json="null"
@@ -595,6 +620,9 @@ emit_release_target_failure_json() {
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
         --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
         --arg ahead "$ahead_count" \
         --arg behind "$behind_count" \
         --arg head "$head_sha" \
@@ -622,7 +650,11 @@ emit_release_target_failure_json() {
             upstream: {
                 name: $upstream,
                 ahead: ($ahead | tonumber),
-                behind: ($behind | tonumber)
+                behind: ($behind | tonumber),
+                remote: $upstream_remote,
+                remote_ref: $upstream_remote_ref,
+                remote_head: $upstream_remote_head,
+                matches_remote_head: ($head == $upstream_remote_head)
             },
             head: $head,
             tracked_changes_present: ($tracked == "true"),
@@ -701,6 +733,9 @@ emit_disk_space_failure_json() {
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
         --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
         --arg ahead "$ahead_count" \
         --arg behind "$behind_count" \
         --arg head "$head_sha" \
@@ -731,7 +766,11 @@ emit_disk_space_failure_json() {
             upstream: {
                 name: $upstream,
                 ahead: ($ahead | tonumber),
-                behind: ($behind | tonumber)
+                behind: ($behind | tonumber),
+                remote: $upstream_remote,
+                remote_ref: $upstream_remote_ref,
+                remote_head: $upstream_remote_head,
+                matches_remote_head: ($head == $upstream_remote_head)
             },
             head: $head,
             tracked_changes_present: ($tracked == "true"),
@@ -1130,6 +1169,9 @@ if [[ "$json_output" == "1" ]]; then
         --arg branch "$branch" \
         --arg expected_branch "$expected_branch" \
         --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
         --arg ahead "$ahead_count" \
         --arg behind "$behind_count" \
         --arg head "$head_sha" \
@@ -1167,7 +1209,11 @@ if [[ "$json_output" == "1" ]]; then
             upstream: {
                 name: $upstream,
                 ahead: ($ahead | tonumber),
-                behind: ($behind | tonumber)
+                behind: ($behind | tonumber),
+                remote: $upstream_remote,
+                remote_ref: $upstream_remote_ref,
+                remote_head: $upstream_remote_head,
+                matches_remote_head: ($head == $upstream_remote_head)
             },
             head: $head,
             tracked_changes_present: ($tracked == "true"),
@@ -1231,6 +1277,8 @@ else
     printf '  branch: %s\n' "$branch"
     printf '  expected_branch: %s\n' "${expected_branch:-<none>}"
     printf '  upstream: %s (ahead=%s behind=%s)\n' "$upstream" "$ahead_count" "$behind_count"
+    printf '  upstream_remote: %s %s head=%s matches_head=true\n' \
+        "$upstream_remote" "$upstream_remote_ref" "$upstream_remote_head"
     printf '  head: %s\n' "$head_sha"
     printf '  tracked_changes_present: %s\n' "$tracked_changes_present"
     if [[ "$target" == "beta" ]]; then

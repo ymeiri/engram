@@ -1625,6 +1625,33 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `b9617dd`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Release Gate Remote Branch Head Guard
+
+`scripts/release-gate-report.sh` now checks the upstream remote branch head directly before release
+evidence can proceed. The gate still requires `HEAD` to be `0 0` ahead/behind relative to its local
+tracking ref, but it also resolves the branch's upstream remote/ref and compares `git ls-remote`
+output with the local `HEAD`.
+
+This keeps GA owner-review evidence from relying on a stale local `origin/main` ref. A checkout can
+no longer claim synced-branch release evidence if the authoritative remote branch has advanced since
+the last fetch. JSON evidence now reports `upstream.remote`, `upstream.remote_ref`,
+`upstream.remote_head`, and `upstream.matches_remote_head`.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh`
+- With a temporary `git` wrapper returning a mismatched SHA for the upstream branch,
+  `scripts/release-gate-report.sh --target ga --hosted-run 27465173036 --quick
+  --allow-tracked-changes --json` failed before hosted CI, disk, package, or Homebrew evidence with
+  `branch is not synced with remote origin/main`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27465173036 --quick
+  --allow-tracked-changes --json` still accepted the current remote branch head and reported
+  `upstream.matches_remote_head=true`, `hosted_ci.state=passing`, `release_target.state=available`,
+  `release_gate_state=evidence_incomplete`, and no release actions.
+
+This is development-diff validation on top of head `582d40d`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`

@@ -109,6 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Ruby syntax, and beta-wording validation after package/install smoke.
 - Hardened the GA release gate so owner-review evidence defaults to the `main` branch and reports
   the expected branch in text and JSON output.
+- Hardened the release gate so synced-branch evidence checks the upstream remote branch head directly
+  before accepting hosted CI, disk, package, or Homebrew evidence.
 - Hardened the GA release gate so non-`main` expected-branch overrides require explicit approval
   and branch names are validated before release evidence is collected.
 - Hardened the GA release gate so explicitly empty `EXPECTED_BRANCH` and `--expected-branch`
