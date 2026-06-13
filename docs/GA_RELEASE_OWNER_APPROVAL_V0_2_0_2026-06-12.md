@@ -180,6 +180,20 @@ jq -e '
   and .disk_space.shortfall_kib == 0
   and .generated_outputs.state == "clear"
   and all(.generated_outputs.outputs[]; .exists == false)
+  and .generated_artifacts.state == "present"
+  and all(.generated_artifacts.artifacts[] | select(.required == true); .exists == true)
+  and any(.generated_artifacts.artifacts[];
+    .path == "dist/engram-0.2.0-aarch64-apple-darwin.tar.gz"
+    and .required == true
+    and .exists == true)
+  and any(.generated_artifacts.artifacts[];
+    .path == "dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256"
+    and .required == true
+    and .exists == true)
+  and any(.generated_artifacts.artifacts[];
+    .path == "dist/homebrew/Formula/engram.rb"
+    and .required == true
+    and .exists == true)
   and .local_ci == "passed"
   and .package_install_smoke == "passed"
   and .homebrew_formula_render == "passed"

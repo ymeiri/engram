@@ -466,6 +466,10 @@ generated_outputs_state="not_checked"
 generated_outputs_json="[]"
 generated_outputs_host_triple=""
 generated_outputs_error=""
+generated_artifacts_state="not_checked"
+generated_artifacts_json="[]"
+generated_artifacts_host_triple=""
+generated_artifacts_error=""
 disk_space_state="not_checked"
 disk_space_error=""
 disk_space_shortfall_kib=""
@@ -646,6 +650,105 @@ collect_generated_outputs() {
         fi
         append_generated_output "homebrew_formula" "$homebrew_formula_output" \
             "$homebrew_will_write" "ALLOW_HOMEBREW_FORMULA_OVERWRITE"
+    fi
+}
+
+append_generated_artifact() {
+    local kind="$1"
+    local abs_path="$2"
+    local required="$3"
+    local exists=false
+    local rel_path="$abs_path"
+
+    if [[ "$rel_path" == "$repo_root/"* ]]; then
+        rel_path="${rel_path#$repo_root/}"
+    fi
+    if [[ -e "$abs_path" || -L "$abs_path" ]]; then
+        exists=true
+    fi
+    if [[ "$required" == "true" && "$exists" != "true" ]]; then
+        generated_artifacts_state="missing"
+        if [[ -n "$generated_artifacts_error" ]]; then
+            generated_artifacts_error+=", "
+        else
+            generated_artifacts_error="required generated release artifacts are missing after local proof: "
+        fi
+        generated_artifacts_error+="$rel_path"
+    fi
+
+    generated_artifacts_json="$(
+        jq -c \
+            --arg kind "$kind" \
+            --arg path "$rel_path" \
+            --arg absolute_path "$abs_path" \
+            --arg required "$required" \
+            --arg exists "$exists" \
+            '. + [{
+                kind: $kind,
+                path: $path,
+                absolute_path: $absolute_path,
+                required: ($required == "true"),
+                exists: ($exists == "true")
+            }]' <<<"$generated_artifacts_json"
+    )"
+}
+
+collect_generated_artifacts() {
+    local host_triple="$generated_outputs_host_triple"
+    local host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+    local archive_name
+    local required_count=0
+    local package_required=false
+    local homebrew_required=false
+
+    generated_artifacts_state="not_required"
+    generated_artifacts_json="[]"
+    generated_artifacts_host_triple=""
+    generated_artifacts_error=""
+
+    if [[ -z "$host_triple" ]]; then
+        if ! command -v rustc >/dev/null 2>&1; then
+            generated_artifacts_state="unknown"
+            generated_artifacts_error="required tool is missing for artifact proof: rustc"
+            return 0
+        fi
+        host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
+    fi
+    if [[ -z "$host_triple" || ! "$host_triple" =~ $host_triple_pattern ]]; then
+        generated_artifacts_state="unknown"
+        generated_artifacts_error="could not determine a valid Rust host triple for artifact proof"
+        return 0
+    fi
+    generated_artifacts_host_triple="$host_triple"
+
+    archive_name="engram-${package_version}-${host_triple}"
+
+    if [[ "$run_package_smoke" == "1" ]]; then
+        package_required=true
+        required_count=$((required_count + 2))
+    fi
+    if [[ "$target" == "ga" && "$run_homebrew_render" == "1" &&
+        "$run_package_smoke" == "1" ]]; then
+        homebrew_required=true
+        required_count=$((required_count + 1))
+    fi
+
+    if (( required_count > 0 )); then
+        generated_artifacts_state="present"
+    fi
+
+    append_generated_artifact "package_archive" \
+        "$repo_root/dist/${archive_name}.tar.gz" "$package_required"
+    append_generated_artifact "package_checksum" \
+        "$repo_root/dist/${archive_name}.tar.gz.sha256" "$package_required"
+
+    if [[ "$target" == "ga" ]]; then
+        append_generated_artifact "homebrew_formula" "$homebrew_formula_output" \
+            "$homebrew_required"
+    fi
+
+    if [[ "$generated_artifacts_state" == "missing" ]]; then
+        generated_artifacts_error+=". Rerun the full release gate before owner review."
     fi
 }
 
@@ -1336,6 +1439,8 @@ if [[ "$target" == "ga" ]]; then
     fi
 fi
 
+collect_generated_artifacts
+
 local_ci_state="$([[ "$run_local_ci" == "1" ]] && printf 'passed' || printf 'skipped')"
 package_smoke_state="$([[ "$run_package_smoke" == "1" ]] && printf 'passed' || printf 'skipped')"
 
@@ -1347,6 +1452,8 @@ if [[ "$target" == "ga" && "$package_version" != "$release_version" ]]; then
     release_gate_state="version_bump_required"
 elif [[ "$target" == "ga" && "$release_scope_state" != "complete" ]]; then
     release_gate_state="release_scope_acknowledgement_required"
+elif [[ "$generated_artifacts_state" == "missing" ]]; then
+    release_gate_state="generated_artifacts_missing"
 elif [[ "$target" == "ga" && "$local_ci_state" == "passed" &&
     "$package_smoke_state" == "passed" && "$homebrew_formula_state" != "passed" ]]; then
     release_gate_state="homebrew_formula_render_required"
@@ -1442,6 +1549,10 @@ remaining_release_actions_json="$(
             [
                 "rerun_ga_release_gate_report_with_homebrew_formula_render"
             ]
+        elif $state == "generated_artifacts_missing" then
+            [
+                "rerun_full_\($target)_release_gate_report_with_local_ci_and_package_smoke"
+            ]
         elif $state == "hosted_ci_passing_release_owner_review_required" then
             [
                 "release_owner_approve_release",
@@ -1494,6 +1605,9 @@ if [[ "$json_output" == "1" ]]; then
         --arg generated_outputs_state "$generated_outputs_state" \
         --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
         --arg generated_outputs_error "$generated_outputs_error" \
+        --arg generated_artifacts_state "$generated_artifacts_state" \
+        --arg generated_artifacts_host_triple "$generated_artifacts_host_triple" \
+        --arg generated_artifacts_error "$generated_artifacts_error" \
         --arg release_notes_path "$release_notes_path" \
         --arg release_scope_state "$release_scope_state" \
         --arg release_scope_native_claude "$release_scope_native_claude_ack" \
@@ -1506,6 +1620,7 @@ if [[ "$json_output" == "1" ]]; then
         --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
         --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
         --argjson generated_outputs "$generated_outputs_json" \
+        --argjson generated_artifacts "$generated_artifacts_json" \
         --argjson remaining_release_actions "$remaining_release_actions_json" \
         '{
             target: $target,
@@ -1570,6 +1685,20 @@ if [[ "$json_output" == "1" ]]; then
                 error: (
                     if $generated_outputs_error == "" then null
                     else $generated_outputs_error
+                    end
+                )
+            },
+            generated_artifacts: {
+                state: $generated_artifacts_state,
+                host_triple: (
+                    if $generated_artifacts_host_triple == "" then null
+                    else $generated_artifacts_host_triple
+                    end
+                ),
+                artifacts: $generated_artifacts,
+                error: (
+                    if $generated_artifacts_error == "" then null
+                    else $generated_artifacts_error
                     end
                 )
             },
@@ -1647,6 +1776,18 @@ else
         | "  generated_output: \(.path) kind=\(.kind) exists=\(.exists)"
             + " will_write=\(.will_write) overwrite_env=\(.overwrite_env)"
     ' <<<"$generated_outputs_json"
+    printf '  generated_artifacts_state: %s\n' "$generated_artifacts_state"
+    if [[ -n "$generated_artifacts_error" ]]; then
+        printf '  generated_artifacts_error: %s\n' "$generated_artifacts_error"
+    fi
+    if [[ -n "$generated_artifacts_host_triple" ]]; then
+        printf '  generated_artifacts_host_triple: %s\n' "$generated_artifacts_host_triple"
+    fi
+    jq -r '
+        .[]
+        | "  generated_artifact: \(.path) kind=\(.kind) required=\(.required)"
+            + " exists=\(.exists)"
+    ' <<<"$generated_artifacts_json"
     if [[ "$target" == "ga" ]]; then
         printf '  homebrew_formula_render: %s\n' "$homebrew_formula_state"
         if [[ "$homebrew_formula_state" == "passed" ]]; then

@@ -191,6 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened the GA release-owner approval runbook so post-approval publication reuses and verifies
   the artifacts produced by the successful full gate instead of regenerating into guarded `dist/`
   paths.
+- Hardened the GA release gate so final JSON/text evidence distinguishes preflight
+  `generated_outputs` cleanup checks from post-run `generated_artifacts` publication proof.
 - Refreshed the GA readiness matrix with hosted CI and published-release expected-head validation
   while preserving the disk cleanup approval gate.
 - Refreshed the GA readiness matrix with current-main hosted CI evidence plus isolated Codex and
