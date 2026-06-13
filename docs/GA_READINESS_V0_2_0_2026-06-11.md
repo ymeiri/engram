@@ -1121,6 +1121,47 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `a1a7da5`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Hosted CI Event Override Guard
+
+`scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now fail closed
+when release evidence tries to select a non-default GitHub Actions event without explicit
+approval. The GA gate defaults to `push`, beta/fallback pre-step evidence defaults to
+`pull_request`, and `EXPECTED_EVENT`, `--expected-event`, or `--event` values that differ from
+those defaults require `ALLOW_EXPECTED_EVENT_OVERRIDE=1` before GitHub run discovery or
+inspection. Explicit empty event values fail instead of silently falling back to the default.
+
+This closes a release-evidence gap left by the earlier event-token validation: syntactically valid
+but wrong event names can no longer make final GA evidence search the wrong class of hosted runs
+unless the run is clearly marked as an explicit local rehearsal. The expected workflow and branch
+guards still apply separately.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/verify-hosted-ci-prestep-blocker.sh`
+- `EXPECTED_EVENT=pull_request scripts/release-gate-report.sh --target ga --hosted-run
+  27451012359 --quick --allow-tracked-changes --json` failed before hosted run inspection with
+  `EXPECTED_EVENT override requires explicit approval`.
+- `ALLOW_EXPECTED_EVENT_OVERRIDE=yes EXPECTED_EVENT=pull_request
+  scripts/release-gate-report.sh --target ga --hosted-run 27451012359 --quick
+  --allow-tracked-changes --json` failed with
+  `ALLOW_EXPECTED_EVENT_OVERRIDE must be 0 or 1, got yes`.
+- `EXPECTED_EVENT= scripts/release-gate-report.sh --target ga --hosted-run 27451012359 --quick
+  --allow-tracked-changes --json` failed before hosted run inspection with
+  `EXPECTED_EVENT/--expected-event must not be empty`.
+- `scripts/verify-hosted-ci-prestep-blocker.sh --event push --json` failed before GitHub run
+  discovery with `EXPECTED_EVENT override requires explicit approval`.
+- `ALLOW_EXPECTED_EVENT_OVERRIDE=yes scripts/verify-hosted-ci-prestep-blocker.sh --event push
+  --json` failed with `ALLOW_EXPECTED_EVENT_OVERRIDE must be 0 or 1, got yes`.
+- `EXPECTED_EVENT= scripts/verify-hosted-ci-prestep-blocker.sh --json` failed before GitHub run
+  discovery with `EXPECTED_EVENT/--event must not be empty`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27451012359 --quick
+  --allow-tracked-changes --json` still accepted the default GA `push` event and reported
+  `hosted_ci.state=passing`, `release_target.state=available`,
+  `release_gate_state=evidence_incomplete`, and no release actions.
+
+This is development-diff validation on top of head `b9617dd`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Validation Run
 
 - `git fetch --tags --prune origin`

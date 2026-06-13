@@ -10,7 +10,13 @@ hosted_run_id="${HOSTED_RUN_ID:-}"
 default_expected_workflow="CI"
 expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
 allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
-expected_event="${EXPECTED_EVENT:-}"
+expected_event=""
+expected_event_explicit=0
+if [[ "${EXPECTED_EVENT+x}" == "x" ]]; then
+    expected_event="$EXPECTED_EVENT"
+    expected_event_explicit=1
+fi
+allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
 expected_branch="${EXPECTED_BRANCH:-}"
 allow_expected_branch_override="${ALLOW_EXPECTED_BRANCH_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
@@ -55,7 +61,8 @@ Options:
 
 Environment overrides:
   RELEASE_TARGET, PR_NUMBER, HOSTED_RUN_ID, EXPECTED_WORKFLOW_NAME,
-  ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE, EXPECTED_EVENT, EXPECTED_BRANCH,
+  ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE, EXPECTED_EVENT,
+  ALLOW_EXPECTED_EVENT_OVERRIDE, EXPECTED_BRANCH,
   ALLOW_EXPECTED_BRANCH_OVERRIDE, RELEASE_VERSION,
   RELEASE_NOTES_PATH, ALLOW_RELEASE_NOTES_PATH_OVERRIDE, RELEASE_REPOSITORY,
   ALLOW_RELEASE_REPOSITORY_OVERRIDE,
@@ -116,6 +123,7 @@ while [[ $# -gt 0 ]]; do
         --expected-event)
             [[ $# -ge 2 ]] || fail "--expected-event requires an event name"
             expected_event="$2"
+            expected_event_explicit=1
             shift 2
             ;;
         --expected-branch)
@@ -190,18 +198,34 @@ if [[ "$expected_workflow" != "$default_expected_workflow" &&
     exit 1
 fi
 
+if [[ "$target" == "ga" ]]; then
+    default_expected_event="push"
+else
+    default_expected_event="pull_request"
+fi
+if [[ -z "$expected_event" && "$expected_event_explicit" == "0" ]]; then
+    expected_event="$default_expected_event"
+fi
+case "$allow_expected_event_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_EXPECTED_EVENT_OVERRIDE must be 0 or 1, got $allow_expected_event_override" ;;
+esac
 if [[ -z "$expected_event" ]]; then
-    if [[ "$target" == "ga" ]]; then
-        expected_event="push"
-    else
-        expected_event="pull_request"
-    fi
+    fail "EXPECTED_EVENT/--expected-event must not be empty"
 fi
 event_name_pattern='^[A-Za-z0-9_]+$'
 if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
     expected_event_error="EXPECTED_EVENT/--expected-event must be a GitHub event name token"
     expected_event_error+=", got $expected_event"
     fail "$expected_event_error"
+fi
+if [[ "$expected_event" != "$default_expected_event" &&
+    "$allow_expected_event_override" != "1" ]]; then
+    printf 'error: EXPECTED_EVENT override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_expected_event" >&2
+    printf 'got: %s\n' "$expected_event" >&2
+    printf 'hint: set ALLOW_EXPECTED_EVENT_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
 fi
 
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then

@@ -7,7 +7,12 @@ cd "$repo_root"
 default_expected_workflow="CI"
 expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
 allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
-expected_event="${EXPECTED_EVENT:-pull_request}"
+default_expected_event="pull_request"
+expected_event="$default_expected_event"
+if [[ "${EXPECTED_EVENT+x}" == "x" ]]; then
+    expected_event="$EXPECTED_EVENT"
+fi
+allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
 expected_head="${EXPECTED_HEAD_SHA:-$(git rev-parse HEAD)}"
 expected_jobs=(Check Test Format Clippy Docs)
 run_id="${GITHUB_RUN_ID:-}"
@@ -46,6 +51,8 @@ Environment overrides:
   ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE
                           Allow non-CI workflow names for explicit local rehearsals
   EXPECTED_EVENT          Expected run event (default: pull_request)
+  ALLOW_EXPECTED_EVENT_OVERRIDE
+                          Allow non-pull_request events for explicit local rehearsals
   GITHUB_RUN_ID           Run ID when no positional run-id is supplied
 
 This script is evidence only. It does not accept a hosted-CI fallback,
@@ -108,10 +115,25 @@ if [[ "$expected_workflow" != "$default_expected_workflow" &&
     exit 1
 fi
 event_name_pattern='^[A-Za-z0-9_]+$'
+case "$allow_expected_event_override" in
+    0 | 1) ;;
+    *) fail "ALLOW_EXPECTED_EVENT_OVERRIDE must be 0 or 1, got $allow_expected_event_override" ;;
+esac
+if [[ -z "$expected_event" ]]; then
+    fail "EXPECTED_EVENT/--event must not be empty"
+fi
 if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
     expected_event_error="EXPECTED_EVENT/--event must be a GitHub event name token"
     expected_event_error+=", got $expected_event"
     fail "$expected_event_error"
+fi
+if [[ "$expected_event" != "$default_expected_event" &&
+    "$allow_expected_event_override" != "1" ]]; then
+    printf 'error: EXPECTED_EVENT override requires explicit approval\n' >&2
+    printf 'expected default: %s\n' "$default_expected_event" >&2
+    printf 'got: %s\n' "$expected_event" >&2
+    printf 'hint: set ALLOW_EXPECTED_EVENT_OVERRIDE=1 only for local rehearsals\n' >&2
+    exit 1
 fi
 if [[ ! "$expected_head" =~ ^[0-9a-f]{40}$ ]]; then
     fail "EXPECTED_HEAD_SHA must be a 40-character Git SHA, got $expected_head"

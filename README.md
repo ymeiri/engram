@@ -410,13 +410,17 @@ cargo fmt
 ./scripts/release-gate-report.sh --target ga  # Collect GA gate evidence with disk preflight
 ./scripts/beta-release-gate-report.sh  # Compatibility wrapper for beta PR release gates
 ./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
-./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker; use --event push for main runs
+./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker evidence
 ./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness
 RUST_LOG=debug engram serve    # Verbose logging
 ```
 
 Release package builds fail on tracked working-tree or index changes by default. Set
 `ALLOW_TRACKED_CHANGES=1` only for local development rehearsals.
+
+Release evidence defaults to the repo's canonical branch, workflow, event, repository, and
+artifact paths. Use `ALLOW_*_OVERRIDE=1` flags only for explicit local rehearsals, not final
+release-owner evidence.
 
 Native Claude preflight evidence defaults to the canonical local branch, binaries, and vault path.
 Set the `ALLOW_NATIVE_CLAUDE_*_OVERRIDE` flags only for explicit local rehearsals.

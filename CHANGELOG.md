@@ -98,6 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   allowed for local rehearsals.
 - Hardened release evidence collection so malformed `EXPECTED_EVENT`, `--expected-event`, and
   hosted CI pre-step `--event` values fail closed before GitHub run discovery or inspection.
+- Hardened release evidence collection so non-default hosted CI event selection requires
+  `ALLOW_EXPECTED_EVENT_OVERRIDE=1` before GitHub run discovery or inspection.
 - Hardened release evidence collection so `EXPECTED_WORKFLOW_NAME` cannot select a non-`CI`
   workflow unless `ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1` is set for an explicit rehearsal.
 - Hardened release evidence collection so malformed `HOSTED_RUN_ID`, `--hosted-run`,
