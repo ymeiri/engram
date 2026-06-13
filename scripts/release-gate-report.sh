@@ -649,6 +649,26 @@ collect_generated_outputs() {
     fi
 }
 
+check_generated_outputs_for_local_steps() {
+    local blocking_outputs
+
+    blocking_outputs="$(
+        jq -r '
+            [.[] | select(.exists == true and .will_write == true) | .path]
+            | join(", ")
+        ' <<<"$generated_outputs_json"
+    )"
+    if [[ -z "$blocking_outputs" ]]; then
+        return 0
+    fi
+
+    generated_outputs_state="cleanup_required"
+    generated_outputs_error="generated release outputs already exist and this gate would write them: "
+    generated_outputs_error+="$blocking_outputs"
+    generated_outputs_error+=". Remove stale outputs or get cleanup approval before final local proof."
+    return 1
+}
+
 check_free_space_for_local_steps() {
     if [[ "$run_local_ci" != "1" && "$run_package_smoke" != "1" ]]; then
         disk_space_state="skipped"
@@ -955,6 +975,130 @@ emit_disk_space_failure_json() {
         }'
 }
 
+emit_generated_outputs_failure_json() {
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg release_target_state "$release_target_state" \
+        --arg release_target_local_tag "$release_target_local_tag_exists" \
+        --arg release_target_remote_tag "$release_target_remote_tag_exists" \
+        --arg release_target_github_release "$release_target_github_release_exists" \
+        --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
+        --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg expected_event "$expected_event" \
+        --arg hosted_ci_state "$hosted_ci_state" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg disk_space_state "$disk_space_state" \
+        --arg free_space_kib "$free_space_kib" \
+        --arg min_free_space_kib "$min_free_space_kib" \
+        --arg disk_space_shortfall_kib "$disk_space_shortfall_kib" \
+        --arg generated_outputs_state "$generated_outputs_state" \
+        --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
+        --arg generated_outputs_error "$generated_outputs_error" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg release_scope_state "$release_scope_state" \
+        --arg release_scope_native_claude "$release_scope_native_claude_ack" \
+        --arg release_scope_lifecycle_m6 "$release_scope_lifecycle_m6_ack" \
+        --argjson pr "$pr_report_json" \
+        --argjson hosted_run "$hosted_run_report_json" \
+        --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        --argjson disk_cleanup_candidates "$disk_cleanup_candidates_json" \
+        --argjson generated_outputs "$generated_outputs_json" \
+        '{
+            target: $target,
+            package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
+            branch: $branch,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: {
+                name: $upstream,
+                ahead: ($ahead | tonumber),
+                behind: ($behind | tonumber),
+                remote: $upstream_remote,
+                remote_ref: $upstream_remote_ref,
+                remote_head: $upstream_remote_head,
+                matches_remote_head: ($head == $upstream_remote_head)
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: $release_target_state,
+                local_tag_exists: ($release_target_local_tag == "true"),
+                remote_git_tag_exists: ($release_target_remote_tag == "true"),
+                github_release_exists: ($release_target_github_release == "true")
+            },
+            pr: $pr,
+            hosted_ci: {
+                state: $hosted_ci_state,
+                repository: $release_repo,
+                expected_event: $expected_event,
+                run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
+                run: $hosted_run,
+                verifier: $hosted_ci_verifier
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: $disk_space_state,
+                free_kib: ($free_space_kib | tonumber),
+                min_required_kib: ($min_free_space_kib | tonumber),
+                shortfall_kib: (
+                    if $disk_space_shortfall_kib == "" then null
+                    else ($disk_space_shortfall_kib | tonumber)
+                    end
+                ),
+                cleanup_candidates: $disk_cleanup_candidates
+            },
+            generated_outputs: {
+                state: $generated_outputs_state,
+                host_triple: (
+                    if $generated_outputs_host_triple == "" then null
+                    else $generated_outputs_host_triple
+                    end
+                ),
+                outputs: $generated_outputs,
+                error: $generated_outputs_error
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: $release_scope_state,
+                native_claude_proof_limits_acknowledged: ($release_scope_native_claude == "true"),
+                lifecycle_m6_limits_acknowledged: ($release_scope_lifecycle_m6 == "true")
+            },
+            release_gate_state: "generated_outputs_cleanup_required",
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: [
+                "remove_stale_generated_release_outputs_or_get_cleanup_approval",
+                "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
+            ],
+            failure: {
+                kind: "generated_outputs_preflight",
+                message: $generated_outputs_error
+            },
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+}
+
 run_release_target_preflight() {
     [[ "$target" == "ga" ]] || return 0
 
@@ -984,6 +1128,21 @@ run_disk_space_preflight() {
             emit_disk_space_failure_json
         fi
         fail "$disk_space_error"
+    fi
+}
+
+run_generated_outputs_preflight() {
+    if [[ "$json_output" == "1" ]]; then
+        printf '\n==> generated outputs preflight\n' >&2
+    else
+        printf '\n==> generated outputs preflight\n'
+    fi
+
+    if ! check_generated_outputs_for_local_steps; then
+        if [[ "$json_output" == "1" ]]; then
+            emit_generated_outputs_failure_json
+        fi
+        fail "$generated_outputs_error"
     fi
 }
 
@@ -1135,6 +1294,7 @@ fi
 collect_generated_outputs
 run_release_target_preflight
 run_disk_space_preflight
+run_generated_outputs_preflight
 
 if [[ "$run_local_ci" == "1" ]]; then
     run_step "local CI-equivalent validation" "$repo_root/scripts/local-ci.sh"

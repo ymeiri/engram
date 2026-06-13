@@ -102,6 +102,11 @@ owner-review proof should require `generated_outputs.state=clear`; if it reports
 `cleanup_required`, the listed files need the same explicit cleanup approval or a local-only
 rehearsal overwrite decision before package/Homebrew evidence is final.
 
+When disk space is sufficient, the full GA release gate now fails before local CI/package/Homebrew
+validation with `release_gate_state=generated_outputs_cleanup_required` if any listed generated
+output both exists and would be written by the gate. Treat that state as a hard cleanup-approval
+gate, not as owner-review-ready evidence.
+
 ## Release-Owner Signoff Checklist
 
 Before tagging or publishing `v0.2.0`, the release owner should explicitly confirm:
