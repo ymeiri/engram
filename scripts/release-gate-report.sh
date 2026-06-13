@@ -4,9 +4,19 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-target="${RELEASE_TARGET:-ga}"
-pr_number="${PR_NUMBER:-}"
-hosted_run_id="${HOSTED_RUN_ID:-}"
+target="${RELEASE_TARGET-ga}"
+pr_number=""
+pr_number_explicit=0
+if [[ "${PR_NUMBER+x}" == "x" ]]; then
+    pr_number="$PR_NUMBER"
+    pr_number_explicit=1
+fi
+hosted_run_id=""
+hosted_run_id_explicit=0
+if [[ "${HOSTED_RUN_ID+x}" == "x" ]]; then
+    hosted_run_id="$HOSTED_RUN_ID"
+    hosted_run_id_explicit=1
+fi
 default_expected_workflow="CI"
 expected_workflow="${EXPECTED_WORKFLOW_NAME-$default_expected_workflow}"
 allow_expected_workflow_override="${ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE:-0}"
@@ -20,15 +30,20 @@ allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
 expected_branch="${EXPECTED_BRANCH:-}"
 allow_expected_branch_override="${ALLOW_EXPECTED_BRANCH_OVERRIDE:-0}"
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
-release_version="${RELEASE_VERSION:-}"
+release_version=""
+release_version_explicit=0
+if [[ "${RELEASE_VERSION+x}" == "x" ]]; then
+    release_version="$RELEASE_VERSION"
+    release_version_explicit=1
+fi
 default_release_notes_path="$repo_root/docs/RELEASE_NOTES_V0_2_0.md"
 release_notes_path="${RELEASE_NOTES_PATH-$default_release_notes_path}"
 allow_release_notes_path_override="${ALLOW_RELEASE_NOTES_PATH_OVERRIDE:-0}"
 default_release_repo="ymeiri/engram"
-release_repo="${RELEASE_REPOSITORY:-$default_release_repo}"
+release_repo="${RELEASE_REPOSITORY-$default_release_repo}"
 allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
 default_min_free_space_kib=10485760
-min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB:-$default_min_free_space_kib}"
+min_free_space_kib="${RELEASE_GATE_MIN_FREE_KIB-$default_min_free_space_kib}"
 allow_min_free_space_override="${ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE:-0}"
 run_local_ci=1
 run_package_smoke=1
@@ -107,17 +122,23 @@ while [[ $# -gt 0 ]]; do
             ;;
         --pr)
             [[ $# -ge 2 ]] || fail "--pr requires a PR number"
+            [[ -n "$2" ]] || fail "PR_NUMBER/--pr must not be empty"
             pr_number="$2"
+            pr_number_explicit=1
             shift 2
             ;;
         --hosted-run)
             [[ $# -ge 2 ]] || fail "--hosted-run requires a run ID"
+            [[ -n "$2" ]] || fail "HOSTED_RUN_ID/--hosted-run must not be empty"
             hosted_run_id="$2"
+            hosted_run_id_explicit=1
             shift 2
             ;;
         --release-version)
             [[ $# -ge 2 ]] || fail "--release-version requires a version"
+            [[ -n "$2" ]] || fail "RELEASE_VERSION/--release-version must not be empty"
             release_version="$2"
+            release_version_explicit=1
             shift 2
             ;;
         --expected-event)
@@ -228,10 +249,20 @@ if [[ "$expected_event" != "$default_expected_event" &&
     exit 1
 fi
 
+if [[ "$pr_number_explicit" == "1" && -z "$pr_number" ]]; then
+    fail "PR_NUMBER/--pr must not be empty"
+fi
+if [[ "$hosted_run_id_explicit" == "1" && -z "$hosted_run_id" ]]; then
+    fail "HOSTED_RUN_ID/--hosted-run must not be empty"
+fi
+
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then
     pr_number=3
 fi
 
+if [[ "$release_version_explicit" == "1" && -z "$release_version" ]]; then
+    fail "RELEASE_VERSION/--release-version must not be empty"
+fi
 if [[ -z "$release_version" ]]; then
     if [[ "$target" == "ga" ]]; then
         release_version="${package_version%%-*}"
@@ -303,6 +334,9 @@ case "$allow_release_repo_override" in
     0 | 1) ;;
     *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;
 esac
+if [[ -z "$release_repo" ]]; then
+    fail "RELEASE_REPOSITORY must not be empty"
+fi
 if [[ "$release_repo" != "$default_release_repo" &&
     "$allow_release_repo_override" != "1" ]]; then
     printf 'error: RELEASE_REPOSITORY override requires explicit approval\n' >&2
@@ -318,6 +352,9 @@ case "$allow_min_free_space_override" in
     0 | 1) ;;
     *) fail "ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE must be 0 or 1, got $allow_min_free_space_override" ;;
 esac
+if [[ -z "$min_free_space_kib" ]]; then
+    fail "RELEASE_GATE_MIN_FREE_KIB must not be empty"
+fi
 [[ "$min_free_space_kib" =~ ^[0-9]+$ ]] ||
     fail "RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer"
 if [[ "$min_free_space_kib" != "$default_min_free_space_kib" &&

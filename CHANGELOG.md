@@ -112,6 +112,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hardened release evidence collection so malformed `HOSTED_RUN_ID`, `--hosted-run`,
   `GITHUB_RUN_ID`, pre-step verifier positional run IDs, `PR_NUMBER`, and `--pr` fail closed
   before GitHub run or pull-request queries.
+- Hardened the GA release gate so explicitly empty release selectors and evidence inputs fail
+  closed instead of silently falling back to default release targets, hosted-run discovery, beta PR
+  defaults, package-version defaults, canonical repository defaults, or disk-threshold defaults.
 - Hardened hosted CI pre-step evidence so malformed `EXPECTED_HEAD_SHA` values fail closed before
   GitHub run discovery or inspection.
 - Hardened hosted CI pre-step evidence so an explicitly empty `EXPECTED_HEAD_SHA` fails closed

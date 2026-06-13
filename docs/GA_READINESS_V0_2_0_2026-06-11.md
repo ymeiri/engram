@@ -523,6 +523,41 @@ Targeted validation for this hosted CI run ID guard on a development diff:
   for head `89e784a8a566b1e1e16a4d60ad51ba072bd061ad` with hosted CI passing, release target
   available, and no release actions.
 
+## Release Gate Explicit-Empty Input Guard
+
+`scripts/release-gate-report.sh` now distinguishes unset release selectors from explicitly empty
+release selectors. Unset values keep their existing defaults, but explicit empty values fail before
+release-target lookup, hosted CI discovery, beta PR fallback, disk preflight, local CI, package
+smoke, Homebrew rendering, tag publication, or asset publication. This covers `RELEASE_TARGET`,
+`HOSTED_RUN_ID`, `--hosted-run`, `PR_NUMBER`, `--pr`, `RELEASE_VERSION`,
+`--release-version`, `RELEASE_REPOSITORY`, and `RELEASE_GATE_MIN_FREE_KIB`.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/release-gate-report.sh`
+- `RELEASE_TARGET= scripts/release-gate-report.sh --quick --json` failed with
+  `--target must be ga or beta`.
+- `HOSTED_RUN_ID= scripts/release-gate-report.sh --target ga --quick --json` failed with
+  `HOSTED_RUN_ID/--hosted-run must not be empty`.
+- `scripts/release-gate-report.sh --target ga --hosted-run '' --quick --json` failed with
+  `HOSTED_RUN_ID/--hosted-run must not be empty`.
+- `PR_NUMBER= scripts/release-gate-report.sh --target beta --quick --json` failed with
+  `PR_NUMBER/--pr must not be empty`.
+- `scripts/release-gate-report.sh --target beta --pr '' --quick --json` failed with
+  `PR_NUMBER/--pr must not be empty`.
+- `RELEASE_VERSION= scripts/release-gate-report.sh --target ga --quick --json` failed with
+  `RELEASE_VERSION/--release-version must not be empty`.
+- `scripts/release-gate-report.sh --target ga --release-version '' --quick --json` failed with
+  `RELEASE_VERSION/--release-version must not be empty`.
+- `RELEASE_REPOSITORY= scripts/release-gate-report.sh --target ga --hosted-run 27454978118
+  --quick --json` failed with `RELEASE_REPOSITORY must not be empty`.
+- `RELEASE_GATE_MIN_FREE_KIB= scripts/release-gate-report.sh --target ga --hosted-run
+  27454978118 --quick --json` failed with `RELEASE_GATE_MIN_FREE_KIB must not be empty`.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27454978118 --quick
+  --allow-tracked-changes --json` still accepted the exact-head hosted run and reported
+  `hosted_ci.state=passing`, `release_target.state=available`, `disk_space.state=skipped`,
+  `release_gate_state=evidence_incomplete`, and no release actions.
+
 ## Release Manifest Build Guard
 
 `scripts/package-release.sh` now validates the generated `MANIFEST.json` with `jq` before the
