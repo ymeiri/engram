@@ -698,6 +698,9 @@ append_generated_artifact() {
     local abs_path="$2"
     local required="$3"
     local exists=false
+    local file_type="missing"
+    local size_bytes=""
+    local sha256=""
     local rel_path="$abs_path"
 
     if [[ "$rel_path" == "$repo_root/"* ]]; then
@@ -705,6 +708,29 @@ append_generated_artifact() {
     fi
     if [[ -e "$abs_path" || -L "$abs_path" ]]; then
         exists=true
+    fi
+    if [[ -L "$abs_path" ]]; then
+        file_type="symlink"
+    elif [[ -f "$abs_path" ]]; then
+        file_type="file"
+        if ! size_bytes="$(wc -c <"$abs_path" | tr -d '[:space:]')"; then
+            size_bytes=""
+        fi
+        if [[ ! "$size_bytes" =~ ^[0-9]+$ ]]; then
+            size_bytes=""
+        fi
+        if command -v shasum >/dev/null 2>&1; then
+            if ! sha256="$(shasum -a 256 "$abs_path" | awk '{ print $1 }')"; then
+                sha256=""
+            fi
+            if [[ ! "$sha256" =~ ^[0-9a-f]{64}$ ]]; then
+                sha256=""
+            fi
+        fi
+    elif [[ -d "$abs_path" ]]; then
+        file_type="directory"
+    elif [[ -e "$abs_path" ]]; then
+        file_type="other"
     fi
     if [[ "$required" == "true" && "$exists" != "true" ]]; then
         generated_artifacts_state="missing"
@@ -723,12 +749,26 @@ append_generated_artifact() {
             --arg absolute_path "$abs_path" \
             --arg required "$required" \
             --arg exists "$exists" \
+            --arg file_type "$file_type" \
+            --arg size_bytes "$size_bytes" \
+            --arg sha256 "$sha256" \
             '. + [{
                 kind: $kind,
                 path: $path,
                 absolute_path: $absolute_path,
                 required: ($required == "true"),
-                exists: ($exists == "true")
+                exists: ($exists == "true"),
+                file_type: $file_type,
+                size_bytes: (
+                    if $size_bytes == "" then null
+                    else ($size_bytes | tonumber)
+                    end
+                ),
+                sha256: (
+                    if $sha256 == "" then null
+                    else $sha256
+                    end
+                )
             }]' <<<"$generated_artifacts_json"
     )"
 }
@@ -1884,6 +1924,9 @@ else
         .[]
         | "  generated_artifact: \(.path) kind=\(.kind) required=\(.required)"
             + " exists=\(.exists)"
+            + " file_type=\(.file_type)"
+            + " size_bytes=\((.size_bytes // "null") | tostring)"
+            + " sha256=\(.sha256 // "null")"
     ' <<<"$generated_artifacts_json"
     if [[ "$target" == "ga" ]]; then
         printf '  homebrew_formula_render: %s\n' "$homebrew_formula_state"

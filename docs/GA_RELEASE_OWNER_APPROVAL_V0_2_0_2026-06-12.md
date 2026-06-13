@@ -123,6 +123,11 @@ validation with `release_gate_state=generated_outputs_cleanup_required` if any l
 output both exists and would be written by the gate. Treat that state as a hard cleanup-approval
 gate, not as owner-review-ready evidence.
 
+After a successful full gate, `generated_artifacts` reports the artifacts produced for publication.
+Each existing regular artifact includes `file_type`, `size_bytes`, and `sha256`, so owner-review
+proof can verify the exact archive, checksum, and formula files that will be published instead of
+accepting path existence alone.
+
 ## Release-Owner Signoff Checklist
 
 Before tagging or publishing `v0.2.0`, the release owner should explicitly confirm:
@@ -192,19 +197,36 @@ jq -e '
   and .generated_outputs.state == "clear"
   and all(.generated_outputs.outputs[]; .exists == false)
   and .generated_artifacts.state == "present"
-  and all(.generated_artifacts.artifacts[] | select(.required == true); .exists == true)
+  and all(.generated_artifacts.artifacts[] | select(.required == true);
+    .exists == true
+    and .file_type == "file"
+    and (.size_bytes | type == "number")
+    and .size_bytes > 0
+    and (.sha256 | test("^[0-9a-f]{64}$")))
   and any(.generated_artifacts.artifacts[];
     .path == "dist/engram-0.2.0-aarch64-apple-darwin.tar.gz"
     and .required == true
-    and .exists == true)
+    and .exists == true
+    and .file_type == "file"
+    and (.size_bytes | type == "number")
+    and .size_bytes > 0
+    and (.sha256 | test("^[0-9a-f]{64}$")))
   and any(.generated_artifacts.artifacts[];
     .path == "dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256"
     and .required == true
-    and .exists == true)
+    and .exists == true
+    and .file_type == "file"
+    and (.size_bytes | type == "number")
+    and .size_bytes > 0
+    and (.sha256 | test("^[0-9a-f]{64}$")))
   and any(.generated_artifacts.artifacts[];
     .path == "dist/homebrew/Formula/engram.rb"
     and .required == true
-    and .exists == true)
+    and .exists == true
+    and .file_type == "file"
+    and (.size_bytes | type == "number")
+    and .size_bytes > 0
+    and (.sha256 | test("^[0-9a-f]{64}$")))
   and .local_ci == "passed"
   and .package_install_smoke == "passed"
   and .homebrew_formula_render == "passed"
