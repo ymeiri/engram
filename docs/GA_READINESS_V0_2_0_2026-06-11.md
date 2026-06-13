@@ -1373,6 +1373,38 @@ Targeted validation for this guard on a development diff:
 This is development-diff validation on top of head `eae6924`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Local Package Host Triple Discovery Guard
+
+`scripts/package-release.sh` and `scripts/package-install-smoke.sh` now validate the auto-detected
+Rust host triple before deriving local release archive/checksum paths. A missing host line from
+`rustc -vV` fails before release binary builds, package extraction, or artifact writes; malformed
+host triples fail before any archive name such as `engram-<version>-bad.tar.gz` can become release
+evidence.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/package-release.sh scripts/package-install-smoke.sh
+  scripts/verify-published-release-install.sh scripts/render-homebrew-formula.sh
+  scripts/release-gate-report.sh`
+- With a fake `rustc -vV` output that omitted `host:`, `scripts/package-release.sh` failed with
+  `host triple could not be determined from rustc -vV`.
+- With a fake `rustc -vV` output containing `host: bad`, `scripts/package-release.sh` failed with
+  `host triple must be a Rust target triple, got bad`.
+- With a fake `rustc -vV` output that omitted `host:`,
+  `SKIP_PACKAGE_BUILD=1 ALLOW_PACKAGE_BUILD_SKIP=1
+  DIST_DIR=/tmp/engram-no-such-assets ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
+  scripts/package-install-smoke.sh` failed with
+  `host triple could not be determined from rustc -vV`.
+- With a fake `rustc -vV` output containing `host: bad`, the same install-smoke command failed
+  with `host triple must be a Rust target triple, got bad`.
+- With the current Rust host, `scripts/package-release.sh` still reached the intended dirty-tree
+  guard, and `SKIP_PACKAGE_BUILD=1 ALLOW_PACKAGE_BUILD_SKIP=1
+  DIST_DIR=/tmp/engram-no-such-assets ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1
+  scripts/package-install-smoke.sh` still reached the intended missing-tarball validation error.
+
+This is development-diff validation on top of head `23f3e87`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Event Override Guard
 
 `scripts/release-gate-report.sh` and `scripts/verify-hosted-ci-prestep-blocker.sh` now fail closed

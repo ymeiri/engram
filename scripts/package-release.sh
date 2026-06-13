@@ -7,10 +7,29 @@ cd "$repo_root"
 default_dist_dir="$repo_root/dist"
 dist_dir="${DIST_DIR-$default_dist_dir}"
 allow_dist_dir_override="${ALLOW_PACKAGE_DIST_DIR_OVERRIDE:-0}"
+
+command -v cargo >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: cargo\n' >&2
+    exit 1
+}
+command -v rustc >/dev/null 2>&1 || {
+    printf 'error: required tool is missing: rustc\n' >&2
+    exit 1
+}
+
 package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
 release_notes_slug="$(printf '%s' "$package_version" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')"
 release_notes_source="$repo_root/docs/RELEASE_NOTES_V${release_notes_slug}.md"
 host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
+host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+if [[ -z "$host_triple" ]]; then
+    printf 'error: host triple could not be determined from rustc -vV\n' >&2
+    exit 1
+fi
+if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
+    printf 'error: host triple must be a Rust target triple, got %s\n' "$host_triple" >&2
+    exit 1
+fi
 archive_name="engram-${package_version}-${host_triple}"
 allow_tracked_changes="${ALLOW_TRACKED_CHANGES:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-package.XXXXXX")"
