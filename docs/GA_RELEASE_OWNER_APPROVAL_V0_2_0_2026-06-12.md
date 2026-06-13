@@ -55,10 +55,11 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest release-facing head is newer than the historical full-gate candidate above. On the
-current `main` line, exact-head hosted CI and the quick GA gate are green. The exact-head default
-full GA gate now passes the default 10 GiB disk preflight on this host, but still fails before local
-CI/package smoke because stale generated outputs already exist at the paths the full gate would
-write.
+current `main` line, exact-head hosted CI run `27475243716` is green for
+`d0454b9c1ea0aeaa6ed0294d81017ea926bc92cb`, and the quick GA gate is green for
+the same head. The exact-head default full GA gate now passes the default 10 GiB disk preflight on
+this host, but still fails before local CI/package smoke because stale generated outputs already
+exist at the paths the full gate would write.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:
@@ -77,6 +78,9 @@ generated_output: path=dist/homebrew/Formula/engram.rb exists=true will_write=tr
 
 `generated_artifacts.state=not_checked` is intentional in this failure path: local
 package/Homebrew proof did not run, so the JSON must not claim publishable artifact evidence.
+The forced disk-space and release-target conflict rehearsals on the same head also report
+`generated_artifacts.state=not_checked`, proving those preflight failures are not artifact
+publication evidence.
 
 The exact `free_space_kib` value is host-local and can move between rehearsals; use the final full
 gate JSON as the authoritative disk evidence. If disk space drops below the default threshold
