@@ -1373,6 +1373,43 @@ Targeted validation for this guard on a development diff:
   directory selector and reached the intended local validation error:
   `asset directory does not exist: /tmp/engram-no-such-assets`.
 
+## Published Release Verifier Workspace Defaults Guard
+
+`scripts/verify-published-release-install.sh` now parses help and explicit selectors before it
+discovers workspace package metadata, the current Rust host triple, or the current Git head. After
+parsing, the verifier explicitly requires `cargo`, `rustc`, `git`, and `jq`; then it validates that
+`cargo pkgid --locked -p engram-cli` returned an `x.y.z` package version with an optional
+prerelease suffix before defaulting `--tag`, deriving archive/checksum asset names, or inspecting
+release metadata.
+
+This keeps post-publish verification fail-closed when local tool discovery is unavailable or
+malformed, while still allowing operators to read `--help` without a complete Rust/Git toolchain in
+`PATH`.
+
+Targeted validation for this guard on a development diff:
+
+- `bash -n scripts/verify-published-release-install.sh`
+- `env PATH=/usr/bin:/bin scripts/verify-published-release-install.sh --help` printed usage and
+  exited `0` without requiring Cargo.
+- `env PATH=/usr/bin:/bin scripts/verify-published-release-install.sh
+  --asset-dir /tmp/engram-no-such-assets --json` failed before package metadata discovery with
+  `required tool is missing: cargo`.
+- With a temporary `cargo` wrapper returning `file:///tmp/engram#not-a-version`,
+  `scripts/verify-published-release-install.sh --asset-dir /tmp/engram-no-such-assets --json`
+  failed before host-triple discovery, asset-dir validation, or release checks with
+  `workspace package version must be x.y.z with an optional prerelease suffix, got not-a-version`.
+- With a temporary `cargo` wrapper exiting nonzero, the same verifier command failed with
+  `could not determine workspace package version for engram-cli`.
+- With the current workspace package metadata,
+  `scripts/verify-published-release-install.sh --asset-dir /tmp/engram-no-such-assets --json`
+  still reached the intended local validation error:
+  `asset directory does not exist: /tmp/engram-no-such-assets`.
+- With a temporary `rustc -vV` wrapper omitting `host:`, the verifier still failed before archive
+  naming with `host triple could not be determined from rustc -vV; pass --host-triple explicitly`.
+
+This is development-diff validation on top of head `f9c998e`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Published Release Verifier Host Triple Discovery Guard
 
 `scripts/verify-published-release-install.sh` now validates the final host triple before deriving

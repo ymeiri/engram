@@ -7,11 +7,14 @@ cd "$repo_root"
 default_repo="ymeiri/engram"
 repo="${GITHUB_REPOSITORY-$default_repo}"
 allow_release_repo_override="${ALLOW_RELEASE_REPOSITORY_OVERRIDE:-0}"
-package_version="$(cargo pkgid --locked -p engram-cli | sed 's/.*#//')"
-host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
-tag="v${package_version}"
+package_version=""
+host_triple=""
+host_triple_explicit=0
+tag=""
+tag_explicit=0
 asset_dir=""
-expected_git_head="$(git rev-parse HEAD)"
+expected_git_head=""
+expected_git_head_explicit=0
 expected_tracked_changes_present=false
 expected_prerelease="auto"
 json_output=0
@@ -175,18 +178,21 @@ while [[ $# -gt 0 ]]; do
             [[ $# -ge 2 ]] || fail "--tag requires a tag"
             [[ -n "$2" ]] || fail "--tag must not be empty"
             tag="$2"
+            tag_explicit=1
             shift 2
             ;;
         --host-triple)
             [[ $# -ge 2 ]] || fail "--host-triple requires a host triple"
             [[ -n "$2" ]] || fail "--host-triple must not be empty"
             host_triple="$2"
+            host_triple_explicit=1
             shift 2
             ;;
         --expected-git-head)
             [[ $# -ge 2 ]] || fail "--expected-git-head requires a commit SHA"
             [[ -n "$2" ]] || fail "--expected-git-head must not be empty"
             expected_git_head="$2"
+            expected_git_head_explicit=1
             shift 2
             ;;
         --expected-tracked-changes-present)
@@ -242,24 +248,50 @@ fi
 if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     fail "release repository must be owner/name, got $repo"
 fi
-if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
-    fail "--expected-git-head must be a 40-character Git SHA, got $expected_git_head"
-fi
 
 require_tool cargo
 require_tool rustc
+require_tool git
 require_tool jq
 
+if ! package_id="$(cargo pkgid --locked -p engram-cli)"; then
+    fail "could not determine workspace package version for engram-cli"
+fi
+package_version="${package_id##*#}"
+package_version_pattern='^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$'
+if [[ ! "$package_version" =~ $package_version_pattern ]]; then
+    package_version_error="workspace package version must be x.y.z"
+    package_version_error+=" with an optional prerelease suffix, got $package_version"
+    fail "$package_version_error"
+fi
+
+if [[ "$tag_explicit" == "0" ]]; then
+    tag="v${package_version}"
+fi
 expected_tag="v${package_version}"
 [[ "$tag" == "$expected_tag" ]] ||
     fail "release tag version mismatch: expected $expected_tag for workspace package version $package_version, got $tag"
 
 host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+if [[ "$host_triple_explicit" == "0" ]]; then
+    if ! host_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"; then
+        fail "host triple could not be determined from rustc -vV; pass --host-triple explicitly"
+    fi
+fi
 if [[ -z "$host_triple" ]]; then
     fail "host triple could not be determined from rustc -vV; pass --host-triple explicitly"
 fi
 if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
     fail "--host-triple must be a Rust target triple, got $host_triple"
+fi
+
+if [[ "$expected_git_head_explicit" == "0" ]]; then
+    if ! expected_git_head="$(git rev-parse HEAD)"; then
+        fail "could not determine expected Git head from the current repository"
+    fi
+fi
+if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "--expected-git-head must be a 40-character Git SHA, got $expected_git_head"
 fi
 
 archive_name="engram-${package_version}-${host_triple}"

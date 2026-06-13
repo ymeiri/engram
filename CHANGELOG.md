@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or unexpected prerelease/stable state before downloading assets.
 - Hardened published release install verification so release tags must match the workspace package
   version before release metadata or asset validation runs.
+- Hardened published release install verification so workspace package, host triple, and current
+  head defaults are discovered only after option parsing and explicit tool validation.
 - Hardened published release install verification so downloaded release assets must match a local
   release tag that peels to the expected packaged Git commit.
 - Hardened published release install verification so downloaded GitHub release proof requires
