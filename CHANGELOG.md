@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scoped observation-search runtime evidence, and the unchanged generated-output cleanup gate.
 - Added an exact MCP regression for the `live-debugger-mcp` scoped observation query that previously
   returned zero in Claude Code, covering the literal `load_datadog_skill`/`global_skills` prompt.
+- Refreshed GA readiness and release-owner approval evidence to exact-head `fd4c61c` hosted CI,
+  branch-sync verification, live scoped-search runtime evidence, and the unchanged cleanup blocker.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `3a95713` hosted CI,
   post-CI generated-output cleanup verification, and the cleanup path allowlist hardening.
 - Tightened the GA release-owner cleanup sequence so the post-approval deletion loop must match the
