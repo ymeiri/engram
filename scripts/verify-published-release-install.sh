@@ -448,6 +448,14 @@ if [[ "$json_output" == "1" ]]; then
             install_smoke: "passed",
             asset_install_verified: true,
             published_install_verified: ($downloaded_assets == "true"),
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 else

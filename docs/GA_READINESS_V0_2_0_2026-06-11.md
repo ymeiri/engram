@@ -2007,6 +2007,31 @@ Development-diff validation for this verifier evidence:
   scripts/verify-hosted-ci-prestep-blocker.sh --json 27190538964` failed closed with a run-head
   mismatch and emitted no success JSON.
 
+## Published Verifier Structured Action Evidence
+
+`scripts/verify-published-release-install.sh --json` now keeps the existing
+`release_actions_performed=false` compatibility field and also emits an `actions_performed`
+object on successful asset-install verification. The object reports `release_actions=false`,
+`git_tag=false`, `github_release=false`, `package_asset_upload=false`,
+`homebrew_tap_update=false`, and `generated_output_cleanup=false`.
+
+This keeps local asset-dir rehearsal evidence and future post-publish verifier evidence aligned
+with the release-gate no-side-effect JSON contract. Local `--asset-dir` evidence can prove
+`asset_install_verified=true`, but it still reports `published_install_verified=false` and no
+release actions because no GitHub release assets were downloaded or mutated.
+
+Development-diff validation for this verifier evidence:
+
+- `bash -n scripts/verify-published-release-install.sh`
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir dist
+  --expected-git-head 6a0d5c32b0ae3ad40835116ece1386c0428d3222 --json` passed with
+  `assets.source=asset_dir`, `assets.downloaded=false`, `install_smoke=passed`,
+  `asset_install_verified=true`, `published_install_verified=false`,
+  `release_actions_performed=false`, and every `actions_performed` value false.
+- `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir dist
+  --expected-git-head 0000000000000000000000000000000000000000 --json` failed closed with a
+  manifest Git-head mismatch and emitted no success JSON.
+
 ## Hosted CI Repository Anchor Guard
 
 `scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run
