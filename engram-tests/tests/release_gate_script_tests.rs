@@ -4,7 +4,7 @@ use std::{
     process::{Command, Output},
 };
 
-use serde_json::Value;
+use serde_json::{json, Value};
 use tempfile::TempDir;
 
 fn run(command: &mut Command) -> Output {
@@ -62,6 +62,178 @@ fn write_release_gate_script(repo: &Path) {
 
 fn git(repo: &Path, args: &[&str]) {
     run(Command::new("git").args(args).current_dir(repo));
+}
+
+fn command_stdout(command: &mut Command) -> String {
+    let output = run(command);
+    String::from_utf8(output.stdout)
+        .expect("command stdout should be UTF-8")
+        .trim()
+        .to_string()
+}
+
+fn git_stdout(repo: &Path, args: &[&str]) -> String {
+    command_stdout(Command::new("git").args(args).current_dir(repo))
+}
+
+fn rust_host_triple() -> String {
+    let output = run(Command::new("rustc").arg("-vV"));
+    let stdout = String::from_utf8(output.stdout).expect("rustc -vV stdout should be UTF-8");
+
+    stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .expect("rustc -vV should include host triple")
+        .to_string()
+}
+
+fn sha256(path: &Path) -> String {
+    command_stdout(Command::new("shasum").args(["-a", "256"]).arg(path))
+        .split_whitespace()
+        .next()
+        .expect("shasum output should include a digest")
+        .to_string()
+}
+
+fn relative_path(repo: &Path, path: &Path) -> String {
+    path.strip_prefix(repo)
+        .expect("path should be under repo")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn generated_output_json(repo: &Path, kind: &str, path: &Path, overwrite_env: &str) -> Value {
+    let absolute_path = fs::canonicalize(path).unwrap();
+    json!({
+        "kind": kind,
+        "path": relative_path(repo, path),
+        "absolute_path": absolute_path.to_string_lossy(),
+        "exists": true,
+        "will_write": true,
+        "overwrite_env": overwrite_env,
+        "file_type": "file",
+        "size_bytes": fs::metadata(path).unwrap().len(),
+        "sha256": sha256(path),
+    })
+}
+
+fn write_ga_generated_outputs(repo: &Path) -> Vec<Value> {
+    let host_triple = rust_host_triple();
+    let archive_name = format!("engram-0.2.0-{host_triple}");
+    let archive = repo.join("dist").join(format!("{archive_name}.tar.gz"));
+    let checksum = repo
+        .join("dist")
+        .join(format!("{archive_name}.tar.gz.sha256"));
+    let formula = repo.join("dist/homebrew/Formula/engram.rb");
+
+    fs::create_dir_all(archive.parent().unwrap()).unwrap();
+    fs::create_dir_all(formula.parent().unwrap()).unwrap();
+    fs::write(&archive, "fake release archive\n").unwrap();
+    fs::write(&checksum, "fake release checksum\n").unwrap();
+    fs::write(&formula, "class Engram < Formula\nend\n").unwrap();
+
+    vec![
+        generated_output_json(
+            repo,
+            "package_archive",
+            &archive,
+            "ALLOW_PACKAGE_ASSET_OVERWRITE",
+        ),
+        generated_output_json(
+            repo,
+            "package_checksum",
+            &checksum,
+            "ALLOW_PACKAGE_ASSET_OVERWRITE",
+        ),
+        generated_output_json(
+            repo,
+            "homebrew_formula",
+            &formula,
+            "ALLOW_HOMEBREW_FORMULA_OVERWRITE",
+        ),
+    ]
+}
+
+fn write_cleanup_manifest(repo: &Path, outputs: Vec<Value>) {
+    let head = git_stdout(repo, &["rev-parse", "HEAD"]);
+    let manifest = json!({
+        "target": "ga",
+        "package_version": "0.2.0",
+        "release_version": "0.2.0",
+        "branch": "main",
+        "head": head,
+        "release_gate_state": "generated_outputs_cleanup_required",
+        "failure": {
+            "kind": "generated_outputs_preflight",
+        },
+        "release_target": {
+            "tag": "v0.2.0",
+            "repository": "ymeiri/engram",
+            "state": "available",
+            "local_tag_exists": false,
+            "remote_git_tag_exists": false,
+            "github_release_exists": false,
+        },
+        "hosted_ci": {
+            "state": "passing",
+            "repository": "ymeiri/engram",
+            "expected_workflow": "CI",
+            "expected_event": "push",
+            "run_id": 1,
+            "run": {
+                "status": "completed",
+                "conclusion": "success",
+                "headSha": head,
+                "event": "push",
+                "workflowName": "CI",
+            },
+        },
+        "disk_space": {
+            "state": "passed",
+            "shortfall_kib": 0,
+        },
+        "generated_outputs": {
+            "state": "cleanup_required",
+            "outputs": outputs,
+        },
+        "generated_artifacts": {
+            "state": "not_checked",
+        },
+        "ready_for_release_owner_review": false,
+        "release_owner_decision_required": true,
+        "hosted_ci_fallback_decision_required": false,
+        "remaining_release_actions": [
+            "remove_stale_generated_release_outputs_or_get_cleanup_approval",
+            "rerun_full_release_gate_report_with_local_ci_and_package_smoke",
+        ],
+        "actions_performed": {
+            "release_actions": false,
+            "git_tag": false,
+            "github_release": false,
+            "package_asset_upload": false,
+            "homebrew_tap_update": false,
+            "generated_output_cleanup": false,
+        },
+        "release_actions_performed": false,
+    });
+
+    fs::write(
+        repo.join("cleanup-manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+}
+
+fn init_synced_main(repo: &Path, remote: &Path) {
+    git(repo, &["init", "--initial-branch=main"]);
+    git(repo, &["config", "user.email", "release-test@example.com"]);
+    git(repo, &["config", "user.name", "Release Test"]);
+    git(repo, &["add", "."]);
+    git(repo, &["commit", "-m", "initial"]);
+
+    run(Command::new("git").args(["init", "--bare"]).arg(remote));
+    git(repo, &["remote", "add", "origin", remote.to_str().unwrap()]);
+    git(repo, &["push", "-u", "origin", "main"]);
 }
 
 fn run_ga_release_gate(repo: &Path) -> Output {
@@ -202,4 +374,152 @@ fn ga_release_gate_rejects_stale_remote_tracking_ref() {
     assert!(failure_message.contains("branch is not synced with remote origin/main"));
     assert!(failure_message.contains("do not use git pull as release approval"));
     assert!(failure_message.contains("fresh exact-head CI plus gate"));
+}
+
+#[test]
+fn ga_release_gate_verifies_generated_output_cleanup_manifest() {
+    let temp = TempDir::new().unwrap();
+    let repo = temp.path().join("repo");
+    let remote = temp.path().join("remote.git");
+    fs::create_dir(&repo).unwrap();
+
+    write_minimal_workspace(&repo);
+    write_release_gate_script(&repo);
+    init_synced_main(&repo, &remote);
+    let outputs = write_ga_generated_outputs(&repo);
+    write_cleanup_manifest(&repo, outputs);
+
+    let output = run_ga_release_gate(&repo);
+
+    assert!(
+        output.status.success(),
+        "matching cleanup manifest should pass:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report = parse_json_report(&output);
+
+    assert_eq!(
+        report["release_gate_state"],
+        "generated_output_cleanup_fingerprints_verified"
+    );
+    assert_eq!(
+        report["generated_output_cleanup_verification"]["state"],
+        "verified"
+    );
+    assert_eq!(
+        report["generated_output_cleanup_verification"]["manifest_path"],
+        "cleanup-manifest.json"
+    );
+    assert_eq!(
+        report["generated_output_cleanup_verification"]["expected_outputs"],
+        report["generated_output_cleanup_verification"]["current_outputs"]
+    );
+    assert!(!report["release_actions_performed"].as_bool().unwrap());
+    assert!(!report["actions_performed"]["generated_output_cleanup"]
+        .as_bool()
+        .unwrap());
+}
+
+#[test]
+fn ga_release_gate_rejects_cleanup_manifest_with_release_action_performed() {
+    let temp = TempDir::new().unwrap();
+    let repo = temp.path().join("repo");
+    let remote = temp.path().join("remote.git");
+    fs::create_dir(&repo).unwrap();
+
+    write_minimal_workspace(&repo);
+    write_release_gate_script(&repo);
+    init_synced_main(&repo, &remote);
+    let outputs = write_ga_generated_outputs(&repo);
+    write_cleanup_manifest(&repo, outputs);
+
+    let manifest_path = repo.join("cleanup-manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["actions_performed"]["generated_output_cleanup"] = json!(true);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    let output = run_ga_release_gate(&repo);
+
+    assert!(
+        !output.status.success(),
+        "cleanup manifest with prior cleanup action should fail"
+    );
+
+    let report = parse_json_report(&output);
+
+    assert_eq!(
+        report["release_gate_state"],
+        "generated_output_cleanup_fingerprints_mismatch"
+    );
+    assert_eq!(
+        report["failure"]["kind"],
+        "generated_output_cleanup_verification"
+    );
+    assert_eq!(
+        report["generated_output_cleanup_verification"]["state"],
+        "mismatch"
+    );
+
+    let failure_message = report["failure"]["message"].as_str().unwrap();
+    assert!(failure_message.contains("actions_performed release-action values"));
+    assert!(!report["release_actions_performed"].as_bool().unwrap());
+    assert!(!report["actions_performed"]["generated_output_cleanup"]
+        .as_bool()
+        .unwrap());
+}
+
+#[test]
+fn ga_release_gate_rejects_cleanup_manifest_when_output_fingerprint_changes() {
+    let temp = TempDir::new().unwrap();
+    let repo = temp.path().join("repo");
+    let remote = temp.path().join("remote.git");
+    fs::create_dir(&repo).unwrap();
+
+    write_minimal_workspace(&repo);
+    write_release_gate_script(&repo);
+    init_synced_main(&repo, &remote);
+    let outputs = write_ga_generated_outputs(&repo);
+    write_cleanup_manifest(&repo, outputs);
+
+    let host_triple = rust_host_triple();
+    let archive = repo
+        .join("dist")
+        .join(format!("engram-0.2.0-{host_triple}.tar.gz"));
+    fs::write(archive, "changed fake release archive\n").unwrap();
+
+    let output = run_ga_release_gate(&repo);
+
+    assert!(
+        !output.status.success(),
+        "cleanup manifest with changed output fingerprint should fail"
+    );
+
+    let report = parse_json_report(&output);
+
+    assert_eq!(
+        report["release_gate_state"],
+        "generated_output_cleanup_fingerprints_mismatch"
+    );
+    assert_eq!(
+        report["generated_output_cleanup_verification"]["state"],
+        "mismatch"
+    );
+    assert_eq!(
+        report["failure"]["message"],
+        "current generated outputs do not match the cleanup manifest"
+    );
+    assert_ne!(
+        report["generated_output_cleanup_verification"]["expected_outputs"],
+        report["generated_output_cleanup_verification"]["current_outputs"]
+    );
+    assert!(!report["release_actions_performed"].as_bool().unwrap());
+    assert!(!report["actions_performed"]["generated_output_cleanup"]
+        .as_bool()
+        .unwrap());
 }
