@@ -200,6 +200,14 @@ emit_config_failure_json() {
                 message: $failure_message
             },
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 }
@@ -694,6 +702,14 @@ emit_repo_state_failure_json() {
                 message: $failure_message
             },
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 }
@@ -1411,6 +1427,14 @@ emit_release_target_failure_json() {
                 message: $release_target_error
             },
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 }
@@ -1561,6 +1585,14 @@ emit_disk_space_failure_json() {
                 message: $disk_space_error
             },
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 }
@@ -1703,6 +1735,14 @@ emit_generated_outputs_failure_json() {
                 message: $generated_outputs_error
             },
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 }
@@ -1859,6 +1899,14 @@ emit_hosted_ci_failure_json() {
                 message: $failure_message
             },
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 }
@@ -2413,6 +2461,14 @@ if [[ "$json_output" == "1" ]]; then
             hosted_ci_fallback_decision_required: ($fallback_decision == "true"),
             remaining_release_actions: $remaining_release_actions,
             release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 else

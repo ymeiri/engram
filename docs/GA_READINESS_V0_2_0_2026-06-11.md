@@ -1943,6 +1943,44 @@ passed for the read-only quick gate and the default full generated-output cleanu
 full gate remains intentionally blocked by the same three stale generated outputs until cleanup is
 explicitly approved and executed with the release-owner runbook checks.
 
+## Release Gate Structured Action Evidence
+
+`scripts/release-gate-report.sh --json` now keeps the existing
+`release_actions_performed=false` compatibility field and also emits an `actions_performed` object
+on every release-gate JSON path. The object currently reports
+`release_actions=false`, `git_tag=false`, `github_release=false`,
+`package_asset_upload=false`, `homebrew_tap_update=false`, and
+`generated_output_cleanup=false`.
+
+This makes release-gate no-side-effect evidence machine-checkable across early configuration
+failures, repository-state failures, quick evidence reports, hosted-CI failures, disk/generated
+output preflights, and final owner-review evidence reports. It does not mark validation-only work
+such as local CI or package smoke as release publication; those remain represented by their
+existing state fields.
+
+Development-diff validation for this structured action evidence:
+
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `git diff --check`
+- `scripts/release-gate-report.sh --bogus --json` failed with
+  `release_gate_state=configuration_preflight_failed`, `failure.kind=configuration_preflight`,
+  `release_actions_performed=false`, and every `actions_performed` value false.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27486939343 --quick --json` failed
+  on the intentional development diff with `release_gate_state=tracked_changes_present`,
+  `failure.kind=tracked_changes_preflight`, `tracked_changes_present=true`,
+  `release_actions_performed=false`, and every `actions_performed` value false.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27486939343 --quick
+  --allow-tracked-changes --json` still emitted partial exact-head evidence for `fa7fbf1`, with
+  hosted CI passing, release target available, generated outputs requiring cleanup,
+  `release_gate_state=evidence_incomplete`, `release_actions_performed=false`, and every
+  `actions_performed` value false.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27486939343
+  --allow-tracked-changes --json` still failed before local proof on the stale generated outputs
+  with `release_gate_state=generated_outputs_cleanup_required`,
+  `failure.kind=generated_outputs_preflight`, `disk_space.state=passed`,
+  `generated_artifacts.state=not_checked`, `release_actions_performed=false`, and every
+  `actions_performed` value false.
+
 ## Hosted CI Repository Anchor Guard
 
 `scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run
