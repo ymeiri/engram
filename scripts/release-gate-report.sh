@@ -423,9 +423,13 @@ fi
 
 upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
 [[ -n "$upstream" ]] || fail "current branch has no upstream"
+branch_sync_hint="run git fetch and inspect local/remote commits; do not use git pull "
+branch_sync_hint+="as release approval; any reconciliation needs fresh exact-head CI plus gate"
 read -r ahead_count behind_count < <(git rev-list --left-right --count HEAD..."$upstream")
 if [[ "$ahead_count" != "0" || "$behind_count" != "0" ]]; then
-    fail "branch is not synced with $upstream: ahead=$ahead_count behind=$behind_count"
+    sync_error="branch is not synced with $upstream:"
+    sync_error+=" ahead=$ahead_count behind=$behind_count; $branch_sync_hint"
+    fail "$sync_error"
 fi
 
 branch_ref="refs/heads/$branch"
@@ -450,6 +454,7 @@ fi
 if [[ "$upstream_remote_head" != "$head_sha" ]]; then
     remote_branch_error="branch is not synced with remote $upstream:"
     remote_branch_error+=" local HEAD=$head_sha remote HEAD=$upstream_remote_head"
+    remote_branch_error+="; $branch_sync_hint"
     fail "$remote_branch_error"
 fi
 

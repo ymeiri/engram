@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names the post-approval commands, and preserves default-deny release boundaries.
 
 ### Changed
+- Clarified GA release-gate branch-sync failure output so operators are told to fetch and inspect,
+  not treat `git pull` as release approval.
 - Clarified the GA release-owner runbook branch-sync step so pull-policy or divergence hints are
   treated as stop-and-inspect evidence, not as approval to run a blind merge or rebase before
   release.

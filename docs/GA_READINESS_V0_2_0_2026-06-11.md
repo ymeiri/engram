@@ -1722,9 +1722,17 @@ no longer claim synced-branch release evidence if the authoritative remote branc
 the last fetch. JSON evidence now reports `upstream.remote`, `upstream.remote_ref`,
 `upstream.remote_head`, and `upstream.matches_remote_head`.
 
+Branch-sync failure output now also carries the release-owner runbook guidance inline: fetch and
+inspect local/remote commits, do not treat `git pull` as release approval, and rerun exact-head
+hosted CI plus the gate after any reconciliation changes the release head.
+
 Targeted validation for this guard:
 
 - `bash -n scripts/release-gate-report.sh`
+- In a temporary local clone with `main` one commit ahead of `origin/main`,
+  `scripts/release-gate-report.sh --target ga --quick --json` failed before hosted CI, disk,
+  package, or Homebrew evidence with `branch is not synced with origin/main: ahead=1 behind=0` and
+  the stop-and-inspect hint.
 - With a temporary `git` wrapper returning a mismatched SHA for the upstream branch,
   `scripts/release-gate-report.sh --target ga --hosted-run 27465173036 --quick
   --allow-tracked-changes --json` failed before hosted CI, disk, package, or Homebrew evidence with
