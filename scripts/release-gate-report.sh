@@ -1426,6 +1426,16 @@ emit_generated_output_cleanup_verification_json() {
                     ]
                 end
             ),
+            failure: (
+                if $verification_state == "verified" then
+                    null
+                else
+                    {
+                        kind: "generated_output_cleanup_verification",
+                        message: $verification_error
+                    }
+                end
+            ),
             release_owner_decision_required: true,
             actions_performed: {
                 release_actions: false,
