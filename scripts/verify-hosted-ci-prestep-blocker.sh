@@ -16,7 +16,18 @@ if [[ "${EXPECTED_EVENT+x}" == "x" ]]; then
     expected_event="$EXPECTED_EVENT"
 fi
 allow_expected_event_override="${ALLOW_EXPECTED_EVENT_OVERRIDE:-0}"
-expected_head="${EXPECTED_HEAD_SHA-$(git rev-parse HEAD)}"
+json_output=0
+for arg in "$@"; do
+    if [[ "$arg" == "--json" ]]; then
+        json_output=1
+        break
+    fi
+done
+if [[ "${EXPECTED_HEAD_SHA+x}" == "x" ]]; then
+    expected_head="$EXPECTED_HEAD_SHA"
+else
+    expected_head="$(git rev-parse HEAD 2>/dev/null || true)"
+fi
 expected_jobs=(Check Test Format Clippy Docs)
 run_id=""
 run_id_explicit=0
@@ -24,23 +35,13 @@ if [[ "${GITHUB_RUN_ID+x}" == "x" ]]; then
     run_id="$GITHUB_RUN_ID"
     run_id_explicit=1
 fi
-json_output=0
+config_preflight_complete=0
 run_json="$(mktemp "${TMPDIR:-/tmp}/engram-hosted-ci-run.XXXXXX")"
 
 cleanup() {
     rm -f "$run_json"
 }
 trap cleanup EXIT
-
-fail() {
-    printf 'error: %s\n' "$*" >&2
-    exit 1
-}
-
-require_tool() {
-    local tool="$1"
-    command -v "$tool" >/dev/null 2>&1 || fail "required tool is missing: $tool"
-}
 
 usage() {
     cat <<'USAGE'
@@ -71,6 +72,73 @@ Environment overrides:
 This script is evidence only. It does not accept a hosted-CI fallback,
 mark a PR ready, merge, tag, publish, or perform release actions.
 USAGE
+}
+
+print_config_failure_json() {
+    local message="$1"
+    jq -n \
+        --arg repo "$repo" \
+        --arg run_id "$run_id" \
+        --arg expected_head "$expected_head" \
+        --arg expected_workflow "$expected_workflow" \
+        --arg expected_event "$expected_event" \
+        --arg message "$message" \
+        '{
+            verification_state: "configuration_preflight_failed",
+            condition_verified: false,
+            repo: (if $repo == "" then null else $repo end),
+            run: {
+                id: (
+                    if ($run_id | test("^[0-9]+$")) then ($run_id | tonumber)
+                    else null
+                    end
+                ),
+                id_raw: (if $run_id == "" then null else $run_id end),
+                repo: (if $repo == "" then null else $repo end),
+                expected_head: (if $expected_head == "" then null else $expected_head end),
+                expected_workflow: (
+                    if $expected_workflow == "" then null else $expected_workflow end
+                ),
+                expected_event: (if $expected_event == "" then null else $expected_event end)
+            },
+            failure: {
+                kind: "configuration_preflight",
+                message: $message
+            },
+            hosted_ci_fallback_accepted: false,
+            actions_performed: {
+                hosted_ci_fallback_acceptance: false,
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
+            release_actions_performed: false
+        }'
+}
+
+exit_config_failure() {
+    local message="$1"
+    if [[ "${json_output:-0}" == "1" ]] && command -v jq >/dev/null 2>&1; then
+        print_config_failure_json "$message"
+    fi
+    exit 1
+}
+
+fail() {
+    local message="$*"
+    printf 'error: %s\n' "$message" >&2
+    if [[ "${config_preflight_complete:-0}" == "0" ]]; then
+        exit_config_failure "$message"
+    fi
+    exit 1
+}
+
+require_tool() {
+    local tool="$1"
+    command -v "$tool" >/dev/null 2>&1 || fail "required tool is missing: $tool"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -120,11 +188,12 @@ if [[ -z "$repo" ]]; then
     fail "GITHUB_REPOSITORY/--repo must not be empty"
 fi
 if [[ "$repo" != "$default_repo" && "$allow_release_repo_override" != "1" ]]; then
-    printf 'error: release repository override requires explicit approval\n' >&2
+    repo_override_error="release repository override requires explicit approval"
+    printf 'error: %s\n' "$repo_override_error" >&2
     printf 'expected default: %s\n' "$default_repo" >&2
     printf 'got: %s\n' "$repo" >&2
     printf 'hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$repo_override_error"
 fi
 if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     fail "release repository must be owner/name, got $repo"
@@ -148,11 +217,12 @@ if [[ ! "$expected_workflow" =~ $workflow_name_pattern ]]; then
 fi
 if [[ "$expected_workflow" != "$default_expected_workflow" &&
     "$allow_expected_workflow_override" != "1" ]]; then
-    printf 'error: EXPECTED_WORKFLOW_NAME override requires explicit approval\n' >&2
+    workflow_override_error="EXPECTED_WORKFLOW_NAME override requires explicit approval"
+    printf 'error: %s\n' "$workflow_override_error" >&2
     printf 'expected default: %s\n' "$default_expected_workflow" >&2
     printf 'got: %s\n' "$expected_workflow" >&2
     printf 'hint: set ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$workflow_override_error"
 fi
 event_name_pattern='^[A-Za-z0-9_]+$'
 case "$allow_expected_event_override" in
@@ -169,11 +239,12 @@ if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
 fi
 if [[ "$expected_event" != "$default_expected_event" &&
     "$allow_expected_event_override" != "1" ]]; then
-    printf 'error: EXPECTED_EVENT override requires explicit approval\n' >&2
+    expected_event_error="EXPECTED_EVENT override requires explicit approval"
+    printf 'error: %s\n' "$expected_event_error" >&2
     printf 'expected default: %s\n' "$default_expected_event" >&2
     printf 'got: %s\n' "$expected_event" >&2
     printf 'hint: set ALLOW_EXPECTED_EVENT_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$expected_event_error"
 fi
 if [[ ! "$expected_head" =~ ^[0-9a-f]{40}$ ]]; then
     fail "EXPECTED_HEAD_SHA must be a 40-character Git SHA, got $expected_head"
@@ -181,6 +252,7 @@ fi
 
 require_tool gh
 require_tool jq
+config_preflight_complete=1
 
 if [[ -z "$run_id" ]]; then
     current_branch="$(git branch --show-current)"

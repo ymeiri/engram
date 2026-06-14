@@ -1998,6 +1998,13 @@ Development-diff validation for this structured action evidence:
 `github_release=false`, `package_asset_upload=false`, `homebrew_tap_update=false`, and
 `generated_output_cleanup=false`.
 
+The verifier also emits structured JSON for configuration preflight failures in `--json` mode.
+Those failures report `verification_state=configuration_preflight_failed`,
+`condition_verified=false`, `failure.kind=configuration_preflight`,
+`hosted_ci_fallback_accepted=false`, `release_actions_performed=false`, and the same all-false
+`actions_performed` object. Later hosted-run evidence mismatches are still outside this
+configuration-preflight class and continue to emit no success JSON.
+
 This keeps the hosted-CI fallback verifier aligned with the GA release-gate JSON contract: the
 verifier can prove that a hosted run failed before workflow steps ran, but it still does not accept
 the fallback, mark a PR ready, merge, tag, publish, upload assets, update Homebrew, or clean release
@@ -2014,6 +2021,20 @@ Development-diff validation for this verifier evidence:
 - `EXPECTED_HEAD_SHA=0000000000000000000000000000000000000000
   scripts/verify-hosted-ci-prestep-blocker.sh --json 27190538964` failed closed with a run-head
   mismatch and emitted no success JSON.
+- `scripts/verify-hosted-ci-prestep-blocker.sh --bogus --json` failed closed with
+  `verification_state=configuration_preflight_failed`, `condition_verified=false`,
+  `failure.kind=configuration_preflight`, `hosted_ci_fallback_accepted=false`,
+  `release_actions_performed=false`, and every `actions_performed` value false.
+- `GITHUB_REPOSITORY=example/engram scripts/verify-hosted-ci-prestep-blocker.sh --json`
+  failed closed with the same structured configuration-preflight JSON and no release actions.
+- `EXPECTED_WORKFLOW_NAME=Release scripts/verify-hosted-ci-prestep-blocker.sh --json` and
+  `EXPECTED_EVENT=schedule scripts/verify-hosted-ci-prestep-blocker.sh --json` failed closed with
+  structured configuration-preflight JSON and no release actions.
+- `EXPECTED_HEAD_SHA=bad scripts/verify-hosted-ci-prestep-blocker.sh --json` failed closed with
+  structured configuration-preflight JSON and no release actions.
+- `EXPECTED_HEAD_SHA=0000000000000000000000000000000000000000
+  scripts/verify-hosted-ci-prestep-blocker.sh --json 27490518203` failed after hosted-run
+  inspection with a run-head mismatch, stdout empty, and no configuration-preflight JSON.
 
 ## Published Verifier Structured Action Evidence
 
