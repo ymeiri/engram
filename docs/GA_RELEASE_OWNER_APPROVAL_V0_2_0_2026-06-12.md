@@ -173,47 +173,79 @@ Before tagging or publishing `v0.2.0`, the release owner should explicitly confi
 
 Run these commands only after explicit release-owner approval.
 
-If the pre-approval gate reported `generated_outputs_cleanup_required`, first verify that the
-local stale outputs still match the approved fingerprints, then remove exactly those ignored
-generated release outputs. If any size or SHA-256 check fails, stop and rerun the quick GA gate to
-collect fresh cleanup evidence before approving deletion.
+Set the hosted run ID to a completed push CI run for the exact head being released:
 
 ```bash
-stale_archive="dist/engram-0.2.0-aarch64-apple-darwin.tar.gz"
-stale_checksum="${stale_archive}.sha256"
-stale_formula="dist/homebrew/Formula/engram.rb"
-
-test -f "$stale_archive"
-test -f "$stale_checksum"
-test -f "$stale_formula"
-
-test "$(wc -c <"$stale_archive" | tr -d '[:space:]')" = "25455708"
-test "$(wc -c <"$stale_checksum" | tr -d '[:space:]')" = "107"
-test "$(wc -c <"$stale_formula" | tr -d '[:space:]')" = "1110"
-
-test "$(shasum -a 256 "$stale_archive" | awk '{ print $1 }')" = \
-  "f48a9fb1f5d5d815b9dfcec0db71aaf0120f5e38fcffc625880c6a0972c2efc5"
-test "$(shasum -a 256 "$stale_checksum" | awk '{ print $1 }')" = \
-  "5aa7217ffe054bcd58b23c4014468c44575671d31b69a537d16313c121ab9c5d"
-test "$(shasum -a 256 "$stale_formula" | awk '{ print $1 }')" = \
-  "596b582ab3f603e6c4c5f098f8dec46db175e28ec85d16a0b5b67bcf6386beef"
-
-rm -- "$stale_archive" "$stale_checksum" "$stale_formula"
-test ! -e "$stale_archive"
-test ! -e "$stale_checksum"
-test ! -e "$stale_formula"
+hosted_run_id=<exact-head-ci-run-id>
+gate_json="$(mktemp)"
 ```
 
-Set the hosted run ID to a completed push CI run for the exact head being released:
+If the pre-approval gate reported `generated_outputs_cleanup_required`, first verify that the
+local stale outputs still match the approved fingerprint manifest, then remove exactly those
+ignored generated release outputs. The verification command is read-only and must report
+`actions_performed.generated_output_cleanup=false`; if the manifest or current fingerprints do not
+match, stop and rerun the full GA gate to collect fresh cleanup evidence before approving deletion.
+
+```bash
+cleanup_manifest="$(mktemp)"
+cleanup_verify_json="$(mktemp)"
+
+set +e
+scripts/release-gate-report.sh \
+  --target ga \
+  --hosted-run "$hosted_run_id" \
+  --json >"$cleanup_manifest"
+cleanup_gate_status=$?
+set -e
+
+test "$cleanup_gate_status" != "0"
+jq -e '
+  .release_gate_state == "generated_outputs_cleanup_required"
+  and .failure.kind == "generated_outputs_preflight"
+  and .generated_outputs.state == "cleanup_required"
+  and all(.generated_outputs.outputs[];
+    .exists == true
+    and .will_write == true
+    and .file_type == "file"
+    and (.size_bytes | type == "number")
+    and .size_bytes > 0
+    and (.sha256 | test("^[0-9a-f]{64}$")))
+  and .actions_performed.generated_output_cleanup == false
+  and .release_actions_performed == false
+' "$cleanup_manifest"
+
+scripts/release-gate-report.sh \
+  --target ga \
+  --verify-generated-output-cleanup "$cleanup_manifest" \
+  --json | tee "$cleanup_verify_json"
+jq -e '
+  .release_gate_state == "generated_output_cleanup_fingerprints_verified"
+  and .generated_output_cleanup_verification.state == "verified"
+  and (.generated_outputs.outputs | length) > 0
+  and all(.generated_outputs.outputs[];
+    .exists == true
+    and .will_write == true
+    and .file_type == "file")
+  and .actions_performed.generated_output_cleanup == false
+  and .release_actions_performed == false
+' "$cleanup_verify_json"
+
+while IFS= read -r stale_output; do
+  rm -- "$stale_output"
+done < <(jq -r '.generated_outputs.outputs[] | select(.will_write == true) | .path' \
+  "$cleanup_verify_json")
+
+while IFS= read -r stale_output; do
+  test ! -e "$stale_output"
+done < <(jq -r '.generated_outputs.outputs[] | select(.will_write == true) | .path' \
+  "$cleanup_verify_json")
+```
 
 Do not use `git pull` to satisfy the branch-sync checks below. If the ahead/behind check is
 nonzero, stop and inspect the local and remote commits first; any merge, rebase, or fast-forward
 changes the release head and requires fresh exact-head hosted CI plus a fresh full GA gate.
 
 ```bash
-hosted_run_id=<exact-head-ci-run-id>
-gate_json="$(mktemp)"
-
 git fetch --tags --prune origin
 git status --branch --short
 test "$(git branch --show-current)" = "main"

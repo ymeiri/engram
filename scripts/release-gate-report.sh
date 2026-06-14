@@ -56,6 +56,7 @@ run_package_smoke=1
 run_homebrew_render=1
 allow_tracked_changes=0
 json_output=0
+verify_generated_output_cleanup_manifest=""
 expected_jobs=(Check Test Format Clippy Docs)
 
 usage() {
@@ -77,6 +78,9 @@ Options:
   --skip-package-smoke          Skip ./scripts/package-install-smoke.sh
   --skip-homebrew-render        Skip Homebrew formula render/syntax validation
   --allow-tracked-changes       Allow tracked working-tree/index changes during development
+  --verify-generated-output-cleanup <gate-json>
+                                Read-only verification that current generated outputs match
+                                a prior generated_outputs_cleanup_required gate JSON
   --json                        Emit final evidence as machine-readable JSON
   -h, --help                    Show this help
 
@@ -314,6 +318,15 @@ while [[ $# -gt 0 ]]; do
             allow_tracked_changes=1
             shift
             ;;
+        --verify-generated-output-cleanup)
+            [[ $# -ge 2 ]] ||
+                fail_config_preflight "--verify-generated-output-cleanup requires a gate JSON path"
+            [[ -n "$2" ]] ||
+                fail_config_preflight \
+                    "--verify-generated-output-cleanup gate JSON path must not be empty"
+            verify_generated_output_cleanup_manifest="$2"
+            shift 2
+            ;;
         --json)
             json_output=1
             shift
@@ -399,6 +412,29 @@ fi
 if [[ "$hosted_run_id_explicit" == "1" && -z "$hosted_run_id" ]]; then
     fail_config_preflight "HOSTED_RUN_ID/--hosted-run must not be empty"
 fi
+if [[ -n "$verify_generated_output_cleanup_manifest" ]]; then
+    if [[ "$target" != "ga" ]]; then
+        fail_config_preflight \
+            "--verify-generated-output-cleanup is only supported for GA release gates"
+    fi
+    if [[ "$run_package_smoke" != "1" ]]; then
+        cleanup_verify_error="--verify-generated-output-cleanup requires package outputs"
+        cleanup_verify_error+=" in the generated-output inventory"
+        cleanup_verify_error+="; do not combine it with --quick or --skip-package-smoke"
+        fail_config_preflight "$cleanup_verify_error"
+    fi
+    if [[ "$target" == "ga" && "$run_homebrew_render" != "1" ]]; then
+        cleanup_verify_error="--verify-generated-output-cleanup requires Homebrew formula output"
+        cleanup_verify_error+=" in the GA generated-output inventory"
+        cleanup_verify_error+="; do not combine it with --quick or --skip-homebrew-render"
+        fail_config_preflight "$cleanup_verify_error"
+    fi
+    if [[ ! -f "$verify_generated_output_cleanup_manifest" ]]; then
+        cleanup_verify_error="generated-output cleanup manifest does not exist or is not a file:"
+        cleanup_verify_error+=" $verify_generated_output_cleanup_manifest"
+        fail_config_preflight "$cleanup_verify_error"
+    fi
+fi
 
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then
     pr_number=3
@@ -447,9 +483,11 @@ if [[ -n "$pr_number" && ! "$pr_number" =~ ^[0-9]+$ ]]; then
     fail_config_preflight "$pr_number_error"
 fi
 
-require_tool git
-require_tool gh
 require_tool jq
+require_tool git
+if [[ -z "$verify_generated_output_cleanup_manifest" ]]; then
+    require_tool gh
+fi
 default_expected_branch=""
 if [[ "$target" == "ga" ]]; then
     default_expected_branch="main"
@@ -1237,6 +1275,290 @@ check_generated_outputs_for_local_steps() {
     generated_outputs_error+="$blocking_outputs"
     generated_outputs_error+=". Remove stale outputs or get cleanup approval before final local proof."
     return 1
+}
+
+emit_generated_output_cleanup_verification_json() {
+    local verification_state="$1"
+    local verification_error="$2"
+
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
+        --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg manifest_path "$verify_generated_output_cleanup_manifest" \
+        --arg verification_state "$verification_state" \
+        --arg verification_error "$verification_error" \
+        --arg generated_outputs_state "$generated_outputs_state" \
+        --arg generated_outputs_host_triple "$generated_outputs_host_triple" \
+        --arg generated_outputs_error "$generated_outputs_error" \
+        --argjson generated_outputs "$generated_outputs_json" \
+        --argjson expected_outputs "$generated_output_cleanup_expected_json" \
+        '{
+            target: $target,
+            package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
+            branch: $branch,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: {
+                name: $upstream,
+                ahead: ($ahead | tonumber),
+                behind: ($behind | tonumber),
+                remote: $upstream_remote,
+                remote_ref: $upstream_remote_ref,
+                remote_head: $upstream_remote_head,
+                matches_remote_head: ($head == $upstream_remote_head)
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: "not_checked",
+                local_tag_exists: null,
+                remote_git_tag_exists: null,
+                github_release_exists: null
+            },
+            pr: null,
+            hosted_ci: {
+                state: "not_checked",
+                repository: $release_repo,
+                run_id: null,
+                run: null,
+                verifier: null
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: "not_checked",
+                free_kib: null,
+                min_required_kib: null,
+                shortfall_kib: null,
+                cleanup_candidates: []
+            },
+            generated_outputs: {
+                state: $generated_outputs_state,
+                host_triple: (
+                    if $generated_outputs_host_triple == "" then null
+                    else $generated_outputs_host_triple
+                    end
+                ),
+                outputs: $generated_outputs,
+                error: (
+                    if $generated_outputs_error == "" then null
+                    else $generated_outputs_error
+                    end
+                )
+            },
+            generated_output_cleanup_verification: {
+                state: $verification_state,
+                manifest_path: $manifest_path,
+                expected_outputs: $expected_outputs,
+                current_outputs: (
+                    $generated_outputs
+                    | map({
+                        kind,
+                        path,
+                        absolute_path,
+                        exists,
+                        will_write,
+                        overwrite_env,
+                        file_type,
+                        size_bytes,
+                        sha256
+                    })
+                    | sort_by(.kind, .path)
+                ),
+                error: (
+                    if $verification_error == "" then null
+                    else $verification_error
+                    end
+                )
+            },
+            generated_artifacts: {
+                state: "not_checked",
+                host_triple: null,
+                artifacts: [],
+                error: null
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: null,
+                state: "not_checked",
+                native_claude_proof_limits_acknowledged: false,
+                lifecycle_m6_limits_acknowledged: false
+            },
+            release_gate_state: (
+                if $verification_state == "verified" then
+                    "generated_output_cleanup_fingerprints_verified"
+                else
+                    "generated_output_cleanup_fingerprints_mismatch"
+                end
+            ),
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: (
+                if $verification_state == "verified" then
+                    [
+                        "remove_verified_stale_generated_release_outputs_after_explicit_owner_approval",
+                        "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
+                    ]
+                else
+                    [
+                        "refresh_generated_output_cleanup_evidence",
+                        "get_release_owner_cleanup_approval",
+                        "rerun_generated_output_cleanup_fingerprint_verification"
+                    ]
+                end
+            ),
+            release_owner_decision_required: true,
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
+            release_actions_performed: false
+        }'
+}
+
+verify_generated_output_cleanup() {
+    local manifest_error
+    local verification_error
+    local current_outputs_normalized
+    local expected_outputs_normalized
+
+    if ! jq -e 'type == "object"' "$verify_generated_output_cleanup_manifest" \
+        >/dev/null 2>&1; then
+        generated_output_cleanup_expected_json="[]"
+        verification_error="generated-output cleanup manifest is not valid JSON"
+        emit_generated_output_cleanup_verification_json "mismatch" "$verification_error"
+        fail "$verification_error"
+    fi
+
+    manifest_error="$(
+        jq -r \
+            --arg target "$target" \
+            --arg package_version "$package_version" \
+            --arg release_version "$release_version" \
+            --arg branch "$branch" \
+            --arg head "$head_sha" \
+            '
+            def sha256_string:
+                type == "string" and test("^[0-9a-f]{64}$");
+            if (.target // "") != $target then
+                "manifest target mismatch: expected \($target), got \(.target // null)"
+            elif (.package_version // "") != $package_version then
+                "manifest package_version mismatch: expected \($package_version), got \(.package_version // null)"
+            elif (.release_version // "") != $release_version then
+                "manifest release_version mismatch: expected \($release_version), got \(.release_version // null)"
+            elif (.branch // "") != $branch then
+                "manifest branch mismatch: expected \($branch), got \(.branch // null)"
+            elif (.head // "") != $head then
+                "manifest head mismatch: expected \($head), got \(.head // null)"
+            elif (.generated_outputs.state // "") != "cleanup_required" then
+                "manifest generated_outputs.state must be cleanup_required"
+            elif ((.generated_outputs.outputs // null) | type) != "array" then
+                "manifest generated_outputs.outputs must be an array"
+            elif (.generated_outputs.outputs | length) == 0 then
+                "manifest generated_outputs.outputs must not be empty"
+            elif any(.generated_outputs.outputs[]; .exists != true) then
+                "manifest generated_outputs.outputs must all have exists=true"
+            elif any(.generated_outputs.outputs[]; .will_write != true) then
+                "manifest generated_outputs.outputs must all have will_write=true"
+            elif any(.generated_outputs.outputs[]; .file_type != "file") then
+                "manifest generated_outputs.outputs must all be regular files"
+            elif any(.generated_outputs.outputs[];
+                ((.size_bytes | type) != "number") or .size_bytes <= 0
+            ) then
+                "manifest generated_outputs.outputs must all have positive size_bytes"
+            elif any(.generated_outputs.outputs[]; (.sha256 | sha256_string | not)) then
+                "manifest generated_outputs.outputs must all have sha256 fingerprints"
+            else
+                empty
+            end
+            ' "$verify_generated_output_cleanup_manifest"
+    )"
+    if [[ -n "$manifest_error" ]]; then
+        generated_output_cleanup_expected_json="[]"
+        verification_error="$manifest_error"
+        emit_generated_output_cleanup_verification_json "mismatch" "$verification_error"
+        fail "$verification_error"
+    fi
+
+    expected_outputs_normalized="$(
+        jq -c '
+            .generated_outputs.outputs
+            | map({
+                kind,
+                path,
+                absolute_path,
+                exists,
+                will_write,
+                overwrite_env,
+                file_type,
+                size_bytes,
+                sha256
+            })
+            | sort_by(.kind, .path)
+        ' "$verify_generated_output_cleanup_manifest"
+    )"
+    current_outputs_normalized="$(
+        jq -c '
+            map({
+                kind,
+                path,
+                absolute_path,
+                exists,
+                will_write,
+                overwrite_env,
+                file_type,
+                size_bytes,
+                sha256
+            })
+            | sort_by(.kind, .path)
+        ' <<<"$generated_outputs_json"
+    )"
+    generated_output_cleanup_expected_json="$expected_outputs_normalized"
+
+    if [[ "$current_outputs_normalized" != "$expected_outputs_normalized" ]]; then
+        verification_error="current generated outputs do not match the cleanup manifest"
+        emit_generated_output_cleanup_verification_json "mismatch" "$verification_error"
+        fail "$verification_error"
+    fi
+
+    if [[ "$json_output" == "1" ]]; then
+        emit_generated_output_cleanup_verification_json "verified" ""
+    else
+        printf '\nGenerated-output cleanup fingerprints verified:\n'
+        printf '  manifest: %s\n' "$verify_generated_output_cleanup_manifest"
+        printf '  branch: %s\n' "$branch"
+        printf '  head: %s\n' "$head_sha"
+        jq -r '
+            .[]
+            | "  generated_output: \(.path) kind=\(.kind) size_bytes=\(.size_bytes)"
+                + " sha256=\(.sha256)"
+        ' <<<"$generated_outputs_json"
+        printf '  release_gate_state: generated_output_cleanup_fingerprints_verified\n'
+        printf '  generated_output_cleanup_performed: false\n'
+    fi
 }
 
 check_free_space_for_local_steps() {
@@ -2082,7 +2404,11 @@ if [[ "$target" == "ga" ]]; then
         release_scope_state="missing_release_notes"
     fi
 
-    collect_hosted_run_checks
+    if [[ -n "$verify_generated_output_cleanup_manifest" ]]; then
+        hosted_ci_state="not_checked"
+    else
+        collect_hosted_run_checks
+    fi
 else
     gh pr view "$pr_number" \
         --repo "$release_repo" \
@@ -2139,6 +2465,10 @@ else
 fi
 
 collect_generated_outputs
+if [[ -n "$verify_generated_output_cleanup_manifest" ]]; then
+    verify_generated_output_cleanup
+    exit 0
+fi
 run_release_target_preflight
 run_disk_space_preflight
 run_generated_outputs_preflight
