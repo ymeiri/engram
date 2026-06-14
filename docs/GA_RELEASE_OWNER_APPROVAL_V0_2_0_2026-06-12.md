@@ -55,22 +55,25 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest recorded release-gate behavior checkpoint is newer than the historical full-gate
-candidate above. At that checkpoint, exact-head hosted CI run `27499686731` is green for
-`d4c0cd9454c304471ee127ae230c112bb4fdf89f`, and the quick GA gate is green for the same head.
-That checkpoint also fixes the scoped `entity_observe(action="search")` false negative for long
-natural-language MCP queries by ranking observation key/content keyword overlap instead of
-requiring the whole query as one contiguous substring; the live local daemon was refreshed from
-that build and the previously failing `live-debugger-mcp` query returned `count=5`. This is a
-runtime-quality fix and not a release-publication event. The same checkpoint keeps the release
-gate behavior unchanged: branch-sync divergence is a stop-and-inspect condition, not approval to
-run `git pull`, and early operator/configuration failures in JSON mode emit
-`configuration_preflight_failed` evidence instead of looking like script crashes. The hosted-CI
-pre-step verifier and published release verifier both emit structured configuration-preflight JSON
-for `--json` operator failures without marking release actions as performed. The generated-output
-cleanup verifier repeats the full-gate manifest evidence and fingerprints the manifest file itself
-with `manifest_size_bytes` and `manifest_sha256`. The exact-head default full GA gate now passes
-the default 10 GiB disk preflight on this host, but still fails before local CI/package smoke
-because stale generated outputs already exist at the paths the full gate would write.
+candidate above. At that checkpoint, exact-head hosted CI run `27501370037` is green for
+`3a95713895e0ee90675d61a03659061cc3a244cc`, and the quick GA gate is green for the same head.
+The earlier `d4c0cd9` checkpoint fixed the scoped `entity_observe(action="search")` false
+negative for long natural-language MCP queries by ranking observation key/content keyword overlap
+instead of requiring the whole query as one contiguous substring; the live local daemon was
+refreshed from that build and the previously failing `live-debugger-mcp` query returned
+`count=5`. That is a runtime-quality fix and not a release-publication event. The current
+checkpoint keeps the release gate behavior unchanged and tightens the post-approval cleanup
+sequence: branch-sync divergence is a stop-and-inspect condition, not approval to run `git pull`;
+early operator/configuration failures in JSON mode emit `configuration_preflight_failed` evidence
+instead of looking like script crashes; the hosted-CI pre-step verifier and published release
+verifier both emit structured configuration-preflight JSON for `--json` operator failures without
+marking release actions as performed; the generated-output cleanup verifier repeats the full-gate
+manifest evidence and fingerprints the manifest file itself with `manifest_size_bytes` and
+`manifest_sha256`; and the deletion loop must diff the verifier's `will_write=true` paths against
+the exact three expected generated-output paths before removing anything. The exact-head default
+full GA gate now passes the default 10 GiB disk preflight on this host, but still fails before
+local CI/package smoke because stale generated outputs already exist at the paths the full gate
+would write.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:
@@ -110,9 +113,11 @@ Those cleanup signals are non-destructive evidence only. This runbook does not a
 `target/`, `dist/`, or any other local artifact. Before the post-approval sequence below can
 produce final owner-review proof on this host, the release owner must approve generated-output
 cleanup for the listed `dist/` archive, checksum, and formula files. The post-approval cleanup
-block below verifies the exact approved size and SHA-256 fingerprints before removing only those
-three ignored generated release outputs. If the disk preflight regresses, the release owner must
-also approve disk cleanup or provide another disk-space remedy. Then rerun the full GA release gate
+block below verifies the exact approved size and SHA-256 fingerprints and then requires the
+cleanup candidate paths to match the exact archive, checksum, and formula allowlist before
+removing only those three ignored generated release outputs. If the disk preflight regresses, the
+release owner must also approve disk cleanup or provide another disk-space remedy. Then rerun the
+full GA release gate
 and confirm that
 `disk_space.state=passed`, `generated_outputs.state=clear`, and
 `disk_space.min_required_kib=10485760`.
