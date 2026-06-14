@@ -210,6 +210,13 @@ jq -e '
   and .disk_space.state == "passed"
   and .generated_outputs.state == "cleanup_required"
   and .generated_artifacts.state == "not_checked"
+  and .ready_for_release_owner_review == false
+  and .release_owner_decision_required == true
+  and .hosted_ci_fallback_decision_required == false
+  and (.remaining_release_actions | sort) == ([
+    "remove_stale_generated_release_outputs_or_get_cleanup_approval",
+    "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
+  ] | sort)
   and (. as $manifest
     | ($manifest.actions_performed | type == "object")
       and (

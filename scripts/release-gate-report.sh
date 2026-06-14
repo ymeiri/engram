@@ -1529,6 +1529,30 @@ verify_generated_output_cleanup() {
             elif (.generated_artifacts.state // "") != "not_checked" then
                 "manifest generated_artifacts.state must be not_checked"
             elif (
+                (.ready_for_release_owner_review | type) != "boolean"
+                or .ready_for_release_owner_review != false
+            ) then
+                "manifest ready_for_release_owner_review must be false"
+            elif (
+                (.release_owner_decision_required | type) != "boolean"
+                or .release_owner_decision_required != true
+            ) then
+                "manifest release_owner_decision_required must be true"
+            elif (
+                (.hosted_ci_fallback_decision_required | type) != "boolean"
+                or .hosted_ci_fallback_decision_required != false
+            ) then
+                "manifest hosted_ci_fallback_decision_required must be false"
+            elif ((.remaining_release_actions // null) | type) != "array" then
+                "manifest remaining_release_actions must be an array"
+            elif (
+                (.remaining_release_actions | sort) != ([
+                    "remove_stale_generated_release_outputs_or_get_cleanup_approval",
+                    "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
+                ] | sort)
+            ) then
+                "manifest remaining_release_actions must require cleanup and full gate rerun"
+            elif (
                 (.release_actions_performed | type) != "boolean"
                 or .release_actions_performed != false
             ) then
