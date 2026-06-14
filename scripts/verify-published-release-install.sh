@@ -18,6 +18,14 @@ expected_git_head_explicit=0
 expected_tracked_changes_present=false
 expected_prerelease="auto"
 json_output=0
+config_preflight_complete=0
+
+for arg in "$@"; do
+    if [[ "$arg" == "--json" ]]; then
+        json_output=1
+        break
+    fi
+done
 
 usage() {
     cat <<'USAGE'
@@ -48,7 +56,59 @@ USAGE
 }
 
 fail() {
-    printf 'error: %s\n' "$*" >&2
+    local message="$*"
+    printf 'error: %s\n' "$message" >&2
+    if [[ "${config_preflight_complete:-0}" == "0" ]]; then
+        exit_config_failure "$message"
+    fi
+    exit 1
+}
+
+print_config_failure_json() {
+    local message="$1"
+    jq -n \
+        --arg repo "$repo" \
+        --arg tag "$tag" \
+        --arg version "$package_version" \
+        --arg host_triple "$host_triple" \
+        --arg expected_git_head "$expected_git_head" \
+        --arg expected_tracked_changes_present "$expected_tracked_changes_present" \
+        --arg expected_prerelease "$expected_prerelease" \
+        --arg message "$message" \
+        '{
+            verification_state: "configuration_preflight_failed",
+            repo: (if $repo == "" then null else $repo end),
+            tag: (if $tag == "" then null else $tag end),
+            version: (if $version == "" then null else $version end),
+            host_triple: (if $host_triple == "" then null else $host_triple end),
+            expected_git_head: (
+                if $expected_git_head == "" then null else $expected_git_head end
+            ),
+            expected_tracked_changes_present: ($expected_tracked_changes_present == "true"),
+            expected_prerelease: $expected_prerelease,
+            asset_install_verified: false,
+            published_install_verified: false,
+            failure: {
+                kind: "configuration_preflight",
+                message: $message
+            },
+            actions_performed: {
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
+            release_actions_performed: false
+        }'
+}
+
+exit_config_failure() {
+    local message="$1"
+    if [[ "${json_output:-0}" == "1" ]] && command -v jq >/dev/null 2>&1; then
+        print_config_failure_json "$message"
+    fi
     exit 1
 }
 
@@ -239,11 +299,12 @@ if [[ -z "$repo" ]]; then
     fail "GITHUB_REPOSITORY/--repo must not be empty"
 fi
 if [[ "$repo" != "$default_repo" && "$allow_release_repo_override" != "1" ]]; then
-    printf 'error: release repository override requires explicit approval\n' >&2
+    repo_override_message="release repository override requires explicit approval"
+    printf 'error: %s\n' "$repo_override_message" >&2
     printf 'expected default: %s\n' "$default_repo" >&2
     printf 'got: %s\n' "$repo" >&2
     printf 'hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$repo_override_message"
 fi
 if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     fail "release repository must be owner/name, got $repo"
@@ -327,6 +388,7 @@ if [[ -z "$asset_dir" ]]; then
     require_tool gh
     asset_dir="$work_dir/assets"
     mkdir -p "$asset_dir"
+    config_preflight_complete=1
 
     if [[ "$json_output" == "1" ]]; then
         printf '\n==> inspect GitHub release\n' >&2
@@ -369,6 +431,7 @@ if [[ -z "$asset_dir" ]]; then
 else
     [[ -d "$asset_dir" ]] || fail "asset directory does not exist: $asset_dir"
     printf '{}' >"$release_json"
+    config_preflight_complete=1
 fi
 
 if [[ ! -s "$asset_dir/$tarball_name" ]]; then

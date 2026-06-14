@@ -2018,6 +2018,12 @@ object on successful asset-install verification. The object reports `release_act
 `git_tag=false`, `github_release=false`, `package_asset_upload=false`,
 `homebrew_tap_update=false`, and `generated_output_cleanup=false`.
 
+The verifier also emits structured JSON for configuration preflight failures in `--json` mode.
+Those failures report `verification_state=configuration_preflight_failed`,
+`failure.kind=configuration_preflight`, `asset_install_verified=false`,
+`published_install_verified=false`, `release_actions_performed=false`, and the same all-false
+`actions_performed` object.
+
 This keeps local asset-dir rehearsal evidence and future post-publish verifier evidence aligned
 with the release-gate no-side-effect JSON contract. Local `--asset-dir` evidence can prove
 `asset_install_verified=true`, but it still reports `published_install_verified=false` and no
@@ -2034,6 +2040,13 @@ Development-diff validation for this verifier evidence:
 - `scripts/verify-published-release-install.sh --tag v0.2.0 --asset-dir dist
   --expected-git-head 0000000000000000000000000000000000000000 --json` failed closed with a
   manifest Git-head mismatch and emitted no success JSON.
+- `scripts/verify-published-release-install.sh --bogus --json` failed closed with
+  `verification_state=configuration_preflight_failed`, `failure.kind=configuration_preflight`,
+  `asset_install_verified=false`, `published_install_verified=false`,
+  `release_actions_performed=false`, and every `actions_performed` value false.
+- `GITHUB_REPOSITORY=example/engram scripts/verify-published-release-install.sh --tag v0.2.0
+  --json` failed closed with the same structured configuration-preflight JSON and no release
+  actions.
 
 ## Hosted CI Repository Anchor Guard
 
