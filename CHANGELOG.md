@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clarified the GA release-owner runbook branch-sync step so pull-policy or divergence hints are
   treated as stop-and-inspect evidence, not as approval to run a blind merge or rebase before
   release.
+- Clarified the GA release-owner runbook Homebrew path so the tap formula is audited before commit
+  and the installed tap formula is tested after publication.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `0aa009a` hosted CI and
   fingerprint-checked generated-output cleanup approval evidence.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `2adc10c` hosted CI,

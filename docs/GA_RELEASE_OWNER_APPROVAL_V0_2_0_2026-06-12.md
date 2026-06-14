@@ -496,6 +496,7 @@ mkdir -p "$tap_dir/Formula"
 cp dist/homebrew/Formula/engram.rb "$tap_dir/Formula/engram.rb"
 git -C "$tap_dir" diff -- Formula/engram.rb
 git -C "$tap_dir" status --short
+brew audit --formula "$tap_dir/Formula/engram.rb"
 git -C "$tap_dir" add Formula/engram.rb
 git -C "$tap_dir" commit -m "Update engram formula to ${tag}"
 git -C "$tap_dir" push origin main
@@ -506,6 +507,7 @@ Finally, verify the user-facing install path:
 ```bash
 brew update
 brew upgrade engram || brew install ymeiri/engram/engram
+brew test ymeiri/engram/engram
 engram --version
 ```
 
