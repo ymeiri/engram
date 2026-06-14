@@ -1561,6 +1561,172 @@ emit_generated_outputs_failure_json() {
         }'
 }
 
+emit_hosted_ci_failure_json() {
+    local release_gate_state="$1"
+    local failure_message="$2"
+    local expected_jobs_json
+    local checks_json
+
+    expected_jobs_json="$(
+        printf '%s\n' "${expected_jobs[@]}" |
+            jq -R -s 'split("\n") | map(select(length > 0))'
+    )"
+    if [[ -s "$checks_file" ]]; then
+        checks_json="$(
+            jq -R -s '
+                split("\n")
+                | map(select(length > 0) | split("\t") | {
+                    name: .[0],
+                    status: .[1],
+                    conclusion: (.[2] // "")
+                })
+            ' "$checks_file"
+        )"
+    else
+        checks_json="[]"
+    fi
+
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
+        --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg expected_workflow "$expected_workflow" \
+        --arg expected_event "$expected_event" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg min_free_space_kib "$min_free_space_kib" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg release_scope_state "$release_scope_state" \
+        --arg release_scope_native_claude "$release_scope_native_claude_ack" \
+        --arg release_scope_lifecycle_m6 "$release_scope_lifecycle_m6_ack" \
+        --arg release_gate_state "$release_gate_state" \
+        --arg failure_message "$failure_message" \
+        --argjson hosted_run "$hosted_run_report_json" \
+        --argjson hosted_ci_verifier "$hosted_ci_verifier_json" \
+        --argjson expected_jobs "$expected_jobs_json" \
+        --argjson checks "$checks_json" \
+        '{
+            target: $target,
+            package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
+            branch: $branch,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: {
+                name: $upstream,
+                ahead: ($ahead | tonumber),
+                behind: ($behind | tonumber),
+                remote: $upstream_remote,
+                remote_ref: $upstream_remote_ref,
+                remote_head: $upstream_remote_head,
+                matches_remote_head: ($head == $upstream_remote_head)
+            },
+            head: $head,
+            tracked_changes_present: ($tracked == "true"),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: "not_checked",
+                local_tag_exists: null,
+                remote_git_tag_exists: null,
+                github_release_exists: null
+            },
+            pr: null,
+            hosted_ci: {
+                state: $release_gate_state,
+                repository: $release_repo,
+                expected_workflow: $expected_workflow,
+                expected_event: $expected_event,
+                expected_jobs: $expected_jobs,
+                run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
+                run: $hosted_run,
+                checks: $checks,
+                verifier: $hosted_ci_verifier
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: "not_checked",
+                free_kib: null,
+                min_required_kib: ($min_free_space_kib | tonumber),
+                shortfall_kib: null,
+                cleanup_candidates: []
+            },
+            generated_outputs: {
+                state: "not_checked",
+                host_triple: null,
+                outputs: [],
+                error: null
+            },
+            generated_artifacts: {
+                state: "not_checked",
+                host_triple: null,
+                artifacts: [],
+                error: null
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: $release_scope_state,
+                native_claude_proof_limits_acknowledged: ($release_scope_native_claude == "true"),
+                lifecycle_m6_limits_acknowledged: ($release_scope_lifecycle_m6 == "true")
+            },
+            release_gate_state: $release_gate_state,
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: (
+                if $release_gate_state == "hosted_ci_head_mismatch" then
+                    [
+                        "select_hosted_ci_run_for_current_head",
+                        "rerun_exact_head_hosted_ci",
+                        "rerun_ga_release_gate_report"
+                    ]
+                elif $release_gate_state == "hosted_ci_jobs_mismatch" then
+                    [
+                        "restore_expected_release_ci_jobs_or_update_gate_with_approval",
+                        "rerun_exact_head_hosted_ci",
+                        "rerun_ga_release_gate_report"
+                    ]
+                else
+                    [
+                        "rerun_exact_head_hosted_ci",
+                        "rerun_ga_release_gate_report"
+                    ]
+                end
+            ),
+            failure: {
+                kind: "hosted_ci_preflight",
+                message: $failure_message
+            },
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+}
+
+fail_hosted_ci_preflight() {
+    local release_gate_state="$1"
+    local failure_message="$2"
+
+    if [[ "$json_output" == "1" ]]; then
+        emit_hosted_ci_failure_json "$release_gate_state" "$failure_message"
+    fi
+    fail "$failure_message"
+}
+
 run_release_target_preflight() {
     [[ "$target" == "ga" ]] || return 0
 
@@ -1610,7 +1776,7 @@ run_generated_outputs_preflight() {
 
 collect_hosted_run_checks() {
     if [[ -z "$hosted_run_id" ]]; then
-        hosted_run_id="$(
+        if ! hosted_run_id="$(
             gh run list \
                 --repo "$release_repo" \
                 --workflow "$expected_workflow" \
@@ -1619,14 +1785,27 @@ collect_hosted_run_checks() {
                 --limit 1 \
                 --json databaseId \
                 --jq '.[0].databaseId // empty'
-        )"
+        )"; then
+            hosted_discovery_error="could not discover hosted CI run for $branch"
+            hosted_discovery_error+=" in $release_repo"
+            fail_hosted_ci_preflight "hosted_ci_discovery_failed" "$hosted_discovery_error"
+        fi
     fi
 
-    [[ -n "$hosted_run_id" ]] || fail "no hosted CI run id was provided or discovered"
+    [[ -n "$hosted_run_id" ]] ||
+        fail_hosted_ci_preflight \
+            "hosted_ci_run_missing" \
+            "no hosted CI run id was provided or discovered"
 
-    gh run view "$hosted_run_id" \
+    if ! gh run view "$hosted_run_id" \
         --repo "$release_repo" \
-        --json databaseId,headSha,status,conclusion,workflowName,event,jobs,url >"$hosted_run_json"
+        --json databaseId,headSha,status,conclusion,workflowName,event,jobs,url \
+        >"$hosted_run_json"; then
+        hosted_inspection_error="could not inspect hosted CI run $hosted_run_id"
+        hosted_inspection_error+=" in $release_repo"
+        fail_hosted_ci_preflight "hosted_ci_inspection_failed" "$hosted_inspection_error"
+    fi
+    hosted_run_report_json="$(jq -c '.' "$hosted_run_json")"
 
     actual_run_id="$(jq -r '.databaseId // empty' "$hosted_run_json")"
     actual_head="$(jq -r '.headSha // empty' "$hosted_run_json")"
@@ -1636,17 +1815,29 @@ collect_hosted_run_checks() {
     actual_event="$(jq -r '.event // empty' "$hosted_run_json")"
 
     [[ "$actual_run_id" == "$hosted_run_id" ]] ||
-        fail "hosted run id mismatch: expected $hosted_run_id, got $actual_run_id"
+        fail_hosted_ci_preflight \
+            "hosted_ci_run_mismatch" \
+            "hosted run id mismatch: expected $hosted_run_id, got $actual_run_id"
     [[ "$actual_head" == "$head_sha" ]] ||
-        fail "hosted run head mismatch: expected $head_sha, got $actual_head"
+        fail_hosted_ci_preflight \
+            "hosted_ci_head_mismatch" \
+            "hosted run head mismatch: expected $head_sha, got $actual_head"
     [[ "$actual_status" == "completed" ]] ||
-        fail "hosted run is not completed: $actual_status"
+        fail_hosted_ci_preflight \
+            "hosted_ci_not_completed" \
+            "hosted run is not completed: $actual_status"
     [[ "$actual_conclusion" == "success" ]] ||
-        fail "hosted run conclusion is not success: $actual_conclusion"
+        fail_hosted_ci_preflight \
+            "hosted_ci_not_successful" \
+            "hosted run conclusion is not success: $actual_conclusion"
     [[ "$actual_workflow" == "$expected_workflow" ]] ||
-        fail "workflow mismatch: expected $expected_workflow, got $actual_workflow"
+        fail_hosted_ci_preflight \
+            "hosted_ci_workflow_mismatch" \
+            "workflow mismatch: expected $expected_workflow, got $actual_workflow"
     [[ "$actual_event" == "$expected_event" ]] ||
-        fail "hosted run event mismatch: expected $expected_event, got $actual_event"
+        fail_hosted_ci_preflight \
+            "hosted_ci_event_mismatch" \
+            "hosted run event mismatch: expected $expected_event, got $actual_event"
 
     jq -r '.jobs[] | [.name, .status, (.conclusion // "")] | @tsv' \
         "$hosted_run_json" >"$checks_file"
@@ -1654,16 +1845,17 @@ collect_hosted_run_checks() {
     expected_jobs_sorted="$(printf '%s\n' "${expected_jobs[@]}" | LC_ALL=C sort)"
     actual_jobs_sorted="$(awk -F '\t' '{ print $1 }' "$checks_file" | LC_ALL=C sort)"
     if [[ "$actual_jobs_sorted" != "$expected_jobs_sorted" ]]; then
-        {
-            printf 'error: hosted CI jobs did not match expected release gate jobs\n'
-            printf 'expected:\n%s\n' "$expected_jobs_sorted"
-            printf 'actual:\n%s\n' "$actual_jobs_sorted"
-        } >&2
-        exit 1
+        hosted_jobs_error="hosted CI jobs did not match expected release gate jobs"
+        hosted_jobs_error+="; expected: ${expected_jobs_sorted//$'\n'/, }"
+        hosted_jobs_error+="; actual: ${actual_jobs_sorted//$'\n'/, }"
+        fail_hosted_ci_preflight "hosted_ci_jobs_mismatch" "$hosted_jobs_error"
     fi
 
     awk -F '\t' 'BEGIN { ok = 1 } $2 != "completed" || $3 != "success" { ok = 0 } END { exit ok ? 0 : 1 }' \
-        "$checks_file" || fail "hosted CI jobs are not all completed successfully"
+        "$checks_file" ||
+        fail_hosted_ci_preflight \
+            "hosted_ci_jobs_not_successful" \
+            "hosted CI jobs are not all completed successfully"
 
     hosted_ci_state="passing"
 }
@@ -1697,7 +1889,6 @@ if [[ "$target" == "ga" ]]; then
     fi
 
     collect_hosted_run_checks
-    hosted_run_report_json="$(jq -c '.' "$hosted_run_json")"
 else
     gh pr view "$pr_number" \
         --repo "$release_repo" \

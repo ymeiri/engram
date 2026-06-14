@@ -1778,6 +1778,48 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `2d46c40`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Release Gate Hosted CI Failure JSON
+
+`scripts/release-gate-report.sh --json` now emits structured failure evidence for GA hosted CI
+preflight failures before exiting nonzero. Hosted run discovery, run inspection, head/status/
+conclusion/workflow/event checks, and expected job validation still stop before release-target
+lookup, disk preflight, generated-output inventory, local CI, package smoke, or Homebrew render,
+but automation can now distinguish those hosted-CI evidence failures from a script crash.
+
+The failure JSON reports states such as `hosted_ci_inspection_failed`,
+`hosted_ci_head_mismatch`, and `hosted_ci_workflow_mismatch`, includes the effective
+`hosted_ci.repository`, expected workflow/event/jobs, the inspected run object when available,
+and any parsed check rows available before failure. It keeps `release_target.state=not_checked`,
+`disk_space.state=not_checked`, `generated_outputs.state=not_checked`,
+`generated_artifacts.state=not_checked`, and `release_actions_performed=false` because no
+downstream release evidence or release action has run yet.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `scripts/release-gate-report.sh --target ga --hosted-run 27483057249 --quick
+  --allow-tracked-changes --json` failed with
+  `release_gate_state=hosted_ci_head_mismatch`, `failure.kind=hosted_ci_preflight`, inspected run
+  `27483057249`, downstream release evidence states `not_checked`, and
+  `release_actions_performed=false`.
+- `ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1 EXPECTED_WORKFLOW_NAME=Release
+  scripts/release-gate-report.sh --target ga --hosted-run 27483700305 --quick
+  --allow-tracked-changes --json` failed with
+  `release_gate_state=hosted_ci_workflow_mismatch`, expected workflow `Release`, inspected
+  workflow `CI`, downstream release evidence states `not_checked`, and no release actions.
+- `scripts/release-gate-report.sh --target ga --hosted-run 0 --quick
+  --allow-tracked-changes --json` failed with
+  `release_gate_state=hosted_ci_inspection_failed`, `hosted_ci.run=null`,
+  `hosted_ci.checks=[]`, downstream release evidence states `not_checked`, and no release
+  actions.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27483700305 --quick
+  --allow-tracked-changes --json` still passed for exact head `0f650e8`, with hosted CI passing,
+  release target `v0.2.0` available, generated outputs reported as read-only cleanup evidence,
+  `release_gate_state=evidence_incomplete`, and no release actions.
+
+This is development-diff validation on top of head `0f650e8`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Repository Anchor Guard
 
 `scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run
