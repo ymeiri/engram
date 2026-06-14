@@ -1277,12 +1277,44 @@ check_generated_outputs_for_local_steps() {
     return 1
 }
 
+cleanup_outputs_sha256() {
+    local outputs_json="$1"
+    local canonical_outputs
+    local digest
+
+    if ! command -v shasum >/dev/null 2>&1; then
+        return 1
+    fi
+    if ! canonical_outputs="$(
+        jq -ecS '
+            if type == "array" and length > 0 then
+                sort_by(.kind, .path)
+            else
+                empty
+            end
+        ' <<<"$outputs_json" 2>/dev/null
+    )"; then
+        return 1
+    fi
+    if ! digest="$(printf '%s' "$canonical_outputs" | shasum -a 256 | awk '{ print $1 }')"; then
+        return 1
+    fi
+    if [[ ! "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+        return 1
+    fi
+
+    printf '%s' "$digest"
+}
+
 emit_generated_output_cleanup_verification_json() {
     local verification_state="$1"
     local verification_error="$2"
     local manifest_evidence_json
     local manifest_size_bytes=""
     local manifest_sha256=""
+    local current_outputs_for_hash_json="[]"
+    local expected_outputs_sha256=""
+    local current_outputs_sha256=""
 
     if [[ -f "$verify_generated_output_cleanup_manifest" ]]; then
         if ! manifest_size_bytes="$(
@@ -1371,6 +1403,33 @@ emit_generated_output_cleanup_verification_json() {
         manifest_evidence_json="null"
     fi
 
+    if ! current_outputs_for_hash_json="$(
+        jq -c '
+            map({
+                kind,
+                path,
+                absolute_path,
+                exists,
+                will_write,
+                overwrite_env,
+                file_type,
+                size_bytes,
+                sha256
+            })
+            | sort_by(.kind, .path)
+        ' <<<"$generated_outputs_json" 2>/dev/null
+    )"; then
+        current_outputs_for_hash_json="[]"
+    fi
+    if ! expected_outputs_sha256="$(
+        cleanup_outputs_sha256 "$generated_output_cleanup_expected_json"
+    )"; then
+        expected_outputs_sha256=""
+    fi
+    if ! current_outputs_sha256="$(cleanup_outputs_sha256 "$current_outputs_for_hash_json")"; then
+        current_outputs_sha256=""
+    fi
+
     jq -n \
         --arg target "$target" \
         --arg package_version "$package_version" \
@@ -1390,6 +1449,8 @@ emit_generated_output_cleanup_verification_json() {
         --arg manifest_path "$verify_generated_output_cleanup_manifest" \
         --arg manifest_size_bytes "$manifest_size_bytes" \
         --arg manifest_sha256 "$manifest_sha256" \
+        --arg expected_outputs_sha256 "$expected_outputs_sha256" \
+        --arg current_outputs_sha256 "$current_outputs_sha256" \
         --arg verification_state "$verification_state" \
         --arg verification_error "$verification_error" \
         --arg generated_outputs_state "$generated_outputs_state" \
@@ -1466,6 +1527,27 @@ emit_generated_output_cleanup_verification_json() {
                 manifest_sha256: (
                     if $manifest_sha256 == "" then null
                     else $manifest_sha256
+                    end
+                ),
+                expected_outputs_sha256: (
+                    if $expected_outputs_sha256 == "" then null
+                    else $expected_outputs_sha256
+                    end
+                ),
+                current_outputs_sha256: (
+                    if $current_outputs_sha256 == "" then null
+                    else $current_outputs_sha256
+                    end
+                ),
+                cleanup_fingerprint_sha256: (
+                    if (
+                        $verification_state == "verified"
+                        and $expected_outputs_sha256 != ""
+                        and $expected_outputs_sha256 == $current_outputs_sha256
+                    ) then
+                        $expected_outputs_sha256
+                    else
+                        null
                     end
                 ),
                 manifest_evidence: $manifest_evidence,

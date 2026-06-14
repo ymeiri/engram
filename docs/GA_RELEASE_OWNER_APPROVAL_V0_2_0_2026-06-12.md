@@ -72,10 +72,11 @@ stop-and-inspect condition, not approval to run `git pull`; early operator/confi
 in JSON mode emit `configuration_preflight_failed` evidence instead of looking like script
 crashes; the hosted-CI pre-step verifier and published release verifier both emit structured
 configuration-preflight JSON for `--json` operator failures without marking release actions as
-performed; the generated-output cleanup verifier repeats the full-gate manifest evidence and
-fingerprints the manifest file itself with `manifest_size_bytes` and `manifest_sha256`; and the
-deletion loop must diff the verifier's `will_write=true` paths against the exact three expected
-generated-output paths before removing anything. The exact-head default full GA gate now passes the
+performed; the generated-output cleanup verifier repeats the full-gate manifest evidence,
+fingerprints the manifest file itself with `manifest_size_bytes` and `manifest_sha256`, and emits a
+stable `cleanup_fingerprint_sha256` for the normalized stale-output set; and the deletion loop must
+diff the verifier's `will_write=true` paths against the exact three expected generated-output paths
+before removing anything. The exact-head default full GA gate now passes the
 default 10 GiB disk preflight on this host, but still fails before local CI/package smoke because
 stale generated outputs already exist at the paths the full gate would write. A post-fetch branch
 check for this checkpoint had `HEAD...origin/main` at `0 0`, with `HEAD`, `origin/main`, and remote
@@ -210,8 +211,10 @@ not full-gate `generated_outputs_cleanup_required` evidence with `release_target
 `disk_space.state=passed`, and no release actions. Its verification JSON repeats the validated
 manifest's hosted-CI, release-target, disk, remaining-action, and no-action evidence under
 `generated_output_cleanup_verification.manifest_evidence` and fingerprints the manifest itself with
-`manifest_size_bytes` and `manifest_sha256`, so the cleanup result is self-contained enough for
-review. Stop and rerun the full GA gate to collect fresh cleanup evidence before approving deletion.
+`manifest_size_bytes` and `manifest_sha256`. It also emits `expected_outputs_sha256`,
+`current_outputs_sha256`, and `cleanup_fingerprint_sha256` so reviewers can distinguish the raw
+manifest provenance hash from the stable stale-output cleanup fingerprint. Stop and rerun the full
+GA gate to collect fresh cleanup evidence before approving deletion.
 
 ```bash
 cleanup_manifest="$(mktemp)"
@@ -290,6 +293,12 @@ jq -e \
   and .generated_output_cleanup_verification.state == "verified"
   and .generated_output_cleanup_verification.manifest_size_bytes == $cleanup_manifest_size_bytes
   and .generated_output_cleanup_verification.manifest_sha256 == $cleanup_manifest_sha256
+  and .generated_output_cleanup_verification.expected_outputs_sha256
+    == .generated_output_cleanup_verification.current_outputs_sha256
+  and .generated_output_cleanup_verification.cleanup_fingerprint_sha256
+    == .generated_output_cleanup_verification.expected_outputs_sha256
+  and (.generated_output_cleanup_verification.cleanup_fingerprint_sha256
+    | test("^[0-9a-f]{64}$"))
   and .generated_output_cleanup_verification.manifest_evidence.target == "ga"
   and .generated_output_cleanup_verification.manifest_evidence.head == .head
   and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.state == "passing"

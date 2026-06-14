@@ -423,6 +423,73 @@ fn ga_release_gate_verifies_generated_output_cleanup_manifest() {
 }
 
 #[test]
+fn ga_release_gate_cleanup_fingerprint_ignores_manifest_metadata_changes() {
+    let temp = TempDir::new().unwrap();
+    let repo = temp.path().join("repo");
+    let remote = temp.path().join("remote.git");
+    fs::create_dir(&repo).unwrap();
+
+    write_minimal_workspace(&repo);
+    write_release_gate_script(&repo);
+    init_synced_main(&repo, &remote);
+    let outputs = write_ga_generated_outputs(&repo);
+    write_cleanup_manifest(&repo, outputs);
+
+    let first_output = run_ga_release_gate(&repo);
+    assert!(
+        first_output.status.success(),
+        "matching cleanup manifest should pass:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&first_output.stdout),
+        String::from_utf8_lossy(&first_output.stderr)
+    );
+    let first_report = parse_json_report(&first_output);
+
+    let manifest_path = repo.join("cleanup-manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["disk_space"]["min_required_kib"] = json!(10_485_760);
+    manifest["disk_space"]["free_kib"] = json!(20_971_520);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    let second_output = run_ga_release_gate(&repo);
+    assert!(
+        second_output.status.success(),
+        "cleanup manifest with metadata-only changes should pass:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&second_output.stdout),
+        String::from_utf8_lossy(&second_output.stderr)
+    );
+    let second_report = parse_json_report(&second_output);
+
+    let first_verification = &first_report["generated_output_cleanup_verification"];
+    let second_verification = &second_report["generated_output_cleanup_verification"];
+
+    assert_ne!(
+        first_verification["manifest_sha256"],
+        second_verification["manifest_sha256"]
+    );
+    assert_eq!(
+        first_verification["cleanup_fingerprint_sha256"],
+        second_verification["cleanup_fingerprint_sha256"]
+    );
+    assert_eq!(
+        first_verification["expected_outputs_sha256"],
+        first_verification["current_outputs_sha256"]
+    );
+    assert_eq!(
+        second_verification["expected_outputs_sha256"],
+        second_verification["current_outputs_sha256"]
+    );
+    assert!(first_verification["cleanup_fingerprint_sha256"]
+        .as_str()
+        .unwrap()
+        .chars()
+        .all(|ch| ch.is_ascii_hexdigit()));
+}
+
+#[test]
 fn ga_release_gate_rejects_cleanup_manifest_with_release_action_performed() {
     let temp = TempDir::new().unwrap();
     let repo = temp.path().join("repo");
