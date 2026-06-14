@@ -1280,6 +1280,73 @@ check_generated_outputs_for_local_steps() {
 emit_generated_output_cleanup_verification_json() {
     local verification_state="$1"
     local verification_error="$2"
+    local manifest_evidence_json
+
+    if manifest_evidence_json="$(
+        jq -c '
+            if type == "object" then
+                {
+                    target: (.target // null),
+                    package_version: (.package_version // null),
+                    release_version: (.release_version // null),
+                    branch: (.branch // null),
+                    head: (.head // null),
+                    release_gate_state: (.release_gate_state // null),
+                    failure_kind: (.failure.kind // null),
+                    release_target: {
+                        tag: (.release_target.tag // null),
+                        repository: (.release_target.repository // null),
+                        state: (.release_target.state // null),
+                        local_tag_exists: (.release_target.local_tag_exists // null),
+                        remote_git_tag_exists: (.release_target.remote_git_tag_exists // null),
+                        github_release_exists: (.release_target.github_release_exists // null)
+                    },
+                    hosted_ci: {
+                        state: (.hosted_ci.state // null),
+                        repository: (.hosted_ci.repository // null),
+                        expected_workflow: (.hosted_ci.expected_workflow // null),
+                        expected_event: (.hosted_ci.expected_event // null),
+                        run_id: (.hosted_ci.run_id // null),
+                        run: (
+                            if ((.hosted_ci.run // null) | type) == "object" then
+                                {
+                                    status: (.hosted_ci.run.status // null),
+                                    conclusion: (.hosted_ci.run.conclusion // null),
+                                    headSha: (.hosted_ci.run.headSha // null),
+                                    event: (.hosted_ci.run.event // null),
+                                    workflowName: (.hosted_ci.run.workflowName // null)
+                                }
+                            else
+                                null
+                            end
+                        )
+                    },
+                    disk_space: {
+                        state: (.disk_space.state // null),
+                        min_required_kib: (.disk_space.min_required_kib // null),
+                        shortfall_kib: (.disk_space.shortfall_kib // null)
+                    },
+                    generated_artifacts_state: (.generated_artifacts.state // null),
+                    ready_for_release_owner_review: (.ready_for_release_owner_review // null),
+                    release_owner_decision_required: (
+                        .release_owner_decision_required // null
+                    ),
+                    hosted_ci_fallback_decision_required: (
+                        .hosted_ci_fallback_decision_required // null
+                    ),
+                    remaining_release_actions: (.remaining_release_actions // null),
+                    actions_performed: (.actions_performed // null),
+                    release_actions_performed: (.release_actions_performed // null)
+                }
+            else
+                null
+            end
+        ' "$verify_generated_output_cleanup_manifest" 2>/dev/null
+    )"; then
+        :
+    else
+        manifest_evidence_json="null"
+    fi
 
     jq -n \
         --arg target "$target" \
@@ -1305,6 +1372,7 @@ emit_generated_output_cleanup_verification_json() {
         --arg generated_outputs_error "$generated_outputs_error" \
         --argjson generated_outputs "$generated_outputs_json" \
         --argjson expected_outputs "$generated_output_cleanup_expected_json" \
+        --argjson manifest_evidence "$manifest_evidence_json" \
         '{
             target: $target,
             package_version: $package_version,
@@ -1365,6 +1433,7 @@ emit_generated_output_cleanup_verification_json() {
             generated_output_cleanup_verification: {
                 state: $verification_state,
                 manifest_path: $manifest_path,
+                manifest_evidence: $manifest_evidence,
                 expected_outputs: $expected_outputs,
                 current_outputs: (
                     $generated_outputs

@@ -187,8 +187,11 @@ ignored generated release outputs. The verification command is read-only and mus
 match, it reports `release_gate_state=generated_output_cleanup_fingerprints_mismatch` with
 `failure.kind=generated_output_cleanup_verification`. The verifier also rejects manifests that are
 not full-gate `generated_outputs_cleanup_required` evidence with `release_target.state=available`,
-`disk_space.state=passed`, and no release actions. Stop and rerun the full GA gate to collect fresh
-cleanup evidence before approving deletion.
+`disk_space.state=passed`, and no release actions. Its verification JSON repeats the validated
+manifest's hosted-CI, release-target, disk, remaining-action, and no-action evidence under
+`generated_output_cleanup_verification.manifest_evidence`, so the cleanup result is
+self-contained enough for review. Stop and rerun the full GA gate to collect fresh cleanup evidence
+before approving deletion.
 
 ```bash
 cleanup_manifest="$(mktemp)"
@@ -256,12 +259,31 @@ scripts/release-gate-report.sh \
 jq -e '
   .release_gate_state == "generated_output_cleanup_fingerprints_verified"
   and .generated_output_cleanup_verification.state == "verified"
+  and .generated_output_cleanup_verification.manifest_evidence.target == "ga"
+  and .generated_output_cleanup_verification.manifest_evidence.head == .head
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.state == "passing"
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.repository == "ymeiri/engram"
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.expected_event == "push"
+  and (.generated_output_cleanup_verification.manifest_evidence.hosted_ci.run_id | type == "number")
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.run.status == "completed"
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.run.conclusion == "success"
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.run.headSha == .head
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.run.event == "push"
+  and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.run.workflowName == "CI"
+  and .generated_output_cleanup_verification.manifest_evidence.release_target.state == "available"
+  and .generated_output_cleanup_verification.manifest_evidence.disk_space.state == "passed"
+  and .generated_output_cleanup_verification.manifest_evidence.generated_artifacts_state == "not_checked"
   and .failure == null
   and (.generated_outputs.outputs | length) > 0
   and all(.generated_outputs.outputs[];
     .exists == true
     and .will_write == true
     and .file_type == "file")
+  and (.generated_output_cleanup_verification.manifest_evidence.remaining_release_actions | sort) == ([
+    "remove_stale_generated_release_outputs_or_get_cleanup_approval",
+    "rerun_full_release_gate_report_with_local_ci_and_package_smoke"
+  ] | sort)
+  and all(.generated_output_cleanup_verification.manifest_evidence.actions_performed[]; . == false)
   and .actions_performed.generated_output_cleanup == false
   and .release_actions_performed == false
 ' "$cleanup_verify_json"
