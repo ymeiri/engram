@@ -1468,8 +1468,11 @@ verify_generated_output_cleanup() {
             --arg target "$target" \
             --arg package_version "$package_version" \
             --arg release_version "$release_version" \
+            --arg release_repo "$release_repo" \
             --arg branch "$branch" \
             --arg head "$head_sha" \
+            --arg expected_workflow "$expected_workflow" \
+            --arg expected_event "$expected_event" \
             '
             def sha256_string:
                 type == "string" and test("^[0-9a-f]{64}$");
@@ -1483,6 +1486,24 @@ verify_generated_output_cleanup() {
                 "manifest branch mismatch: expected \($branch), got \(.branch // null)"
             elif (.head // "") != $head then
                 "manifest head mismatch: expected \($head), got \(.head // null)"
+            elif (.hosted_ci.state // "") != "passing" then
+                "manifest hosted_ci.state must be passing"
+            elif (.hosted_ci.repository // "") != $release_repo then
+                "manifest hosted_ci.repository must match release repository"
+            elif (.hosted_ci.expected_event // "") != $expected_event then
+                "manifest hosted_ci.expected_event must match expected event"
+            elif ((.hosted_ci.run_id // null) | type) != "number" then
+                "manifest hosted_ci.run_id must be a number"
+            elif (.hosted_ci.run.status // "") != "completed" then
+                "manifest hosted_ci.run.status must be completed"
+            elif (.hosted_ci.run.conclusion // "") != "success" then
+                "manifest hosted_ci.run.conclusion must be success"
+            elif (.hosted_ci.run.headSha // "") != $head then
+                "manifest hosted_ci.run.headSha must match release head"
+            elif (.hosted_ci.run.event // "") != $expected_event then
+                "manifest hosted_ci.run.event must match expected event"
+            elif (.hosted_ci.run.workflowName // "") != $expected_workflow then
+                "manifest hosted_ci.run.workflowName must match expected workflow"
             elif (.release_gate_state // "") != "generated_outputs_cleanup_required" then
                 "manifest release_gate_state must be generated_outputs_cleanup_required"
             elif (.failure.kind // "") != "generated_outputs_preflight" then

@@ -206,6 +206,15 @@ test "$cleanup_gate_status" != "0"
 jq -e '
   .release_gate_state == "generated_outputs_cleanup_required"
   and .failure.kind == "generated_outputs_preflight"
+  and .hosted_ci.state == "passing"
+  and .hosted_ci.repository == .release_target.repository
+  and .hosted_ci.expected_event == "push"
+  and (.hosted_ci.run_id | type == "number")
+  and .hosted_ci.run.status == "completed"
+  and .hosted_ci.run.conclusion == "success"
+  and .hosted_ci.run.headSha == .head
+  and .hosted_ci.run.event == .hosted_ci.expected_event
+  and .hosted_ci.run.workflowName == "CI"
   and .release_target.state == "available"
   and .disk_space.state == "passed"
   and .generated_outputs.state == "cleanup_required"
