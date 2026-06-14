@@ -1745,6 +1745,39 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `582d40d`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Release Gate Repository-State Failure JSON
+
+`scripts/release-gate-report.sh --json` now emits structured failure evidence for early
+repository-state preflights before exiting nonzero. Branch mismatch, branch sync, and tracked
+working-tree/index failures still stop before release-target lookup, hosted CI verification, disk
+preflight, generated-output inventory, package smoke, or Homebrew render, but automation can now
+distinguish those release-head failures from a script crash.
+
+The failure JSON uses `release_target.state=not_checked`, `hosted_ci.state=not_checked`,
+`disk_space.state=not_checked`, `generated_outputs.state=not_checked`,
+`generated_artifacts.state=not_checked`, and `release_actions_performed=false` because no release
+evidence or release action has run yet.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- On a dirty development tree, `scripts/release-gate-report.sh --target ga --hosted-run
+  27483057249 --quick --json` failed with `release_gate_state=tracked_changes_present`,
+  `failure.kind=tracked_changes_preflight`, all downstream release evidence states
+  `not_checked`, and `release_actions_performed=false`.
+- With `ALLOW_EXPECTED_BRANCH_OVERRIDE=1 EXPECTED_BRANCH=release/0.2`,
+  `scripts/release-gate-report.sh --target ga --hosted-run 27483057249 --quick --json` failed
+  with `release_gate_state=branch_mismatch`, `failure.kind=branch_preflight`, and no downstream
+  release evidence.
+- In a temporary local clone with `main` one commit ahead of `origin/main`,
+  `scripts/release-gate-report.sh --target ga --quick --json` failed with
+  `release_gate_state=branch_sync_required`, `failure.kind=branch_sync_preflight`,
+  `upstream.ahead=1`, `upstream.behind=0`, the stop-and-inspect `git pull` warning, and
+  `release_actions_performed=false`.
+
+This is development-diff validation on top of head `2d46c40`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Repository Anchor Guard
 
 `scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run

@@ -403,12 +403,178 @@ cleanup() {
 }
 trap cleanup EXIT
 
+branch=""
+head_sha=""
+tracked_changes_present=""
+upstream=""
+ahead_count=""
+behind_count=""
+upstream_remote=""
+upstream_remote_ref=""
+upstream_remote_head=""
+
+emit_repo_state_failure_json() {
+    local release_gate_state="$1"
+    local failure_kind="$2"
+    local failure_message="$3"
+
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg branch "$branch" \
+        --arg expected_branch "$expected_branch" \
+        --arg upstream "$upstream" \
+        --arg upstream_remote "$upstream_remote" \
+        --arg upstream_remote_ref "$upstream_remote_ref" \
+        --arg upstream_remote_head "$upstream_remote_head" \
+        --arg ahead "$ahead_count" \
+        --arg behind "$behind_count" \
+        --arg head "$head_sha" \
+        --arg tracked "$tracked_changes_present" \
+        --arg expected_event "$expected_event" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg min_free_space_kib "$min_free_space_kib" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg release_gate_state "$release_gate_state" \
+        --arg failure_kind "$failure_kind" \
+        --arg failure_message "$failure_message" \
+        '{
+            target: $target,
+            package_version: $package_version,
+            release_version: $release_version,
+            workspace_version_matches_release: ($package_version == $release_version),
+            branch: (if $branch == "" then null else $branch end),
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: (
+                if $upstream == "" then null
+                else {
+                    name: $upstream,
+                    ahead: (if $ahead == "" then null else ($ahead | tonumber) end),
+                    behind: (if $behind == "" then null else ($behind | tonumber) end),
+                    remote: (if $upstream_remote == "" then null else $upstream_remote end),
+                    remote_ref: (
+                        if $upstream_remote_ref == "" then null else $upstream_remote_ref end
+                    ),
+                    remote_head: (
+                        if $upstream_remote_head == "" then null
+                        else $upstream_remote_head
+                        end
+                    ),
+                    matches_remote_head: (
+                        if $head == "" or $upstream_remote_head == "" then null
+                        else ($head == $upstream_remote_head)
+                        end
+                    )
+                }
+                end
+            ),
+            head: (if $head == "" then null else $head end),
+            tracked_changes_present: (
+                if $tracked == "" then null else ($tracked == "true") end
+            ),
+            release_target: {
+                tag: $release_tag,
+                repository: $release_repo,
+                state: "not_checked",
+                local_tag_exists: null,
+                remote_git_tag_exists: null,
+                github_release_exists: null
+            },
+            pr: null,
+            hosted_ci: {
+                state: "not_checked",
+                repository: $release_repo,
+                expected_event: $expected_event,
+                run_id: (if $hosted_run_id == "" then null else ($hosted_run_id | tonumber) end),
+                run: null,
+                verifier: null
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: "not_checked",
+                free_kib: null,
+                min_required_kib: ($min_free_space_kib | tonumber),
+                shortfall_kib: null,
+                cleanup_candidates: []
+            },
+            generated_outputs: {
+                state: "not_checked",
+                host_triple: null,
+                outputs: [],
+                error: null
+            },
+            generated_artifacts: {
+                state: "not_checked",
+                host_triple: null,
+                artifacts: [],
+                error: null
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: "not_checked",
+                native_claude_proof_limits_acknowledged: false,
+                lifecycle_m6_limits_acknowledged: false
+            },
+            release_gate_state: $release_gate_state,
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: (
+                if $release_gate_state == "tracked_changes_present" then
+                    ["commit_or_revert_tracked_changes", "rerun_ga_release_gate_report"]
+                elif $release_gate_state == "branch_mismatch" then
+                    [
+                        "checkout_expected_release_branch",
+                        "rerun_exact_head_hosted_ci",
+                        "rerun_ga_release_gate_report"
+                    ]
+                else
+                    [
+                        "sync_release_branch_with_remote",
+                        "rerun_exact_head_hosted_ci",
+                        "rerun_ga_release_gate_report"
+                    ]
+                end
+            ),
+            failure: {
+                kind: $failure_kind,
+                message: $failure_message
+            },
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+}
+
+fail_repo_state_preflight() {
+    local release_gate_state="$1"
+    local failure_kind="$2"
+    local failure_message="$3"
+
+    if [[ "$json_output" == "1" ]]; then
+        emit_repo_state_failure_json "$release_gate_state" "$failure_kind" "$failure_message"
+    fi
+    fail "$failure_message"
+}
+
 branch="$(git branch --show-current)"
-[[ -n "$branch" ]] || fail "could not determine current branch"
-if [[ -n "$expected_branch" && "$branch" != "$expected_branch" ]]; then
-    fail "branch mismatch: expected $expected_branch, got $branch"
+if [[ -z "$branch" ]]; then
+    fail_repo_state_preflight \
+        "branch_sync_required" \
+        "branch_preflight" \
+        "could not determine current branch"
 fi
 head_sha="$(git rev-parse HEAD)"
+if [[ -n "$expected_branch" && "$branch" != "$expected_branch" ]]; then
+    branch_error="branch mismatch: expected $expected_branch, got $branch"
+    fail_repo_state_preflight "branch_mismatch" "branch_preflight" "$branch_error"
+fi
 
 if git diff --quiet --ignore-submodules -- &&
     git diff --cached --quiet --ignore-submodules --; then
@@ -418,44 +584,85 @@ else
 fi
 
 if [[ "$tracked_changes_present" == "true" && "$allow_tracked_changes" != "1" ]]; then
-    fail "tracked working-tree or index changes are present; commit or pass --allow-tracked-changes"
+    tracked_error="tracked working-tree or index changes are present"
+    tracked_error+="; commit or pass --allow-tracked-changes"
+    fail_repo_state_preflight \
+        "tracked_changes_present" \
+        "tracked_changes_preflight" \
+        "$tracked_error"
 fi
 
 upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
-[[ -n "$upstream" ]] || fail "current branch has no upstream"
 branch_sync_hint="run git fetch and inspect local/remote commits; do not use git pull "
 branch_sync_hint+="as release approval; any reconciliation needs fresh exact-head CI plus gate"
+if [[ -z "$upstream" ]]; then
+    upstream_error="current branch has no upstream; $branch_sync_hint"
+    fail_repo_state_preflight \
+        "branch_sync_required" \
+        "branch_sync_preflight" \
+        "$upstream_error"
+fi
 read -r ahead_count behind_count < <(git rev-list --left-right --count HEAD..."$upstream")
 if [[ "$ahead_count" != "0" || "$behind_count" != "0" ]]; then
     sync_error="branch is not synced with $upstream:"
     sync_error+=" ahead=$ahead_count behind=$behind_count; $branch_sync_hint"
-    fail "$sync_error"
+    fail_repo_state_preflight "branch_sync_required" "branch_sync_preflight" "$sync_error"
 fi
 
 branch_ref="refs/heads/$branch"
 upstream_remote="$(git for-each-ref --format='%(upstream:remotename)' "$branch_ref")"
 upstream_remote_ref="$(git for-each-ref --format='%(upstream:remoteref)' "$branch_ref")"
-[[ -n "$upstream_remote" ]] || fail "could not determine upstream remote for $branch"
-[[ -n "$upstream_remote_ref" ]] || fail "could not determine upstream remote ref for $branch"
+if [[ -z "$upstream_remote" ]]; then
+    remote_error="could not determine upstream remote for $branch"
+    fail_repo_state_preflight "branch_sync_required" "branch_sync_preflight" "$remote_error"
+fi
+if [[ -z "$upstream_remote_ref" ]]; then
+    remote_ref_error="could not determine upstream remote ref for $branch"
+    fail_repo_state_preflight \
+        "branch_sync_required" \
+        "branch_sync_preflight" \
+        "$remote_ref_error"
+fi
 case "$upstream_remote_ref" in
     refs/heads/*) ;;
-    *) fail "upstream for $branch is not a remote branch ref: $upstream_remote_ref" ;;
+    *)
+        remote_ref_error="upstream for $branch is not a remote branch ref: $upstream_remote_ref"
+        fail_repo_state_preflight \
+            "branch_sync_required" \
+            "branch_sync_preflight" \
+            "$remote_ref_error"
+        ;;
 esac
 if ! upstream_remote_refs="$(git ls-remote "$upstream_remote" "$upstream_remote_ref")"; then
-    fail "could not inspect upstream remote branch $upstream"
+    inspect_error="could not inspect upstream remote branch $upstream; $branch_sync_hint"
+    fail_repo_state_preflight "branch_sync_required" "branch_sync_preflight" "$inspect_error"
 fi
 upstream_remote_head="$(
     awk -v ref="$upstream_remote_ref" '$2 == ref { print $1 }' <<<"$upstream_remote_refs" | tail -n 1
 )"
-[[ -n "$upstream_remote_head" ]] || fail "upstream remote branch is missing: $upstream"
+if [[ -z "$upstream_remote_head" ]]; then
+    missing_remote_error="upstream remote branch is missing: $upstream; $branch_sync_hint"
+    fail_repo_state_preflight \
+        "branch_sync_required" \
+        "branch_sync_preflight" \
+        "$missing_remote_error"
+fi
 if [[ ! "$upstream_remote_head" =~ ^[0-9a-f]{40}$ ]]; then
-    fail "upstream remote branch head must be a 40-character Git SHA, got $upstream_remote_head"
+    malformed_head_error="upstream remote branch head must be a 40-character Git SHA"
+    malformed_head_error+=", got $upstream_remote_head"
+    fail_repo_state_preflight \
+        "branch_sync_required" \
+        "branch_sync_preflight" \
+        "$malformed_head_error"
 fi
 if [[ "$upstream_remote_head" != "$head_sha" ]]; then
     remote_branch_error="branch is not synced with remote $upstream:"
     remote_branch_error+=" local HEAD=$head_sha remote HEAD=$upstream_remote_head"
     remote_branch_error+="; $branch_sync_hint"
-    fail "$remote_branch_error"
+    fail_repo_state_preflight \
+        "branch_sync_required" \
+        "branch_sync_preflight" \
+        "$remote_branch_error"
 fi
 
 hosted_ci_state="unknown"

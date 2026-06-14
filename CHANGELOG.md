@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names the post-approval commands, and preserves default-deny release boundaries.
 
 ### Changed
+- Hardened GA release-gate JSON mode so branch mismatch, branch-sync, and tracked-change
+  preflight failures emit structured failure evidence before exiting.
 - Clarified GA release-gate branch-sync failure output so operators are told to fetch and inspect,
   not treat `git pull` as release approval.
 - Clarified the GA release-owner runbook branch-sync step so pull-policy or divergence hints are
