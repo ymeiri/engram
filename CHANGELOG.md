@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   full-gate cleanup-required evidence, and manifest self-fingerprint cleanup verification.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `d4c0cd9` hosted CI,
   scoped observation-search runtime evidence, and the unchanged generated-output cleanup gate.
+- Added an exact MCP regression for the `live-debugger-mcp` scoped observation query that previously
+  returned zero in Claude Code, covering the literal `load_datadog_skill`/`global_skills` prompt.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `3a95713` hosted CI,
   post-CI generated-output cleanup verification, and the cleanup path allowlist hardening.
 - Tightened the GA release-owner cleanup sequence so the post-approval deletion loop must match the
@@ -263,7 +265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed entity-scoped observation search so long natural-language MCP queries are matched by
   relevant terms inside an entity's observations instead of requiring the whole query as one
-  contiguous substring.
+  contiguous substring, with exact regression coverage for the live-debugger skill-loading query.
 - Kept work-management integration tests offline-deterministic by using the no-embedder
   `WorkService` fixture for CRUD and MCP coverage, avoiding incidental model downloads on hosted
   CI.

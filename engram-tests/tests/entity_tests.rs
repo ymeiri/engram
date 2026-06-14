@@ -1449,6 +1449,74 @@ async fn test_mcp_entity_observe_search() {
 }
 
 #[tokio::test]
+async fn test_mcp_entity_observe_search_matches_live_debugger_skill_loading_query() {
+    let state = setup_tool_state().await;
+
+    tools::entity_new(
+        &state,
+        EntityRequestNew {
+            action: "create".to_string(),
+            name: Some("live-debugger-mcp".to_string()),
+            entity_type: Some("service".to_string()),
+            description: None,
+            query: None,
+            type_filter: None,
+            limit: None,
+            target: None,
+            relation: None,
+            alias: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    tools::entity_observe_new(
+        &state,
+        EntityObserveRequestNew {
+            action: "add".to_string(),
+            entity: Some("live-debugger-mcp".to_string()),
+            content: Some(
+                "Live Debugger skill is served through load_datadog_skill('datadog/live-debugger') \
+                 from the MCP catalogue, not code-gen-backend global_skills."
+                    .to_string(),
+            ),
+            key: Some("architecture.skill-single-source".to_string()),
+            source: None,
+            key_pattern: None,
+            query: None,
+            limit: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let result = tools::entity_observe_new(
+        &state,
+        EntityObserveRequestNew {
+            action: "search".to_string(),
+            entity: Some("live-debugger-mcp".to_string()),
+            content: None,
+            key: None,
+            source: None,
+            key_pattern: None,
+            query: Some(
+                "debug with ai how skill is loaded code-gen-backend global_skills vs MCP \
+                 load_datadog_skill catalogue"
+                    .to_string(),
+            ),
+            limit: None,
+        },
+    )
+    .await;
+
+    assert!(result.is_ok());
+    let response = result.unwrap();
+    assert!(response.contains("\"count\": 1"));
+    assert!(response.contains("architecture.skill-single-source"));
+    assert!(response.contains("load_datadog_skill"));
+}
+
+#[tokio::test]
 async fn test_mcp_entity_observe_history() {
     let state = setup_tool_state().await;
 
