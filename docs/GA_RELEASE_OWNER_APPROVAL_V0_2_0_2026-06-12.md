@@ -461,6 +461,7 @@ gh release create "$tag" \
   "$archive" \
   "$checksum" \
   --repo ymeiri/engram \
+  --verify-tag \
   --title "engram ${tag}" \
   --notes-file docs/RELEASE_NOTES_V0_2_0.md \
   --latest
