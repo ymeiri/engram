@@ -847,20 +847,71 @@ impl EntityRepo {
         );
 
         let mut result = self.db
-            .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $entity_id AND content IS NOT NONE AND string::lowercase(content) CONTAINS $query ORDER BY updated_at DESC LIMIT $limit")
+            .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $entity_id AND content IS NOT NONE ORDER BY updated_at DESC")
             .bind(("entity_id", entity_id.to_string()))
-            .bind(("query", query.to_lowercase()))
-            .bind(("limit", limit as i64))
             .await?;
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
 
-        let mut observations = Vec::new();
-        for record in records {
-            observations.push(self.record_to_observation(record)?);
+        let query_lower = query.to_lowercase();
+        let mut terms: Vec<&str> = Vec::new();
+        for term in query_lower
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+            .filter(|term| {
+                term.len() >= 3
+                    && !matches!(
+                        *term,
+                        "and" | "are" | "for" | "from" | "how" | "the" | "that" | "this" | "with"
+                    )
+            })
+        {
+            if !terms.contains(&term) {
+                terms.push(term);
+            }
         }
 
-        Ok(observations)
+        let mut scored_observations = Vec::new();
+        for record in records {
+            let observation = self.record_to_observation(record)?;
+            let haystack = match &observation.key {
+                Some(key) => format!("{} {}", key, observation.content).to_lowercase(),
+                None => observation.content.to_lowercase(),
+            };
+
+            let exact_match = haystack.contains(&query_lower);
+            let matched_terms = terms
+                .iter()
+                .filter(|term| haystack.contains(**term))
+                .count();
+            let matched = if terms.is_empty() {
+                exact_match
+            } else if terms.len() == 1 {
+                matched_terms == 1
+            } else {
+                exact_match || matched_terms >= 2
+            };
+
+            if matched {
+                let score = if exact_match {
+                    terms.len() + 100
+                } else {
+                    matched_terms
+                };
+                scored_observations.push((score, observation));
+            }
+        }
+
+        scored_observations.sort_by(|(score_a, obs_a), (score_b, obs_b)| {
+            score_b
+                .cmp(score_a)
+                .then_with(|| obs_b.updated_at.cmp(&obs_a.updated_at))
+        });
+
+        Ok(scored_observations
+            .into_iter()
+            .take(limit)
+            .map(|(_, observation)| observation)
+            .collect())
     }
 
     /// Get observation history for a key (archived versions).

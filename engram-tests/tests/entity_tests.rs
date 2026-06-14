@@ -727,6 +727,15 @@ async fn test_search_observations() {
         )
         .await
         .unwrap();
+    service
+        .add_observation(
+            "my-app",
+            "Live Debugger AI skill location: code-gen-backend/internal/agent/v2/global_skills/live-debugger/SKILL.md",
+            Some("architecture.skill-location"),
+            None,
+        )
+        .await
+        .unwrap();
 
     // Search for "JWT"
     let jwt_obs = service
@@ -741,6 +750,17 @@ async fn test_search_observations() {
         .await
         .unwrap();
     assert_eq!(db_obs.len(), 1);
+
+    let long_query_obs = service
+        .search_observations(
+            "my-app",
+            "debug with ai how skill is loaded code-gen-backend global_skills vs MCP load_datadog_skill catalogue",
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(long_query_obs.len(), 1);
+    assert!(long_query_obs[0].content.contains("global_skills"));
 }
 
 #[tokio::test]
@@ -1374,6 +1394,23 @@ async fn test_mcp_entity_observe_search() {
     };
     tools::entity_observe_new(&state, obs_req).await.unwrap();
 
+    let skill_obs_req = EntityObserveRequestNew {
+        action: "add".to_string(),
+        entity: Some("search-test".to_string()),
+        content: Some(
+            "Live Debugger AI skill location: code-gen-backend/internal/agent/v2/global_skills/live-debugger/SKILL.md"
+                .to_string(),
+        ),
+        key: Some("architecture.skill-location".to_string()),
+        source: None,
+        key_pattern: None,
+        query: None,
+        limit: None,
+    };
+    tools::entity_observe_new(&state, skill_obs_req)
+        .await
+        .unwrap();
+
     // Search observations
     let search_req = EntityObserveRequestNew {
         action: "search".to_string(),
@@ -1390,6 +1427,25 @@ async fn test_mcp_entity_observe_search() {
     let response = result.unwrap();
     assert!(response.contains("OAuth2"));
     assert!(response.contains("PKCE"));
+
+    let long_query_req = EntityObserveRequestNew {
+        action: "search".to_string(),
+        entity: Some("search-test".to_string()),
+        content: None,
+        key: None,
+        source: None,
+        key_pattern: None,
+        query: Some(
+            "debug with ai how skill is loaded code-gen-backend global_skills vs MCP load_datadog_skill catalogue"
+                .to_string(),
+        ),
+        limit: None,
+    };
+    let result = tools::entity_observe_new(&state, long_query_req).await;
+    assert!(result.is_ok());
+    let response = result.unwrap();
+    assert!(response.contains("global_skills"));
+    assert!(response.contains("architecture.skill-location"));
 }
 
 #[tokio::test]

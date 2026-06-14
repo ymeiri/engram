@@ -246,6 +246,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   approval and a fresh full gate on the release head.
 
 ### Fixed
+- Fixed entity-scoped observation search so long natural-language MCP queries are matched by
+  relevant terms inside an entity's observations instead of requiring the whole query as one
+  contiguous substring.
 - Kept work-management integration tests offline-deterministic by using the no-embedder
   `WorkService` fixture for CRUD and MCP coverage, avoiding incidental model downloads on hosted
   CI.
