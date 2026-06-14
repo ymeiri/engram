@@ -27,6 +27,13 @@ require_ready=0
 allow_worktree_changes=0
 json_output=0
 
+for arg in "$@"; do
+    if [[ "$arg" == "--json" ]]; then
+        json_output=1
+        break
+    fi
+done
+
 usage() {
     cat <<'USAGE'
 Usage: scripts/native-claude-gate-preflight.sh [options]
@@ -56,7 +63,35 @@ USAGE
 }
 
 fail() {
-    printf 'error: %s\n' "$*" >&2
+    local message="$*"
+    printf 'error: %s\n' "$message" >&2
+    exit_config_failure "$message"
+}
+
+print_config_failure_json() {
+    local message="$1"
+    jq -n \
+        --arg message "$message" \
+        '{
+            gate_state: "configuration_preflight_failed",
+            failure: {
+                kind: "configuration_preflight",
+                message: $message
+            },
+            actions_performed: {
+                native_claude_launch: false,
+                hooks_command: false,
+                process_signals: false,
+                release_actions: false
+            }
+        }'
+}
+
+exit_config_failure() {
+    local message="$1"
+    if [[ "${json_output:-0}" == "1" ]] && command -v jq >/dev/null 2>&1; then
+        print_config_failure_json "$message"
+    fi
     exit 1
 }
 
@@ -151,11 +186,12 @@ git check-ref-format --branch "$expected_branch" >/dev/null 2>&1 ||
     fail "EXPECTED_BRANCH/--expected-branch must be a valid Git branch name, got $expected_branch"
 if [[ "$expected_branch" != "$default_expected_branch" &&
     "$allow_expected_branch_override" != "1" ]]; then
-    printf 'error: EXPECTED_BRANCH override requires explicit native Claude approval\n' >&2
+    message="EXPECTED_BRANCH override requires explicit native Claude approval"
+    printf 'error: %s\n' "$message" >&2
     printf 'expected default branch: %s\n' "$default_expected_branch" >&2
     printf 'got: %s\n' "$expected_branch" >&2
     printf 'hint: set ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$message"
 fi
 
 [[ -n "$expected_claude_bin" ]] || fail "CLAUDE_BIN must not be empty"
@@ -163,11 +199,12 @@ fi
     fail "CLAUDE_BIN must be an absolute path, got $expected_claude_bin"
 if [[ "$expected_claude_bin" != "$default_claude_bin" &&
     "$allow_claude_bin_override" != "1" ]]; then
-    printf 'error: CLAUDE_BIN override requires explicit native Claude approval\n' >&2
+    message="CLAUDE_BIN override requires explicit native Claude approval"
+    printf 'error: %s\n' "$message" >&2
     printf 'expected default Claude binary: %s\n' "$default_claude_bin" >&2
     printf 'got: %s\n' "$expected_claude_bin" >&2
     printf 'hint: set ALLOW_NATIVE_CLAUDE_BIN_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$message"
 fi
 
 [[ -n "$expected_claude_target" ]] || fail "EXPECTED_CLAUDE_TARGET must not be empty"
@@ -181,7 +218,8 @@ if { [[ "$expected_claude_target" != "$default_claude_target" ]] ||
     [[ "$expected_claude_version" != "$default_claude_version" ]] ||
     [[ "$expected_claude_sha256" != "$default_claude_sha256" ]]; } &&
     [[ "$allow_claude_identity_override" != "1" ]]; then
-    printf 'error: Claude identity override requires explicit native Claude approval\n' >&2
+    message="Claude identity override requires explicit native Claude approval"
+    printf 'error: %s\n' "$message" >&2
     printf 'expected target: %s\n' "$default_claude_target" >&2
     printf 'expected version: %s\n' "$default_claude_version" >&2
     printf 'expected sha256: %s\n' "$default_claude_sha256" >&2
@@ -189,29 +227,31 @@ if { [[ "$expected_claude_target" != "$default_claude_target" ]] ||
     printf 'got version: %s\n' "$expected_claude_version" >&2
     printf 'got sha256: %s\n' "$expected_claude_sha256" >&2
     printf 'hint: set ALLOW_NATIVE_CLAUDE_IDENTITY_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$message"
 fi
 
 [[ -n "$engram_bin" ]] || fail "ENGRAM_BIN must not be empty"
 [[ "$engram_bin" == /* ]] || fail "ENGRAM_BIN must be an absolute path, got $engram_bin"
 if [[ "$engram_bin" != "$default_engram_bin" &&
     "$allow_engram_bin_override" != "1" ]]; then
-    printf 'error: ENGRAM_BIN override requires explicit native Claude approval\n' >&2
+    message="ENGRAM_BIN override requires explicit native Claude approval"
+    printf 'error: %s\n' "$message" >&2
     printf 'expected default Engram binary: %s\n' "$default_engram_bin" >&2
     printf 'got: %s\n' "$engram_bin" >&2
     printf 'hint: set ALLOW_NATIVE_CLAUDE_ENGRAM_BIN_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$message"
 fi
 
 [[ -n "$vault_path" ]] || fail "ENGRAM_VAULT_PATH must not be empty"
 [[ "$vault_path" == /* ]] || fail "ENGRAM_VAULT_PATH must be an absolute path, got $vault_path"
 if [[ "$vault_path" != "$default_vault_path" &&
     "$allow_vault_path_override" != "1" ]]; then
-    printf 'error: ENGRAM_VAULT_PATH override requires explicit native Claude approval\n' >&2
+    message="ENGRAM_VAULT_PATH override requires explicit native Claude approval"
+    printf 'error: %s\n' "$message" >&2
     printf 'expected default vault path: %s\n' "$default_vault_path" >&2
     printf 'got: %s\n' "$vault_path" >&2
     printf 'hint: set ALLOW_NATIVE_CLAUDE_VAULT_PATH_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    exit_config_failure "$message"
 fi
 
 [[ -x "$expected_claude_bin" ]] || fail "Claude binary is not executable: $expected_claude_bin"

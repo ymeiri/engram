@@ -190,7 +190,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
 | Generated vault | Validated | Canonical vault status after the current native-Claude evidence refresh reports `generated_file_count=3051`, `expected_generated_file_count=3051`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
-| Native Claude production gate | Blocked | The native preflight baseline now matches the installed Claude Code `2.1.174` path/hash, default-denies non-canonical branch/binary/vault overrides, and the canonical vault was regenerated to `3051/3051`. On exact head `cada64a`, the strict preflight reports no tracked changes but blocks on the local untracked `.engram-vault/` copy plus an already-running native Claude CLI process. The scoped preflight with worktree changes explicitly allowed isolates the production gate and reports the only remaining native-Claude blocker as an already-running native Claude CLI process. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window and clean release-evidence worktree allow the proof run. |
+| Native Claude production gate | Blocked | The native preflight baseline now matches the installed Claude Code `2.1.174` path/hash, default-denies non-canonical branch/binary/vault overrides, and the canonical vault was regenerated to `3051/3051`. On exact head `cada64a`, the strict preflight reports no tracked changes but blocks on the local untracked `.engram-vault/` copy plus an already-running native Claude CLI process. The scoped preflight with worktree changes explicitly allowed isolates the production gate and reports the only remaining native-Claude blocker as an already-running native Claude CLI process. The preflight now emits `configuration_preflight_failed` JSON for early `--json` operator/configuration failures without launching Claude, running `/hooks`, signaling processes, or taking release actions. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window and clean release-evidence worktree allow the proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
@@ -1002,6 +1002,46 @@ This keeps native Claude prompt-bearing, live `/hooks`, and live host-label proo
 current GA release claim. Final owner-review evidence should either run in a clean worktree without
 the local `.engram-vault/` copy or receive explicit local handling for that generated vault copy,
 and it still needs a clean native-Claude process window.
+
+## Native Claude Configuration Failure JSON
+
+`scripts/native-claude-gate-preflight.sh --json` now emits structured failure evidence for early
+native-Claude operator and approval-input preflights before exiting nonzero. Unknown flags,
+non-default evidence target overrides without the matching approval flag, malformed approval flag
+values, and malformed Claude identity inputs report
+`gate_state=configuration_preflight_failed` with `failure.kind=configuration_preflight`.
+
+Those failures also keep `actions_performed.native_claude_launch=false`,
+`actions_performed.hooks_command=false`, `actions_performed.process_signals=false`, and
+`actions_performed.release_actions=false`, so automation can distinguish config rejection from a
+preflight collection crash or a live native-Claude proof attempt.
+
+Validation:
+
+- `bash -n scripts/native-claude-gate-preflight.sh`
+- `scripts/native-claude-gate-preflight.sh --bogus --json` failed with
+  `gate_state=configuration_preflight_failed`,
+  `failure.message="unknown option: --bogus"`, and all action booleans false.
+- `scripts/native-claude-gate-preflight.sh --expected-branch dev --json` failed with
+  `gate_state=configuration_preflight_failed`,
+  `failure.message="EXPECTED_BRANCH override requires explicit native Claude approval"`, and
+  all action booleans false.
+- `ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE=yes scripts/native-claude-gate-preflight.sh --json`
+  failed with `gate_state=configuration_preflight_failed`,
+  `failure.message="ALLOW_NATIVE_CLAUDE_BRANCH_OVERRIDE must be 0 or 1, got yes"`, and all
+  action booleans false.
+- `CLAUDE_BIN=/tmp/claude scripts/native-claude-gate-preflight.sh --json` failed with
+  `gate_state=configuration_preflight_failed`,
+  `failure.message="CLAUDE_BIN override requires explicit native Claude approval"`, and all
+  action booleans false.
+- `EXPECTED_CLAUDE_SHA256=abc scripts/native-claude-gate-preflight.sh --json` failed with
+  `gate_state=configuration_preflight_failed`,
+  `failure.message` beginning `EXPECTED_CLAUDE_SHA256 must be a SHA-256 hex value`, and all
+  action booleans false.
+- `scripts/native-claude-gate-preflight.sh --allow-worktree-changes --json` still emitted the
+  normal blocked preflight evidence shape; with this development diff present, it reported
+  `tracked_changes_present=true`, canonical vault alignment, and the same live native-Claude
+  process blocker.
 
 ## Release-Facing Docs Scope Cleanup
 
