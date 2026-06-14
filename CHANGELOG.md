@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release.
 - Clarified the GA release-owner runbook Homebrew path so the tap formula is audited before commit
   and the installed tap formula is tested after publication.
+- Tightened the GA release-owner runbook Homebrew install proof so it installs or upgrades the
+  fully-qualified tap formula and verifies the formula prefix binary version directly.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `0aa009a` hosted CI and
   fingerprint-checked generated-output cleanup approval evidence.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `2adc10c` hosted CI,

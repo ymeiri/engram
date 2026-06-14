@@ -506,9 +506,14 @@ Finally, verify the user-facing install path:
 
 ```bash
 brew update
-brew upgrade engram || brew install ymeiri/engram/engram
+if brew --prefix --installed ymeiri/engram/engram >/dev/null 2>&1; then
+  brew upgrade ymeiri/engram/engram
+else
+  brew install ymeiri/engram/engram
+fi
 brew test ymeiri/engram/engram
-engram --version
+brew_prefix="$(brew --prefix --installed ymeiri/engram/engram)"
+test "$("$brew_prefix/bin/engram" --version)" = "engram 0.2.0"
 ```
 
 ## Boundary
