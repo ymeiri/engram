@@ -1820,6 +1820,51 @@ Targeted validation for this guard:
 This is development-diff validation on top of head `0f650e8`; after this guard is committed, rerun
 exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
 
+## Release Gate Configuration Failure JSON
+
+`scripts/release-gate-report.sh --json` now emits structured failure evidence for early
+configuration and approval-input preflights before exiting nonzero. Malformed CLI flags,
+non-default release-gate override attempts without approval, malformed release selectors,
+repository overrides, and disk-threshold overrides still stop before branch/repository-state
+inspection, release-target lookup, hosted CI verification, disk preflight, generated-output
+inventory, local CI, package smoke, or Homebrew render, but automation can now distinguish those
+configuration failures from a script crash.
+
+The failure JSON uses `release_gate_state=configuration_preflight_failed` and
+`failure.kind=configuration_preflight`. It keeps `release_target.state=not_checked`,
+`hosted_ci.state=not_checked`, `disk_space.state=not_checked`,
+`generated_outputs.state=not_checked`, `generated_artifacts.state=not_checked`,
+`local_ci=not_run`, `package_install_smoke=not_run`, and `release_actions_performed=false`
+because no release evidence or release action has run yet.
+
+Targeted validation for this guard:
+
+- `bash -n scripts/release-gate-report.sh scripts/beta-release-gate-report.sh`
+- `git diff --check`
+- `scripts/release-gate-report.sh --bogus --json` failed with
+  `release_gate_state=configuration_preflight_failed`,
+  `failure.kind=configuration_preflight`, all downstream release evidence states
+  `not_checked`, and no release actions.
+- `EXPECTED_EVENT=workflow_dispatch scripts/release-gate-report.sh --target ga --quick --json`
+  failed with `release_gate_state=configuration_preflight_failed`,
+  `failure.kind=configuration_preflight`, downstream release evidence states `not_checked`, and
+  no release actions.
+- `RELEASE_GATE_MIN_FREE_KIB=abc scripts/release-gate-report.sh --target ga --quick --json`
+  failed with `release_gate_state=configuration_preflight_failed`,
+  `failure.kind=configuration_preflight`, downstream release evidence states `not_checked`, and
+  no release actions.
+- `RELEASE_REPOSITORY=example/engram scripts/release-gate-report.sh --target ga --quick --json`
+  failed with `release_gate_state=configuration_preflight_failed`,
+  `failure.kind=configuration_preflight`, downstream release evidence states `not_checked`, and
+  no release actions.
+- `scripts/release-gate-report.sh --target ga --hosted-run 27484385982 --quick
+  --allow-tracked-changes --json` still passed for exact head `3bb9810`, with hosted CI passing,
+  release target `v0.2.0` available, generated outputs reported as read-only cleanup evidence,
+  `release_gate_state=evidence_incomplete`, and no release actions.
+
+This is development-diff validation on top of head `3bb9810`; after this guard is committed, rerun
+exact-head hosted CI and the GA gate before tag, publish, or Homebrew tap update.
+
 ## Hosted CI Repository Anchor Guard
 
 `scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run

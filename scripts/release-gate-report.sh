@@ -36,6 +36,7 @@ fi
 allow_expected_branch_override="${ALLOW_EXPECTED_BRANCH_OVERRIDE:-0}"
 package_version=""
 release_version=""
+release_tag=""
 release_version_explicit=0
 if [[ "${RELEASE_VERSION+x}" == "x" ]]; then
     release_version="$RELEASE_VERSION"
@@ -98,9 +99,124 @@ fail() {
     exit 1
 }
 
+emit_config_failure_json() {
+    local failure_message="$1"
+
+    jq -n \
+        --arg target "$target" \
+        --arg package_version "$package_version" \
+        --arg release_version "$release_version" \
+        --arg release_tag "$release_tag" \
+        --arg release_repo "$release_repo" \
+        --arg expected_branch "$expected_branch" \
+        --arg expected_workflow "$expected_workflow" \
+        --arg expected_event "$expected_event" \
+        --arg hosted_run_id "$hosted_run_id" \
+        --arg min_free_space_kib "$min_free_space_kib" \
+        --arg release_notes_path "$release_notes_path" \
+        --arg failure_message "$failure_message" \
+        '{
+            target: $target,
+            package_version: (if $package_version == "" then null else $package_version end),
+            release_version: (if $release_version == "" then null else $release_version end),
+            workspace_version_matches_release: (
+                if $package_version == "" or $release_version == "" then null
+                else ($package_version == $release_version)
+                end
+            ),
+            branch: null,
+            expected_branch: (if $expected_branch == "" then null else $expected_branch end),
+            upstream: null,
+            head: null,
+            tracked_changes_present: null,
+            release_target: {
+                tag: (if $release_tag == "" then null else $release_tag end),
+                repository: $release_repo,
+                state: "not_checked",
+                local_tag_exists: null,
+                remote_git_tag_exists: null,
+                github_release_exists: null
+            },
+            pr: null,
+            hosted_ci: {
+                state: "not_checked",
+                repository: $release_repo,
+                expected_workflow: $expected_workflow,
+                expected_event: (if $expected_event == "" then null else $expected_event end),
+                run_id: (
+                    if ($hosted_run_id | test("^[0-9]+$")) then ($hosted_run_id | tonumber)
+                    else null
+                    end
+                ),
+                run: null,
+                verifier: null
+            },
+            local_ci: "not_run",
+            package_install_smoke: "not_run",
+            disk_space: {
+                state: "not_checked",
+                free_kib: null,
+                min_required_kib: (
+                    if ($min_free_space_kib | test("^[0-9]+$")) then
+                        ($min_free_space_kib | tonumber)
+                    else
+                        null
+                    end
+                ),
+                shortfall_kib: null,
+                cleanup_candidates: []
+            },
+            generated_outputs: {
+                state: "not_checked",
+                host_triple: null,
+                outputs: [],
+                error: null
+            },
+            generated_artifacts: {
+                state: "not_checked",
+                host_triple: null,
+                artifacts: [],
+                error: null
+            },
+            homebrew_formula_render: "not_run",
+            homebrew_formula: {
+                output: null
+            },
+            release_scope: {
+                release_notes_path: $release_notes_path,
+                state: "not_checked",
+                native_claude_proof_limits_acknowledged: false,
+                lifecycle_m6_limits_acknowledged: false
+            },
+            release_gate_state: "configuration_preflight_failed",
+            ready_for_release_owner_review: false,
+            hosted_ci_fallback_decision_required: false,
+            remaining_release_actions: [
+                "fix_release_gate_configuration",
+                "rerun_ga_release_gate_report"
+            ],
+            failure: {
+                kind: "configuration_preflight",
+                message: $failure_message
+            },
+            release_owner_decision_required: true,
+            release_actions_performed: false
+        }'
+}
+
+fail_config_preflight() {
+    local failure_message="$1"
+
+    if [[ "$json_output" == "1" ]] && command -v jq >/dev/null 2>&1; then
+        emit_config_failure_json "$failure_message"
+    fi
+    fail "$failure_message"
+}
+
 require_tool() {
     local tool="$1"
-    command -v "$tool" >/dev/null 2>&1 || fail "required tool is missing: $tool"
+    command -v "$tool" >/dev/null 2>&1 ||
+        fail_config_preflight "required tool is missing: $tool"
 }
 
 run_step() {
@@ -115,46 +231,55 @@ run_step() {
     fi
 }
 
+for arg in "$@"; do
+    if [[ "$arg" == "--json" ]]; then
+        json_output=1
+        break
+    fi
+done
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --target)
-            [[ $# -ge 2 ]] || fail "--target requires ga or beta"
+            [[ $# -ge 2 ]] || fail_config_preflight "--target requires ga or beta"
             case "$2" in
                 ga | beta) target="$2" ;;
-                *) fail "--target must be ga or beta" ;;
+                *) fail_config_preflight "--target must be ga or beta" ;;
             esac
             shift 2
             ;;
         --pr)
-            [[ $# -ge 2 ]] || fail "--pr requires a PR number"
-            [[ -n "$2" ]] || fail "PR_NUMBER/--pr must not be empty"
+            [[ $# -ge 2 ]] || fail_config_preflight "--pr requires a PR number"
+            [[ -n "$2" ]] || fail_config_preflight "PR_NUMBER/--pr must not be empty"
             pr_number="$2"
             pr_number_explicit=1
             shift 2
             ;;
         --hosted-run)
-            [[ $# -ge 2 ]] || fail "--hosted-run requires a run ID"
-            [[ -n "$2" ]] || fail "HOSTED_RUN_ID/--hosted-run must not be empty"
+            [[ $# -ge 2 ]] || fail_config_preflight "--hosted-run requires a run ID"
+            [[ -n "$2" ]] || fail_config_preflight "HOSTED_RUN_ID/--hosted-run must not be empty"
             hosted_run_id="$2"
             hosted_run_id_explicit=1
             shift 2
             ;;
         --release-version)
-            [[ $# -ge 2 ]] || fail "--release-version requires a version"
-            [[ -n "$2" ]] || fail "RELEASE_VERSION/--release-version must not be empty"
+            [[ $# -ge 2 ]] || fail_config_preflight "--release-version requires a version"
+            [[ -n "$2" ]] ||
+                fail_config_preflight "RELEASE_VERSION/--release-version must not be empty"
             release_version="$2"
             release_version_explicit=1
             shift 2
             ;;
         --expected-event)
-            [[ $# -ge 2 ]] || fail "--expected-event requires an event name"
+            [[ $# -ge 2 ]] || fail_config_preflight "--expected-event requires an event name"
             expected_event="$2"
             expected_event_explicit=1
             shift 2
             ;;
         --expected-branch)
-            [[ $# -ge 2 ]] || fail "--expected-branch requires a branch name"
-            [[ -n "$2" ]] || fail "EXPECTED_BRANCH/--expected-branch must not be empty"
+            [[ $# -ge 2 ]] || fail_config_preflight "--expected-branch requires a branch name"
+            [[ -n "$2" ]] ||
+                fail_config_preflight "EXPECTED_BRANCH/--expected-branch must not be empty"
             expected_branch="$2"
             expected_branch_explicit=1
             shift 2
@@ -190,14 +315,14 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            fail "unknown option: $1"
+            fail_config_preflight "unknown option: $1"
             ;;
     esac
 done
 
 case "$target" in
     ga | beta) ;;
-    *) fail "--target must be ga or beta" ;;
+    *) fail_config_preflight "--target must be ga or beta" ;;
 esac
 
 case "$allow_expected_workflow_override" in
@@ -205,25 +330,26 @@ case "$allow_expected_workflow_override" in
     *)
         workflow_override_error="ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE must be 0 or 1"
         workflow_override_error+=", got $allow_expected_workflow_override"
-        fail "$workflow_override_error"
+        fail_config_preflight "$workflow_override_error"
         ;;
 esac
 if [[ -z "$expected_workflow" ]]; then
-    fail "EXPECTED_WORKFLOW_NAME must not be empty"
+    fail_config_preflight "EXPECTED_WORKFLOW_NAME must not be empty"
 fi
 workflow_name_pattern='^[A-Za-z0-9_. -]+$'
 if [[ ! "$expected_workflow" =~ $workflow_name_pattern ]]; then
     workflow_name_error="EXPECTED_WORKFLOW_NAME must contain only letters, numbers, spaces,"
     workflow_name_error+=" dot, underscore, and hyphen; got $expected_workflow"
-    fail "$workflow_name_error"
+    fail_config_preflight "$workflow_name_error"
 fi
 if [[ "$expected_workflow" != "$default_expected_workflow" &&
     "$allow_expected_workflow_override" != "1" ]]; then
-    printf 'error: EXPECTED_WORKFLOW_NAME override requires explicit approval\n' >&2
-    printf 'expected default: %s\n' "$default_expected_workflow" >&2
-    printf 'got: %s\n' "$expected_workflow" >&2
-    printf 'hint: set ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    workflow_override_error="EXPECTED_WORKFLOW_NAME override requires explicit approval"
+    workflow_override_error+="; expected default: $default_expected_workflow"
+    workflow_override_error+="; got: $expected_workflow"
+    workflow_override_error+="; hint: set ALLOW_EXPECTED_WORKFLOW_NAME_OVERRIDE=1"
+    workflow_override_error+=" only for local rehearsals"
+    fail_config_preflight "$workflow_override_error"
 fi
 
 if [[ "$target" == "ga" ]]; then
@@ -236,31 +362,34 @@ if [[ -z "$expected_event" && "$expected_event_explicit" == "0" ]]; then
 fi
 case "$allow_expected_event_override" in
     0 | 1) ;;
-    *) fail "ALLOW_EXPECTED_EVENT_OVERRIDE must be 0 or 1, got $allow_expected_event_override" ;;
+    *)
+        fail_config_preflight \
+            "ALLOW_EXPECTED_EVENT_OVERRIDE must be 0 or 1, got $allow_expected_event_override"
+        ;;
 esac
 if [[ -z "$expected_event" ]]; then
-    fail "EXPECTED_EVENT/--expected-event must not be empty"
+    fail_config_preflight "EXPECTED_EVENT/--expected-event must not be empty"
 fi
 event_name_pattern='^[A-Za-z0-9_]+$'
 if [[ ! "$expected_event" =~ $event_name_pattern ]]; then
     expected_event_error="EXPECTED_EVENT/--expected-event must be a GitHub event name token"
     expected_event_error+=", got $expected_event"
-    fail "$expected_event_error"
+    fail_config_preflight "$expected_event_error"
 fi
 if [[ "$expected_event" != "$default_expected_event" &&
     "$allow_expected_event_override" != "1" ]]; then
-    printf 'error: EXPECTED_EVENT override requires explicit approval\n' >&2
-    printf 'expected default: %s\n' "$default_expected_event" >&2
-    printf 'got: %s\n' "$expected_event" >&2
-    printf 'hint: set ALLOW_EXPECTED_EVENT_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    expected_event_error="EXPECTED_EVENT override requires explicit approval"
+    expected_event_error+="; expected default: $default_expected_event"
+    expected_event_error+="; got: $expected_event"
+    expected_event_error+="; hint: set ALLOW_EXPECTED_EVENT_OVERRIDE=1 only for local rehearsals"
+    fail_config_preflight "$expected_event_error"
 fi
 
 if [[ "$pr_number_explicit" == "1" && -z "$pr_number" ]]; then
-    fail "PR_NUMBER/--pr must not be empty"
+    fail_config_preflight "PR_NUMBER/--pr must not be empty"
 fi
 if [[ "$hosted_run_id_explicit" == "1" && -z "$hosted_run_id" ]]; then
-    fail "HOSTED_RUN_ID/--hosted-run must not be empty"
+    fail_config_preflight "HOSTED_RUN_ID/--hosted-run must not be empty"
 fi
 
 if [[ "$target" == "beta" && -z "$pr_number" ]]; then
@@ -269,21 +398,21 @@ fi
 
 require_tool cargo
 if ! package_id="$(cargo pkgid --locked -p engram-cli)"; then
-    fail "could not determine workspace package version with cargo pkgid"
+    fail_config_preflight "could not determine workspace package version with cargo pkgid"
 fi
 package_version="${package_id##*#}"
 package_version_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'
 if [[ -z "$package_version" ]]; then
-    fail "workspace package version could not be determined from cargo pkgid"
+    fail_config_preflight "workspace package version could not be determined from cargo pkgid"
 fi
 if [[ ! "$package_version" =~ $package_version_pattern ]]; then
     package_version_error="workspace package version must be x.y.z"
     package_version_error+=" with an optional prerelease suffix, got $package_version"
-    fail "$package_version_error"
+    fail_config_preflight "$package_version_error"
 fi
 
 if [[ "$release_version_explicit" == "1" && -z "$release_version" ]]; then
-    fail "RELEASE_VERSION/--release-version must not be empty"
+    fail_config_preflight "RELEASE_VERSION/--release-version must not be empty"
 fi
 if [[ -z "$release_version" ]]; then
     if [[ "$target" == "ga" ]]; then
@@ -296,15 +425,18 @@ release_version_pattern="$package_version_pattern"
 if [[ ! "$release_version" =~ $release_version_pattern ]]; then
     release_version_error="RELEASE_VERSION/--release-version must be x.y.z"
     release_version_error+=" with an optional prerelease suffix, got $release_version"
-    fail "$release_version_error"
+    fail_config_preflight "$release_version_error"
 fi
 release_tag="v${release_version}"
 
 if [[ -n "$hosted_run_id" && ! "$hosted_run_id" =~ ^[0-9]+$ ]]; then
-    fail "HOSTED_RUN_ID/--hosted-run must be a numeric GitHub Actions run id, got $hosted_run_id"
+    fail_config_preflight \
+        "HOSTED_RUN_ID/--hosted-run must be a numeric GitHub Actions run id, got $hosted_run_id"
 fi
 if [[ -n "$pr_number" && ! "$pr_number" =~ ^[0-9]+$ ]]; then
-    fail "PR_NUMBER/--pr must be a numeric GitHub pull request number, got $pr_number"
+    pr_number_error="PR_NUMBER/--pr must be a numeric GitHub pull request number"
+    pr_number_error+=", got $pr_number"
+    fail_config_preflight "$pr_number_error"
 fi
 
 require_tool git
@@ -316,79 +448,93 @@ if [[ "$target" == "ga" ]]; then
 fi
 case "$allow_expected_branch_override" in
     0 | 1) ;;
-    *) fail "ALLOW_EXPECTED_BRANCH_OVERRIDE must be 0 or 1, got $allow_expected_branch_override" ;;
+    *)
+        fail_config_preflight \
+            "ALLOW_EXPECTED_BRANCH_OVERRIDE must be 0 or 1, got $allow_expected_branch_override"
+        ;;
 esac
 if [[ "$expected_branch_explicit" == "1" && -z "$expected_branch" ]]; then
-    fail "EXPECTED_BRANCH/--expected-branch must not be empty"
+    fail_config_preflight "EXPECTED_BRANCH/--expected-branch must not be empty"
 fi
 if [[ "$target" == "ga" && -z "$expected_branch" ]]; then
     expected_branch="$default_expected_branch"
 fi
 if [[ -n "$expected_branch" ]]; then
-    git check-ref-format --branch "$expected_branch" >/dev/null 2>&1 ||
-        fail "EXPECTED_BRANCH/--expected-branch must be a valid Git branch name, got $expected_branch"
+    if ! git check-ref-format --branch "$expected_branch" >/dev/null 2>&1; then
+        expected_branch_error="EXPECTED_BRANCH/--expected-branch must be a valid Git branch name"
+        expected_branch_error+=", got $expected_branch"
+        fail_config_preflight "$expected_branch_error"
+    fi
 fi
 if [[ "$target" == "ga" && "$expected_branch" != "$default_expected_branch" &&
     "$allow_expected_branch_override" != "1" ]]; then
-    printf 'error: EXPECTED_BRANCH override requires explicit approval\n' >&2
-    printf 'expected default: %s\n' "$default_expected_branch" >&2
-    printf 'got: %s\n' "$expected_branch" >&2
-    printf 'hint: set ALLOW_EXPECTED_BRANCH_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    expected_branch_error="EXPECTED_BRANCH override requires explicit approval"
+    expected_branch_error+="; expected default: $default_expected_branch"
+    expected_branch_error+="; got: $expected_branch"
+    expected_branch_error+="; hint: set ALLOW_EXPECTED_BRANCH_OVERRIDE=1 only for local rehearsals"
+    fail_config_preflight "$expected_branch_error"
 fi
 case "$allow_release_notes_path_override" in
     0 | 1) ;;
     *)
         release_notes_override_error="ALLOW_RELEASE_NOTES_PATH_OVERRIDE must be 0 or 1"
         release_notes_override_error+=", got $allow_release_notes_path_override"
-        fail "$release_notes_override_error"
+        fail_config_preflight "$release_notes_override_error"
         ;;
 esac
 if [[ -z "$release_notes_path" ]]; then
-    fail "RELEASE_NOTES_PATH must not be empty"
+    fail_config_preflight "RELEASE_NOTES_PATH must not be empty"
 fi
 if [[ "$release_notes_path" != "$default_release_notes_path" &&
     "$allow_release_notes_path_override" != "1" ]]; then
-    printf 'error: RELEASE_NOTES_PATH override requires explicit approval\n' >&2
-    printf 'expected default: %s\n' "$default_release_notes_path" >&2
-    printf 'got: %s\n' "$release_notes_path" >&2
-    printf 'hint: set ALLOW_RELEASE_NOTES_PATH_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    release_notes_override_error="RELEASE_NOTES_PATH override requires explicit approval"
+    release_notes_override_error+="; expected default: $default_release_notes_path"
+    release_notes_override_error+="; got: $release_notes_path"
+    release_notes_override_error+="; hint: set ALLOW_RELEASE_NOTES_PATH_OVERRIDE=1"
+    release_notes_override_error+=" only for local rehearsals"
+    fail_config_preflight "$release_notes_override_error"
 fi
 case "$allow_release_repo_override" in
     0 | 1) ;;
-    *) fail "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override" ;;
+    *)
+        fail_config_preflight \
+            "ALLOW_RELEASE_REPOSITORY_OVERRIDE must be 0 or 1, got $allow_release_repo_override"
+        ;;
 esac
 if [[ -z "$release_repo" ]]; then
-    fail "RELEASE_REPOSITORY must not be empty"
+    fail_config_preflight "RELEASE_REPOSITORY must not be empty"
 fi
 if [[ "$release_repo" != "$default_release_repo" &&
     "$allow_release_repo_override" != "1" ]]; then
-    printf 'error: RELEASE_REPOSITORY override requires explicit approval\n' >&2
-    printf 'expected default: %s\n' "$default_release_repo" >&2
-    printf 'got: %s\n' "$release_repo" >&2
-    printf 'hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    release_repo_error="RELEASE_REPOSITORY override requires explicit approval"
+    release_repo_error+="; expected default: $default_release_repo"
+    release_repo_error+="; got: $release_repo"
+    release_repo_error+="; hint: set ALLOW_RELEASE_REPOSITORY_OVERRIDE=1 only for local rehearsals"
+    fail_config_preflight "$release_repo_error"
 fi
 if [[ ! "$release_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-    fail "release repository must be owner/name, got $release_repo"
+    fail_config_preflight "release repository must be owner/name, got $release_repo"
 fi
 case "$allow_min_free_space_override" in
     0 | 1) ;;
-    *) fail "ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE must be 0 or 1, got $allow_min_free_space_override" ;;
+    *)
+        min_free_override_error="ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE must be 0 or 1"
+        min_free_override_error+=", got $allow_min_free_space_override"
+        fail_config_preflight "$min_free_override_error"
+        ;;
 esac
 if [[ -z "$min_free_space_kib" ]]; then
-    fail "RELEASE_GATE_MIN_FREE_KIB must not be empty"
+    fail_config_preflight "RELEASE_GATE_MIN_FREE_KIB must not be empty"
 fi
 [[ "$min_free_space_kib" =~ ^[0-9]+$ ]] ||
-    fail "RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer"
+    fail_config_preflight "RELEASE_GATE_MIN_FREE_KIB must be a non-negative integer"
 if [[ "$min_free_space_kib" != "$default_min_free_space_kib" &&
     "$allow_min_free_space_override" != "1" ]]; then
-    printf 'error: RELEASE_GATE_MIN_FREE_KIB override requires explicit approval\n' >&2
-    printf 'expected default: %s\n' "$default_min_free_space_kib" >&2
-    printf 'got: %s\n' "$min_free_space_kib" >&2
-    printf 'hint: set ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 only for local rehearsals\n' >&2
-    exit 1
+    min_free_error="RELEASE_GATE_MIN_FREE_KIB override requires explicit approval"
+    min_free_error+="; expected default: $default_min_free_space_kib"
+    min_free_error+="; got: $min_free_space_kib"
+    min_free_error+="; hint: set ALLOW_RELEASE_GATE_MIN_FREE_OVERRIDE=1 only for local rehearsals"
+    fail_config_preflight "$min_free_error"
 fi
 
 pr_json="$(mktemp "${TMPDIR:-/tmp}/engram-release-pr.XXXXXX")"

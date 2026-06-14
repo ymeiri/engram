@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preflight failures emit structured failure evidence before exiting.
 - Hardened GA release-gate JSON mode so hosted CI discovery, inspection, metadata, and job
   preflight failures emit structured failure evidence before downstream release checks.
+- Hardened GA release-gate JSON mode so early configuration and approval-input failures emit
+  structured failure evidence before repository, hosted CI, disk, or artifact checks.
 - Clarified GA release-gate branch-sync failure output so operators are told to fetch and inspect,
   not treat `git pull` as release approval.
 - Clarified the GA release-owner runbook branch-sync step so pull-policy or divergence hints are
