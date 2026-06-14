@@ -300,6 +300,15 @@ if [[ "$json_output" == "1" ]]; then
             jobs: $jobs,
             condition: "all expected jobs completed with conclusion=failure and steps=[]",
             hosted_ci_fallback_accepted: false,
+            actions_performed: {
+                hosted_ci_fallback_acceptance: false,
+                release_actions: false,
+                git_tag: false,
+                github_release: false,
+                package_asset_upload: false,
+                homebrew_tap_update: false,
+                generated_output_cleanup: false
+            },
             release_actions_performed: false
         }'
 else

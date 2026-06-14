@@ -1981,6 +1981,32 @@ Development-diff validation for this structured action evidence:
   `generated_artifacts.state=not_checked`, `release_actions_performed=false`, and every
   `actions_performed` value false.
 
+## Hosted CI Pre-Step Structured Action Evidence
+
+`scripts/verify-hosted-ci-prestep-blocker.sh --json` now keeps
+`hosted_ci_fallback_accepted=false` and `release_actions_performed=false`, and also emits an
+`actions_performed` object on successful pre-step-blocker verification. The object reports
+`hosted_ci_fallback_acceptance=false`, `release_actions=false`, `git_tag=false`,
+`github_release=false`, `package_asset_upload=false`, `homebrew_tap_update=false`, and
+`generated_output_cleanup=false`.
+
+This keeps the hosted-CI fallback verifier aligned with the GA release-gate JSON contract: the
+verifier can prove that a hosted run failed before workflow steps ran, but it still does not accept
+the fallback, mark a PR ready, merge, tag, publish, upload assets, update Homebrew, or clean release
+outputs.
+
+Development-diff validation for this verifier evidence:
+
+- `bash -n scripts/verify-hosted-ci-prestep-blocker.sh`
+- `git diff --check`
+- `EXPECTED_HEAD_SHA=0de4f2745ba627266200b8f6e03d1b06edb2dc82
+  scripts/verify-hosted-ci-prestep-blocker.sh --json 27190538964` passed against the historical
+  pre-step-blocker run with `condition_verified=true`, `hosted_ci_fallback_accepted=false`,
+  `release_actions_performed=false`, and every `actions_performed` value false.
+- `EXPECTED_HEAD_SHA=0000000000000000000000000000000000000000
+  scripts/verify-hosted-ci-prestep-blocker.sh --json 27190538964` failed closed with a run-head
+  mismatch and emitted no success JSON.
+
 ## Hosted CI Repository Anchor Guard
 
 `scripts/release-gate-report.sh` now passes the effective release repository into hosted CI run
