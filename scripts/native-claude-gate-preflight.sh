@@ -83,7 +83,8 @@ print_config_failure_json() {
                 hooks_command: false,
                 process_signals: false,
                 release_actions: false
-            }
+            },
+            release_actions_performed: false
         }'
 }
 
@@ -448,7 +449,8 @@ if [[ "$json_output" == "1" ]]; then
                 hooks_command: false,
                 process_signals: false,
                 release_actions: false
-            }
+            },
+            release_actions_performed: false
         }'
 else
     printf 'Native Claude production gate preflight:\n'

@@ -1015,13 +1015,16 @@ Those failures also keep `actions_performed.native_claude_launch=false`,
 `actions_performed.hooks_command=false`, `actions_performed.process_signals=false`, and
 `actions_performed.release_actions=false`, so automation can distinguish config rejection from a
 preflight collection crash or a live native-Claude proof attempt.
+The native-Claude JSON paths also retain the legacy `release_actions_performed=false`
+compatibility field, matching the release gate and post-publish verifier no-action contracts.
 
 Validation:
 
 - `bash -n scripts/native-claude-gate-preflight.sh`
 - `scripts/native-claude-gate-preflight.sh --bogus --json` failed with
   `gate_state=configuration_preflight_failed`,
-  `failure.message="unknown option: --bogus"`, and all action booleans false.
+  `failure.message="unknown option: --bogus"`, `release_actions_performed=false`, and all action
+  booleans false.
 - `scripts/native-claude-gate-preflight.sh --expected-branch dev --json` failed with
   `gate_state=configuration_preflight_failed`,
   `failure.message="EXPECTED_BRANCH override requires explicit native Claude approval"`, and
@@ -1040,8 +1043,8 @@ Validation:
   action booleans false.
 - `scripts/native-claude-gate-preflight.sh --allow-worktree-changes --json` still emitted the
   normal blocked preflight evidence shape; with this development diff present, it reported
-  `tracked_changes_present=true`, canonical vault alignment, and the same live native-Claude
-  process blocker.
+  `tracked_changes_present=true`, canonical vault alignment, `release_actions_performed=false`,
+  and the same live native-Claude process blocker.
 
 ## Release-Facing Docs Scope Cleanup
 
