@@ -1281,6 +1281,29 @@ emit_generated_output_cleanup_verification_json() {
     local verification_state="$1"
     local verification_error="$2"
     local manifest_evidence_json
+    local manifest_size_bytes=""
+    local manifest_sha256=""
+
+    if [[ -f "$verify_generated_output_cleanup_manifest" ]]; then
+        if ! manifest_size_bytes="$(
+            wc -c <"$verify_generated_output_cleanup_manifest" | tr -d '[:space:]'
+        )"; then
+            manifest_size_bytes=""
+        fi
+        if [[ ! "$manifest_size_bytes" =~ ^[0-9]+$ ]]; then
+            manifest_size_bytes=""
+        fi
+        if command -v shasum >/dev/null 2>&1; then
+            if ! manifest_sha256="$(
+                shasum -a 256 "$verify_generated_output_cleanup_manifest" | awk '{ print $1 }'
+            )"; then
+                manifest_sha256=""
+            fi
+            if [[ ! "$manifest_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+                manifest_sha256=""
+            fi
+        fi
+    fi
 
     if manifest_evidence_json="$(
         jq -c '
@@ -1365,6 +1388,8 @@ emit_generated_output_cleanup_verification_json() {
         --arg head "$head_sha" \
         --arg tracked "$tracked_changes_present" \
         --arg manifest_path "$verify_generated_output_cleanup_manifest" \
+        --arg manifest_size_bytes "$manifest_size_bytes" \
+        --arg manifest_sha256 "$manifest_sha256" \
         --arg verification_state "$verification_state" \
         --arg verification_error "$verification_error" \
         --arg generated_outputs_state "$generated_outputs_state" \
@@ -1433,6 +1458,16 @@ emit_generated_output_cleanup_verification_json() {
             generated_output_cleanup_verification: {
                 state: $verification_state,
                 manifest_path: $manifest_path,
+                manifest_size_bytes: (
+                    if $manifest_size_bytes == "" then null
+                    else ($manifest_size_bytes | tonumber)
+                    end
+                ),
+                manifest_sha256: (
+                    if $manifest_sha256 == "" then null
+                    else $manifest_sha256
+                    end
+                ),
                 manifest_evidence: $manifest_evidence,
                 expected_outputs: $expected_outputs,
                 current_outputs: (

@@ -189,9 +189,9 @@ match, it reports `release_gate_state=generated_output_cleanup_fingerprints_mism
 not full-gate `generated_outputs_cleanup_required` evidence with `release_target.state=available`,
 `disk_space.state=passed`, and no release actions. Its verification JSON repeats the validated
 manifest's hosted-CI, release-target, disk, remaining-action, and no-action evidence under
-`generated_output_cleanup_verification.manifest_evidence`, so the cleanup result is
-self-contained enough for review. Stop and rerun the full GA gate to collect fresh cleanup evidence
-before approving deletion.
+`generated_output_cleanup_verification.manifest_evidence` and fingerprints the manifest itself with
+`manifest_size_bytes` and `manifest_sha256`, so the cleanup result is self-contained enough for
+review. Stop and rerun the full GA gate to collect fresh cleanup evidence before approving deletion.
 
 ```bash
 cleanup_manifest="$(mktemp)"
@@ -251,14 +251,23 @@ jq -e '
     and (.sha256 | test("^[0-9a-f]{64}$")))
   and .release_actions_performed == false
 ' "$cleanup_manifest"
+cleanup_manifest_size_bytes="$(wc -c <"$cleanup_manifest" | tr -d '[:space:]')"
+cleanup_manifest_sha256="$(shasum -a 256 "$cleanup_manifest" | awk '{ print $1 }')"
+test "$cleanup_manifest_size_bytes" -gt 0
+test -n "$cleanup_manifest_sha256"
 
 scripts/release-gate-report.sh \
   --target ga \
   --verify-generated-output-cleanup "$cleanup_manifest" \
   --json | tee "$cleanup_verify_json"
-jq -e '
+jq -e \
+  --argjson cleanup_manifest_size_bytes "$cleanup_manifest_size_bytes" \
+  --arg cleanup_manifest_sha256 "$cleanup_manifest_sha256" \
+  '
   .release_gate_state == "generated_output_cleanup_fingerprints_verified"
   and .generated_output_cleanup_verification.state == "verified"
+  and .generated_output_cleanup_verification.manifest_size_bytes == $cleanup_manifest_size_bytes
+  and .generated_output_cleanup_verification.manifest_sha256 == $cleanup_manifest_sha256
   and .generated_output_cleanup_verification.manifest_evidence.target == "ga"
   and .generated_output_cleanup_verification.manifest_evidence.head == .head
   and .generated_output_cleanup_verification.manifest_evidence.hosted_ci.state == "passing"
