@@ -189,8 +189,8 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Local runtime | Validated for GA package smoke / installed global still beta.2 | Full GA gate package/install smoke passed for `engram 0.2.0` on `8094269`; local asset-dir verification also passed without downloads or publishing. Local `--asset-dir` verifier output now reports `asset_install_verified=true` while keeping `published_install_verified=false`. The previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | After release publication, verify the published install path and then refresh local runtime evidence if desired. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
-| Generated vault | Validated | Canonical vault status after memory updates reports `generated_file_count=2977`, `expected_generated_file_count=2977`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
-| Native Claude production gate | Blocked | The native preflight baseline now matches the installed Claude Code `2.1.174` path/hash, default-denies non-canonical branch/binary/vault overrides, and the canonical vault was regenerated to `2977/2977`. Development-diff evidence with worktree changes explicitly allowed reports the only remaining native preflight blocker as an already-running native Claude CLI process. | Rerun the fail-closed preflight on the committed exact head, then do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window allows the proof run. |
+| Generated vault | Validated | Canonical vault status after the current native-Claude evidence refresh reports `generated_file_count=3051`, `expected_generated_file_count=3051`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
+| Native Claude production gate | Blocked | The native preflight baseline now matches the installed Claude Code `2.1.174` path/hash, default-denies non-canonical branch/binary/vault overrides, and the canonical vault was regenerated to `3051/3051`. On exact head `cada64a`, the strict preflight reports no tracked changes but blocks on the local untracked `.engram-vault/` copy plus an already-running native Claude CLI process. The scoped preflight with worktree changes explicitly allowed isolates the production gate and reports the only remaining native-Claude blocker as an already-running native Claude CLI process. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window and clean release-evidence worktree allow the proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
@@ -967,6 +967,41 @@ committed exact head before using it as owner-review evidence.
 This refresh also confirms the divergent-branch warning seen during a prior pull
 attempt is not the live repo state: after `git fetch --tags --prune origin`, `main` and
 `origin/main` were still aligned at `a082a63` with `ahead=0`, `behind=0`.
+
+## Native Claude Preflight Checkpoint at cada64a
+
+After the GA evidence docs refresh was committed as `cada64a`, the canonical generated vault had
+drifted behind memory at `generated_file_count=3028`,
+`expected_generated_file_count=3051`, `user_file_count=0`. Recompiling
+`/Users/yuval.meiri/.engram/vault` wrote only generated vault files and restored the canonical
+vault to `generated_file_count=3051`, `expected_generated_file_count=3051`,
+`user_file_count=0`.
+
+The current strict native-Claude preflight on exact head `cada64a` then reported:
+
+- `gate_state=blocked`
+- branch `main`, upstream `origin/main`, `ahead=0`, `behind=0`
+- `tracked_changes_present=false`
+- `extra_untracked_count=3036`, from the local untracked `.engram-vault/` copy
+- canonical vault status aligned at `generated_file_count=3051`,
+  `expected_generated_file_count=3051`, `user_file_count=0`
+- blockers `unexpected untracked files are present` and
+  `native Claude CLI processes are already running`
+- no native Claude launch, `/hooks` command, process signal, or release action was performed
+
+A scoped rerun with worktree changes explicitly allowed was used only to isolate the production
+native-Claude gate from the local untracked vault copy. It reported the same exact head `cada64a`,
+no tracked changes, canonical vault alignment at `3051/3051`, Claude Code target
+`/Users/yuval.meiri/.local/share/claude/versions/2.1.174`, version `2.1.174 (Claude Code)`,
+SHA-256 `20c5380b4423be9963c510f5464cc1f443235a9b4423179f9c01f28021b81bad`, and the only
+remaining blocker `native Claude CLI processes are already running`. It also confirmed
+`actions_performed.native_claude_launch=false`, `actions_performed.hooks_command=false`,
+`actions_performed.process_signals=false`, and `actions_performed.release_actions=false`.
+
+This keeps native Claude prompt-bearing, live `/hooks`, and live host-label proof outside the
+current GA release claim. Final owner-review evidence should either run in a clean worktree without
+the local `.engram-vault/` copy or receive explicit local handling for that generated vault copy,
+and it still needs a clean native-Claude process window.
 
 ## Release-Facing Docs Scope Cleanup
 
