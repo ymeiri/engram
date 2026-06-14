@@ -210,6 +210,19 @@ jq -e '
   and .disk_space.state == "passed"
   and .generated_outputs.state == "cleanup_required"
   and .generated_artifacts.state == "not_checked"
+  and (. as $manifest
+    | ($manifest.actions_performed | type == "object")
+      and (
+        $manifest.actions_performed as $actions
+        | all([
+            "release_actions",
+            "git_tag",
+            "github_release",
+            "package_asset_upload",
+            "homebrew_tap_update",
+            "generated_output_cleanup"
+          ][]; $actions[.] == false)
+        and all($actions[]; . == false)))
   and all(.generated_outputs.outputs[];
     .exists == true
     and .will_write == true
@@ -217,7 +230,6 @@ jq -e '
     and (.size_bytes | type == "number")
     and .size_bytes > 0
     and (.sha256 | test("^[0-9a-f]{64}$")))
-  and .actions_performed.generated_output_cleanup == false
   and .release_actions_performed == false
 ' "$cleanup_manifest"
 

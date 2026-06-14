@@ -1535,6 +1535,18 @@ verify_generated_output_cleanup() {
                 "manifest release_actions_performed must be false"
             elif ((.actions_performed // null) | type) != "object" then
                 "manifest actions_performed must be an object"
+            elif (. as $manifest | any([
+                "release_actions",
+                "git_tag",
+                "github_release",
+                "package_asset_upload",
+                "homebrew_tap_update",
+                "generated_output_cleanup"
+            ][]; (
+                ($manifest.actions_performed[.] | type) != "boolean"
+                or $manifest.actions_performed[.] != false
+            ))) then
+                "manifest actions_performed release-action values must all be false"
             elif any(.actions_performed[]; . != false) then
                 "manifest actions_performed values must all be false"
             else
