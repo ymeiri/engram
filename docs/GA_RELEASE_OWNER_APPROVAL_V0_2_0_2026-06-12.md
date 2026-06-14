@@ -202,6 +202,8 @@ review. Stop and rerun the full GA gate to collect fresh cleanup evidence before
 ```bash
 cleanup_manifest="$(mktemp)"
 cleanup_verify_json="$(mktemp)"
+approved_cleanup_paths="$(mktemp)"
+expected_cleanup_paths="$(mktemp)"
 
 set +e
 scripts/release-gate-report.sh \
@@ -303,15 +305,34 @@ jq -e \
   and .release_actions_performed == false
 ' "$cleanup_verify_json"
 
+cat >"$expected_cleanup_paths" <<'PATHS'
+dist/engram-0.2.0-aarch64-apple-darwin.tar.gz
+dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256
+dist/homebrew/Formula/engram.rb
+PATHS
+sort -o "$expected_cleanup_paths" "$expected_cleanup_paths"
+
+jq -r '.generated_outputs.outputs[] | select(.will_write == true) | .path' \
+  "$cleanup_verify_json" | sort >"$approved_cleanup_paths"
+diff -u "$expected_cleanup_paths" "$approved_cleanup_paths"
+
 while IFS= read -r stale_output; do
+  case "$stale_output" in
+    dist/engram-0.2.0-aarch64-apple-darwin.tar.gz | \
+    dist/engram-0.2.0-aarch64-apple-darwin.tar.gz.sha256 | \
+    dist/homebrew/Formula/engram.rb) ;;
+    *)
+      printf 'unexpected generated-output cleanup path: %s\n' "$stale_output" >&2
+      exit 1
+      ;;
+  esac
+  test -f "$stale_output"
   rm -- "$stale_output"
-done < <(jq -r '.generated_outputs.outputs[] | select(.will_write == true) | .path' \
-  "$cleanup_verify_json")
+done <"$approved_cleanup_paths"
 
 while IFS= read -r stale_output; do
   test ! -e "$stale_output"
-done < <(jq -r '.generated_outputs.outputs[] | select(.will_write == true) | .path' \
-  "$cleanup_verify_json")
+done <"$approved_cleanup_paths"
 ```
 
 Do not use `git pull` to satisfy the branch-sync checks below. If the ahead/behind check is
