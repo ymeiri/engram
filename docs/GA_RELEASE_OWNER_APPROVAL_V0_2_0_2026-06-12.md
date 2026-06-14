@@ -185,8 +185,10 @@ local stale outputs still match the approved fingerprint manifest, then remove e
 ignored generated release outputs. The verification command is read-only and must report
 `actions_performed.generated_output_cleanup=false`; if the manifest or current fingerprints do not
 match, it reports `release_gate_state=generated_output_cleanup_fingerprints_mismatch` with
-`failure.kind=generated_output_cleanup_verification`. Stop and rerun the full GA gate to collect
-fresh cleanup evidence before approving deletion.
+`failure.kind=generated_output_cleanup_verification`. The verifier also rejects manifests that are
+not full-gate `generated_outputs_cleanup_required` evidence with `release_target.state=available`,
+`disk_space.state=passed`, and no release actions. Stop and rerun the full GA gate to collect fresh
+cleanup evidence before approving deletion.
 
 ```bash
 cleanup_manifest="$(mktemp)"
@@ -204,7 +206,10 @@ test "$cleanup_gate_status" != "0"
 jq -e '
   .release_gate_state == "generated_outputs_cleanup_required"
   and .failure.kind == "generated_outputs_preflight"
+  and .release_target.state == "available"
+  and .disk_space.state == "passed"
   and .generated_outputs.state == "cleanup_required"
+  and .generated_artifacts.state == "not_checked"
   and all(.generated_outputs.outputs[];
     .exists == true
     and .will_write == true

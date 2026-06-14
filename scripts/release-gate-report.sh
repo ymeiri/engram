@@ -1483,6 +1483,31 @@ verify_generated_output_cleanup() {
                 "manifest branch mismatch: expected \($branch), got \(.branch // null)"
             elif (.head // "") != $head then
                 "manifest head mismatch: expected \($head), got \(.head // null)"
+            elif (.release_gate_state // "") != "generated_outputs_cleanup_required" then
+                "manifest release_gate_state must be generated_outputs_cleanup_required"
+            elif (.failure.kind // "") != "generated_outputs_preflight" then
+                "manifest failure.kind must be generated_outputs_preflight"
+            elif (.release_target.state // "") != "available" then
+                "manifest release_target.state must be available"
+            elif (
+                (.release_target.local_tag_exists | type) != "boolean"
+                or .release_target.local_tag_exists != false
+            ) then
+                "manifest release_target.local_tag_exists must be false"
+            elif (
+                (.release_target.remote_git_tag_exists | type) != "boolean"
+                or .release_target.remote_git_tag_exists != false
+            ) then
+                "manifest release_target.remote_git_tag_exists must be false"
+            elif (
+                (.release_target.github_release_exists | type) != "boolean"
+                or .release_target.github_release_exists != false
+            ) then
+                "manifest release_target.github_release_exists must be false"
+            elif (.disk_space.state // "") != "passed" then
+                "manifest disk_space.state must be passed"
+            elif ((.disk_space.shortfall_kib | type) != "number" or .disk_space.shortfall_kib != 0) then
+                "manifest disk_space.shortfall_kib must be 0"
             elif (.generated_outputs.state // "") != "cleanup_required" then
                 "manifest generated_outputs.state must be cleanup_required"
             elif ((.generated_outputs.outputs // null) | type) != "array" then
@@ -1501,6 +1526,17 @@ verify_generated_output_cleanup() {
                 "manifest generated_outputs.outputs must all have positive size_bytes"
             elif any(.generated_outputs.outputs[]; (.sha256 | sha256_string | not)) then
                 "manifest generated_outputs.outputs must all have sha256 fingerprints"
+            elif (.generated_artifacts.state // "") != "not_checked" then
+                "manifest generated_artifacts.state must be not_checked"
+            elif (
+                (.release_actions_performed | type) != "boolean"
+                or .release_actions_performed != false
+            ) then
+                "manifest release_actions_performed must be false"
+            elif ((.actions_performed // null) | type) != "object" then
+                "manifest actions_performed must be an object"
+            elif any(.actions_performed[]; . != false) then
+                "manifest actions_performed values must all be false"
             else
                 empty
             end
