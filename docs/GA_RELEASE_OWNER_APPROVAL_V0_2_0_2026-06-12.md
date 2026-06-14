@@ -55,17 +55,22 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest recorded release-gate behavior checkpoint is newer than the historical full-gate
-candidate above. At that checkpoint, exact-head hosted CI run `27497957513` is green for
-`2adc10c3e6e77c107636abac59b202bdbc89b920`, and the quick GA gate is green for the same head.
-That checkpoint also clarifies that branch-sync divergence is a stop-and-inspect condition, not
-approval to run `git pull`, and that early operator/configuration failures in JSON mode emit
+candidate above. At that checkpoint, exact-head hosted CI run `27499686731` is green for
+`d4c0cd9454c304471ee127ae230c112bb4fdf89f`, and the quick GA gate is green for the same head.
+That checkpoint also fixes the scoped `entity_observe(action="search")` false negative for long
+natural-language MCP queries by ranking observation key/content keyword overlap instead of
+requiring the whole query as one contiguous substring; the live local daemon was refreshed from
+that build and the previously failing `live-debugger-mcp` query returned `count=5`. This is a
+runtime-quality fix and not a release-publication event. The same checkpoint keeps the release
+gate behavior unchanged: branch-sync divergence is a stop-and-inspect condition, not approval to
+run `git pull`, and early operator/configuration failures in JSON mode emit
 `configuration_preflight_failed` evidence instead of looking like script crashes. The hosted-CI
 pre-step verifier and published release verifier both emit structured configuration-preflight JSON
 for `--json` operator failures without marking release actions as performed. The generated-output
-cleanup verifier now repeats the full-gate manifest evidence and fingerprints the manifest file
-itself with `manifest_size_bytes` and `manifest_sha256`. The exact-head default full GA gate now
-passes the default 10 GiB disk preflight on this host, but still fails before local CI/package
-smoke because stale generated outputs already exist at the paths the full gate would write.
+cleanup verifier repeats the full-gate manifest evidence and fingerprints the manifest file itself
+with `manifest_size_bytes` and `manifest_sha256`. The exact-head default full GA gate now passes
+the default 10 GiB disk preflight on this host, but still fails before local CI/package smoke
+because stale generated outputs already exist at the paths the full gate would write.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:

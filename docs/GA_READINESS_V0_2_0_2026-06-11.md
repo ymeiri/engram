@@ -21,7 +21,7 @@ Release package output overwrite guard checkpoint:
 Generated-artifact proof-state checkpoint:
 `d0454b9c1ea0aeaa6ed0294d81017ea926bc92cb`
 Latest recorded release-gate behavior evidence checkpoint:
-`2adc10c3e6e77c107636abac59b202bdbc89b920`
+`d4c0cd9454c304471ee127ae230c112bb4fdf89f`
 
 ## Summary
 
@@ -69,8 +69,8 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   for `809426945cb7e0d78950552165691e29aa0191bc` completed successfully on
   2026-06-12 for Check, Test, Clippy, Docs, and Format. The `Test` job ran
   `cargo test --locked --all-targets --jobs 1` and completed in `28m51s`.
-- Current release-gate behavior CI: main push run `27497957513` for
-  `2adc10c3e6e77c107636abac59b202bdbc89b920` completed successfully on
+- Current release-gate behavior CI: main push run `27499686731` for
+  `d4c0cd9454c304471ee127ae230c112bb4fdf89f` completed successfully on
   2026-06-14 for Check, Test, Clippy, Docs, and Format. The post-CI GA gate
   assertions passed for the quick `evidence_incomplete` state, the default
   `generated_outputs_cleanup_required` full-gate stop, and the read-only
@@ -130,11 +130,19 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   on 2026-06-14 for Check, Test, Clippy, Docs, and Format. The `Test` job restored and
   warmed `engram-tests/.fastembed_cache` before running
   `cargo test --locked --all-targets --jobs 1`.
-- Current release-gate behavior evidence CI: main push run
+- Prior release-gate behavior evidence CI: main push run
   `27491186766` for `1ddc317df74bfe9a67640107b0dca0708aaeb9f1` completed successfully
   on 2026-06-14 for Check, Test, Clippy, Docs, and Format. The `Test` job restored and
   warmed `engram-tests/.fastembed_cache` before running
   `cargo test --locked --all-targets --jobs 1`.
+- Scoped observation-search fix CI: main push run `27499686731` for
+  `d4c0cd9454c304471ee127ae230c112bb4fdf89f` completed successfully on
+  2026-06-14 for Check, Test, Clippy, Docs, and Format. The local focused and full
+  entity-test validation included `cargo test -p engram-tests --test entity_tests`,
+  and the live MCP `entity_observe(action="search", entity="live-debugger-mcp", ...)`
+  regression query returned `count=5` after the installed daemon refresh. This fixes
+  the prior false negative for long natural-language scoped observation searches; it
+  does not change the release-owner cleanup gate.
 - Prior quick GA gate:
   `scripts/release-gate-report.sh --target ga --hosted-run 27475243716 --quick --json`
   passed for exact head `d0454b9`, with hosted CI passing, release target `v0.2.0`
@@ -148,8 +156,8 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   read-only cleanup evidence with regular-file size and SHA-256 fingerprints, and
   `release_actions_performed=false`.
 - Current cleanup-approval quick GA gate:
-  `scripts/release-gate-report.sh --target ga --hosted-run 27491186766 --quick --json`
-  passed for exact head `1ddc317`, with hosted CI
+  `scripts/release-gate-report.sh --target ga --hosted-run 27499686731 --quick --json`
+  passed for exact head `d4c0cd9`, with hosted CI
   passing, release target `v0.2.0` still available, generated outputs reported as
   read-only cleanup evidence with regular-file size and SHA-256 fingerprints, and
   `release_actions_performed=false`.
@@ -158,7 +166,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `generated_artifacts.state=not_checked`, `generated_artifacts.host_triple=null`, and
   an empty post-run artifact list. This proves that preflight failures do not claim
   archive, checksum, or Homebrew formula publication evidence.
-- Current post-CI full-gate rehearsal against run `27491186766` keeps
+- Current post-CI full-gate rehearsal against run `27499686731` keeps
   `release_actions_performed=false` and reports `generated_artifacts.state=not_checked`
   on the generated-output preflight failure.
 - The latest recorded `v0.2.0-beta.2` release-target conflict rehearsal against run
@@ -166,7 +174,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   `ready_for_release_owner_review=false`.
 - The latest exact-head default GA gate on this host passes disk preflight with
   `disk_space.state=passed` and `min_required_kib=10485760`, then fails before local
-  CI/package smoke on head `1ddc317` with
+  CI/package smoke on head `d4c0cd9` with
   `release_gate_state=generated_outputs_cleanup_required`,
   `failure.kind=generated_outputs_preflight`, and `release_target.state=available`.
   Exact `free_space_kib` values are host-local and should be read from the final gate JSON.
@@ -181,13 +189,12 @@ prerelease with macOS Apple Silicon archive and checksum assets.
   fails closed at `release_gate_state=generated_outputs_cleanup_required` if any generated output
   that the full gate would write already exists. This keeps stale `dist/` evidence from reaching
   local CI, package smoke, or Homebrew formula validation.
-- Local runtime before refresh: installed `engram` and daemon still reported
-  `0.2.0-beta.1`.
-- Local runtime after refresh: installed binary hash
-  `d1bef731d7172e3a36a716bd5a7da4a9fe8f50978123f711896374559f855b44`
-  reports `engram 0.2.0-beta.2`; daemon restarted on port `8765`, PID `9401`,
-  with spawn version `0.2.0-beta.2`; `/health` returns
-  `{"status":"ok","service":"engram","version":"0.2.0-beta.2"}`.
+- Local runtime before the latest refresh: installed `engram` and daemon reported
+  `0.2.0-beta.2`.
+- Local runtime after the latest refresh: installed binary hash
+  `df9b8a72f9a7c5775bab0429dbc27270c13c230bdfb95529d11bb35c9868e17c`
+  reports `engram 0.2.0`; daemon restarted on port `8765` with spawn version
+  `0.2.0`; `/health` returns `{"status":"ok","service":"engram","version":"0.2.0"}`.
 
 ## Matrix
 
@@ -195,13 +202,14 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | --- | --- | --- | --- |
 | GA target | Validated | Current prerelease line is `0.2.0-beta.2`; no `v0.2.0` tag/release exists. | Keep GA target as `v0.2.0` unless a later release decision changes it. |
 | Beta baseline | Validated | Local tags and GitHub prereleases exist for beta.1 and beta.2 with release assets. | Use beta.2 plus current `main` as the GA baseline. |
-| Versioning | Validated historically / fresh full local gate pending | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version on head `8094269`; full GA gate confirmed `workspace_version_matches_release=true`. The latest recorded `2adc10c` release-gate behavior evidence checkpoint has exact-head hosted CI and quick-gate evidence, but not a fresh full local gate because generated-output cleanup is still approval-gated before local CI/package smoke. | Obtain release-owner approval for generated-output cleanup, preserve disk cleanup approval as conditional if the preflight regresses, then rerun exact-head CI if needed and the full GA gate on the final release head. |
-| Hosted CI | Validated on latest recorded release-gate evidence checkpoint | Main push CI run `27497957513` passed for head `2adc10c`. Earlier runs `27497239164`, `27491186766`, `27489912065`, `27485035688`, `27484385982`, `27483700305`, `27483057249`, `27482421136`, `27481797605`, `27480555463`, `27479860353`, `27479117658`, `27478418090`, `27475243716`, `27474449994`, `27473620301`, `27472826808`, `27472166352`, `27425319893`, `27417397670`, `27401954970`, `27399073606`, `27388790648`, `27379891728`, `27372009309`, `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for cleanup manifest fingerprinting, cleanup manifest evidence, hosted-verifier config JSON, published-verifier config JSON, configuration-failure JSON, hosted-CI failure JSON, branch-sync, cleanup-runbook, artifact-proof, runbook, output-guard, disk, package, owner-review, setup-path, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
-| Local runtime | Validated for GA package smoke / installed global still beta.2 | Full GA gate package/install smoke passed for `engram 0.2.0` on `8094269`; local asset-dir verification also passed without downloads or publishing. Local `--asset-dir` verifier output now reports `asset_install_verified=true` while keeping `published_install_verified=false`. The previously installed global binary and daemon remain beta.2 evidence until an explicit post-release refresh. | After release publication, verify the published install path and then refresh local runtime evidence if desired. |
+| Versioning | Validated historically / fresh full local gate pending | Workspace metadata and lockfile are consistent at the intended `0.2.0` GA version on head `8094269`; full GA gate confirmed `workspace_version_matches_release=true`. The latest recorded `d4c0cd9` release-gate behavior evidence checkpoint has exact-head hosted CI and quick-gate evidence, but not a fresh full local gate because generated-output cleanup is still approval-gated before local CI/package smoke. | Obtain release-owner approval for generated-output cleanup, preserve disk cleanup approval as conditional if the preflight regresses, then rerun exact-head CI if needed and the full GA gate on the final release head. |
+| Hosted CI | Validated on latest recorded release-gate evidence checkpoint | Main push CI run `27499686731` passed for head `d4c0cd9`. Earlier runs `27497957513`, `27497239164`, `27491186766`, `27489912065`, `27485035688`, `27484385982`, `27483700305`, `27483057249`, `27482421136`, `27481797605`, `27480555463`, `27479860353`, `27479117658`, `27478418090`, `27475243716`, `27474449994`, `27473620301`, `27472826808`, `27472166352`, `27425319893`, `27417397670`, `27401954970`, `27399073606`, `27388790648`, `27379891728`, `27372009309`, `27363378532`, `27361233663`, `27335890558`, and `27340971819` passed for scoped observation-search fix, cleanup manifest fingerprinting, cleanup manifest evidence, hosted-verifier config JSON, published-verifier config JSON, configuration-failure JSON, hosted-CI failure JSON, branch-sync, cleanup-runbook, artifact-proof, runbook, output-guard, disk, package, owner-review, setup-path, release-code, and release-notes checkpoints. | Re-run exact-head hosted CI after any GA version/docs/package changes. |
+| Local runtime | Source-installed 0.2.0 validated / published install pending | Full GA gate package/install smoke passed for `engram 0.2.0` on `8094269`; local asset-dir verification also passed without downloads or publishing. After the scoped-search fix, `/Users/yuval.meiri/.local/bin/engram` was source-installed from current main, reports `engram 0.2.0`, and the restarted daemon reports spawn version `0.2.0`; `/health` returns `{"status":"ok","service":"engram","version":"0.2.0"}`. This is local source-install evidence, not published-release evidence. | After release publication, verify the published install path and then refresh local runtime evidence from the published asset. |
+| Scoped observation search | Validated | Commit `d4c0cd9` fixed `entity_observe(action="search")` so long natural-language queries rank relevant scoped observations by key/content term overlap instead of requiring a full contiguous substring. Local `entity_tests`, exact-head CI run `27499686731`, and live MCP query `debug with ai how skill is loaded code-gen-backend global_skills vs MCP load_datadog_skill catalogue` returning `count=5` cover the prior Claude Code false negative. | No remaining GA blocker from this bug; keep broad unified search and scoped observation search behavior distinct in future regressions. |
 | `orient` hot path | Validated / preserve | Lean `orient` returned compact scope, cursor, Brain Loop guidance, candidate IDs, and no open obligations. | Do not expand `orient`; only add focused regressions if GA changes touch ranking or lifecycle. |
 | Memory obligations | Validated | `engram obligations doctor --scope-project engram --cwd ...` returned `open=[]`, `warnings=[]`. | Re-run after every meaningful GA commit. |
-| Generated vault | Validated | Canonical vault status after the current native-Claude evidence refresh reports `generated_file_count=3051`, `expected_generated_file_count=3051`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
-| Native Claude production gate | Blocked | The native preflight baseline now matches the installed Claude Code `2.1.174` path/hash, default-denies non-canonical branch/binary/vault overrides, and the canonical vault was regenerated to `3051/3051`. On exact head `cada64a`, the strict preflight reports no tracked changes but blocks on the local untracked `.engram-vault/` copy plus an already-running native Claude CLI process. The scoped preflight with worktree changes explicitly allowed isolates the production gate and reports the only remaining native-Claude blocker as an already-running native Claude CLI process. The preflight now emits `configuration_preflight_failed` JSON for early `--json` operator/configuration failures without launching Claude, running `/hooks`, signaling processes, or taking release actions. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window and clean release-evidence worktree allow the proof run. |
+| Generated vault | Validated | The generated vault status for this evidence checkpoint reports `generated_file_count=3134`, `expected_generated_file_count=3134`, `user_file_count=0`. | Re-run before final GA release if memory writes occur. |
+| Native Claude production gate | Blocked | The native preflight baseline now matches the installed Claude Code `2.1.174` path/hash, default-denies non-canonical branch/binary/vault overrides, and the generated vault was regenerated to `3134/3134`. On exact head `cada64a`, the strict preflight reports no tracked changes but blocks on the local untracked `.engram-vault/` copy plus an already-running native Claude CLI process. The scoped preflight with worktree changes explicitly allowed isolates the production gate and reports the only remaining native-Claude blocker as an already-running native Claude CLI process. The preflight now emits `configuration_preflight_failed` JSON for early `--json` operator/configuration failures without launching Claude, running `/hooks`, signaling processes, or taking release actions. | Do not claim native Claude prompt-bearing, `/hooks`, or live host-label proof until a clean process window and clean release-evidence worktree allow the proof run. |
 | Claude static harness readiness | Partially validated | `engram harness doctor --harness claude-code --json` reports `ready=true` with warnings about user-owned snippet, extra permissions, split settings, and unproved live hook visibility. | Resolve or explicitly scope warnings before GA claims depend on live Claude hook behavior. |
 | Codex setup/runtime path | Validated for generated adapter install and current MCP use | `engram setup --agent codex --root <temp> --write --yes` wrote the two required Codex skills plus `AGENTS.engram.md`; `engram harness status/doctor --harness codex --root <temp> --json` reported required adapters installed and `ready=true`. Current Codex session also used MCP `orient` successfully. | Repeat on the final GA versioned head; live lifecycle compliance remains advisory and host-driven. |
 | Cursor setup/runtime path | Validated for generated adapter install | `engram setup --agent cursor --root <temp> --write --yes` wrote the three required Cursor skills; `engram harness status/doctor --harness cursor --root <temp> --json` reported required adapters installed and `ready=true`. | Repeat on the final GA versioned head; no live Cursor host session has been claimed. |
@@ -210,7 +218,7 @@ prerelease with macOS Apple Silicon archive and checksum assets.
 | Homebrew | Validated historically / unpublished | The full GA gate for `8094269` rendered `dist/homebrew/Formula/engram.rb`, `ruby -c` reported `Syntax OK`, and the gate rejected beta-specific Homebrew wording. The renderer also requires the adjacent `.sha256` asset to name and hash the same archive, verifies packaged `MANIFEST.json` release identity, rejects archive members outside the expected root, checks packaged payload hashes before writing formula text, refuses to overwrite existing formula output unless explicitly allowed for local rehearsals, and now stages formula text in a temporary file with Ruby syntax validation before moving it into the final output path. The remote tap `ymeiri/homebrew-engram` still points at beta.2 until explicitly updated. | Update the tap only after release approval, fresh package evidence, generated-output cleanup, and published asset verification. |
 | Docs consistency | Partially hardened | README, MCP setup, and security policy now use a `0.2.x` support-scope framing for supported setup paths while preserving the current fact that `v0.2.0-beta.2` is the latest published artifact. Historical docs still contain beta-specific caveats by design. | Re-check release-facing docs after the final `0.2.0` version bump and artifact publication; do not rewrite historical T-doc evidence. |
 | Memory lifecycle / M6 | Scoped for GA / final validation required | Legacy layers remain supported substrate; broad lifecycle cleanup and unrestricted automated lifecycle mutation are not proven GA-complete and are explicitly outside the current `v0.2.0` release claims. `scripts/release-gate-report.sh --target ga` now checks that the GA release notes retain those scope acknowledgements. | Keep the release-notes scope acknowledgements through the final version bump and full GA gate; do not broaden lifecycle/M6 claims without fresh implementation and validation evidence. |
-| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The exact-head post-CI full gate for `2adc10c` reports `release_target.state=available`, `disk_space.state=passed`, `release_gate_state=generated_outputs_cleanup_required`, and `generated_artifacts.state=not_checked` before local CI/package/Homebrew proof because stale generated outputs still exist. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence, verifies the exact stale-output fingerprints before cleanup, warns against using `git pull` to satisfy branch-sync checks, requires a fresh full gate on the release head, and reuses the full-gate archive/checksum/formula artifacts for publication instead of rerunning guarded generators. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent, fails with `generated_outputs_cleanup_required` if stale generated archive/checksum/formula outputs would be written by final proof, supports read-only `--verify-generated-output-cleanup <gate-json>` fingerprint verification before any owner-approved deletion with structured mismatch JSON and full-gate manifest validation including exact-head hosted-CI proof, owner-decision fields, expected remaining actions, and required all-false release-action keys, emits the validated manifest's hosted-CI/release-target/disk/no-action summary as `generated_output_cleanup_verification.manifest_evidence`, fingerprints that source manifest with `manifest_size_bytes` and `manifest_sha256`, emits structured `configuration_preflight_failed` JSON for early operator/configuration failures, and reports post-run `generated_artifacts` so owner-review JSON proves the artifacts to publish exist after the full gate with regular-file size and SHA-256 fingerprints. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, generated-output cleanup, disk cleanup if required, fresh exact-head gate evidence, generated artifact fingerprint evidence, and release-target availability evidence. |
+| Git release mechanics | Runbook prepared / not published | No `v0.2.0` tag, release, or package publication exists. `scripts/release-gate-report.sh --target ga --hosted-run 27388790648 --json` passed on the historical Homebrew-gated owner-review head and reported `ready_for_release_owner_review=true`. The exact-head post-CI full gate for `d4c0cd9` reports `release_target.state=available`, `disk_space.state=passed`, `release_gate_state=generated_outputs_cleanup_required`, and `generated_artifacts.state=not_checked` before local CI/package/Homebrew proof because stale generated outputs still exist. `docs/GA_RELEASE_OWNER_APPROVAL_V0_2_0_2026-06-12.md` names the fail-closed post-approval command sequence, verifies the exact stale-output fingerprints before cleanup, warns against using `git pull` to satisfy branch-sync checks, requires a fresh full gate on the release head, and reuses the full-gate archive/checksum/formula artifacts for publication instead of rerunning guarded generators. The GA gate now defaults `expected_branch=main` so owner-review evidence cannot be collected from a synced non-main branch unless explicitly overridden, reports `release_target.state=available` only when the intended local tag, remote Git tag, and GitHub release are all absent, fails with `generated_outputs_cleanup_required` if stale generated archive/checksum/formula outputs would be written by final proof, supports read-only `--verify-generated-output-cleanup <gate-json>` fingerprint verification before any owner-approved deletion with structured mismatch JSON and full-gate manifest validation including exact-head hosted-CI proof, owner-decision fields, expected remaining actions, and required all-false release-action keys, emits the validated manifest's hosted-CI/release-target/disk/no-action summary as `generated_output_cleanup_verification.manifest_evidence`, fingerprints that source manifest with `manifest_size_bytes` and `manifest_sha256`, emits structured `configuration_preflight_failed` JSON for early operator/configuration failures, and reports post-run `generated_artifacts` so owner-review JSON proves the artifacts to publish exist after the full gate with regular-file size and SHA-256 fingerprints. | Tag, publish, update Homebrew, and verify only after explicit release-owner approval, generated-output cleanup, disk cleanup if required, fresh exact-head gate evidence, generated artifact fingerprint evidence, and release-target availability evidence. |
 
 ## First GA Slice Completed
 
