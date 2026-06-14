@@ -12,8 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and known-limitation guidance for final release review.
 - Added a `v0.2.0` GA release-owner approval runbook that requires fresh exact-head gate evidence,
   names the post-approval commands, and preserves default-deny release boundaries.
-- Added a cargo-covered release-gate regression that exercises the GA branch-sync failure path in
-  a temporary git repository and verifies the stop-and-inspect `git pull` warning.
+- Added cargo-covered release-gate regressions that exercise GA branch-sync failure paths in
+  temporary git repositories and verify the stale-remote guard plus stop-and-inspect `git pull`
+  warning.
 
 ### Changed
 - Hardened GA release-gate JSON mode so branch mismatch, branch-sync, and tracked-change
