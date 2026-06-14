@@ -55,8 +55,9 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest recorded release-gate behavior checkpoint is newer than the historical full-gate
-candidate above. At that checkpoint, exact-head hosted CI run `27509155255` is green for
-`cd94e1a68f59a9a7bc373f2a3b1a7d5639444fa2`, and the quick GA gate is green for the same head.
+candidate above. At that checkpoint, exact-head hosted CI run `27511071899` is green for
+`eefe20416db209d646334e7759b4130c0ee730c4`, and the full GA gate still fails closed on the same
+head only because stale generated outputs already exist at the paths the final proof would write.
 The earlier `d4c0cd9` checkpoint fixed the scoped `entity_observe(action="search")` false
 negative for long natural-language MCP queries by ranking observation key/content keyword overlap
 instead of requiring the whole query as one contiguous substring; the live local daemon was
@@ -66,21 +67,23 @@ refreshed from that build and the previously failing `live-debugger-mcp` query r
 Claude Code zero-result concern. Commit `cd94e1a` then added release-gate cleanup-verifier
 regressions for a matching generated-output cleanup manifest, a manifest that unsafely claims
 cleanup already happened, and a stale-output fingerprint drift. These are runtime and release-gate
-quality signals, not release-publication events. The current checkpoint keeps the release gate
-behavior unchanged and tightens the post-approval cleanup sequence: branch-sync divergence is a
-stop-and-inspect condition, not approval to run `git pull`; early operator/configuration failures
-in JSON mode emit `configuration_preflight_failed` evidence instead of looking like script
-crashes; the hosted-CI pre-step verifier and published release verifier both emit structured
-configuration-preflight JSON for `--json` operator failures without marking release actions as
-performed; the generated-output cleanup verifier repeats the full-gate manifest evidence,
-fingerprints the manifest file itself with `manifest_size_bytes` and `manifest_sha256`, and emits a
-stable `cleanup_fingerprint_sha256` for the normalized stale-output set; and the deletion loop must
-diff the verifier's `will_write=true` paths against the exact three expected generated-output paths
-before removing anything. The exact-head default full GA gate now passes the
+quality signals, not release-publication events. Commit `eefe204` added a stable
+`cleanup_fingerprint_sha256` digest for the normalized stale-output set so reviewers can separate
+the actual cleanup fingerprint from the raw gate-manifest provenance hash. The current checkpoint
+keeps the release gate behavior unchanged and tightens the post-approval cleanup sequence:
+branch-sync divergence is a stop-and-inspect condition, not approval to run `git pull`; early
+operator/configuration failures in JSON mode emit `configuration_preflight_failed` evidence instead
+of looking like script crashes; the hosted-CI pre-step verifier and published release verifier both
+emit structured configuration-preflight JSON for `--json` operator failures without marking release
+actions as performed; the generated-output cleanup verifier repeats the full-gate manifest
+evidence, fingerprints the manifest file itself with `manifest_size_bytes` and `manifest_sha256`,
+and emits a stable `cleanup_fingerprint_sha256` for the normalized stale-output set; and the
+deletion loop must diff the verifier's `will_write=true` paths against the exact three expected
+generated-output paths before removing anything. The exact-head default full GA gate now passes the
 default 10 GiB disk preflight on this host, but still fails before local CI/package smoke because
 stale generated outputs already exist at the paths the full gate would write. A post-fetch branch
 check for this checkpoint had `HEAD...origin/main` at `0 0`, with `HEAD`, `origin/main`, and remote
-`refs/heads/main` all at `cd94e1a`.
+`refs/heads/main` all at `eefe204`.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:
@@ -113,7 +116,9 @@ regular files; use the final gate JSON as the authoritative stale-output fingerp
 approving cleanup.
 The latest read-only cleanup-verifier rehearsal against that gate JSON reported
 `release_gate_state=generated_output_cleanup_fingerprints_verified` with manifest SHA-256
-`8c69908350d15a7eff3c6401b3577979990264ccb3e313a5ca797f608c2346dc` and no release actions.
+`fb2df2b7dfb41821db3926c5dbfd39c81dd0fe27d3bbdac6819c516e5eaefcf8`,
+`expected_outputs_sha256=current_outputs_sha256=cleanup_fingerprint_sha256=953a22106e39b416e351b3fb86354f59215c8c6a4b05d88ce4711b7be8acc6f4`,
+and no release actions.
 
 The exact `free_space_kib` value is host-local and can move between rehearsals; use the final full
 gate JSON as the authoritative disk evidence. If disk space drops below the default threshold

@@ -48,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that claim cleanup already happened, and stale generated-output fingerprints.
 - Added a stable cleanup-fingerprint digest to GA generated-output cleanup verification so release
   owner approval can track the normalized stale-output set separately from raw manifest metadata.
+- Refreshed GA readiness and release-owner approval evidence to exact-head `eefe204` hosted CI,
+  current full-gate cleanup-required evidence, and stable cleanup-fingerprint verification.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `cd94e1a` hosted CI,
   cleanup-verifier regression coverage, current quick/full GA gate evidence, and the unchanged
   cleanup blocker.
