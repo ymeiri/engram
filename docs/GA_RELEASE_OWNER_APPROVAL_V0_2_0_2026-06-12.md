@@ -55,16 +55,17 @@ the new head before tagging.
 ## Current Local Cleanup Blockers
 
 The latest recorded release-gate behavior checkpoint is newer than the historical full-gate
-candidate above. At that checkpoint, exact-head hosted CI run `27491186766` is green for
-`1ddc317df74bfe9a67640107b0dca0708aaeb9f1`, and the quick GA gate is green for the same head.
+candidate above. At that checkpoint, exact-head hosted CI run `27497957513` is green for
+`2adc10c3e6e77c107636abac59b202bdbc89b920`, and the quick GA gate is green for the same head.
 That checkpoint also clarifies that branch-sync divergence is a stop-and-inspect condition, not
 approval to run `git pull`, and that early operator/configuration failures in JSON mode emit
 `configuration_preflight_failed` evidence instead of looking like script crashes. The hosted-CI
 pre-step verifier and published release verifier both emit structured configuration-preflight JSON
-for `--json` operator failures without marking release actions as performed. The exact-head
-default full GA gate now passes the default 10 GiB disk preflight on this host, but still fails
-before local CI/package smoke because stale generated outputs already exist at the paths the full
-gate would write.
+for `--json` operator failures without marking release actions as performed. The generated-output
+cleanup verifier now repeats the full-gate manifest evidence and fingerprints the manifest file
+itself with `manifest_size_bytes` and `manifest_sha256`. The exact-head default full GA gate now
+passes the default 10 GiB disk preflight on this host, but still fails before local CI/package
+smoke because stale generated outputs already exist at the paths the full gate would write.
 
 The latest exact-head full-gate rehearsal failed closed after reporting the intended release target
 as available:

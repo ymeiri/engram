@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release.
 - Refreshed GA readiness and release-owner approval evidence to exact-head `0aa009a` hosted CI and
   fingerprint-checked generated-output cleanup approval evidence.
+- Refreshed GA readiness and release-owner approval evidence to exact-head `2adc10c` hosted CI,
+  full-gate cleanup-required evidence, and manifest self-fingerprint cleanup verification.
 - Tightened the GA release-owner runbook with fingerprint-checked cleanup commands for the stale
   generated archive, checksum, and Homebrew formula outputs that currently block final local proof.
 - Refreshed the native Claude production-gate preflight baseline to the current Claude Code
