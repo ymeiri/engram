@@ -57,7 +57,21 @@ run_homebrew_render=1
 allow_tracked_changes=0
 json_output=0
 verify_generated_output_cleanup_manifest=""
-expected_jobs=(Check Test Format Clippy Docs)
+expected_jobs=(
+    Check
+    Test
+    Format
+    Clippy
+    Docs
+    "Package Smoke (Linux x64)"
+    "Package Smoke (macOS Apple Silicon)"
+    "Package Smoke (macOS Intel)"
+)
+homebrew_package_triples=(
+    "aarch64-apple-darwin"
+    "x86_64-apple-darwin"
+    "x86_64-unknown-linux-gnu"
+)
 
 usage() {
     cat <<'USAGE'
@@ -1201,10 +1215,15 @@ append_generated_artifact() {
 collect_generated_artifacts() {
     local host_triple="$generated_outputs_host_triple"
     local host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
+    local package_triples=()
+    local candidate_triple
+    local existing_triple
+    local package_triple
     local archive_name
     local required_count=0
-    local package_required=false
     local homebrew_required=false
+    local package_artifact_required=false
+    local already_present
 
     generated_artifacts_state="not_required"
     generated_artifacts_json="[]"
@@ -1226,11 +1245,21 @@ collect_generated_artifacts() {
     fi
     generated_artifacts_host_triple="$host_triple"
 
-    archive_name="engram-${package_version}-${host_triple}"
-
-    if [[ "$run_package_smoke" == "1" ]]; then
-        package_required=true
-        required_count=$((required_count + 2))
+    package_triples+=("$host_triple")
+    if [[ "$target" == "ga" && "$run_homebrew_render" == "1" &&
+        "$run_package_smoke" == "1" ]]; then
+        for candidate_triple in "${homebrew_package_triples[@]}"; do
+            already_present=0
+            for existing_triple in "${package_triples[@]}"; do
+                if [[ "$candidate_triple" == "$existing_triple" ]]; then
+                    already_present=1
+                    break
+                fi
+            done
+            if [[ "$already_present" != "1" ]]; then
+                package_triples+=("$candidate_triple")
+            fi
+        done
     fi
     if [[ "$target" == "ga" && "$run_homebrew_render" == "1" &&
         "$run_package_smoke" == "1" ]]; then
@@ -1242,10 +1271,26 @@ collect_generated_artifacts() {
         generated_artifacts_state="present"
     fi
 
-    append_generated_artifact "package_archive" \
-        "$repo_root/dist/${archive_name}.tar.gz" "$package_required"
-    append_generated_artifact "package_checksum" \
-        "$repo_root/dist/${archive_name}.tar.gz.sha256" "$package_required"
+    for package_triple in "${package_triples[@]}"; do
+        archive_name="engram-${package_version}-${package_triple}"
+        package_artifact_required=false
+        if [[ "$package_triple" == "$host_triple" && "$run_package_smoke" == "1" ]]; then
+            package_artifact_required=true
+        fi
+        if [[ "$homebrew_required" == "true" ]]; then
+            package_artifact_required=true
+        fi
+        if [[ "$package_artifact_required" == "true" ]]; then
+            required_count=$((required_count + 2))
+            if [[ "$generated_artifacts_state" == "not_required" ]]; then
+                generated_artifacts_state="present"
+            fi
+        fi
+        append_generated_artifact "package_archive" \
+            "$repo_root/dist/${archive_name}.tar.gz" "$package_artifact_required"
+        append_generated_artifact "package_checksum" \
+            "$repo_root/dist/${archive_name}.tar.gz.sha256" "$package_artifact_required"
+    done
 
     if [[ "$target" == "ga" ]]; then
         append_generated_artifact "homebrew_formula" "$homebrew_formula_output" \

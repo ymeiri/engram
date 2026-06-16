@@ -36,7 +36,7 @@ tool history across sessions without embedding API calls.
 
 ### 1. Install
 
-Homebrew is the preferred path for macOS Apple Silicon:
+Homebrew is the preferred path for macOS and Linux x64:
 
 ```bash
 brew tap ymeiri/engram
@@ -44,22 +44,32 @@ brew install engram
 engram --version
 ```
 
-The Homebrew formula is scoped to Apple Silicon macOS. Other platforms can install from a release
-artifact or build from source.
+The Homebrew formula supports Apple Silicon macOS, Intel macOS, and Linux x64 once the matching
+release artifacts are published. Other platforms can build from source.
 
 From a published release artifact:
 
 ```bash
 version=0.2.0-beta.2  # use 0.2.0 after the GA release is published
-archive="engram-${version}-aarch64-apple-darwin.tar.gz"
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) target="aarch64-apple-darwin" ;;
+  Darwin-x86_64) target="x86_64-apple-darwin" ;;
+  Linux-x86_64) target="x86_64-unknown-linux-gnu" ;;
+  *) echo "unsupported platform for published tarballs" >&2; exit 1 ;;
+esac
+archive="engram-${version}-${target}.tar.gz"
 
 curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
 curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}.sha256"
-shasum -a 256 -c "${archive}.sha256"
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c "${archive}.sha256"
+else
+  sha256sum -c "${archive}.sha256"
+fi
 tar -xzf "${archive}"
 
 mkdir -p "$HOME/.local/bin"
-install -m 755 "engram-${version}-aarch64-apple-darwin/engram" "$HOME/.local/bin/engram"
+install -m 755 "engram-${version}-${target}/engram" "$HOME/.local/bin/engram"
 export PATH="$HOME/.local/bin:$PATH"
 engram --version
 ```

@@ -31,8 +31,8 @@ live cross-harness proof is still pending.
 
 ## Install
 
-Homebrew is the preferred macOS Apple Silicon path after the v0.2.0 formula is
-published:
+Homebrew is the preferred path for Apple Silicon macOS, Intel macOS, and Linux
+x64 after the v0.2.0 formula and matching release artifacts are published:
 
 ```bash
 brew tap ymeiri/engram
@@ -46,13 +46,23 @@ published for users who do not use Homebrew:
 
 ```bash
 version=0.2.0
-archive="engram-${version}-aarch64-apple-darwin.tar.gz"
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) target="aarch64-apple-darwin" ;;
+  Darwin-x86_64) target="x86_64-apple-darwin" ;;
+  Linux-x86_64) target="x86_64-unknown-linux-gnu" ;;
+  *) echo "unsupported platform for published tarballs" >&2; exit 1 ;;
+esac
+archive="engram-${version}-${target}.tar.gz"
 
 curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}"
 curl -LO "https://github.com/ymeiri/engram/releases/download/v${version}/${archive}.sha256"
-shasum -a 256 -c "${archive}.sha256"
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c "${archive}.sha256"
+else
+  sha256sum -c "${archive}.sha256"
+fi
 tar -xzf "${archive}"
-install -m 755 "engram-${version}-aarch64-apple-darwin/engram" "$HOME/.local/bin/engram"
+install -m 755 "engram-${version}-${target}/engram" "$HOME/.local/bin/engram"
 engram init
 engram setup
 ```
@@ -95,8 +105,8 @@ who rely on the database for production work should keep their normal backups.
   gate records a clean native Claude preflight/proof run.
 - Setup writes are approval-gated. Dry-run is the default, and Engram does not
   overwrite user-owned harness files without explicit adoption.
-- Homebrew packaging is scoped to macOS Apple Silicon until additional platform
-  artifacts and formula paths are validated.
+- Native Windows packaging is not part of v0.2.0. The v0.2.0 release targets
+  Apple Silicon macOS, Intel macOS, and Linux x64 artifacts.
 - The first embedding use may download `all-MiniLM-L6-v2` from Hugging Face
   unless the cache has already been warmed.
 - Legacy Entity, Session, Document, Tool, Coordination, Knowledge, and Work

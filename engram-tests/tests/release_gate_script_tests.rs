@@ -102,14 +102,20 @@ fn relative_path(repo: &Path, path: &Path) -> String {
         .to_string()
 }
 
-fn generated_output_json(repo: &Path, kind: &str, path: &Path, overwrite_env: &str) -> Value {
+fn generated_output_json(
+    repo: &Path,
+    kind: &str,
+    path: &Path,
+    will_write: bool,
+    overwrite_env: &str,
+) -> Value {
     let absolute_path = fs::canonicalize(path).unwrap();
     json!({
         "kind": kind,
         "path": relative_path(repo, path),
         "absolute_path": absolute_path.to_string_lossy(),
         "exists": true,
-        "will_write": true,
+        "will_write": will_write,
         "overwrite_env": overwrite_env,
         "file_type": "file",
         "size_bytes": fs::metadata(path).unwrap().len(),
@@ -137,18 +143,21 @@ fn write_ga_generated_outputs(repo: &Path) -> Vec<Value> {
             repo,
             "package_archive",
             &archive,
+            true,
             "ALLOW_PACKAGE_ASSET_OVERWRITE",
         ),
         generated_output_json(
             repo,
             "package_checksum",
             &checksum,
+            true,
             "ALLOW_PACKAGE_ASSET_OVERWRITE",
         ),
         generated_output_json(
             repo,
             "homebrew_formula",
             &formula,
+            true,
             "ALLOW_HOMEBREW_FORMULA_OVERWRITE",
         ),
     ]
