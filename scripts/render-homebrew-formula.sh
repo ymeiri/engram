@@ -53,6 +53,7 @@ supported_homebrew_triples=(
     "aarch64-apple-darwin"
     "x86_64-apple-darwin"
     "x86_64-unknown-linux-gnu"
+    "aarch64-unknown-linux-gnu"
 )
 homebrew_package_triples=("${supported_homebrew_triples[@]}")
 homebrew_host_triple_explicit=0
@@ -502,6 +503,8 @@ mac_intel_archive_name=""
 mac_intel_sha256=""
 linux_intel_archive_name=""
 linux_intel_sha256=""
+linux_arm_archive_name=""
+linux_arm_sha256=""
 validated_archive_names=()
 validated_sha256s=()
 
@@ -520,6 +523,10 @@ for package_triple in "${homebrew_package_triples[@]}"; do
         x86_64-unknown-linux-gnu)
             archive_name_var="linux_intel_archive_name"
             sha256_var="linux_intel_sha256"
+            ;;
+        aarch64-unknown-linux-gnu)
+            archive_name_var="linux_arm_archive_name"
+            sha256_var="linux_arm_sha256"
             ;;
         *)
             printf 'error: unsupported Homebrew package triple reached renderer: %s\n' \
@@ -555,6 +562,12 @@ EOF
       sha256 "${mac_arm_sha256}"
     end
 EOF
+    else
+        cat >>"$tmp_formula" <<'EOF'
+    on_arm do
+      depends_on arch: :x86_64
+    end
+EOF
     fi
     if [[ -n "$mac_intel_archive_name" ]]; then
         cat >>"$tmp_formula" <<EOF
@@ -563,20 +576,52 @@ EOF
       sha256 "${mac_intel_sha256}"
     end
 EOF
+    else
+        cat >>"$tmp_formula" <<'EOF'
+    on_intel do
+      depends_on arch: :arm64
+    end
+EOF
     fi
     cat >>"$tmp_formula" <<EOF
   end
 EOF
 fi
 
-if [[ -n "$linux_intel_archive_name" ]]; then
+if [[ -n "$linux_intel_archive_name" || -n "$linux_arm_archive_name" ]]; then
     cat >>"$tmp_formula" <<EOF
 
   on_linux do
+EOF
+    if [[ -n "$linux_intel_archive_name" ]]; then
+        cat >>"$tmp_formula" <<EOF
     on_intel do
       url "${release_base_url}/${linux_intel_archive_name}.tar.gz"
       sha256 "${linux_intel_sha256}"
     end
+EOF
+    else
+        cat >>"$tmp_formula" <<'EOF'
+    on_intel do
+      depends_on arch: :arm64
+    end
+EOF
+    fi
+    if [[ -n "$linux_arm_archive_name" ]]; then
+        cat >>"$tmp_formula" <<EOF
+    on_arm do
+      url "${release_base_url}/${linux_arm_archive_name}.tar.gz"
+      sha256 "${linux_arm_sha256}"
+    end
+EOF
+    else
+        cat >>"$tmp_formula" <<'EOF'
+    on_arm do
+      depends_on arch: :x86_64
+    end
+EOF
+    fi
+    cat >>"$tmp_formula" <<EOF
   end
 EOF
 fi
@@ -589,7 +634,9 @@ cat >>"$tmp_formula" <<'EOF'
         odie "engram #{version} Homebrew package supports Apple Silicon and Intel macOS only"
       end
     elsif OS.linux?
-      odie "engram #{version} Homebrew package supports Linux x86_64 only" unless Hardware::CPU.intel?
+      unless Hardware::CPU.arm? || Hardware::CPU.intel?
+        odie "engram #{version} Homebrew package supports Linux x86_64 and ARM64 only"
+      end
     else
       odie "engram #{version} Homebrew package supports macOS and Linux only"
     end

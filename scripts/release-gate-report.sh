@@ -64,13 +64,25 @@ expected_jobs=(
     Clippy
     Docs
     "Package Smoke (Linux x64)"
+    "Package Smoke (Linux ARM64)"
     "Package Smoke (macOS Apple Silicon)"
     "Package Smoke (macOS Intel)"
+    "Package Smoke (Windows x64)"
+    "Package Smoke (Windows ARM64)"
 )
 homebrew_package_triples=(
     "aarch64-apple-darwin"
     "x86_64-apple-darwin"
     "x86_64-unknown-linux-gnu"
+    "aarch64-unknown-linux-gnu"
+)
+release_package_triples=(
+    "aarch64-apple-darwin"
+    "x86_64-apple-darwin"
+    "x86_64-unknown-linux-gnu"
+    "aarch64-unknown-linux-gnu"
+    "x86_64-pc-windows-msvc"
+    "aarch64-pc-windows-msvc"
 )
 
 usage() {
@@ -255,6 +267,14 @@ run_step() {
         printf '\n==> %s\n' "$name"
         "$@"
     fi
+}
+
+package_archive_extension() {
+    local package_triple="$1"
+    case "$package_triple" in
+        *-pc-windows-msvc) printf 'zip\n' ;;
+        *) printf 'tar.gz\n' ;;
+    esac
 }
 
 for arg in "$@"; do
@@ -1077,6 +1097,7 @@ collect_generated_outputs() {
     local host_triple
     local host_triple_pattern='^[A-Za-z0-9_.+-]+(-[A-Za-z0-9_.+-]+)+$'
     local archive_name
+    local archive_extension
     local package_will_write=false
     local homebrew_will_write=false
 
@@ -1099,15 +1120,16 @@ collect_generated_outputs() {
     fi
     generated_outputs_host_triple="$host_triple"
     archive_name="engram-${package_version}-${host_triple}"
+    archive_extension="$(package_archive_extension "$host_triple")"
 
     if [[ "$run_package_smoke" == "1" ]]; then
         package_will_write=true
     fi
     append_generated_output "package_archive" \
-        "$repo_root/dist/${archive_name}.tar.gz" "$package_will_write" \
+        "$repo_root/dist/${archive_name}.${archive_extension}" "$package_will_write" \
         "ALLOW_PACKAGE_ASSET_OVERWRITE"
     append_generated_output "package_checksum" \
-        "$repo_root/dist/${archive_name}.tar.gz.sha256" "$package_will_write" \
+        "$repo_root/dist/${archive_name}.${archive_extension}.sha256" "$package_will_write" \
         "ALLOW_PACKAGE_ASSET_OVERWRITE"
 
     if [[ "$target" == "ga" ]]; then
@@ -1220,6 +1242,7 @@ collect_generated_artifacts() {
     local existing_triple
     local package_triple
     local archive_name
+    local archive_extension
     local required_count=0
     local homebrew_required=false
     local package_artifact_required=false
@@ -1245,7 +1268,13 @@ collect_generated_artifacts() {
     fi
     generated_artifacts_host_triple="$host_triple"
 
-    package_triples+=("$host_triple")
+    if [[ "$target" == "ga" && "$run_package_smoke" == "1" ]]; then
+        for candidate_triple in "${release_package_triples[@]}"; do
+            package_triples+=("$candidate_triple")
+        done
+    else
+        package_triples+=("$host_triple")
+    fi
     if [[ "$target" == "ga" && "$run_homebrew_render" == "1" &&
         "$run_package_smoke" == "1" ]]; then
         for candidate_triple in "${homebrew_package_triples[@]}"; do
@@ -1273,11 +1302,12 @@ collect_generated_artifacts() {
 
     for package_triple in "${package_triples[@]}"; do
         archive_name="engram-${package_version}-${package_triple}"
+        archive_extension="$(package_archive_extension "$package_triple")"
         package_artifact_required=false
         if [[ "$package_triple" == "$host_triple" && "$run_package_smoke" == "1" ]]; then
             package_artifact_required=true
         fi
-        if [[ "$homebrew_required" == "true" ]]; then
+        if [[ "$target" == "ga" && "$run_package_smoke" == "1" ]]; then
             package_artifact_required=true
         fi
         if [[ "$package_artifact_required" == "true" ]]; then
@@ -1287,9 +1317,9 @@ collect_generated_artifacts() {
             fi
         fi
         append_generated_artifact "package_archive" \
-            "$repo_root/dist/${archive_name}.tar.gz" "$package_artifact_required"
+            "$repo_root/dist/${archive_name}.${archive_extension}" "$package_artifact_required"
         append_generated_artifact "package_checksum" \
-            "$repo_root/dist/${archive_name}.tar.gz.sha256" "$package_artifact_required"
+            "$repo_root/dist/${archive_name}.${archive_extension}.sha256" "$package_artifact_required"
     done
 
     if [[ "$target" == "ga" ]]; then

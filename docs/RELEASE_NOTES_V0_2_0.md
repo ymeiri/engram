@@ -31,8 +31,9 @@ live cross-harness proof is still pending.
 
 ## Install
 
-Homebrew is the preferred path for Apple Silicon macOS, Intel macOS, and Linux
-x64 after the v0.2.0 formula and matching release artifacts are published:
+Homebrew is the preferred path for Apple Silicon macOS, Intel macOS, Linux x64,
+and Linux ARM64 after the v0.2.0 formula and matching release artifacts are
+published:
 
 ```bash
 brew tap ymeiri/engram
@@ -50,6 +51,7 @@ case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target="aarch64-apple-darwin" ;;
   Darwin-x86_64) target="x86_64-apple-darwin" ;;
   Linux-x86_64) target="x86_64-unknown-linux-gnu" ;;
+  Linux-aarch64 | Linux-arm64) target="aarch64-unknown-linux-gnu" ;;
   *) echo "unsupported platform for published tarballs" >&2; exit 1 ;;
 esac
 archive="engram-${version}-${target}.tar.gz"
@@ -66,6 +68,10 @@ install -m 755 "engram-${version}-${target}/engram" "$HOME/.local/bin/engram"
 engram init
 engram setup
 ```
+
+Windows x64 and Windows ARM64 zip assets will also be available from GitHub
+Releases. The v0.2.0 Windows assets are unsigned, so Windows may show SmartScreen
+or similar trust prompts until a later release adds a signing pipeline.
 
 ## Upgrade From v0.2.0 Beta
 

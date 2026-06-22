@@ -36,7 +36,7 @@ tool history across sessions without embedding API calls.
 
 ### 1. Install
 
-Homebrew is the preferred path for macOS and Linux x64:
+Homebrew is the preferred path for macOS and Linux:
 
 ```bash
 brew tap ymeiri/engram
@@ -44,8 +44,8 @@ brew install engram
 engram --version
 ```
 
-The Homebrew formula supports Apple Silicon macOS, Intel macOS, and Linux x64 once the matching
-release artifacts are published. Other platforms can build from source.
+The Homebrew formula supports Apple Silicon macOS, Intel macOS, Linux x64, and Linux ARM64 once the
+matching release artifacts are published. Windows uses release zip assets instead of Homebrew.
 
 From a published release artifact:
 
@@ -55,6 +55,7 @@ case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target="aarch64-apple-darwin" ;;
   Darwin-x86_64) target="x86_64-apple-darwin" ;;
   Linux-x86_64) target="x86_64-unknown-linux-gnu" ;;
+  Linux-aarch64 | Linux-arm64) target="aarch64-unknown-linux-gnu" ;;
   *) echo "unsupported platform for published tarballs" >&2; exit 1 ;;
 esac
 archive="engram-${version}-${target}.tar.gz"
@@ -73,6 +74,33 @@ install -m 755 "engram-${version}-${target}/engram" "$HOME/.local/bin/engram"
 export PATH="$HOME/.local/bin:$PATH"
 engram --version
 ```
+
+On Windows PowerShell:
+
+```powershell
+$version = "0.2.0-beta.2" # use 0.2.0 after the GA release is published
+$arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
+switch ($arch) {
+  "X64" { $target = "x86_64-pc-windows-msvc" }
+  "Arm64" { $target = "aarch64-pc-windows-msvc" }
+  default { throw "unsupported Windows architecture for published zip assets: $arch" }
+}
+$archive = "engram-$version-$target.zip"
+$base = "https://github.com/ymeiri/engram/releases/download/v$version"
+Invoke-WebRequest "$base/$archive" -OutFile $archive
+Invoke-WebRequest "$base/$archive.sha256" -OutFile "$archive.sha256"
+$expected = (Get-Content "$archive.sha256" -Raw).Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)[0]
+$actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "checksum mismatch for $archive" }
+Expand-Archive $archive -Force
+New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
+Copy-Item "engram-$version-$target\engram.exe" "$HOME\bin\engram.exe" -Force
+$env:Path = "$HOME\bin;$env:Path"
+engram --version
+```
+
+The GA Windows zip assets are unsigned. Windows may show SmartScreen or similar trust prompts until
+we add a signing pipeline in a later release.
 
 See [Releases](https://github.com/ymeiri/engram/releases) for published artifacts.
 
@@ -414,12 +442,15 @@ cargo test --locked            # Run tests with the committed dependency graph
 cargo clippy --locked --all-targets -- -D warnings
 cargo fmt
 ./scripts/local-ci.sh          # Run the CI-equivalent release gate locally
-./scripts/package-release.sh   # Build a local release tarball, manifest, and checksum
-./scripts/package-install-smoke.sh  # Verify manifest, install, and packaged /health
+./scripts/package-release.sh   # Build a local Unix release tarball, manifest, and checksum
+./scripts/package-install-smoke.sh  # Verify Unix manifest, install, and packaged /health
+pwsh ./scripts/package-release-windows.ps1  # Build a Windows zip on Windows hosts
+pwsh ./scripts/package-install-smoke-windows.ps1  # Verify Windows zip install and /health
 ./scripts/render-homebrew-formula.sh  # Render tap-ready Homebrew formula from the tarball
 ./scripts/release-gate-report.sh --target ga  # Collect GA gate evidence with disk preflight
 ./scripts/beta-release-gate-report.sh  # Compatibility wrapper for beta PR release gates
-./scripts/verify-published-release-install.sh  # Verify downloaded release assets after publishing
+./scripts/verify-published-release-install.sh  # Verify Unix release assets after publishing
+pwsh ./scripts/verify-published-release-install-windows.ps1  # Verify Windows release assets
 ./scripts/verify-hosted-ci-prestep-blocker.sh  # Verify hosted pre-step CI blocker evidence
 ./scripts/native-claude-gate-preflight.sh  # Check native Claude proof readiness
 RUST_LOG=debug engram serve    # Verbose logging

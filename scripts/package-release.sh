@@ -41,6 +41,10 @@ if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
     printf 'error: host triple must be a Rust target triple, got %s\n' "$host_triple" >&2
     exit 1
 fi
+if [[ "$host_triple" == *-pc-windows-msvc ]]; then
+    printf 'error: Windows packages must be built with scripts/package-release-windows.ps1\n' >&2
+    exit 1
+fi
 archive_name="engram-${package_version}-${host_triple}"
 allow_tracked_changes="${ALLOW_TRACKED_CHANGES:-0}"
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/engram-package.XXXXXX")"

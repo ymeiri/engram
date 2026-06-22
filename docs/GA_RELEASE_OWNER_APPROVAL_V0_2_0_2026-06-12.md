@@ -461,13 +461,28 @@ if gh release view "$tag" --repo ymeiri/engram >/dev/null 2>&1; then
   exit 1
 fi
 
-archive="dist/engram-${release_version}-aarch64-apple-darwin.tar.gz"
-checksum="${archive}.sha256"
 formula="dist/homebrew/Formula/engram.rb"
-test -f "$archive"
-test -f "$checksum"
+assets=(
+  "dist/engram-${release_version}-aarch64-apple-darwin.tar.gz"
+  "dist/engram-${release_version}-aarch64-apple-darwin.tar.gz.sha256"
+  "dist/engram-${release_version}-x86_64-apple-darwin.tar.gz"
+  "dist/engram-${release_version}-x86_64-apple-darwin.tar.gz.sha256"
+  "dist/engram-${release_version}-x86_64-unknown-linux-gnu.tar.gz"
+  "dist/engram-${release_version}-x86_64-unknown-linux-gnu.tar.gz.sha256"
+  "dist/engram-${release_version}-aarch64-unknown-linux-gnu.tar.gz"
+  "dist/engram-${release_version}-aarch64-unknown-linux-gnu.tar.gz.sha256"
+  "dist/engram-${release_version}-x86_64-pc-windows-msvc.zip"
+  "dist/engram-${release_version}-x86_64-pc-windows-msvc.zip.sha256"
+  "dist/engram-${release_version}-aarch64-pc-windows-msvc.zip"
+  "dist/engram-${release_version}-aarch64-pc-windows-msvc.zip.sha256"
+)
+for asset in "${assets[@]}"; do
+  test -f "$asset"
+done
 test -f "$formula"
-(cd dist && shasum -a 256 -c "$(basename "$checksum")")
+for checksum in dist/*.sha256; do
+  (cd dist && shasum -a 256 -c "$(basename "$checksum")")
+done
 ruby -c "$formula"
 ```
 
@@ -481,8 +496,7 @@ git tag -s "$tag" -m "engram ${tag}" "$release_head"
 git push origin "$tag"
 
 gh release create "$tag" \
-  "$archive" \
-  "$checksum" \
+  "${assets[@]}" \
   --repo ymeiri/engram \
   --verify-tag \
   --title "engram ${tag}" \
@@ -509,6 +523,17 @@ jq --arg release_head "$release_head" -e '
   and .published_install_verified == true
   and .release_actions_performed == false
 ' "$verify_json"
+```
+
+Run the Windows published install verifier on both Windows x64 and Windows ARM64 hosts after the
+GitHub release is published:
+
+```powershell
+$tag = "v0.2.0"
+$release_head = "<exact release commit SHA>"
+pwsh ./scripts/verify-published-release-install-windows.ps1 `
+  -Tag $tag `
+  -ExpectedGitHead $release_head
 ```
 
 After the release assets verify, update the Homebrew tap:

@@ -58,6 +58,10 @@ if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
     printf 'error: host triple must be a Rust target triple, got %s\n' "$host_triple" >&2
     exit 1
 fi
+if [[ "$host_triple" == *-pc-windows-msvc ]]; then
+    printf 'error: Windows package smoke must use scripts/package-install-smoke-windows.ps1\n' >&2
+    exit 1
+fi
 archive_name="engram-${package_version}-${host_triple}"
 tarball="$dist_dir/$archive_name.tar.gz"
 checksum="$tarball.sha256"

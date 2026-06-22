@@ -60,6 +60,17 @@ fn write_release_gate_script(repo: &Path) {
     fs::copy(source, &dest).unwrap();
 }
 
+fn write_homebrew_render_script(repo: &Path) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("scripts/render-homebrew-formula.sh");
+    let scripts_dir = repo.join("scripts");
+    fs::create_dir_all(&scripts_dir).unwrap();
+    let dest = scripts_dir.join("render-homebrew-formula.sh");
+    fs::copy(source, &dest).unwrap();
+}
+
 fn git(repo: &Path, args: &[&str]) {
     run(Command::new("git").args(args).current_dir(repo));
 }
@@ -93,6 +104,85 @@ fn sha256(path: &Path) -> String {
         .next()
         .expect("shasum output should include a digest")
         .to_string()
+}
+
+fn write_synthetic_release_archive(
+    repo: &Path,
+    triple: &str,
+    git_head: &str,
+    cargo_lock_sha256: &str,
+) {
+    let dist = repo.join("dist");
+    let archive_name = format!("engram-0.2.0-{triple}");
+    let payload_root = repo.join("target/synthetic-release").join(&archive_name);
+    fs::create_dir_all(&payload_root).unwrap();
+
+    for (name, contents) in [
+        ("engram", "#!/usr/bin/env bash\nprintf 'engram 0.2.0\\n'\n"),
+        ("README.md", "# Engram\n"),
+        ("LICENSE", "Apache-2.0\n"),
+        ("CHANGELOG.md", "# Changelog\n"),
+        ("RELEASE_NOTES.md", "# Release Notes\n"),
+    ] {
+        fs::write(payload_root.join(name), contents).unwrap();
+    }
+
+    let files = [
+        "engram",
+        "README.md",
+        "LICENSE",
+        "CHANGELOG.md",
+        "RELEASE_NOTES.md",
+    ]
+    .into_iter()
+    .map(|path| {
+        json!({
+            "path": path,
+            "sha256": sha256(&payload_root.join(path)),
+        })
+    })
+    .collect::<Vec<_>>();
+    let manifest = json!({
+        "package": "engram",
+        "version": "0.2.0",
+        "host_triple": triple,
+        "archive_name": archive_name,
+        "git_head": git_head,
+        "tracked_changes_present": false,
+        "cargo_lock_sha256": cargo_lock_sha256,
+        "files": files,
+    });
+    fs::write(
+        payload_root.join("MANIFEST.json"),
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+
+    fs::create_dir_all(&dist).unwrap();
+    let tarball = dist.join(format!("{archive_name}.tar.gz"));
+    run(Command::new("tar")
+        .args(["-czf", tarball.to_str().unwrap(), "-C"])
+        .arg(payload_root.parent().unwrap())
+        .arg(&archive_name));
+    let digest = sha256(&tarball);
+    fs::write(
+        dist.join(format!("{archive_name}.tar.gz.sha256")),
+        format!("{digest} {archive_name}.tar.gz\n"),
+    )
+    .unwrap();
+}
+
+fn write_synthetic_homebrew_release_archives(repo: &Path) {
+    let git_head = git_stdout(repo, &["rev-parse", "HEAD"]);
+    let cargo_lock_sha256 = sha256(&repo.join("Cargo.lock"));
+    for triple in [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+    ] {
+        write_synthetic_release_archive(repo, triple, &git_head, &cargo_lock_sha256);
+    }
 }
 
 fn relative_path(repo: &Path, path: &Path) -> String {
@@ -268,6 +358,37 @@ fn parse_json_report(output: &Output) -> Value {
             String::from_utf8_lossy(&output.stderr)
         )
     })
+}
+
+#[test]
+fn homebrew_formula_render_supports_linux_arm() {
+    let temp = TempDir::new().unwrap();
+    let repo = temp.path().join("repo");
+    fs::create_dir(&repo).unwrap();
+
+    write_minimal_workspace(&repo);
+    write_homebrew_render_script(&repo);
+    git(&repo, &["init", "--initial-branch=main"]);
+    git(&repo, &["config", "user.email", "release-test@example.com"]);
+    git(&repo, &["config", "user.name", "Release Test"]);
+    git(&repo, &["add", "."]);
+    git(&repo, &["commit", "-m", "initial"]);
+    write_synthetic_homebrew_release_archives(&repo);
+
+    let dist = repo.join("dist");
+    run(Command::new("bash")
+        .arg("scripts/render-homebrew-formula.sh")
+        .env("ALLOW_HOMEBREW_DIST_DIR_OVERRIDE", "1")
+        .env("DIST_DIR", &dist)
+        .current_dir(&repo));
+
+    let formula_path = dist.join("homebrew/Formula/engram.rb");
+    let formula = fs::read_to_string(&formula_path).unwrap();
+    assert!(formula.contains("on_linux do"));
+    assert!(formula.contains("x86_64-unknown-linux-gnu"));
+    assert!(formula.contains("aarch64-unknown-linux-gnu"));
+    assert!(formula.contains("Homebrew package supports Linux x86_64 and ARM64 only"));
+    run(Command::new("ruby").arg("-c").arg(formula_path));
 }
 
 #[test]

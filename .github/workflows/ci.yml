@@ -99,12 +99,21 @@ jobs:
           - platform: Linux x64
             os: ubuntu-latest
             archive_triple: x86_64-unknown-linux-gnu
+          - platform: Linux ARM64
+            os: ubuntu-24.04-arm
+            archive_triple: aarch64-unknown-linux-gnu
           - platform: macOS Apple Silicon
             os: macos-latest
             archive_triple: aarch64-apple-darwin
           - platform: macOS Intel
             os: macos-15-intel
             archive_triple: x86_64-apple-darwin
+          - platform: Windows x64
+            os: windows-2022
+            archive_triple: x86_64-pc-windows-msvc
+          - platform: Windows ARM64
+            os: windows-11-arm
+            archive_triple: aarch64-pc-windows-msvc
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0
@@ -121,13 +130,20 @@ jobs:
           path: .fastembed_cache
           key: ${{ runner.os }}-${{ runner.arch }}-fastembed-all-MiniLM-L6-v2-v1
       - name: Verify package host triple
+        shell: bash
         run: |
           actual_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
           if [ "$actual_triple" != "${{ matrix.archive_triple }}" ]; then
             echo "expected ${{ matrix.archive_triple }}, got $actual_triple" >&2
             exit 1
           fi
-      - run: ./scripts/package-install-smoke.sh
+      - name: Package install smoke (Unix)
+        if: runner.os != 'Windows'
+        run: ./scripts/package-install-smoke.sh
+      - name: Package install smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/package-install-smoke-windows.ps1
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
@@ -135,4 +151,6 @@ jobs:
           path: |
             dist/engram-*-${{ matrix.archive_triple }}.tar.gz
             dist/engram-*-${{ matrix.archive_triple }}.tar.gz.sha256
+            dist/engram-*-${{ matrix.archive_triple }}.zip
+            dist/engram-*-${{ matrix.archive_triple }}.zip.sha256
           if-no-files-found: error

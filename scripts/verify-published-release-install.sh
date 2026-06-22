@@ -19,6 +19,14 @@ expected_tracked_changes_present=false
 expected_prerelease="auto"
 json_output=0
 config_preflight_complete=0
+release_package_triples=(
+    "aarch64-apple-darwin"
+    "x86_64-apple-darwin"
+    "x86_64-unknown-linux-gnu"
+    "aarch64-unknown-linux-gnu"
+    "x86_64-pc-windows-msvc"
+    "aarch64-pc-windows-msvc"
+)
 
 for arg in "$@"; do
     if [[ "$arg" == "--json" ]]; then
@@ -31,13 +39,14 @@ usage() {
     cat <<'USAGE'
 Usage: scripts/verify-published-release-install.sh [options]
 
-Verify release archive/checksum assets by running the package install smoke
+Verify release archive/checksum assets by running the Unix package install smoke
 against downloaded GitHub release assets or a local pre-publish asset directory.
 
 Options:
   --repo <owner/name>                    GitHub repository (default: GITHUB_REPOSITORY or ymeiri/engram)
   --tag <tag>                            GitHub release tag (default: v<workspace package version>)
-  --host-triple <triple>                 Release host triple (default: current rustc host)
+  --host-triple <triple>                 Unix release host triple (default: current rustc host;
+                                        use the Windows PowerShell verifier for Windows triples)
   --expected-git-head <sha>              Expected MANIFEST.json git head (default: current HEAD)
   --expected-tracked-changes-present <bool>
                                         Expected MANIFEST.json tracked-change flag (default: false)
@@ -133,6 +142,34 @@ sha256_file() {
     shasum -a 256 "$1" | awk '{ print $1 }'
 }
 
+package_archive_extension() {
+    local package_triple="$1"
+    case "$package_triple" in
+        *-pc-windows-msvc) printf 'zip\n' ;;
+        *) printf 'tar.gz\n' ;;
+    esac
+}
+
+expected_release_asset_names_json() {
+    local package_triple
+    local archive_extension
+    local archive_name
+    local assets_json="[]"
+
+    for package_triple in "${release_package_triples[@]}"; do
+        archive_extension="$(package_archive_extension "$package_triple")"
+        archive_name="engram-${package_version}-${package_triple}.${archive_extension}"
+        assets_json="$(
+            jq -c \
+                --arg archive "$archive_name" \
+                --arg checksum "${archive_name}.sha256" \
+                '. + [$archive, $checksum]' <<<"$assets_json"
+        )"
+    done
+
+    printf '%s\n' "$assets_json"
+}
+
 release_asset_digest() {
     local asset_name="$1"
 
@@ -177,12 +214,14 @@ validate_remote_release_tag() {
 }
 
 validate_release_asset_list() {
+    local expected_assets_json
+
+    expected_assets_json="$(expected_release_asset_names_json)"
     if jq -e \
-        --arg archive "$tarball_name" \
-        --arg checksum "$checksum_name" \
+        --argjson expected_assets "$expected_assets_json" \
         '
             (.assets | type == "array")
-            and ([.assets[].name] | sort == ([$archive, $checksum] | sort))
+            and ([.assets[].name] | sort == ($expected_assets | sort))
             and all(.assets[];
                 .state == "uploaded"
                 and ((.size | type) == "number")
@@ -194,9 +233,8 @@ validate_release_asset_list() {
         return 0
     fi
 
-    printf 'error: GitHub release assets must be exactly the expected archive and checksum:\n' >&2
-    printf '  %s\n' "$tarball_name" >&2
-    printf '  %s\n' "$checksum_name" >&2
+    printf 'error: GitHub release assets must be exactly the expected platform archives and checksums:\n' >&2
+    jq -r '.[] | "  " + .' <<<"$expected_assets_json" >&2
     printf 'actual release assets:\n' >&2
     jq -r '
         (.assets // [])
@@ -210,7 +248,7 @@ validate_release_asset_list() {
 validate_downloaded_asset_digests() {
     local asset_name expected_digest actual_digest file_path
 
-    for asset_name in "$tarball_name" "$checksum_name"; do
+    for asset_name in $(expected_release_asset_names_json | jq -r '.[]'); do
         file_path="$asset_dir/$asset_name"
         [[ -s "$file_path" ]] || fail "release asset is missing or empty: $file_path"
 
@@ -356,8 +394,12 @@ if [[ ! "$expected_git_head" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 archive_name="engram-${package_version}-${host_triple}"
-tarball_name="${archive_name}.tar.gz"
+archive_extension="$(package_archive_extension "$host_triple")"
+tarball_name="${archive_name}.${archive_extension}"
 checksum_name="${tarball_name}.sha256"
+if [[ "$host_triple" == *-pc-windows-msvc ]]; then
+    fail "Windows published install verification must run via scripts/verify-published-release-install-windows.ps1"
+fi
 resolved_expected_prerelease="$expected_prerelease"
 if [[ "$resolved_expected_prerelease" == "auto" ]]; then
     if [[ "$tag" == *"-"* ]]; then
@@ -423,8 +465,7 @@ if [[ -z "$asset_dir" ]]; then
     run_step "verify GitHub release asset list" validate_release_asset_list
     run_step "download release assets" gh release download "$tag" \
         --repo "$repo" \
-        --pattern "$tarball_name" \
-        --pattern "$checksum_name" \
+        --pattern 'engram-*' \
         --dir "$asset_dir"
     downloaded_assets=true
     run_step "verify GitHub release asset digests" validate_downloaded_asset_digests

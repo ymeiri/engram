@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added GA packaging/install support scope for Linux ARM64 Homebrew/direct tarballs and unsigned
+  Windows x64/ARM64 release zip assets.
+- Added Windows-native PowerShell release package, install-smoke, and published-install verifier
+  scripts for `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`.
 - Drafted the `v0.2.0` GA release notes artifact with install, upgrade, first-run,
   and known-limitation guidance for final release review.
 - Added a `v0.2.0` GA release-owner approval runbook that requires fresh exact-head gate evidence,
@@ -17,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning.
 
 ### Changed
+- Expanded GA package-smoke CI, Homebrew rendering, release-gate artifact expectations, and
+  published-release verification to cover the broader macOS/Linux/Windows platform matrix.
 - Hardened GA release-gate JSON mode so branch mismatch, branch-sync, and tracked-change
   preflight failures emit structured failure evidence before exiting.
 - Hardened GA release-gate JSON mode so hosted CI discovery, inspection, metadata, and job
