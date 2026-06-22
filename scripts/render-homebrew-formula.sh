@@ -629,14 +629,12 @@ fi
 cat >>"$tmp_formula" <<'EOF'
 
   def install
+    supported_arch = Hardware::CPU.arm? || Hardware::CPU.intel?
+
     if OS.mac?
-      unless Hardware::CPU.arm? || Hardware::CPU.intel?
-        odie "engram #{version} Homebrew package supports Apple Silicon and Intel macOS only"
-      end
+      odie "engram #{version} Homebrew package supports Apple Silicon and Intel macOS only" unless supported_arch
     elsif OS.linux?
-      unless Hardware::CPU.arm? || Hardware::CPU.intel?
-        odie "engram #{version} Homebrew package supports Linux x86_64 and ARM64 only"
-      end
+      odie "engram #{version} Homebrew package supports Linux x86_64 and ARM64 only" unless supported_arch
     else
       odie "engram #{version} Homebrew package supports macOS and Linux only"
     end
