@@ -473,8 +473,6 @@ assets=(
   "dist/engram-${release_version}-aarch64-unknown-linux-gnu.tar.gz.sha256"
   "dist/engram-${release_version}-x86_64-pc-windows-msvc.zip"
   "dist/engram-${release_version}-x86_64-pc-windows-msvc.zip.sha256"
-  "dist/engram-${release_version}-aarch64-pc-windows-msvc.zip"
-  "dist/engram-${release_version}-aarch64-pc-windows-msvc.zip.sha256"
 )
 for asset in "${assets[@]}"; do
   test -f "$asset"
@@ -525,8 +523,8 @@ jq --arg release_head "$release_head" -e '
 ' "$verify_json"
 ```
 
-Run the Windows published install verifier on both Windows x64 and Windows ARM64 hosts after the
-GitHub release is published:
+Run the Windows published install verifier on a Windows x64 host after the GitHub release is
+published:
 
 ```powershell
 $tag = "v0.2.0"

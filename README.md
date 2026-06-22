@@ -82,8 +82,7 @@ $version = "0.2.0-beta.2" # use 0.2.0 after the GA release is published
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
 switch ($arch) {
   "X64" { $target = "x86_64-pc-windows-msvc" }
-  "Arm64" { $target = "aarch64-pc-windows-msvc" }
-  default { throw "unsupported Windows architecture for published zip assets: $arch" }
+  default { throw "unsupported Windows architecture for published v0.2.0 zip assets: $arch" }
 }
 $archive = "engram-$version-$target.zip"
 $base = "https://github.com/ymeiri/engram/releases/download/v$version"

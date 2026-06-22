@@ -69,9 +69,9 @@ engram init
 engram setup
 ```
 
-Windows x64 and Windows ARM64 zip assets will also be available from GitHub
-Releases. The v0.2.0 Windows assets are unsigned, so Windows may show SmartScreen
-or similar trust prompts until a later release adds a signing pipeline.
+Windows x64 zip assets will also be available from GitHub Releases. The v0.2.0
+Windows asset is unsigned, so Windows may show SmartScreen or similar trust
+prompts until a later release adds a signing pipeline.
 
 ## Upgrade From v0.2.0 Beta
 

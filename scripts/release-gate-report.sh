@@ -68,7 +68,6 @@ expected_jobs=(
     "Package Smoke (macOS Apple Silicon)"
     "Package Smoke (macOS Intel)"
     "Package Smoke (Windows x64)"
-    "Package Smoke (Windows ARM64)"
 )
 homebrew_package_triples=(
     "aarch64-apple-darwin"
@@ -82,7 +81,6 @@ release_package_triples=(
     "x86_64-unknown-linux-gnu"
     "aarch64-unknown-linux-gnu"
     "x86_64-pc-windows-msvc"
-    "aarch64-pc-windows-msvc"
 )
 
 usage() {

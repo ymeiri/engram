@@ -111,9 +111,6 @@ jobs:
           - platform: Windows x64
             os: windows-2022
             archive_triple: x86_64-pc-windows-msvc
-          - platform: Windows ARM64
-            os: windows-11-arm
-            archive_triple: aarch64-pc-windows-msvc
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_RELEASE_DEBUG: 0

@@ -48,7 +48,7 @@ pwsh ./scripts/package-install-smoke-windows.ps1
 ```
 
 `pwsh` is not installed on the local Apple Silicon Mac. Windows package scripts must be executed on
-Windows x64 and Windows ARM64 hosts or by the GitHub Actions package-smoke matrix.
+Windows x64 hosts or by the GitHub Actions package-smoke matrix.
 
 ## 1. Check Out The Branch
 
@@ -204,7 +204,7 @@ triple. It does not prove macOS or Windows install behavior.
 macOS and Windows proof must come from one of these:
 
 - The GitHub Actions jobs `Package Smoke (macOS Apple Silicon)` and `Package Smoke (macOS Intel)`.
-- The GitHub Actions jobs `Package Smoke (Windows x64)` and `Package Smoke (Windows ARM64)`.
+- The GitHub Actions job `Package Smoke (Windows x64)`.
 - Real native hosts running the matching smoke script.
 
 The branch currently only triggers GitHub CI on a pull request to `main`, because the workflow is
@@ -225,7 +225,6 @@ Package Smoke (Linux ARM64)
 Package Smoke (macOS Apple Silicon)
 Package Smoke (macOS Intel)
 Package Smoke (Windows x64)
-Package Smoke (Windows ARM64)
 ```
 
 The package-smoke jobs are the release artifact proof jobs. Each job verifies its Rust host triple
