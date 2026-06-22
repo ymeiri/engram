@@ -7,13 +7,17 @@
 use crate::error::{IndexError, IndexResult};
 use engram_core::harness::{
     HarnessAdapterCheck, HarnessAdapterKind, HarnessAdapterSpec, HarnessAdapterStatus,
-    HarnessInstallFile, HarnessInstallReport, HarnessKind, HarnessLifecycleReport,
-    HarnessLifecycleTrigger, HarnessMcpToolReport, HarnessPolicy, HarnessRenderedAdapter,
-    HarnessSettingsCheck, HarnessStatusReport,
+    HarnessEnforcementProfile, HarnessInstallFile, HarnessInstallReport, HarnessKind,
+    HarnessLifecycleReport, HarnessLifecycleTrigger, HarnessMcpToolReport, HarnessPolicy,
+    HarnessRenderedAdapter, HarnessSettingsCheck, HarnessStatusReport,
 };
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
     ModelIdentity, WriterProvenance,
+};
+use engram_core::obligation::{
+    AgentObligation, AgentObligationKind, AgentObligationResolution, AgentObligationResolutionKind,
+    AgentObligationTrigger,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -42,6 +46,8 @@ pub struct HarnessInstallOptions {
     pub adopt_user_owned: bool,
     /// Claude Code settings target for generated permissions and hooks.
     pub settings_target: HarnessSettingsTarget,
+    /// Lifecycle enforcement profile to encode in generated policy and adapters.
+    pub enforcement_profile: HarnessEnforcementProfile,
 }
 
 /// Claude Code settings target for harness installation.
@@ -101,6 +107,8 @@ impl std::fmt::Display for HarnessSettingsTarget {
 pub struct HarnessHookEvent {
     /// Harness handling the event.
     pub harness: HarnessKind,
+    /// Lifecycle enforcement profile.
+    pub enforcement_profile: HarnessEnforcementProfile,
     /// Claude Code hook event name.
     pub hook_event_name: String,
     /// Claude Code session identifier.
@@ -186,12 +194,23 @@ impl HarnessService {
     /// Return the canonical policy for a harness.
     #[must_use]
     pub fn policy(&self, harness: HarnessKind) -> HarnessPolicy {
+        self.policy_with_enforcement(harness, HarnessEnforcementProfile::default())
+    }
+
+    /// Return the canonical policy for a harness and enforcement profile.
+    #[must_use]
+    pub fn policy_with_enforcement(
+        &self,
+        harness: HarnessKind,
+        enforcement_profile: HarnessEnforcementProfile,
+    ) -> HarnessPolicy {
         HarnessPolicy {
             harness,
-            soft_contract: true,
+            enforcement_profile,
+            soft_contract: enforcement_profile.is_soft(),
             lifecycle_triggers: lifecycle_triggers(),
             required_mcp_tools: required_mcp_tools(),
-            adapters: adapters_for(harness),
+            adapters: adapters_for(harness, enforcement_profile),
         }
     }
 
@@ -202,8 +221,24 @@ impl HarnessService {
         root: Option<&Path>,
         observed_mcp_tools: &[String],
     ) -> IndexResult<HarnessStatusReport> {
+        self.status_with_enforcement(
+            harness,
+            root,
+            observed_mcp_tools,
+            HarnessEnforcementProfile::default(),
+        )
+    }
+
+    /// Return status for a harness at an install root with an enforcement profile.
+    pub fn status_with_enforcement(
+        &self,
+        harness: HarnessKind,
+        root: Option<&Path>,
+        observed_mcp_tools: &[String],
+        enforcement_profile: HarnessEnforcementProfile,
+    ) -> IndexResult<HarnessStatusReport> {
         let root = resolve_root(root)?;
-        let policy = self.policy(harness);
+        let policy = self.policy_with_enforcement(harness, enforcement_profile);
         let adapters: Vec<_> = policy
             .adapters
             .iter()
@@ -273,7 +308,7 @@ impl HarnessService {
 
         let mut settings = Vec::new();
         if harness == HarnessKind::ClaudeCode {
-            let settings_status = claude_settings_status(&root)?;
+            let settings_status = claude_settings_status(&root, policy.enforcement_profile)?;
             if settings_status.has_missing_required() {
                 ready = false;
             }
@@ -292,17 +327,7 @@ impl HarnessService {
         Ok(HarnessStatusReport {
             harness,
             root: root.display().to_string(),
-            lifecycle: HarnessLifecycleReport {
-                soft_contract: policy.soft_contract,
-                enforced: !policy.soft_contract,
-                advisory_triggers: policy.lifecycle_triggers.clone(),
-                message: if policy.soft_contract {
-                    "Lifecycle compliance is advisory; agents should follow the listed triggers."
-                        .to_string()
-                } else {
-                    "Lifecycle compliance is enforced by the harness.".to_string()
-                },
-            },
+            lifecycle: lifecycle_report(&policy),
             policy,
             adapters,
             missing_mcp_tools,
@@ -320,7 +345,24 @@ impl HarnessService {
         root: Option<&Path>,
         observed_mcp_tools: &[String],
     ) -> IndexResult<HarnessStatusReport> {
-        let mut report = self.status(harness, root, observed_mcp_tools)?;
+        self.doctor_with_enforcement(
+            harness,
+            root,
+            observed_mcp_tools,
+            HarnessEnforcementProfile::default(),
+        )
+    }
+
+    /// Run harness diagnostics with an enforcement profile.
+    pub fn doctor_with_enforcement(
+        &self,
+        harness: HarnessKind,
+        root: Option<&Path>,
+        observed_mcp_tools: &[String],
+        enforcement_profile: HarnessEnforcementProfile,
+    ) -> IndexResult<HarnessStatusReport> {
+        let mut report =
+            self.status_with_enforcement(harness, root, observed_mcp_tools, enforcement_profile)?;
         if report.ready {
             let triggers = report
                 .lifecycle
@@ -331,7 +373,10 @@ impl HarnessService {
                 .join(", ");
             report
                 .warnings
-                .push(format!("Harness adapter files are present; lifecycle compliance is still soft and depends on the agent following the policy. Advisory triggers: {triggers}."));
+                .push(format!(
+                    "Harness adapter files are present; enforcement_profile={} and lifecycle triggers are: {triggers}.",
+                    report.lifecycle.enforcement_profile
+                ));
         } else {
             report.warnings.push(
                 "Harness is not fully installed; agents may still use Engram manually through MCP."
@@ -343,7 +388,16 @@ impl HarnessService {
 
     /// Render the policy as pretty JSON.
     pub fn render_policy(&self, harness: HarnessKind) -> IndexResult<String> {
-        serde_json::to_string_pretty(&self.policy(harness))
+        self.render_policy_with_enforcement(harness, HarnessEnforcementProfile::default())
+    }
+
+    /// Render the policy as pretty JSON with an enforcement profile.
+    pub fn render_policy_with_enforcement(
+        &self,
+        harness: HarnessKind,
+        enforcement_profile: HarnessEnforcementProfile,
+    ) -> IndexResult<String> {
+        serde_json::to_string_pretty(&self.policy_with_enforcement(harness, enforcement_profile))
             .map_err(|e| IndexError::Parse(format!("failed to render harness policy: {e}")))
     }
 
@@ -354,7 +408,22 @@ impl HarnessService {
         harness: HarnessKind,
         adapter_name: Option<&str>,
     ) -> Vec<HarnessRenderedAdapter> {
-        self.policy(harness)
+        self.render_adapters_with_enforcement(
+            harness,
+            adapter_name,
+            HarnessEnforcementProfile::default(),
+        )
+    }
+
+    /// Render one adapter or all adapters with an enforcement profile.
+    #[must_use]
+    pub fn render_adapters_with_enforcement(
+        &self,
+        harness: HarnessKind,
+        adapter_name: Option<&str>,
+        enforcement_profile: HarnessEnforcementProfile,
+    ) -> Vec<HarnessRenderedAdapter> {
+        self.policy_with_enforcement(harness, enforcement_profile)
             .adapters
             .into_iter()
             .filter(|adapter| {
@@ -385,6 +454,7 @@ impl HarnessService {
                 write,
                 adopt_user_owned: false,
                 settings_target: HarnessSettingsTarget::default(),
+                enforcement_profile: HarnessEnforcementProfile::default(),
             },
         )
     }
@@ -402,7 +472,10 @@ impl HarnessService {
         let mut skipped = Vec::new();
         let mut warnings = Vec::new();
 
-        for adapter in self.policy(harness).adapters {
+        for adapter in self
+            .policy_with_enforcement(harness, options.enforcement_profile)
+            .adapters
+        {
             let path = root.join(&adapter.relative_path);
             let check = check_adapter(&root, &adapter)?;
             match check.status {
@@ -484,6 +557,7 @@ impl HarnessService {
                 &root,
                 options.settings_target,
                 options.write,
+                options.enforcement_profile,
                 &mut planned,
                 &mut written,
                 &mut skipped,
@@ -493,6 +567,7 @@ impl HarnessService {
 
         Ok(HarnessInstallReport {
             harness,
+            enforcement_profile: options.enforcement_profile,
             root: root.display().to_string(),
             dry_run: !options.write,
             planned,
@@ -522,10 +597,42 @@ impl HarnessService {
             .clone()
             .or_else(|| project_from_cwd(event.cwd.as_deref()));
         let writer = hook_writer(&event);
+        let enforce_runtime = event.harness == HarnessKind::ClaudeCode
+            && event.enforcement_profile != HarnessEnforcementProfile::Soft;
+        if enforce_runtime
+            && services.obligations.is_none()
+            && matches!(
+                normalized_event_name(&event.hook_event_name).as_str(),
+                "userpromptsubmit" | "pretooluse" | "posttooluse" | "stop"
+            )
+        {
+            warnings.push(
+                "Engram runtime enforcement degraded: obligation service is unavailable."
+                    .to_string(),
+            );
+        }
 
         match normalized_event_name(&event.hook_event_name).as_str() {
             "userpromptsubmit" => {
                 if let Some(service) = services.obligations {
+                    if enforce_runtime && is_substantive_prompt(event.prompt.as_deref()) {
+                        match ensure_orientation_obligation(
+                            service,
+                            &event,
+                            project.as_deref(),
+                            &writer,
+                        )
+                        .await
+                        {
+                            Ok(written) => {
+                                if written {
+                                    obligations_written += 1;
+                                }
+                            }
+                            Err(error) => warnings
+                                .push(format!("orientation obligation write failed: {error}")),
+                        }
+                    }
                     let detection = service
                         .detect(crate::obligation::ObligationDetectOptions {
                             cwd: event.cwd.clone(),
@@ -558,8 +665,25 @@ impl HarnessService {
                     }
                 }
             }
+            "pretooluse" => {}
             "posttooluse" => {
                 if let Some(service) = services.obligations {
+                    if enforce_runtime && is_orient_tool(&event) {
+                        match resolve_orientation_obligations(
+                            service,
+                            project.as_deref(),
+                            event.cwd.as_deref(),
+                        )
+                        .await
+                        {
+                            Ok(0) => {}
+                            Ok(count) => warnings.push(format!(
+                                "resolved {count} Engram orientation obligation(s)."
+                            )),
+                            Err(error) => warnings
+                                .push(format!("orientation obligation resolve failed: {error}")),
+                        }
+                    }
                     let detection = service
                         .detect(crate::obligation::ObligationDetectOptions {
                             cwd: event.cwd.clone(),
@@ -738,25 +862,40 @@ impl HarnessService {
                 .list_open_for_context(project.as_deref(), event.cwd.as_deref())
                 .await
             {
-                Ok(obligations) => obligations.len(),
+                Ok(obligations) => obligations,
                 Err(error) => {
                     warnings.push(format!("obligation doctor failed: {error}"));
-                    0
+                    Vec::new()
                 }
             }
         } else {
-            0
+            Vec::new()
         };
+        if enforce_runtime
+            && event.enforcement_profile == HarnessEnforcementProfile::Graduated
+            && normalized_event_name(&event.hook_event_name) == "stop"
+            && event.stop_hook_active
+            && !open_obligations.is_empty()
+        {
+            warnings.push(format!(
+                "Engram graduated Stop allowed exit because stop_hook_active=true; {} open obligation(s) remain.",
+                open_obligations.len()
+            ));
+        }
 
         let additional_context = hook_additional_context(
             &event,
             memory_written,
             obligations_written,
             handoff_written,
-            open_obligations,
+            open_obligations.len(),
             &warnings,
         );
-        let response = claude_hook_response(&event, &additional_context);
+        let enforcement =
+            claude_runtime_enforcement_response(&event, &open_obligations, &additional_context);
+        let blocked = enforcement.is_some();
+        let response =
+            enforcement.unwrap_or_else(|| claude_hook_response(&event, &additional_context));
 
         Ok(HarnessHookEventOutcome {
             response,
@@ -764,9 +903,34 @@ impl HarnessService {
             memory_written,
             obligations_written,
             handoff_written,
-            blocked: false,
+            blocked,
             warnings,
         })
+    }
+}
+
+fn lifecycle_report(policy: &HarnessPolicy) -> HarnessLifecycleReport {
+    let message = match policy.enforcement_profile {
+        HarnessEnforcementProfile::Soft => {
+            "Lifecycle compliance is advisory; agents should follow the listed triggers."
+                .to_string()
+        }
+        HarnessEnforcementProfile::Graduated => {
+            "Lifecycle compliance uses graduated enforcement: task-start orientation and final obligations are enforced at high-value boundaries where the host supports hooks."
+                .to_string()
+        }
+        HarnessEnforcementProfile::Strict => {
+            "Lifecycle compliance is strict: hooks keep blocking until required obligations are resolved or explicitly skipped."
+                .to_string()
+        }
+    };
+
+    HarnessLifecycleReport {
+        enforcement_profile: policy.enforcement_profile,
+        soft_contract: policy.enforcement_profile.is_soft(),
+        enforced: !policy.enforcement_profile.is_soft(),
+        advisory_triggers: policy.lifecycle_triggers.clone(),
+        message,
     }
 }
 
@@ -838,6 +1002,196 @@ fn hook_scope(event: &HarnessHookEvent) -> MemoryScope {
                 })
                 .unwrap_or(MemoryScope::Global)
         })
+}
+
+fn is_substantive_prompt(prompt: Option<&str>) -> bool {
+    let Some(prompt) = prompt.map(str::trim).filter(|prompt| !prompt.is_empty()) else {
+        return false;
+    };
+    let lower = prompt.to_lowercase();
+    !matches!(
+        lower.as_str(),
+        "ok" | "okay" | "yes" | "no" | "thanks" | "thank you" | "continue" | "go on"
+    )
+}
+
+async fn ensure_orientation_obligation(
+    service: &crate::obligation::ObligationService,
+    event: &HarnessHookEvent,
+    project: Option<&str>,
+    writer: &WriterProvenance,
+) -> IndexResult<bool> {
+    let open = service
+        .list_open_for_context(project, event.cwd.as_deref())
+        .await?;
+    if open.iter().any(is_orientation_obligation) {
+        return Ok(false);
+    }
+
+    let mut obligation = AgentObligation::new(
+        AgentObligationKind::EngramOrientation,
+        "Run Engram orientation before non-Engram tool use",
+        "Claude Code must call mcp__engram__orient with response_shape=\"lean\" before using non-Engram tools for this task.",
+        obligation_scope(project, event.cwd.as_deref()),
+        AgentObligationTrigger::new("user_prompt", "substantive task prompt submitted")
+            .with_target("mcp__engram__orient"),
+        writer.clone(),
+    )
+    .with_required_resolution(AgentObligationResolutionKind::EngramOriented)
+    .with_required_resolution(AgentObligationResolutionKind::SkippedWithReason)
+    .with_tag("engram-orientation")
+    .with_tag("claude-code")
+    .with_tag("runtime-enforcement");
+
+    if let Some(prompt) = event.prompt.as_deref().map(str::trim) {
+        obligation = obligation.with_evidence(
+            EvidenceRef::new(EvidenceKind::ManualReview, "claude_user_prompt")
+                .with_summary("Claude Code UserPromptSubmit hook observed a substantive prompt")
+                .with_excerpt(prompt.chars().take(1200).collect::<String>()),
+        );
+    }
+
+    service.add(obligation).await?;
+    Ok(true)
+}
+
+async fn resolve_orientation_obligations(
+    service: &crate::obligation::ObligationService,
+    project: Option<&str>,
+    cwd: Option<&str>,
+) -> IndexResult<usize> {
+    let open = service.list_open_for_context(project, cwd).await?;
+    let mut count = 0;
+    for obligation in open.into_iter().filter(is_orientation_obligation) {
+        let resolution = AgentObligationResolution::new(
+            AgentObligationResolutionKind::EngramOriented,
+            "mcp__engram__orient completed for this task.",
+            "engram-harness",
+        )
+        .with_evidence(
+            EvidenceRef::new(EvidenceKind::ToolCall, "mcp__engram__orient")
+                .with_summary("Claude Code PostToolUse hook observed Engram orient"),
+        );
+        service.resolve(obligation.id, resolution).await?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+fn obligation_scope(project: Option<&str>, cwd: Option<&str>) -> MemoryScope {
+    if let Some(project) = project {
+        MemoryScope::project(project)
+    } else if let Some(cwd) = cwd {
+        MemoryScope::Custom {
+            name: format!("cwd:{cwd}"),
+        }
+    } else {
+        MemoryScope::Global
+    }
+}
+
+fn is_orientation_obligation(obligation: &AgentObligation) -> bool {
+    obligation.kind == AgentObligationKind::EngramOrientation
+}
+
+fn is_orient_tool(event: &HarnessHookEvent) -> bool {
+    event
+        .tool_name
+        .as_deref()
+        .is_some_and(|tool| tool.eq_ignore_ascii_case("mcp__engram__orient"))
+}
+
+fn is_engram_tool(event: &HarnessHookEvent) -> bool {
+    event
+        .tool_name
+        .as_deref()
+        .is_some_and(|tool| tool.starts_with("mcp__engram__"))
+}
+
+fn claude_runtime_enforcement_response(
+    event: &HarnessHookEvent,
+    open_obligations: &[AgentObligation],
+    additional_context: &str,
+) -> Option<Value> {
+    if event.harness != HarnessKind::ClaudeCode
+        || event.enforcement_profile == HarnessEnforcementProfile::Soft
+    {
+        return None;
+    }
+
+    match normalized_event_name(&event.hook_event_name).as_str() {
+        "pretooluse" if !is_engram_tool(event) => {
+            let orientation = open_obligations.iter().find(|obligation| {
+                is_orientation_obligation(obligation)
+                    && obligation
+                        .trigger
+                        .target
+                        .as_deref()
+                        .is_some_and(|target| target == "mcp__engram__orient")
+            })?;
+            let tool = event.tool_name.as_deref().unwrap_or("unknown tool");
+            let reason = format!(
+                "Engram {} enforcement denied `{tool}` because task-start orientation is still open (obligation {}). Call `mcp__engram__orient` with `agent=\"claude_code\"`, current `project`, `cwd`, prompt, and `response_shape=\"lean\"`, then retry the tool.",
+                event.enforcement_profile,
+                orientation.id
+            );
+            Some(json!({
+                "continue": true,
+                "hookSpecificOutput": {
+                    "hookEventName": event.hook_event_name.trim(),
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason
+                },
+                "systemMessage": additional_context
+            }))
+        }
+        "stop" if !open_obligations.is_empty() => {
+            if event.enforcement_profile == HarnessEnforcementProfile::Graduated
+                && event.stop_hook_active
+            {
+                return None;
+            }
+            let reason = stop_block_reason(event, open_obligations);
+            Some(json!({
+                "decision": "block",
+                "reason": reason,
+                "systemMessage": additional_context
+            }))
+        }
+        _ => None,
+    }
+}
+
+fn stop_block_reason(event: &HarnessHookEvent, open_obligations: &[AgentObligation]) -> String {
+    let project_arg = event
+        .project
+        .clone()
+        .or_else(|| project_from_cwd(event.cwd.as_deref()))
+        .map(|project| format!(", project=\"{project}\""))
+        .unwrap_or_default();
+    let cwd_arg = event
+        .cwd
+        .as_ref()
+        .map(|cwd| format!(", cwd=\"{cwd}\""))
+        .unwrap_or_default();
+    let first = &open_obligations[0];
+    format!(
+        "Engram {} enforcement blocked the final response because {} open obligation(s) remain. First open obligation: {} ({}, id={}). Run `obligations(action=doctor{}{})`, then either `obligations(action=resolve, id=\"{}\", resolution_kind=\"{}\", summary=\"...\", actor=\"agent\")` or `obligations(action=skip, id=\"{}\", reason=\"...\", actor=\"agent\")`. Then answer again.",
+        event.enforcement_profile,
+        open_obligations.len(),
+        first.title,
+        first.kind,
+        first.id,
+        project_arg,
+        cwd_arg,
+        first.id,
+        first
+            .required_resolution
+            .first()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "memory_recorded".to_string()),
+        first.id
+    )
 }
 
 fn tool_prompt(event: &HarnessHookEvent) -> Option<String> {
@@ -1005,8 +1359,20 @@ fn hook_additional_context(
                 .to_string(),
         ),
         "stop" => lines.push(
-            "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect, project=..., cwd=...) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
-                .to_string(),
+            match event.enforcement_profile {
+                HarnessEnforcementProfile::Soft => {
+                    "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect, project=..., cwd=...) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
+                        .to_string()
+                }
+                HarnessEnforcementProfile::Graduated => {
+                    "Engram ran final obligation detection. Graduated enforcement blocks this Stop once when open obligations remain; resolve or explicitly skip open obligations with obligations(action=resolve/skip), rerun obligations(action=detect, project=..., cwd=...) if more files change, then answer. If Claude is already in stop_hook_active recovery, report the remaining obligations and exit."
+                        .to_string()
+                }
+                HarnessEnforcementProfile::Strict => {
+                    "Engram ran final obligation detection. Strict enforcement blocks Stop while open obligations remain; resolve or explicitly skip them with obligations(action=resolve/skip), rerun obligations(action=detect, project=..., cwd=...) if more files change, then answer."
+                        .to_string()
+                }
+            },
         ),
         "precompact" | "postcompact" => lines.push(
             "Before relying on compacted context, use handoff(action=get) and memory(action=changes_since)."
@@ -1102,17 +1468,20 @@ fn required_mcp_tools() -> Vec<String> {
     .collect()
 }
 
-fn adapters_for(harness: HarnessKind) -> Vec<HarnessAdapterSpec> {
+fn adapters_for(
+    harness: HarnessKind,
+    enforcement_profile: HarnessEnforcementProfile,
+) -> Vec<HarnessAdapterSpec> {
     match harness {
-        HarnessKind::ClaudeCode => claude_adapters(),
-        HarnessKind::Codex => codex_adapters(),
-        HarnessKind::GeminiCli => gemini_adapters(),
-        HarnessKind::Cursor => cursor_adapters(),
-        HarnessKind::Generic => generic_adapters(),
+        HarnessKind::ClaudeCode => claude_adapters(enforcement_profile),
+        HarnessKind::Codex => codex_adapters(enforcement_profile),
+        HarnessKind::GeminiCli => gemini_adapters(enforcement_profile),
+        HarnessKind::Cursor => cursor_adapters(enforcement_profile),
+        HarnessKind::Generic => generic_adapters(enforcement_profile),
     }
 }
 
-fn claude_adapters() -> Vec<HarnessAdapterSpec> {
+fn claude_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<HarnessAdapterSpec> {
     vec![
         adapter(
             "claude-memory-session-command",
@@ -1120,7 +1489,7 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             ".claude/commands/engram-memory-session.md",
             "Claude command that states the Memory OS lifecycle contract.",
             true,
-            claude_memory_session_command(),
+            claude_memory_session_command(enforcement_profile),
         ),
         adapter(
             "claude-resume-session-command",
@@ -1144,7 +1513,7 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             ".claude/hooks/engram-session-start.sh",
             "Claude hook nudge for session/task start orientation.",
             true,
-            claude_session_start_hook(),
+            claude_session_start_hook(enforcement_profile),
         ),
         adapter(
             "claude-stop-nudge-hook",
@@ -1152,7 +1521,7 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             ".claude/hooks/engram-stop-nudge.sh",
             "Claude hook nudge before stopping/final response.",
             true,
-            claude_stop_nudge_hook(),
+            claude_stop_nudge_hook(enforcement_profile),
         ),
         adapter(
             "claude-session-end-hook",
@@ -1160,7 +1529,7 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             ".claude/hooks/engram-session-end.sh",
             "Claude command hook for session-end handoff when MCP tool hooks are unavailable.",
             true,
-            claude_session_end_hook(),
+            claude_session_end_hook(enforcement_profile),
         ),
         adapter(
             "claude-settings-snippet",
@@ -1168,7 +1537,7 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             ".claude/engram-settings-snippet.json",
             "Claude Code settings snippet for Engram MCP permissions and lifecycle hooks.",
             false,
-            claude_settings_snippet(),
+            claude_settings_snippet(enforcement_profile),
         ),
         adapter(
             "project-agents-snippet",
@@ -1176,12 +1545,12 @@ fn claude_adapters() -> Vec<HarnessAdapterSpec> {
             "AGENTS.engram.md",
             "Project instruction snippet that can be merged into AGENTS.md.",
             false,
-            agents_snippet(),
+            agents_snippet(enforcement_profile),
         ),
     ]
 }
 
-fn codex_adapters() -> Vec<HarnessAdapterSpec> {
+fn codex_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<HarnessAdapterSpec> {
     vec![
         adapter(
             "codex-memory-session-skill",
@@ -1189,7 +1558,7 @@ fn codex_adapters() -> Vec<HarnessAdapterSpec> {
             ".codex/skills/engram-memory-session/SKILL.md",
             "Codex skill for the Memory OS lifecycle contract.",
             true,
-            codex_memory_session_skill(),
+            codex_memory_session_skill(enforcement_profile),
         ),
         adapter(
             "codex-resume-session-skill",
@@ -1205,12 +1574,12 @@ fn codex_adapters() -> Vec<HarnessAdapterSpec> {
             "AGENTS.engram.md",
             "Project instruction snippet that can be merged into AGENTS.md.",
             false,
-            agents_snippet(),
+            agents_snippet(enforcement_profile),
         ),
     ]
 }
 
-fn gemini_adapters() -> Vec<HarnessAdapterSpec> {
+fn gemini_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<HarnessAdapterSpec> {
     vec![
         adapter(
             "gemini-memory-session-command",
@@ -1218,7 +1587,7 @@ fn gemini_adapters() -> Vec<HarnessAdapterSpec> {
             ".gemini/commands/engram/memory-session.toml",
             "Gemini CLI custom command for the Memory OS lifecycle contract.",
             true,
-            gemini_memory_session_command(),
+            gemini_memory_session_command(enforcement_profile),
         ),
         adapter(
             "gemini-resume-session-command",
@@ -1242,12 +1611,12 @@ fn gemini_adapters() -> Vec<HarnessAdapterSpec> {
             ".gemini/GEMINI.md",
             "Gemini CLI global context file for Memory OS lifecycle nudges.",
             true,
-            gemini_global_context(),
+            gemini_global_context(enforcement_profile),
         ),
     ]
 }
 
-fn cursor_adapters() -> Vec<HarnessAdapterSpec> {
+fn cursor_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<HarnessAdapterSpec> {
     vec![
         adapter(
             "cursor-memory-session-skill",
@@ -1255,7 +1624,7 @@ fn cursor_adapters() -> Vec<HarnessAdapterSpec> {
             ".cursor/skills/engram-memory-session/SKILL.md",
             "Cursor Agent skill for the Memory OS lifecycle contract.",
             true,
-            cursor_memory_session_skill(),
+            cursor_memory_session_skill(enforcement_profile),
         ),
         adapter(
             "cursor-resume-session-skill",
@@ -1276,14 +1645,14 @@ fn cursor_adapters() -> Vec<HarnessAdapterSpec> {
     ]
 }
 
-fn generic_adapters() -> Vec<HarnessAdapterSpec> {
+fn generic_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<HarnessAdapterSpec> {
     vec![adapter(
         "generic-harness-policy",
         HarnessAdapterKind::PolicyDocument,
         ".engram/harness-policy.md",
         "Generic Memory OS harness lifecycle policy.",
         true,
-        generic_policy_document(),
+        generic_policy_document(enforcement_profile),
     )]
 }
 
@@ -1438,7 +1807,10 @@ fn read_claude_settings_sources(root: &Path) -> IndexResult<Vec<ClaudeSettingsSo
     ])
 }
 
-fn claude_settings_status(root: &Path) -> IndexResult<ClaudeSettingsStatus> {
+fn claude_settings_status(
+    root: &Path,
+    enforcement_profile: HarnessEnforcementProfile,
+) -> IndexResult<ClaudeSettingsStatus> {
     let sources = read_claude_settings_sources(root)?;
     let present_sources: Vec<_> = sources
         .iter()
@@ -1492,7 +1864,9 @@ fn claude_settings_status(root: &Path) -> IndexResult<ClaudeSettingsStatus> {
                 source
                     .settings
                     .as_ref()
-                    .map(|settings| claude_settings_has_hook(settings, event, matcher))
+                    .map(|settings| {
+                        claude_settings_has_hook(settings, event, matcher, enforcement_profile)
+                    })
                     .unwrap_or(false)
             })
             .map(|source| source.label.to_string())
@@ -1614,6 +1988,7 @@ fn merge_claude_settings(
     root: &Path,
     target: HarnessSettingsTarget,
     write: bool,
+    enforcement_profile: HarnessEnforcementProfile,
     planned: &mut Vec<HarnessInstallFile>,
     written: &mut Vec<HarnessInstallFile>,
     skipped: &mut Vec<HarnessInstallFile>,
@@ -1633,7 +2008,7 @@ fn merge_claude_settings(
         );
         return Ok(());
     };
-    warn_for_settings_target(target, root, warnings)?;
+    warn_for_settings_target(target, root, warnings, enforcement_profile)?;
     let mut settings = match fs::read_to_string(&path) {
         Ok(contents) => serde_json::from_str::<Value>(&contents)
             .map_err(|e| IndexError::Parse(format!("failed to parse Claude settings: {e}")))?,
@@ -1642,7 +2017,7 @@ fn merge_claude_settings(
     };
 
     let changed_permissions = merge_claude_permissions(&mut settings);
-    let changed_hooks = merge_claude_hooks(&mut settings);
+    let changed_hooks = merge_claude_hooks(&mut settings, enforcement_profile);
     let changed = changed_permissions || changed_hooks;
     let path_string = path.display().to_string();
     if changed {
@@ -1687,6 +2062,7 @@ fn warn_for_settings_target(
     target: HarnessSettingsTarget,
     root: &Path,
     warnings: &mut Vec<String>,
+    enforcement_profile: HarnessEnforcementProfile,
 ) -> IndexResult<()> {
     match target {
         HarnessSettingsTarget::Project => {
@@ -1696,9 +2072,10 @@ fn warn_for_settings_target(
             )?;
             if let Some(settings) = local.settings {
                 let permissions = claude_engram_permissions(&settings);
-                let has_hooks = claude_required_hook_events().into_iter().any(|(event, matcher)| {
-                    claude_settings_has_hook(&settings, event, matcher)
-                });
+                let has_hooks =
+                    claude_required_hook_events().into_iter().any(|(event, matcher)| {
+                        claude_settings_has_hook(&settings, event, matcher, enforcement_profile)
+                    });
                 if !permissions.is_empty() || has_hooks {
                     warnings.push(format!(
                         "{} already contains Engram entries; project settings will be written to settings.json, while local settings remain personal and have higher precedence.",
@@ -1745,7 +2122,10 @@ fn merge_claude_permissions(settings: &mut Value) -> bool {
     changed
 }
 
-fn merge_claude_hooks(settings: &mut Value) -> bool {
+fn merge_claude_hooks(
+    settings: &mut Value,
+    enforcement_profile: HarnessEnforcementProfile,
+) -> bool {
     ensure_object(settings);
     if settings.get("hooks").and_then(Value::as_object).is_none() {
         settings["hooks"] = json!({});
@@ -1755,7 +2135,7 @@ fn merge_claude_hooks(settings: &mut Value) -> bool {
         settings,
         "SessionEnd",
         None,
-        &claude_mcp_hook_handler("SessionEnd"),
+        &claude_mcp_hook_handler("SessionEnd", enforcement_profile),
     );
     changed |= ensure_claude_hook(
         settings,
@@ -1768,7 +2148,12 @@ fn merge_claude_hooks(settings: &mut Value) -> bool {
         }),
     );
     for (event, matcher) in claude_mcp_hook_events() {
-        changed |= ensure_claude_hook(settings, event, matcher, claude_mcp_hook_handler(event));
+        changed |= ensure_claude_hook(
+            settings,
+            event,
+            matcher,
+            claude_mcp_hook_handler(event, enforcement_profile),
+        );
     }
     changed |= ensure_claude_hook(
         settings,
@@ -1872,10 +2257,21 @@ fn remove_claude_hook_handler(
     changed || groups.len() != before
 }
 
-fn claude_settings_has_hook(settings: &Value, event: &str, matcher: Option<&str>) -> bool {
+fn claude_settings_has_hook(
+    settings: &Value,
+    event: &str,
+    matcher: Option<&str>,
+    enforcement_profile: HarnessEnforcementProfile,
+) -> bool {
     settings
         .pointer(&format!("/hooks/{event}"))
-        .map(|entry| claude_event_has_handler(entry, matcher, &claude_expected_handler(event)))
+        .map(|entry| {
+            claude_event_has_handler(
+                entry,
+                matcher,
+                &claude_expected_handler(event, enforcement_profile),
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -1888,7 +2284,7 @@ fn claude_settings_has_permission(settings: &Value, permission: &str) -> bool {
         .any(|value| value.as_str() == Some(permission))
 }
 
-fn claude_expected_handler(event: &str) -> Value {
+fn claude_expected_handler(event: &str, enforcement_profile: HarnessEnforcementProfile) -> Value {
     if event == "SessionStart" {
         json!({
             "type": "command",
@@ -1902,7 +2298,7 @@ fn claude_expected_handler(event: &str) -> Value {
             "timeout": 15
         })
     } else {
-        claude_mcp_hook_handler(event)
+        claude_mcp_hook_handler(event, enforcement_profile)
     }
 }
 
@@ -1932,6 +2328,8 @@ fn claude_required_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
 fn claude_mcp_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
     vec![
         ("UserPromptSubmit", None),
+        ("PreToolUse", Some("*")),
+        ("PostToolUse", Some("mcp__engram__orient")),
         ("PostToolUse", Some("Write|Edit|MultiEdit")),
         ("PostToolUseFailure", Some("*")),
         ("Stop", None),
@@ -1940,7 +2338,7 @@ fn claude_mcp_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
     ]
 }
 
-fn claude_mcp_hook_handler(event: &str) -> Value {
+fn claude_mcp_hook_handler(event: &str, enforcement_profile: HarnessEnforcementProfile) -> Value {
     json!({
         "type": "mcp_tool",
         "server": "engram",
@@ -1949,6 +2347,7 @@ fn claude_mcp_hook_handler(event: &str) -> Value {
         "input": {
             "action": "hook_event",
             "harness": "claude_code",
+            "enforcement": enforcement_profile.to_string(),
             "hook_event_name": event,
             "session_id": "${session_id}",
             "cwd": "${cwd}",
@@ -1996,15 +2395,43 @@ fn set_executable_if_hook(path: &Path, kind: HarnessAdapterKind) -> IndexResult<
     Ok(())
 }
 
-fn claude_memory_session_command() -> String {
+fn harness_contract_sentence(
+    enforcement_profile: HarnessEnforcementProfile,
+    runtime_enforced: bool,
+) -> &'static str {
+    match (enforcement_profile, runtime_enforced) {
+        (HarnessEnforcementProfile::Soft, _) => {
+            "This uses the soft profile. Missing lifecycle steps should be reported as warnings, not blockers."
+        }
+        (HarnessEnforcementProfile::Graduated, true) => {
+            "This uses the graduated profile. Claude Code hooks enforce task-start lean orientation before non-Engram tools and block final response once when open obligations remain."
+        }
+        (HarnessEnforcementProfile::Graduated, false) => {
+            "This uses the graduated profile. Follow the lifecycle as mandatory agent behavior; runtime blocking is only available where the host exposes hooks."
+        }
+        (HarnessEnforcementProfile::Strict, true) => {
+            "This uses the strict profile. Claude Code hooks keep blocking gated actions until required obligations are resolved, explicitly skipped, or Engram is degraded."
+        }
+        (HarnessEnforcementProfile::Strict, false) => {
+            "This uses the strict profile. Follow the lifecycle as mandatory agent behavior; runtime blocking is only available where the host exposes hooks."
+        }
+    }
+}
+
+const CONCRETE_MEMORY_TRIGGERS: &str = "Treat JIRA keys, PRs/issues, known entities/services, project-state claims, final responses, and durable discoveries as concrete Engram triggers.";
+
+fn claude_memory_session_command(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, true);
     format!(
         r#"{MARKER_MD}
 # Engram Memory Session
 
 Use this command when a Claude Code session needs persistent project memory.
 
-Lifecycle contract:
-- At task/session start, call `orient` with the project, cwd, prompt, and harness.
+Lifecycle contract ({enforcement_profile}):
+- At task/session start, call `orient` with the project, cwd, prompt, harness, and
+  `response_shape="lean"`.
+- {CONCRETE_MEMORY_TRIGGERS}
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
@@ -2025,7 +2452,7 @@ Lifecycle contract:
 - At session end, compile a handoff and create a knowledge commit candidate.
 - In commit workflows, consult memory for relevant preferences, rules, and limitations first.
 
-This is a soft contract. Missing lifecycle steps should be reported as warnings, not blockers.
+{contract}
 "#
     )
 }
@@ -2035,7 +2462,8 @@ fn claude_resume_session_command() -> String {
         r#"{MARKER_MD}
 # Resume Engram Session
 
-1. Call `orient` with the explicit project and current cwd.
+1. Call `orient` with the explicit project, current cwd, `agent=claude_code`, and
+   `response_shape="lean"`.
 2. Read the returned context pack, ambiguities, and memory cursor.
 3. Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
    outcome, gap, and attribution fields before final response when memory quality can be judged.
@@ -2073,7 +2501,8 @@ Before ending:
     )
 }
 
-fn claude_session_start_hook() -> String {
+fn claude_session_start_hook(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, true);
     format!(
         r#"#!/usr/bin/env bash
 {MARKER_SH}
@@ -2095,14 +2524,15 @@ fi
 
 CONTEXT="<engram_session_activation source=\"$SOURCE\" project=\"$PROJECT_NAME\" session_id=\"$SESSION_ID\">
 Engram is the durable Memory OS for this Claude Code session.
-Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, and agent=claude_code.
+Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, agent=claude_code, and response_shape=lean.
+{CONCRETE_MEMORY_TRIGGERS}
 Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
 Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids before final response when those outcomes or attribution judgments can be made.
 Use used_memory_ids for returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned memory influenced behavior.
 Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
 When the current method, plan, or next action should survive resume, use memory(action=capture_current_plan) with compact content and file/tool/manual-review evidence.
 Before context compaction or session end, update handoff and commit compact durable memory when useful.
-This is a soft contract: resolve obligations or state explicit skip reasons; do not fabricate missing memory.
+{contract} Resolve obligations or state explicit skip reasons; do not fabricate missing memory.
 </engram_session_activation>"
 
 CONTEXT_JSON=$(printf '%s' "$CONTEXT" | jq -Rs .)
@@ -2117,7 +2547,18 @@ EOF
     )
 }
 
-fn claude_stop_nudge_hook() -> String {
+fn claude_stop_nudge_hook(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let final_message = match enforcement_profile {
+        HarnessEnforcementProfile::Soft => {
+            "Engram final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+        }
+        HarnessEnforcementProfile::Graduated => {
+            "Engram graduated final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations. Claude MCP Stop enforcement blocks once when open obligations remain."
+        }
+        HarnessEnforcementProfile::Strict => {
+            "Engram strict final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations. Claude MCP Stop enforcement keeps blocking while obligations remain."
+        }
+    };
     format!(
         r#"#!/usr/bin/env bash
 {MARKER_SH}
@@ -2139,14 +2580,14 @@ fi
 cat <<'EOF'
 {{
   "continue": true,
-  "systemMessage": "Engram final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+  "systemMessage": "{final_message}"
 }}
 EOF
 "#
     )
 }
 
-fn claude_session_end_hook() -> String {
+fn claude_session_end_hook(enforcement_profile: HarnessEnforcementProfile) -> String {
     let body = r#"set -euo pipefail
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -2170,6 +2611,7 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty')
 WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "nudge"')
+ENFORCEMENT_PROFILE="{enforcement_profile}"
 
 if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
   CWD="${CLAUDE_PROJECT_DIR:-}"
@@ -2211,7 +2653,8 @@ CALL_PAYLOAD=$(jq -nc \
   --arg transcript_path "$TRANSCRIPT_PATH" \
   --arg reason "$REASON" \
   --arg write_policy "$WRITE_POLICY" \
-  '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"harness",arguments:{action:"hook_event",harness:"claude_code",hook_event_name:"SessionEnd",session_id:$session_id,cwd:$cwd,transcript_path:$transcript_path,reason:$reason,write_policy:$write_policy,model_provider:"anthropic",model:"claude-code",surface:"claude-code",actor:"agent"}}}')
+  --arg enforcement "$ENFORCEMENT_PROFILE" \
+  '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"harness",arguments:{action:"hook_event",harness:"claude_code",enforcement:$enforcement,hook_event_name:"SessionEnd",session_id:$session_id,cwd:$cwd,transcript_path:$transcript_path,reason:$reason,write_policy:$write_policy,model_provider:"anthropic",model:"claude-code",surface:"claude-code",actor:"agent"}}}')
 
 if ! CALL_RESPONSE=$(curl -sS --max-time 10 -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "mcp-session-id: $MCP_SESSION_ID" -X POST "$MCP_URL" -d "$CALL_PAYLOAD"); then
   fallback "Engram SessionEnd handoff skipped: harness hook_event call failed."
@@ -2227,10 +2670,11 @@ fi
 printf '%s\n' "$HOOK_JSON"
 "#;
 
+    let body = body.replace("{enforcement_profile}", &enforcement_profile.to_string());
     format!("#!/usr/bin/env bash\n{MARKER_SH}\n{body}")
 }
 
-fn claude_settings_snippet() -> String {
+fn claude_settings_snippet(enforcement_profile: HarnessEnforcementProfile) -> String {
     serde_json::to_string_pretty(&json!({
         "permissions": {
             "allow": claude_required_permissions()
@@ -2245,26 +2689,33 @@ fn claude_settings_snippet() -> String {
                 }]
             }],
             "UserPromptSubmit": [{
-                "hooks": [claude_mcp_hook_handler("UserPromptSubmit")]
+                "hooks": [claude_mcp_hook_handler("UserPromptSubmit", enforcement_profile)]
+            }],
+            "PreToolUse": [{
+                "matcher": "*",
+                "hooks": [claude_mcp_hook_handler("PreToolUse", enforcement_profile)]
             }],
             "PostToolUse": [{
+                "matcher": "mcp__engram__orient",
+                "hooks": [claude_mcp_hook_handler("PostToolUse", enforcement_profile)]
+            }, {
                 "matcher": "Write|Edit|MultiEdit",
-                "hooks": [claude_mcp_hook_handler("PostToolUse")]
+                "hooks": [claude_mcp_hook_handler("PostToolUse", enforcement_profile)]
             }],
             "PostToolUseFailure": [{
                 "matcher": "*",
-                "hooks": [claude_mcp_hook_handler("PostToolUseFailure")]
+                "hooks": [claude_mcp_hook_handler("PostToolUseFailure", enforcement_profile)]
             }],
             "Stop": [{
-                "hooks": [claude_mcp_hook_handler("Stop")]
+                "hooks": [claude_mcp_hook_handler("Stop", enforcement_profile)]
             }],
             "PreCompact": [{
                 "matcher": "manual|auto",
-                "hooks": [claude_mcp_hook_handler("PreCompact")]
+                "hooks": [claude_mcp_hook_handler("PreCompact", enforcement_profile)]
             }],
             "PostCompact": [{
                 "matcher": "manual|auto",
-                "hooks": [claude_mcp_hook_handler("PostCompact")]
+                "hooks": [claude_mcp_hook_handler("PostCompact", enforcement_profile)]
             }],
             "SessionEnd": [{
                 "hooks": [{
@@ -2278,15 +2729,18 @@ fn claude_settings_snippet() -> String {
     .expect("Claude settings snippet should serialize")
 }
 
-fn codex_memory_session_skill() -> String {
+fn codex_memory_session_skill(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
         r#"{MARKER_MD}
 # Engram Memory Session
 
 Use when Codex is working in a repo or project with persistent Engram memory.
 
-Workflow:
-- Start by calling `orient` with project, cwd, prompt, and `agent=codex`.
+Workflow ({enforcement_profile}):
+- Start by calling `orient` with project, cwd, prompt, `agent=codex`, and
+  `response_shape="lean"`.
+- {CONCRETE_MEMORY_TRIGGERS}
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
@@ -2314,7 +2768,7 @@ Workflow:
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
-This skill is advisory. Report skipped lifecycle steps as warnings; do not block coding work.
+{contract}
 "#
     )
 }
@@ -2327,7 +2781,7 @@ fn codex_resume_session_skill() -> String {
 Use when the user asks to continue, resume, or load prior Engram context.
 
 Steps:
-- Call `orient` before reading broad files.
+- Call `orient` with `response_shape="lean"` before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
@@ -2348,7 +2802,8 @@ Steps:
     )
 }
 
-fn gemini_memory_session_command() -> String {
+fn gemini_memory_session_command(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
         r#"{MARKER_SH}
 description = "Follow the Engram Memory OS lifecycle contract."
@@ -2358,8 +2813,10 @@ prompt = """
 You are Gemini CLI working in a repository or project with persistent Engram memory.
 This command is invoked as `/engram:memory-session`.
 
-Follow this soft lifecycle contract:
-- Start by calling the Engram MCP `orient` tool with project, cwd, prompt, and `agent=gemini_cli`.
+Follow this {enforcement_profile} lifecycle contract:
+- Start by calling the Engram MCP `orient` tool with project, cwd, prompt,
+  `agent=gemini_cli`, and `response_shape="lean"`.
+- {CONCRETE_MEMORY_TRIGGERS}
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
@@ -2381,7 +2838,7 @@ Follow this soft lifecycle contract:
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
-This contract is advisory. Report skipped lifecycle steps as warnings; do not block coding work.
+{contract}
 """
 "#
     )
@@ -2398,7 +2855,7 @@ You are Gemini CLI resuming work with persistent Engram memory.
 This command is invoked as `/engram:resume-session`.
 
 Steps:
-- Call the Engram MCP `orient` tool before reading broad files.
+- Call the Engram MCP `orient` tool with `response_shape="lean"` before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
@@ -2443,14 +2900,17 @@ Before ending:
     )
 }
 
-fn gemini_global_context() -> String {
+fn gemini_global_context(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
         r#"{MARKER_MD}
 # Engram Memory OS Harness
 
 Gemini CLI should treat Engram as persistent project memory when Engram MCP tools are available.
 
-- Start work by calling `orient` with the current project, cwd, prompt, and `agent=gemini_cli`.
+- Start work by calling `orient` with the current project, cwd, prompt,
+  `agent=gemini_cli`, and `response_shape="lean"`.
+- {CONCRETE_MEMORY_TRIGGERS}
 - Keep the returned memory cursor and call `memory(action=changes_since)` before major
   decisions, before final response, and during long sessions.
 - Keep returned `trace_id` values from `orient` or `search` and call
@@ -2471,7 +2931,7 @@ Gemini CLI should treat Engram as persistent project memory when Engram MCP tool
   compact durable memory.
 - Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
 - Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
-- Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
+- {contract}
 
 Useful commands when installed:
 - `/engram:memory-session`
@@ -2481,7 +2941,8 @@ Useful commands when installed:
     )
 }
 
-fn cursor_memory_session_skill() -> String {
+fn cursor_memory_session_skill(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
         r#"{MARKER_MD}
 ---
@@ -2492,8 +2953,10 @@ description: Use when Cursor Agent is working in a repo or project with persiste
 
 Use this skill when Cursor Agent is working in a repository or project with persistent Engram memory.
 
-Workflow:
-- Start by calling the Engram MCP `orient` tool with project, cwd, prompt, and `agent=cursor`.
+Workflow ({enforcement_profile}):
+- Start by calling the Engram MCP `orient` tool with project, cwd, prompt, `agent=cursor`, and
+  `response_shape="lean"`.
+- {CONCRETE_MEMORY_TRIGGERS}
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
@@ -2516,7 +2979,7 @@ Workflow:
 - For commit messages, check memory for user/project commit preferences first.
 - If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
-This skill is advisory. Report skipped lifecycle steps as warnings; do not block coding work.
+{contract}
 "#
     )
 }
@@ -2533,7 +2996,7 @@ description: Use when Cursor Agent resumes, continues, or loads prior project co
 Use this skill when the user asks Cursor Agent to continue, resume, or load prior Engram context.
 
 Steps:
-- Call the Engram MCP `orient` tool before reading broad files.
+- Call the Engram MCP `orient` tool with `response_shape="lean"` before reading broad files.
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
@@ -2579,12 +3042,15 @@ Before ending:
     )
 }
 
-fn agents_snippet() -> String {
+fn agents_snippet(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
         r#"{MARKER_MD}
 # Engram Memory OS Harness
 
-- Start work by calling `orient` with the current project, cwd, prompt, and harness name.
+- Start work by calling `orient` with the current project, cwd, prompt, harness name, and
+  `response_shape="lean"`.
+- {CONCRETE_MEMORY_TRIGGERS}
 - Keep the returned memory cursor and call `memory(action=changes_since)` before major
   decisions, before final response, and during long sessions.
 - Keep returned `trace_id` values from `orient` or `search` and call
@@ -2606,20 +3072,22 @@ fn agents_snippet() -> String {
   compact durable memory for the next session.
 - Maintain rolling handoffs for multi-turn work. Handoffs must include next actions.
 - Keep migration review-gated. Do not auto-promote orphan, digest, or legacy data.
-- Treat lifecycle enforcement as soft: warn about skipped steps, but do not block coding.
+- {contract}
 "#
     )
 }
 
-fn generic_policy_document() -> String {
+fn generic_policy_document(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
         r#"{MARKER_MD}
 # Engram Generic Harness Policy
 
 Required MCP tools: orient, memory, harness, lint, graph, handoff, obligations, telemetry, vault.
 
-Lifecycle:
-- task/session start: call `orient`
+Lifecycle ({enforcement_profile}):
+- task/session start: call `orient` with `response_shape="lean"`
+- {CONCRETE_MEMORY_TRIGGERS}
 - before major decisions: call `memory(action=changes_since)`
 - after non-obvious discoveries: record memory/session event
 - after current method/plan/next-action changes: use `memory(action=capture_current_plan)` with
@@ -2636,7 +3104,7 @@ Lifecycle:
 - session end/handoff: compile handoff and knowledge commit candidate
 - commit workflows: consult memory for relevant preferences/rules
 
-Enforcement is soft. Missing lifecycle steps produce warnings, not hard blocks.
+{contract}
 "#
     )
 }
@@ -2704,7 +3172,7 @@ mod tests {
     }
 
     #[test]
-    fn doctor_names_soft_lifecycle_triggers_when_ready() {
+    fn doctor_names_graduated_lifecycle_triggers_when_ready() {
         let root = tempfile::tempdir().unwrap();
         let service = HarnessService::new();
         service
@@ -2716,8 +3184,12 @@ mod tests {
             .unwrap();
 
         assert!(report.ready);
-        assert!(report.lifecycle.soft_contract);
-        assert!(!report.lifecycle.enforced);
+        assert_eq!(
+            report.lifecycle.enforcement_profile,
+            HarnessEnforcementProfile::Graduated
+        );
+        assert!(!report.lifecycle.soft_contract);
+        assert!(report.lifecycle.enforced);
         assert_eq!(
             report.lifecycle.advisory_triggers,
             vec![
@@ -2734,12 +3206,48 @@ mod tests {
         let lifecycle_warning = report
             .warnings
             .iter()
-            .find(|warning| warning.contains("Advisory triggers:"))
-            .expect("ready doctor should name advisory lifecycle triggers");
+            .find(|warning| warning.contains("enforcement_profile=graduated"))
+            .expect("ready doctor should name graduated lifecycle profile");
         assert!(lifecycle_warning.contains("task_start_orient"));
         assert!(lifecycle_warning.contains("before_final_obligations"));
         assert!(lifecycle_warning.contains("session_end_handoff"));
         assert!(lifecycle_warning.contains("commit_workflow_consult_memory"));
+    }
+
+    #[test]
+    fn soft_profile_preserves_advisory_lifecycle_report() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        service
+            .install_with_options(
+                HarnessKind::Codex,
+                Some(root.path()),
+                HarnessInstallOptions {
+                    write: true,
+                    adopt_user_owned: false,
+                    settings_target: HarnessSettingsTarget::default(),
+                    enforcement_profile: HarnessEnforcementProfile::Soft,
+                },
+            )
+            .unwrap();
+
+        let report = service
+            .doctor_with_enforcement(
+                HarnessKind::Codex,
+                Some(root.path()),
+                &[],
+                HarnessEnforcementProfile::Soft,
+            )
+            .unwrap();
+
+        assert!(report.ready);
+        assert_eq!(
+            report.lifecycle.enforcement_profile,
+            HarnessEnforcementProfile::Soft
+        );
+        assert!(report.lifecycle.soft_contract);
+        assert!(!report.lifecycle.enforced);
+        assert!(report.lifecycle.message.contains("advisory"));
     }
 
     #[test]
@@ -3043,7 +3551,8 @@ mod tests {
     fn claude_install_merges_settings_and_is_ready() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".claude")).unwrap();
-        let stale_session_end_handler = claude_mcp_hook_handler("SessionEnd");
+        let stale_session_end_handler =
+            claude_mcp_hook_handler("SessionEnd", HarnessEnforcementProfile::default());
         fs::write(
             root.path().join(".claude/settings.json"),
             serde_json::to_string(&serde_json::json!({
@@ -3075,6 +3584,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::default(),
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3086,6 +3596,8 @@ mod tests {
         let settings = fs::read_to_string(root.path().join(".claude/settings.json")).unwrap();
         assert!(settings.contains("mcp__engram__orient"));
         assert!(settings.contains("mcp__engram__telemetry"));
+        assert!(settings.contains("\"PreToolUse\""));
+        assert!(settings.contains("\"mcp__engram__orient\""));
         assert!(settings.contains("\"PostToolUseFailure\""));
         assert!(settings.contains("existing"));
         let settings_json: Value = serde_json::from_str(&settings).unwrap();
@@ -3142,6 +3654,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::Project,
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3172,6 +3685,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: true,
                     settings_target: HarnessSettingsTarget::default(),
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3199,6 +3713,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::Local,
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3227,6 +3742,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::SnippetOnly,
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3275,6 +3791,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::SnippetOnly,
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3323,6 +3840,7 @@ mod tests {
                     write: true,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::SnippetOnly,
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3375,6 +3893,7 @@ mod tests {
                     write: false,
                     adopt_user_owned: false,
                     settings_target: HarnessSettingsTarget::Project,
+                    enforcement_profile: HarnessEnforcementProfile::default(),
                 },
             )
             .unwrap();
@@ -3499,7 +4018,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hook_event_stop_nudges_without_blocking_when_obligations_are_open() {
+    async fn hook_event_stop_blocks_once_when_obligations_are_open() {
         let config = engram_store::StoreConfig::memory();
         let db = engram_store::connect_and_init(&config).await.unwrap();
         let memory = crate::memory::MemoryService::new(db.clone());
@@ -3552,13 +4071,13 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(!stop_outcome.blocked);
-        assert_eq!(stop_outcome.response["continue"], true);
+        assert!(stop_outcome.blocked);
+        assert_eq!(stop_outcome.response["decision"], "block");
         assert!(stop_outcome.response.get("hookSpecificOutput").is_none());
-        assert!(stop_outcome.response["systemMessage"]
+        assert!(stop_outcome.response["reason"]
             .as_str()
             .unwrap()
-            .contains("without blocking the user"));
+            .contains("obligations(action=doctor"));
 
         let active_stop = service
             .handle_hook_event(
@@ -3585,6 +4104,193 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("open_obligations="));
+        assert!(active_stop
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("stop_hook_active=true")));
+
+        let strict_active_stop = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Strict,
+                    hook_event_name: "Stop".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    stop_hook_active: true,
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(strict_active_stop.blocked);
+        assert_eq!(strict_active_stop.response["decision"], "block");
+    }
+
+    #[tokio::test]
+    async fn soft_hook_event_stop_preserves_non_blocking_behavior() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let memory = crate::memory::MemoryService::new(db.clone());
+        memory.init_schema().await.unwrap();
+        let obligations = crate::obligation::ObligationService::new(db.clone());
+        obligations.init_schema().await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+        let service = HarnessService::new();
+
+        service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Soft,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("Implement the design and commit it".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        let stop_outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Soft,
+                    hook_event_name: "Stop".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    stop_hook_active: false,
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: Some(&memory),
+                    obligations: Some(&obligations),
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!stop_outcome.blocked);
+        assert_eq!(stop_outcome.response["continue"], true);
+        assert!(stop_outcome.response["systemMessage"]
+            .as_str()
+            .unwrap()
+            .contains("without blocking the user"));
+    }
+
+    #[tokio::test]
+    async fn pre_tool_use_blocks_until_orient_resolves_orientation_obligation() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let obligations = crate::obligation::ObligationService::new(db);
+        obligations.init_schema().await.unwrap();
+        let service = HarnessService::new();
+        let services = || HarnessHookServices {
+            memory: None,
+            obligations: Some(&obligations),
+            handoff: None,
+        };
+
+        let prompt_outcome = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("Inspect the repository and explain the GA status".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        assert!(prompt_outcome.obligations_written >= 1);
+
+        let denied = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "PreToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("Bash".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        assert!(denied.blocked);
+        assert_eq!(
+            denied.response["hookSpecificOutput"]["permissionDecision"],
+            "deny"
+        );
+        assert!(
+            denied.response["hookSpecificOutput"]["permissionDecisionReason"]
+                .as_str()
+                .unwrap()
+                .contains("response_shape=\"lean\"")
+        );
+
+        let orient_pretool = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "PreToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("mcp__engram__orient".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        assert!(!orient_pretool.blocked);
+        assert_eq!(orient_pretool.response["continue"], true);
+
+        service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "PostToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("mcp__engram__orient".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+
+        let allowed = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "PreToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("Bash".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        assert!(!allowed.blocked);
+        assert_eq!(allowed.response["continue"], true);
     }
 
     #[tokio::test]

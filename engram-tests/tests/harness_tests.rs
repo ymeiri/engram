@@ -42,6 +42,7 @@ fn request(action: &str) -> HarnessRequest {
     HarnessRequest {
         action: action.to_string(),
         harness: Some("claude_code".to_string()),
+        enforcement: None,
         root: None,
         adapter: None,
         write: None,
@@ -100,6 +101,8 @@ async fn test_mcp_harness_render_policy_requires_telemetry() {
         .await
         .expect("render_policy should work");
     let json = parse_json(&response);
+    assert_eq!(json["enforcement_profile"], "graduated");
+    assert_eq!(json["soft_contract"], false);
     let tools = json["required_mcp_tools"]
         .as_array()
         .expect("required_mcp_tools should be an array");
@@ -128,6 +131,36 @@ async fn test_mcp_harness_render_claude_session_end_hook_defaults_to_nudge() {
 }
 
 #[tokio::test]
+async fn test_mcp_harness_render_claude_settings_includes_graduated_hooks() {
+    let state = ToolState::new();
+    let mut render = request("render_adapter");
+    render.harness = Some("claude_code".to_string());
+    render.adapter = Some("claude-settings-snippet".to_string());
+
+    let response = tools::harness_new(&state, render)
+        .await
+        .expect("render_adapter should work");
+    let json = parse_json(&response);
+    let contents = json["adapters"][0]["contents"]
+        .as_str()
+        .expect("rendered adapter should include contents");
+    let settings: Value = serde_json::from_str(contents).expect("snippet should be valid JSON");
+
+    assert!(settings.pointer("/hooks/PreToolUse").is_some());
+    let post_tool_hooks = settings
+        .pointer("/hooks/PostToolUse")
+        .and_then(Value::as_array)
+        .expect("PostToolUse hooks should be present");
+    assert!(post_tool_hooks.iter().any(|group| {
+        group.get("matcher").and_then(Value::as_str) == Some("mcp__engram__orient")
+    }));
+    assert_eq!(
+        settings["hooks"]["PreToolUse"][0]["hooks"][0]["input"]["enforcement"],
+        "graduated"
+    );
+}
+
+#[tokio::test]
 async fn test_mcp_harness_render_adapter_mentions_feedback_trace_id() {
     let state = ToolState::new();
     let mut render = request("render_adapter");
@@ -151,6 +184,8 @@ async fn test_mcp_harness_render_adapter_mentions_feedback_trace_id() {
     assert!(contents.contains("rejected_memory_ids"));
     assert!(contents.contains("stale_memory_ids"));
     assert!(contents.contains("wrong_scope_memory_ids"));
+    assert!(contents.contains("graduated profile"));
+    assert!(contents.contains("response_shape=\"lean\""));
 }
 
 #[tokio::test]
@@ -175,8 +210,9 @@ async fn test_mcp_harness_doctor_returns_structured_lifecycle_report() {
     let json = parse_json(&response);
 
     assert_eq!(json["ready"], true);
-    assert_eq!(json["lifecycle"]["soft_contract"], true);
-    assert_eq!(json["lifecycle"]["enforced"], false);
+    assert_eq!(json["lifecycle"]["enforcement_profile"], "graduated");
+    assert_eq!(json["lifecycle"]["soft_contract"], false);
+    assert_eq!(json["lifecycle"]["enforced"], true);
     assert_eq!(json["mcp_tools"]["checked"], false);
     assert!(json["mcp_tools"]["missing_tools"]
         .as_array()
@@ -194,7 +230,7 @@ async fn test_mcp_harness_doctor_returns_structured_lifecycle_report() {
     assert!(json["lifecycle"]["message"]
         .as_str()
         .expect("lifecycle message should be a string")
-        .contains("advisory"));
+        .contains("graduated enforcement"));
 }
 
 #[tokio::test]
@@ -296,6 +332,61 @@ async fn test_mcp_harness_hook_event_returns_claude_hook_json() {
         .as_str()
         .unwrap()
         .contains("memory_written=1"));
+}
+
+#[tokio::test]
+async fn test_mcp_harness_pre_tool_use_denies_until_orient_runs() {
+    let state = setup_tool_state().await;
+
+    let mut prompt = request("hook_event");
+    prompt.hook_event_name = Some("UserPromptSubmit".to_string());
+    prompt.cwd = Some("/tmp/engram".to_string());
+    prompt.prompt = Some("Inspect the repository and report GA release status".to_string());
+    prompt.write_policy = Some("durable".to_string());
+    tools::harness_new(&state, prompt)
+        .await
+        .expect("prompt hook should work");
+
+    let mut denied = request("hook_event");
+    denied.hook_event_name = Some("PreToolUse".to_string());
+    denied.cwd = Some("/tmp/engram".to_string());
+    denied.tool_name = Some("Bash".to_string());
+    let denied_response = tools::harness_new(&state, denied)
+        .await
+        .expect("pretool hook should work");
+    let denied_json = parse_json(&denied_response);
+    assert_eq!(
+        denied_json["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    assert!(
+        denied_json["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .contains("response_shape=\"lean\"")
+    );
+
+    let mut orient = request("hook_event");
+    orient.hook_event_name = Some("PostToolUse".to_string());
+    orient.cwd = Some("/tmp/engram".to_string());
+    orient.tool_name = Some("mcp__engram__orient".to_string());
+    tools::harness_new(&state, orient)
+        .await
+        .expect("orient posttool hook should work");
+
+    let mut allowed = request("hook_event");
+    allowed.hook_event_name = Some("PreToolUse".to_string());
+    allowed.cwd = Some("/tmp/engram".to_string());
+    allowed.tool_name = Some("Bash".to_string());
+    let allowed_response = tools::harness_new(&state, allowed)
+        .await
+        .expect("pretool hook should work after orient");
+    let allowed_json = parse_json(&allowed_response);
+    assert_eq!(allowed_json["continue"], true);
+    assert!(allowed_json
+        .get("hookSpecificOutput")
+        .and_then(|output| output.get("permissionDecision"))
+        .is_none());
 }
 
 #[tokio::test]

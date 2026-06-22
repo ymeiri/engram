@@ -29,6 +29,8 @@ pub enum AgentObligationKind {
     TestVerification,
     /// Commit work requires checking project/user commit preferences.
     CommitPreferenceCheck,
+    /// Harness requires initial Engram orientation before non-Engram tool use.
+    EngramOrientation,
     /// Custom obligation kind.
     Custom(String),
 }
@@ -44,6 +46,7 @@ impl std::fmt::Display for AgentObligationKind {
             Self::HandoffUpdate => write!(f, "handoff_update"),
             Self::TestVerification => write!(f, "test_verification"),
             Self::CommitPreferenceCheck => write!(f, "commit_preference_check"),
+            Self::EngramOrientation => write!(f, "engram_orientation"),
             Self::Custom(value) => write!(f, "{value}"),
         }
     }
@@ -64,6 +67,7 @@ impl AgentObligationKind {
             "commit" | "commit_preference" | "commit_preference_check" => {
                 Self::CommitPreferenceCheck
             }
+            "orientation" | "orient" | "engram_orientation" => Self::EngramOrientation,
             other => Self::Custom(other.to_string()),
         }
     }
@@ -128,6 +132,8 @@ pub enum AgentObligationResolutionKind {
     TestsRun,
     /// Commit preferences were checked.
     PreferenceChecked,
+    /// Engram orientation was completed.
+    EngramOriented,
     /// Agent intentionally skipped with a reason.
     SkippedWithReason,
     /// Custom resolution.
@@ -147,6 +153,7 @@ impl std::fmt::Display for AgentObligationResolutionKind {
             Self::DesignContextRead => write!(f, "design_context_read"),
             Self::TestsRun => write!(f, "tests_run"),
             Self::PreferenceChecked => write!(f, "preference_checked"),
+            Self::EngramOriented => write!(f, "engram_oriented"),
             Self::SkippedWithReason => write!(f, "skipped_with_reason"),
             Self::Custom(value) => write!(f, "{value}"),
         }
@@ -168,6 +175,7 @@ impl AgentObligationResolutionKind {
             "design" | "design_context_read" => Self::DesignContextRead,
             "test" | "tests" | "tests_run" => Self::TestsRun,
             "preference" | "preference_checked" => Self::PreferenceChecked,
+            "orient" | "oriented" | "engram_oriented" => Self::EngramOriented,
             "skip" | "skipped" | "skipped_with_reason" => Self::SkippedWithReason,
             other => Self::Custom(other.to_string()),
         }

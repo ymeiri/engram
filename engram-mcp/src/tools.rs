@@ -4,7 +4,7 @@
 
 use engram_core::document::DocSearchResult;
 use engram_core::entity::{EntityType, RelationType};
-use engram_core::harness::HarnessKind;
+use engram_core::harness::{HarnessEnforcementProfile, HarnessKind};
 use engram_core::knowledge::DocType;
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChange, MemoryChangeType, MemoryCursor,
@@ -7491,8 +7491,9 @@ pub struct OrientRequest {
     /// Maximum memory items per grouped bucket
     pub limit: Option<usize>,
     /// Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance.
+    /// When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output.
     #[schemars(
-        description = "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+        description = "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
     )]
     pub response_shape: Option<OrientResponseShape>,
 }
@@ -7581,7 +7582,9 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         request.project, request.cwd
     );
 
-    let response_shape = request.response_shape.unwrap_or_default();
+    let response_shape = request
+        .response_shape
+        .unwrap_or_else(|| default_orient_response_shape(request.agent.as_deref()));
     let cwd = request.cwd;
     let project = request.project;
     let external_session_id = resolve_external_session_id(request.external_session_id.clone());
@@ -7626,6 +7629,19 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
                 OrientLeanResponse::from_packet(packet, obligation_summary, open_obligations);
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
+    }
+}
+
+fn default_orient_response_shape(agent: Option<&str>) -> OrientResponseShape {
+    if agent.is_some_and(|agent| {
+        matches!(
+            agent.to_lowercase().replace('-', "_").as_str(),
+            "claude" | "claude_code" | "claudecode"
+        )
+    }) {
+        OrientResponseShape::Lean
+    } else {
+        OrientResponseShape::Full
     }
 }
 
@@ -7837,6 +7853,11 @@ pub struct HarnessRequest {
     /// Harness name: claude_code, codex, gemini_cli, cursor, or generic
     #[schemars(description = "Harness name: claude_code, codex, gemini_cli, cursor, or generic")]
     pub harness: Option<String>,
+    /// Lifecycle enforcement profile: soft, graduated, or strict. Defaults to graduated.
+    #[schemars(
+        description = "Lifecycle enforcement profile: soft, graduated, or strict. Defaults to graduated."
+    )]
+    pub enforcement: Option<String>,
     /// Install root. Defaults to the user's home directory.
     #[schemars(description = "Install root. Defaults to the user's home directory.")]
     pub root: Option<String>,
@@ -7903,24 +7924,41 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
         .as_deref()
         .map(HarnessKind::parse)
         .unwrap_or_default();
+    let enforcement_profile = parse_optional_enforcement(&request.enforcement)?;
     let root = request.root.as_deref().map(Path::new);
 
     match request.action.to_lowercase().as_str() {
         "status" => {
             let report = service
-                .status(harness, root, &request.observed_mcp_tools)
+                .status_with_enforcement(
+                    harness,
+                    root,
+                    &request.observed_mcp_tools,
+                    enforcement_profile,
+                )
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
         }
         "doctor" => {
             let report = service
-                .doctor(harness, root, &request.observed_mcp_tools)
+                .doctor_with_enforcement(
+                    harness,
+                    root,
+                    &request.observed_mcp_tools,
+                    enforcement_profile,
+                )
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
         }
-        "render_policy" | "render" => service.render_policy(harness).map_err(|e| e.to_string()),
+        "render_policy" | "render" => service
+            .render_policy_with_enforcement(harness, enforcement_profile)
+            .map_err(|e| e.to_string()),
         "render_adapter" => {
-            let adapters = service.render_adapters(harness, request.adapter.as_deref());
+            let adapters = service.render_adapters_with_enforcement(
+                harness,
+                request.adapter.as_deref(),
+                enforcement_profile,
+            );
             serde_json::to_string_pretty(&serde_json::json!({
                 "count": adapters.len(),
                 "adapters": adapters
@@ -7936,6 +7974,7 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                         write: request.write.unwrap_or(false),
                         adopt_user_owned: request.adopt_user_owned.unwrap_or(false),
                         settings_target: parse_optional_settings_target(&request.settings_target)?,
+                        enforcement_profile,
                     },
                 )
                 .map_err(|e| e.to_string())?;
@@ -7947,6 +7986,7 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
             let handoff_guard = state.handoff_service.read().await;
             let event = HarnessHookEvent {
                 harness,
+                enforcement_profile,
                 hook_event_name: request
                     .hook_event_name
                     .clone()
@@ -8007,6 +8047,14 @@ fn parse_optional_settings_target(value: &Option<String>) -> Result<HarnessSetti
         .map(HarnessSettingsTarget::parse)
         .transpose()
         .map(|target| target.unwrap_or_default())
+}
+
+fn parse_optional_enforcement(value: &Option<String>) -> Result<HarnessEnforcementProfile, String> {
+    value
+        .as_deref()
+        .map(HarnessEnforcementProfile::parse)
+        .transpose()
+        .map(|profile| profile.unwrap_or_default())
 }
 
 // =============================================================================
@@ -11281,7 +11329,7 @@ mod tests {
         );
         assert_eq!(
             properties["response_shape"]["description"],
-            "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+            "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
         );
     }
 

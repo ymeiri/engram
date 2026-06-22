@@ -10,7 +10,8 @@ use clap::{Parser, Subcommand, ValueEnum};
 use engram_core::entity::{EntityType, RelationType};
 use engram_core::graph::MemorySubgraph;
 use engram_core::harness::{
-    HarnessAdapterStatus, HarnessInstallReport, HarnessKind, HarnessStatusReport,
+    HarnessAdapterStatus, HarnessEnforcementProfile, HarnessInstallReport, HarnessKind,
+    HarnessStatusReport,
 };
 use engram_core::knowledge::DocType;
 use engram_core::lint::{LintFinding, LintReport, LintSeverity};
@@ -1984,6 +1985,23 @@ impl From<HarnessKindArg> for HarnessKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum HarnessEnforcementArg {
+    Soft,
+    Graduated,
+    Strict,
+}
+
+impl From<HarnessEnforcementArg> for HarnessEnforcementProfile {
+    fn from(value: HarnessEnforcementArg) -> Self {
+        match value {
+            HarnessEnforcementArg::Soft => Self::Soft,
+            HarnessEnforcementArg::Graduated => Self::Graduated,
+            HarnessEnforcementArg::Strict => Self::Strict,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum SetupAgentArg {
     ClaudeCode,
@@ -2032,6 +2050,10 @@ enum HarnessCommands {
         #[arg(long, value_enum, default_value = "generic")]
         harness: HarnessKindArg,
 
+        /// Lifecycle enforcement profile
+        #[arg(long, value_enum, default_value = "graduated")]
+        enforcement: HarnessEnforcementArg,
+
         /// Install root, defaults to home directory
         #[arg(long)]
         root: Option<String>,
@@ -2050,6 +2072,10 @@ enum HarnessCommands {
         /// Harness to check
         #[arg(long, value_enum, default_value = "generic")]
         harness: HarnessKindArg,
+
+        /// Lifecycle enforcement profile
+        #[arg(long, value_enum, default_value = "graduated")]
+        enforcement: HarnessEnforcementArg,
 
         /// Install root, defaults to home directory
         #[arg(long)]
@@ -2070,6 +2096,10 @@ enum HarnessCommands {
         #[arg(long, value_enum, default_value = "generic")]
         harness: HarnessKindArg,
 
+        /// Lifecycle enforcement profile
+        #[arg(long, value_enum, default_value = "graduated")]
+        enforcement: HarnessEnforcementArg,
+
         /// Render a specific adapter by name instead of the policy JSON
         #[arg(long)]
         adapter: Option<String>,
@@ -2084,6 +2114,10 @@ enum HarnessCommands {
         /// Harness to install
         #[arg(long, value_enum, default_value = "generic")]
         harness: HarnessKindArg,
+
+        /// Lifecycle enforcement profile
+        #[arg(long, value_enum, default_value = "graduated")]
+        enforcement: HarnessEnforcementArg,
 
         /// Install root, defaults to home directory
         #[arg(long)]
@@ -2111,6 +2145,10 @@ enum HarnessCommands {
         /// Harness handling the hook
         #[arg(long, value_enum, default_value = "claude-code")]
         harness: HarnessKindArg,
+
+        /// Lifecycle enforcement profile
+        #[arg(long, value_enum, default_value = "graduated")]
+        enforcement: HarnessEnforcementArg,
 
         /// Hook event name, e.g. UserPromptSubmit, PostToolUseFailure, Stop
         #[arg(long)]
@@ -2987,6 +3025,10 @@ fn harness_hook_daemon_arguments(hook_event: &HarnessHookEvent) -> serde_json::V
         serde_json::json!(hook_event.harness.to_string()),
     );
     map.insert(
+        "enforcement".to_string(),
+        serde_json::json!(hook_event.enforcement_profile.to_string()),
+    );
+    map.insert(
         "hook_event_name".to_string(),
         serde_json::json!(hook_event.hook_event_name),
     );
@@ -3704,6 +3746,7 @@ fn print_harness_status(report: &HarnessStatusReport) {
     println!("Harness: {}", report.harness);
     println!("Root:    {}", report.root);
     println!("Ready:   {}", report.ready);
+    println!("Profile: {}", report.lifecycle.enforcement_profile);
     println!(
         "Lifecycle: soft_contract={}, enforced={}",
         report.lifecycle.soft_contract, report.lifecycle.enforced
@@ -3767,6 +3810,7 @@ fn print_harness_status(report: &HarnessStatusReport) {
 
 fn print_harness_install(report: &HarnessInstallReport) {
     println!("Harness install: {}", report.harness);
+    println!("Profile:         {}", report.enforcement_profile);
     println!("Root:            {}", report.root);
     println!("Dry-run:         {}", report.dry_run);
     println!("Planned files:   {}", report.planned.len());
@@ -3885,6 +3929,7 @@ fn run_setup(
             write,
             adopt_user_owned: false,
             settings_target,
+            enforcement_profile: HarnessEnforcementProfile::default(),
         },
     )?;
     print_harness_install(&report);
@@ -8674,14 +8719,16 @@ async fn main() -> Result<()> {
             match command {
                 HarnessCommands::Status {
                     harness,
+                    enforcement,
                     root,
                     observed_mcp_tools,
                     json,
                 } => {
-                    let report = service.status(
+                    let report = service.status_with_enforcement(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
                         &observed_mcp_tools,
+                        enforcement.into(),
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -8691,14 +8738,16 @@ async fn main() -> Result<()> {
                 }
                 HarnessCommands::Doctor {
                     harness,
+                    enforcement,
                     root,
                     observed_mcp_tools,
                     json,
                 } => {
-                    let report = service.doctor(
+                    let report = service.doctor_with_enforcement(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
                         &observed_mcp_tools,
+                        enforcement.into(),
                     )?;
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
@@ -8708,12 +8757,18 @@ async fn main() -> Result<()> {
                 }
                 HarnessCommands::Render {
                     harness,
+                    enforcement,
                     adapter,
                     json,
                 } => {
                     let harness = harness.into();
+                    let enforcement = enforcement.into();
                     if let Some(adapter) = adapter {
-                        let adapters = service.render_adapters(harness, Some(&adapter));
+                        let adapters = service.render_adapters_with_enforcement(
+                            harness,
+                            Some(&adapter),
+                            enforcement,
+                        );
                         if json {
                             println!("{}", serde_json::to_string_pretty(&adapters)?);
                         } else if adapters.is_empty() {
@@ -8727,12 +8782,14 @@ async fn main() -> Result<()> {
                             }
                         }
                     } else {
-                        let policy = service.render_policy(harness)?;
+                        let policy =
+                            service.render_policy_with_enforcement(harness, enforcement)?;
                         println!("{policy}");
                     }
                 }
                 HarnessCommands::Install {
                     harness,
+                    enforcement,
                     root,
                     write,
                     adopt_user_owned,
@@ -8746,6 +8803,7 @@ async fn main() -> Result<()> {
                             write,
                             adopt_user_owned,
                             settings_target,
+                            enforcement_profile: enforcement.into(),
                         },
                     )?;
                     if json {
@@ -8756,6 +8814,7 @@ async fn main() -> Result<()> {
                 }
                 HarnessCommands::Hook {
                     harness,
+                    enforcement,
                     event,
                     session_id,
                     cwd,
@@ -8781,6 +8840,7 @@ async fn main() -> Result<()> {
                 } => {
                     let hook_event = HarnessHookEvent {
                         harness: harness.into(),
+                        enforcement_profile: enforcement.into(),
                         hook_event_name: event,
                         session_id,
                         cwd,
@@ -10542,6 +10602,8 @@ mod tests {
             "status",
             "--harness",
             "codex",
+            "--enforcement",
+            "strict",
             "--observed-mcp-tool",
             "orient",
             "--observed-mcp-tool",
@@ -10553,8 +10615,11 @@ mod tests {
         match cli.command {
             Commands::Harness { command } => match command {
                 HarnessCommands::Status {
-                    observed_mcp_tools, ..
+                    enforcement,
+                    observed_mcp_tools,
+                    ..
                 } => {
+                    assert!(matches!(enforcement, HarnessEnforcementArg::Strict));
                     assert_eq!(observed_mcp_tools, vec!["orient", "telemetry"]);
                 }
                 _ => panic!("expected status command"),

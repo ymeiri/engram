@@ -1411,7 +1411,7 @@ async fn test_mcp_orient_lean_response_shape_omits_duplicate_payloads() {
             arm: None,
             include_recent_commits: Some(false),
             limit: Some(5),
-            response_shape: None,
+            response_shape: Some(OrientResponseShape::Full),
         },
     )
     .await
@@ -1463,6 +1463,55 @@ async fn test_mcp_orient_lean_response_shape_omits_duplicate_payloads() {
         .get("trust")
         .is_none());
     assert!(lean_response.len() < full_response.len());
+}
+
+#[tokio::test]
+async fn test_mcp_orient_claude_omitted_shape_defaults_to_lean_but_explicit_full_wins() {
+    let state = setup_tool_state().await;
+
+    let omitted_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("verify Claude default response shape".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("verify_decision".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("omitted Claude orient should work");
+    let omitted_json = parse_json(&omitted_response);
+    assert_eq!(omitted_json["response_shape"], "lean");
+    assert!(omitted_json.get("context_pack").is_none());
+
+    let explicit_full_response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some("verify Claude explicit full response shape".to_string()),
+            project: Some("engram".to_string()),
+            agent: Some("claude_code".to_string()),
+            external_session_id: None,
+            intent: Some("verify_decision".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: Some(OrientResponseShape::Full),
+        },
+    )
+    .await
+    .expect("explicit full Claude orient should work");
+    let explicit_full_json = parse_json(&explicit_full_response);
+    assert!(explicit_full_json["context_pack"].is_string());
+    assert!(explicit_full_json.get("response_shape").is_none());
 }
 
 #[tokio::test]
@@ -2139,7 +2188,7 @@ async fn test_mcp_orient_puts_follow_user_preference_in_hot_context() {
             arm: Some("test_hot_context".to_string()),
             include_recent_commits: Some(false),
             limit: Some(5),
-            response_shape: None,
+            response_shape: Some(OrientResponseShape::Full),
         },
     )
     .await

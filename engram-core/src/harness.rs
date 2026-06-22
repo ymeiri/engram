@@ -1,8 +1,7 @@
 //! Agent harness policy types.
 //!
-//! The harness layer is a soft contract between Engram and agent surfaces. It
-//! describes the lifecycle steps an agent should naturally follow and the local
-//! adapters that make those steps discoverable.
+//! The harness layer describes the lifecycle steps an agent should follow and
+//! the local adapters that make those steps discoverable or enforceable.
 
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +45,49 @@ impl HarnessKind {
             "cursor" | "cursor_agent" => Self::Cursor,
             _ => Self::Generic,
         }
+    }
+}
+
+/// Harness lifecycle enforcement profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessEnforcementProfile {
+    /// Advisory-only lifecycle. Hooks never block agent work.
+    Soft,
+    /// GA default: block high-value boundaries once, with an escape for host loops.
+    #[default]
+    Graduated,
+    /// Strict lifecycle. Hooks keep blocking until obligations are closed or Engram is degraded.
+    Strict,
+}
+
+impl std::fmt::Display for HarnessEnforcementProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Soft => write!(f, "soft"),
+            Self::Graduated => write!(f, "graduated"),
+            Self::Strict => write!(f, "strict"),
+        }
+    }
+}
+
+impl HarnessEnforcementProfile {
+    /// Parse an enforcement profile name.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.to_lowercase().replace('-', "_").as_str() {
+            "soft" | "advisory" => Ok(Self::Soft),
+            "graduated" | "default" | "ga" => Ok(Self::Graduated),
+            "strict" | "hard" => Ok(Self::Strict),
+            _ => Err(format!(
+                "invalid harness enforcement '{value}'; expected soft, graduated, or strict"
+            )),
+        }
+    }
+
+    /// True when the profile is advisory only.
+    #[must_use]
+    pub const fn is_soft(self) -> bool {
+        matches!(self, Self::Soft)
     }
 }
 
@@ -158,11 +200,13 @@ pub struct HarnessAdapterCheck {
     pub message: String,
 }
 
-/// Soft harness policy.
+/// Harness policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HarnessPolicy {
     /// Harness the policy targets.
     pub harness: HarnessKind,
+    /// Canonical lifecycle enforcement profile.
+    pub enforcement_profile: HarnessEnforcementProfile,
     /// Whether lifecycle enforcement is advisory rather than blocking.
     pub soft_contract: bool,
     /// Lifecycle triggers agents should follow.
@@ -176,6 +220,8 @@ pub struct HarnessPolicy {
 /// Structured lifecycle compliance state for a harness report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HarnessLifecycleReport {
+    /// Canonical lifecycle enforcement profile.
+    pub enforcement_profile: HarnessEnforcementProfile,
     /// Whether lifecycle enforcement is advisory rather than blocking.
     pub soft_contract: bool,
     /// Whether Engram enforces lifecycle compliance as a hard runtime gate.
@@ -272,6 +318,8 @@ pub struct HarnessInstallFile {
 pub struct HarnessInstallReport {
     /// Harness installed.
     pub harness: HarnessKind,
+    /// Lifecycle enforcement profile used for generated files.
+    pub enforcement_profile: HarnessEnforcementProfile,
     /// Root used for installation.
     pub root: String,
     /// True when no writes were performed.

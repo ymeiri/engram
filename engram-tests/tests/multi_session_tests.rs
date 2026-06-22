@@ -704,7 +704,7 @@ async fn test_mcp_tools_list_orient_schema_exposes_context_contract() {
     );
     assert_eq!(
         properties["response_shape"]["description"],
-        "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance."
+        "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
     );
 
     daemon.stop().await.expect("Failed to stop daemon");
