@@ -117,6 +117,8 @@ jobs:
             libssl-dev netcat-openbsd perl pkg-config protobuf-compiler tar xz-utils zstd
           rm -rf /var/lib/apt/lists/*
       - uses: actions/checkout@v5
+      - name: Mark checkout safe for container Git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
