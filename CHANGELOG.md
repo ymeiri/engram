@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Expanded GA package-smoke CI, Homebrew rendering, release-gate artifact expectations, and
   published-release verification to cover the broader macOS/Linux/Windows platform matrix.
+- Reworked Linux package-smoke CI to build release artifacts inside an Ubuntu 22.04 userspace
+  baseline instead of inheriting newer hosted-runner glibc symbols.
 - Hardened GA release-gate JSON mode so branch mismatch, branch-sync, and tracked-change
   preflight failures emit structured failure evidence before exiting.
 - Hardened GA release-gate JSON mode so hosted CI discovery, inspection, metadata, and job
@@ -129,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of silently falling back to automatic port selection.
 - Hardened package install smoke verification so explicit `SMOKE_PORT` overrides fail closed when
   the requested local port is already in use.
+- Hardened package install smoke verification so Linux release artifacts fail if the packaged binary
+  requires glibc symbols newer than `GLIBC_2.35`.
 - Hardened package install smoke verification so non-default `DIST_DIR` inputs require
   `ALLOW_PACKAGE_DIST_DIR_OVERRIDE=1` before local release assets are consumed.
 - Hardened package install smoke verification so malformed workspace package versions fail closed
