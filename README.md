@@ -25,8 +25,9 @@ tool history across sessions without embedding API calls.
 > MCP-compatible hosts may work with the same server, but they are not part of the supported
 > 0.2.x setup matrix.
 >
-> **Current release state:** the latest published artifact is still `v0.2.0-beta.2`; final
-> `v0.2.0` artifacts must pass exact-head release validation before publication.
+> **Current release state:** the latest supported stable line is `v0.2.x`. Linux Homebrew and
+> direct tarball installs should use `v0.2.1` or later; the `v0.2.0` Linux artifacts were built on
+> a newer glibc baseline than some workspaces provide.
 >
 > **First-run cache note:** semantic search uses a local ONNX embedding model. First use may download
 > `all-MiniLM-L6-v2` from Hugging Face into the local cache unless you pre-warm it with
@@ -44,13 +45,14 @@ brew install engram
 engram --version
 ```
 
-The Homebrew formula supports Apple Silicon macOS, Intel macOS, Linux x64, and Linux ARM64 once the
-matching release artifacts are published. Windows uses release zip assets instead of Homebrew.
+The Homebrew formula supports Apple Silicon macOS, Intel macOS, Linux x64, and Linux ARM64. Linux
+release artifacts are built on an Ubuntu 22.04 glibc baseline and package-smoke checked not to
+require symbols newer than `GLIBC_2.35`. Windows uses release zip assets instead of Homebrew.
 
 From a published release artifact:
 
 ```bash
-version=0.2.0-beta.2  # use 0.2.0 after the GA release is published
+version=0.2.1
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target="aarch64-apple-darwin" ;;
   Darwin-x86_64) target="x86_64-apple-darwin" ;;
@@ -78,11 +80,11 @@ engram --version
 On Windows PowerShell:
 
 ```powershell
-$version = "0.2.0-beta.2" # use 0.2.0 after the GA release is published
+$version = "0.2.1"
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
 switch ($arch) {
   "X64" { $target = "x86_64-pc-windows-msvc" }
-  default { throw "unsupported Windows architecture for published v0.2.0 zip assets: $arch" }
+  default { throw "unsupported Windows architecture for published v0.2.1 zip assets: $arch" }
 }
 $archive = "engram-$version-$target.zip"
 $base = "https://github.com/ymeiri/engram/releases/download/v$version"

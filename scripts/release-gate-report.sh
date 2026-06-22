@@ -42,8 +42,12 @@ if [[ "${RELEASE_VERSION+x}" == "x" ]]; then
     release_version="$RELEASE_VERSION"
     release_version_explicit=1
 fi
-default_release_notes_path="$repo_root/docs/RELEASE_NOTES_V0_2_0.md"
-release_notes_path="${RELEASE_NOTES_PATH-$default_release_notes_path}"
+default_release_notes_path=""
+release_notes_path="${RELEASE_NOTES_PATH-}"
+release_notes_path_explicit=0
+if [[ "${RELEASE_NOTES_PATH+x}" == "x" ]]; then
+    release_notes_path_explicit=1
+fi
 allow_release_notes_path_override="${ALLOW_RELEASE_NOTES_PATH_OVERRIDE:-0}"
 default_release_repo="ymeiri/engram"
 release_repo="${RELEASE_REPOSITORY-$default_release_repo}"
@@ -504,6 +508,13 @@ if [[ ! "$release_version" =~ $release_version_pattern ]]; then
     fail_config_preflight "$release_version_error"
 fi
 release_tag="v${release_version}"
+release_notes_slug="$(printf '%s' "$release_version" |
+    tr '[:lower:]' '[:upper:]' |
+    sed 's/[^A-Z0-9]/_/g')"
+default_release_notes_path="$repo_root/docs/RELEASE_NOTES_V${release_notes_slug}.md"
+if [[ "$release_notes_path_explicit" != "1" ]]; then
+    release_notes_path="$default_release_notes_path"
+fi
 
 if [[ -n "$hosted_run_id" && ! "$hosted_run_id" =~ ^[0-9]+$ ]]; then
     fail_config_preflight \
@@ -2753,7 +2764,7 @@ if [[ "$target" == "ga" ]]; then
             grep -Fq "live \`/hooks\` effective-hook visibility" "$release_notes_path"; then
             release_scope_native_claude_ack=true
         fi
-        if grep -Fq "v0.2.0 does not claim" "$release_notes_path" &&
+        if grep -Fq "v${release_version} does not claim" "$release_notes_path" &&
             grep -Fq "broad legacy deprecation" "$release_notes_path" &&
             grep -Fq "unrestricted automated" "$release_notes_path"; then
             release_scope_lifecycle_m6_ack=true

@@ -89,19 +89,69 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --locked --no-deps
 
-  package-smoke:
+  package-smoke-linux:
+    name: Package Smoke (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    container: ubuntu:22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux x64
+            os: ubuntu-22.04
+            archive_triple: x86_64-unknown-linux-gnu
+          - platform: Linux ARM64
+            os: ubuntu-24.04-arm
+            archive_triple: aarch64-unknown-linux-gnu
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_RELEASE_DEBUG: 0
+      ENGRAM_EMBED_CACHE_DIR: ${{ github.workspace }}/.fastembed_cache
+      ENGRAM_MAX_GLIBC_VERSION: "2.35"
+    steps:
+      - name: Install Linux package build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            binutils build-essential ca-certificates clang cmake curl git jq libclang-dev \
+            libssl-dev netcat-openbsd perl pkg-config protobuf-compiler tar xz-utils zstd
+          rm -rf /var/lib/apt/lists/*
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Cache embedding model
+        uses: actions/cache@v5
+        with:
+          path: .fastembed_cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-fastembed-all-MiniLM-L6-v2-v1
+      - name: Verify package host triple
+        shell: bash
+        run: |
+          actual_triple="$(rustc -vV | awk '/^host:/ { print $2 }')"
+          if [ "$actual_triple" != "${{ matrix.archive_triple }}" ]; then
+            echo "expected ${{ matrix.archive_triple }}, got $actual_triple" >&2
+            exit 1
+          fi
+      - name: Package install smoke (Unix)
+        run: ./scripts/package-install-smoke.sh
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: engram-${{ matrix.archive_triple }}
+          path: |
+            dist/engram-*-${{ matrix.archive_triple }}.tar.gz
+            dist/engram-*-${{ matrix.archive_triple }}.tar.gz.sha256
+          if-no-files-found: error
+
+  package-smoke-native:
     name: Package Smoke (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: Linux x64
-            os: ubuntu-latest
-            archive_triple: x86_64-unknown-linux-gnu
-          - platform: Linux ARM64
-            os: ubuntu-24.04-arm
-            archive_triple: aarch64-unknown-linux-gnu
           - platform: macOS Apple Silicon
             os: macos-latest
             archive_triple: aarch64-apple-darwin

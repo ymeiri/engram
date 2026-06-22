@@ -58,8 +58,14 @@ if [[ ! "$host_triple" =~ $host_triple_pattern ]]; then
     printf 'error: host triple must be a Rust target triple, got %s\n' "$host_triple" >&2
     exit 1
 fi
+max_linux_glibc_version="${ENGRAM_MAX_GLIBC_VERSION:-2.35}"
 if [[ "$host_triple" == *-pc-windows-msvc ]]; then
     printf 'error: Windows package smoke must use scripts/package-install-smoke-windows.ps1\n' >&2
+    exit 1
+fi
+if [[ ! "$max_linux_glibc_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    printf 'error: ENGRAM_MAX_GLIBC_VERSION must be major.minor, got %s\n' \
+        "$max_linux_glibc_version" >&2
     exit 1
 fi
 archive_name="engram-${package_version}-${host_triple}"
@@ -227,6 +233,40 @@ validate_archive_paths() {
     done
 }
 
+validate_linux_glibc_baseline() {
+    local binary="$1"
+    local versions_file="$work_dir/glibc-versions.txt"
+    local highest_required
+
+    command -v readelf >/dev/null 2>&1 || {
+        printf 'error: required tool is missing for Linux package smoke: readelf\n' >&2
+        exit 1
+    }
+
+    readelf --version-info "$binary" |
+        sed -n 's/.*Name: GLIBC_\([0-9][0-9.]*\).*/\1/p' |
+        sort -Vu >"$versions_file"
+
+    if [[ ! -s "$versions_file" ]]; then
+        printf 'error: could not determine GLIBC requirements for %s\n' "$binary" >&2
+        exit 1
+    fi
+
+    highest_required="$(tail -n 1 "$versions_file")"
+    if [[ "$highest_required" != "$max_linux_glibc_version" &&
+        "$(printf '%s\n%s\n' "$max_linux_glibc_version" "$highest_required" |
+            sort -V | tail -n 1)" == "$highest_required" ]]; then
+        printf 'error: packaged Linux binary requires GLIBC_%s, above supported baseline GLIBC_%s\n' \
+            "$highest_required" "$max_linux_glibc_version" >&2
+        printf 'required GLIBC versions:\n' >&2
+        sed 's/^/  GLIBC_/' "$versions_file" >&2
+        exit 1
+    fi
+
+    printf 'Linux GLIBC baseline OK: highest required GLIBC_%s <= GLIBC_%s\n' \
+        "$highest_required" "$max_linux_glibc_version"
+}
+
 command -v jq >/dev/null 2>&1 || {
     printf 'error: required tool is missing: jq\n' >&2
     exit 1
@@ -385,6 +425,9 @@ done
 if [[ ! -x "$package_dir/engram" ]]; then
     printf 'error: packaged engram binary is not executable: %s\n' "$package_dir/engram" >&2
     exit 1
+fi
+if [[ "$host_triple" == *-unknown-linux-gnu ]]; then
+    run_step "verify Linux GLIBC baseline" validate_linux_glibc_baseline "$package_dir/engram"
 fi
 
 manifest="$package_dir/MANIFEST.json"
