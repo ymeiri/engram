@@ -30,9 +30,9 @@ engram setup --agent codex --write
 engram setup --agent cursor --write
 ```
 
-Claude Code exposes lifecycle hooks, so setup can write hook files and merge Claude settings.
-Codex and Cursor use generated skills/instructions; they still need MCP configured so the agent can
-call Engram tools.
+Claude Code exposes lifecycle hooks, so setup writes hook files, merges Claude settings, and
+registers or updates the user-scope Claude MCP server named `engram`. Codex and Cursor use
+generated skills/instructions; they still need MCP configured so the agent can call Engram tools.
 
 By default, setup writes under your home directory. Use `--root .` from a repository if you want
 project-local agent files.
@@ -53,7 +53,16 @@ personal, gitignored settings:
 engram setup --agent claude-code --write --settings-target settings.local.json
 ```
 
-Manual MCP configuration in `~/.claude.json`:
+The Claude Code write step runs the equivalent of:
+
+```bash
+claude mcp add -s user engram -- /absolute/path/to/engram serve
+```
+
+If a user-scope `engram` entry already exists, setup replaces it with the resolved current Engram
+binary path. Restart Claude Code after setup so the hooks and MCP entry are loaded.
+
+Manual MCP configuration in `~/.claude.json` is still supported for advanced setups:
 
 ```json
 {

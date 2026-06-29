@@ -57,6 +57,8 @@ use engram_index::{
 use engram_mcp::EngramServer;
 use engram_store::{connect_and_init, StoreConfig};
 use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use time::OffsetDateTime;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -3870,7 +3872,7 @@ fn prompt_setup_agent() -> Result<SetupAgentArg> {
 
 fn confirm_setup_write(agent: SetupAgentArg) -> Result<bool> {
     print!(
-        "Write engram adapter/hook configuration for {}? [y/N]: ",
+        "Write engram adapter/hook/MCP configuration for {}? [y/N]: ",
         agent.label()
     );
     std::io::stdout().flush()?;
@@ -3881,6 +3883,197 @@ fn confirm_setup_write(agent: SetupAgentArg) -> Result<bool> {
         input.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"
     ))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ClaudeMcpRegistrationStatus {
+    DryRun { binary: PathBuf },
+    Added { binary: PathBuf },
+    Updated { binary: PathBuf },
+    ClaudeCliMissing { binary: PathBuf },
+    Failed { binary: PathBuf, message: String },
+}
+
+fn homebrew_stable_engram_binary(current_exe: &Path, brew_prefix: &Path) -> Option<PathBuf> {
+    let brew_root = brew_prefix.parent()?.parent()?;
+    let current = current_exe.to_string_lossy();
+    let cellar_marker = format!("{}/Cellar/engram/", brew_root.display());
+    if current.contains(&cellar_marker) {
+        return Some(brew_prefix.join("bin/engram"));
+    }
+    None
+}
+
+fn detected_homebrew_engram_binary(current_exe: &Path) -> Option<PathBuf> {
+    if !current_exe.to_string_lossy().contains("/Cellar/engram/") {
+        return None;
+    }
+    let output = Command::new("brew")
+        .args(["--prefix", "ymeiri/engram/engram"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let prefix = String::from_utf8(output.stdout).ok()?;
+    let prefix = PathBuf::from(prefix.trim());
+    let binary = homebrew_stable_engram_binary(current_exe, &prefix)?;
+    binary.is_file().then_some(binary)
+}
+
+fn resolve_setup_engram_binary() -> Result<PathBuf> {
+    let current_exe = std::env::current_exe()?;
+    Ok(detected_homebrew_engram_binary(&current_exe).unwrap_or(current_exe))
+}
+
+fn claude_mcp_add_engram(binary: &Path) -> std::io::Result<std::process::Output> {
+    Command::new("claude")
+        .args(["mcp", "add", "-s", "user", "engram", "--"])
+        .arg(binary)
+        .arg("serve")
+        .output()
+}
+
+fn claude_mcp_remove_user_engram() -> std::io::Result<std::process::Output> {
+    Command::new("claude")
+        .args(["mcp", "remove", "-s", "user", "engram"])
+        .output()
+}
+
+fn register_claude_mcp_server(write: bool) -> ClaudeMcpRegistrationStatus {
+    let binary = match resolve_setup_engram_binary() {
+        Ok(binary) => binary,
+        Err(error) => {
+            return ClaudeMcpRegistrationStatus::Failed {
+                binary: PathBuf::from("engram"),
+                message: format!("could not resolve current engram executable: {error}"),
+            };
+        }
+    };
+
+    if !write {
+        return ClaudeMcpRegistrationStatus::DryRun { binary };
+    }
+
+    let output = match claude_mcp_add_engram(&binary) {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return ClaudeMcpRegistrationStatus::ClaudeCliMissing { binary };
+        }
+        Err(error) => {
+            return ClaudeMcpRegistrationStatus::Failed {
+                binary,
+                message: error.to_string(),
+            };
+        }
+    };
+
+    if output.status.success() {
+        return ClaudeMcpRegistrationStatus::Added { binary };
+    }
+
+    let add_message = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if add_message.to_ascii_lowercase().contains("already exists") {
+        let remove_output = match claude_mcp_remove_user_engram() {
+            Ok(output) => output,
+            Err(error) => {
+                return ClaudeMcpRegistrationStatus::Failed {
+                    binary,
+                    message: format!(
+                        "could not replace existing Claude MCP server `engram`: {error}"
+                    ),
+                };
+            }
+        };
+        if !remove_output.status.success() {
+            let remove_message = format!(
+                "{}{}",
+                String::from_utf8_lossy(&remove_output.stdout),
+                String::from_utf8_lossy(&remove_output.stderr)
+            );
+            return ClaudeMcpRegistrationStatus::Failed {
+                binary,
+                message: format!(
+                    "could not replace existing Claude MCP server `engram`: {}",
+                    remove_message.trim()
+                ),
+            };
+        }
+        let output = match claude_mcp_add_engram(&binary) {
+            Ok(output) => output,
+            Err(error) => {
+                return ClaudeMcpRegistrationStatus::Failed {
+                    binary,
+                    message: format!(
+                        "removed existing Claude MCP server `engram` but could not add the replacement: {error}"
+                    ),
+                };
+            }
+        };
+        if output.status.success() {
+            return ClaudeMcpRegistrationStatus::Updated { binary };
+        }
+        let replace_message = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return ClaudeMcpRegistrationStatus::Failed {
+            binary,
+            message: format!(
+                "removed existing Claude MCP server `engram` but could not add the replacement: {}",
+                replace_message.trim()
+            ),
+        };
+    }
+
+    ClaudeMcpRegistrationStatus::Failed {
+        binary,
+        message: add_message.trim().to_string(),
+    }
+}
+
+fn print_claude_mcp_registration(status: &ClaudeMcpRegistrationStatus) {
+    match status {
+        ClaudeMcpRegistrationStatus::DryRun { binary } => {
+            println!(
+                "Claude MCP server: will register `engram` -> {} serve",
+                binary.display()
+            );
+        }
+        ClaudeMcpRegistrationStatus::Added { binary } => {
+            println!(
+                "Claude MCP server: registered `engram` -> {} serve",
+                binary.display()
+            );
+        }
+        ClaudeMcpRegistrationStatus::Updated { binary } => {
+            println!(
+                "Claude MCP server: updated `engram` -> {} serve",
+                binary.display()
+            );
+        }
+        ClaudeMcpRegistrationStatus::ClaudeCliMissing { binary } => {
+            println!(
+                "Warning: Claude Code CLI was not found; could not register MCP server `engram` -> {} serve.",
+                binary.display()
+            );
+            println!(
+                "  Install Claude Code or add the MCP server manually before using Engram hooks."
+            );
+        }
+        ClaudeMcpRegistrationStatus::Failed { binary, message } => {
+            println!(
+                "Warning: could not register Claude MCP server `engram` -> {} serve: {}",
+                binary.display(),
+                message
+            );
+        }
+    }
 }
 
 fn print_setup_next_steps(agent: SetupAgentArg, wrote_files: bool) {
@@ -3933,6 +4126,10 @@ fn run_setup(
         },
     )?;
     print_harness_install(&report);
+    if agent == SetupAgentArg::ClaudeCode {
+        let mcp_status = register_claude_mcp_server(write);
+        print_claude_mcp_registration(&mcp_status);
+    }
     print_setup_next_steps(agent, !report.dry_run && !report.written.is_empty());
     Ok(())
 }
@@ -10684,6 +10881,25 @@ mod tests {
     fn setup_yes_requires_agent_for_noninteractive_runs() {
         let err = resolve_setup_agent(None, true).unwrap_err();
         assert!(err.to_string().contains("--yes requires --agent"));
+    }
+
+    #[test]
+    fn setup_claude_mcp_prefers_stable_homebrew_binary_for_cellar_exe() {
+        let current = Path::new("/opt/homebrew/Cellar/engram/0.2.3/bin/engram");
+        let prefix = Path::new("/opt/homebrew/opt/engram");
+
+        assert_eq!(
+            homebrew_stable_engram_binary(current, prefix),
+            Some(PathBuf::from("/opt/homebrew/opt/engram/bin/engram"))
+        );
+    }
+
+    #[test]
+    fn setup_claude_mcp_ignores_homebrew_prefix_for_non_homebrew_exe() {
+        let current = Path::new("/tmp/engram/target/debug/engram");
+        let prefix = Path::new("/opt/homebrew/opt/engram");
+
+        assert_eq!(homebrew_stable_engram_binary(current, prefix), None);
     }
 
     #[test]

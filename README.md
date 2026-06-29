@@ -26,9 +26,10 @@ tool history across sessions without embedding API calls.
 > 0.2.x setup matrix.
 >
 > **Current release state:** the latest supported stable line is `v0.2.x`. Claude Code Homebrew
-> installs should use `v0.2.2` or later for the home-directory setup hook fallback. Linux Homebrew
-> and direct tarball installs should use `v0.2.1` or later; the `v0.2.0` Linux artifacts were built
-> on a newer glibc baseline than some workspaces provide.
+> installs should use `v0.2.3` or later so guided setup installs hooks and registers the Claude
+> MCP server entry together. Linux Homebrew and direct tarball installs should use `v0.2.1` or
+> later; the `v0.2.0` Linux artifacts were built on a newer glibc baseline than some workspaces
+> provide.
 >
 > **First-run cache note:** semantic search uses a local ONNX embedding model. First use may download
 > `all-MiniLM-L6-v2` from Hugging Face into the local cache unless you pre-warm it with
@@ -53,7 +54,7 @@ require symbols newer than `GLIBC_2.35`. Windows uses release zip assets instead
 From a published release artifact:
 
 ```bash
-version=0.2.2
+version=0.2.3
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target="aarch64-apple-darwin" ;;
   Darwin-x86_64) target="x86_64-apple-darwin" ;;
@@ -81,11 +82,11 @@ engram --version
 On Windows PowerShell:
 
 ```powershell
-$version = "0.2.2"
+$version = "0.2.3"
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
 switch ($arch) {
   "X64" { $target = "x86_64-pc-windows-msvc" }
-  default { throw "unsupported Windows architecture for published v0.2.2 zip assets: $arch" }
+  default { throw "unsupported Windows architecture for published v0.2.3 zip assets: $arch" }
 }
 $archive = "engram-$version-$target.zip"
 $base = "https://github.com/ymeiri/engram/releases/download/v$version"
@@ -156,17 +157,23 @@ engram setup --agent cursor
 After reviewing the planned files, write the agent adapter and hook configuration:
 
 ```bash
+engram setup --agent claude-code --write
 engram setup --agent codex --write
+engram setup --agent cursor --write
 ```
 
 Setup supports Claude Code, Codex, and Cursor in the 0.2.x support matrix. It uses the same
 harness adapter installer as `engram harness install`, keeps writes approval-gated, and does not
 overwrite user-owned files unless you opt into the lower-level harness command.
 
+For Claude Code, the write step also registers or updates the user-scope Claude MCP server named
+`engram` so the generated hooks can call Engram immediately after Claude Code is restarted.
+
 By default, setup writes under your home directory. Use `--root .` from a repository if you want
 project-local agent files.
 
-Manual MCP configuration is also supported. For example, Claude Code can use:
+Manual MCP configuration is also supported for advanced or unsupported host setups. For example,
+Claude Code can use:
 
 Add to your Claude Code config (`~/.claude.json`):
 

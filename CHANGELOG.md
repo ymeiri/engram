@@ -284,6 +284,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   approval and a fresh full gate on the release head.
 
 ### Fixed
+- Fixed Claude Code guided setup so `engram setup --agent claude-code --write` registers the
+  user-scope Claude MCP server named `engram`, replaces stale existing entries, and uses the stable
+  Homebrew `opt` binary path when setup is run from a versioned Cellar executable.
 - Fixed Claude Code setup for Homebrew/global installs by making generated hook commands fall back
   from project-local `.claude/hooks` to `$HOME/.claude/hooks`, and by removing legacy project-only
   Engram hook entries during reinstall.
