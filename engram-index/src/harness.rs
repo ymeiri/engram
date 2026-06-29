@@ -27,9 +27,25 @@ use std::path::{Path, PathBuf};
 
 const MARKER_MD: &str = "<!-- engram:harness-adapter:v1 -->";
 const MARKER_SH: &str = "# engram:harness-adapter:v1";
-const CLAUDE_HOOK_COMMAND: &str =
+const CLAUDE_HOOK_COMMAND: &str = concat!(
+    "project_hook=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"; ",
+    "home_hook=\"${HOME:-}/.claude/hooks/engram-session-start.sh\"; ",
+    "if [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
+    "if [ -n \"${HOME:-}\" ] && [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; ",
+    "printf '%s\\n' 'Engram SessionStart hook skipped: hook file was not found under CLAUDE_PROJECT_DIR or HOME.' >&2; ",
+    "exit 0"
+);
+const CLAUDE_SESSION_END_HOOK_COMMAND: &str = concat!(
+    "project_hook=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"; ",
+    "home_hook=\"${HOME:-}/.claude/hooks/engram-session-end.sh\"; ",
+    "if [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
+    "if [ -n \"${HOME:-}\" ] && [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; ",
+    "printf '%s\\n' 'Engram SessionEnd hook skipped: hook file was not found under CLAUDE_PROJECT_DIR or HOME.' >&2; ",
+    "exit 0"
+);
+const CLAUDE_LEGACY_HOOK_COMMAND: &str =
     "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"";
-const CLAUDE_SESSION_END_HOOK_COMMAND: &str =
+const CLAUDE_LEGACY_SESSION_END_HOOK_COMMAND: &str =
     "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"";
 const CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING: &str = concat!(
     "Claude Code static readiness confirms generated adapter files and settings entries; ",
@@ -2137,6 +2153,26 @@ fn merge_claude_hooks(
         None,
         &claude_mcp_hook_handler("SessionEnd", enforcement_profile),
     );
+    changed |= remove_claude_hook_handler(
+        settings,
+        "SessionStart",
+        Some("startup|resume|compact"),
+        &json!({
+            "type": "command",
+            "command": CLAUDE_LEGACY_HOOK_COMMAND,
+            "timeout": 10
+        }),
+    );
+    changed |= remove_claude_hook_handler(
+        settings,
+        "SessionEnd",
+        None,
+        &json!({
+            "type": "command",
+            "command": CLAUDE_LEGACY_SESSION_END_HOOK_COMMAND,
+            "timeout": 15
+        }),
+    );
     changed |= ensure_claude_hook(
         settings,
         "SessionStart",
@@ -3563,8 +3599,23 @@ mod tests {
                             "command": "existing"
                         }]
                     }],
+                    "SessionStart": [{
+                        "matcher": "startup|resume|compact",
+                        "hooks": [{
+                            "type": "command",
+                            "command": CLAUDE_LEGACY_HOOK_COMMAND,
+                            "timeout": 10
+                        }]
+                    }],
                     "SessionEnd": [{
-                        "hooks": [stale_session_end_handler]
+                        "hooks": [
+                            stale_session_end_handler,
+                            {
+                                "type": "command",
+                                "command": CLAUDE_LEGACY_SESSION_END_HOOK_COMMAND,
+                                "timeout": 15
+                            }
+                        ]
                     }]
                 },
                 "permissions": {
@@ -3601,6 +3652,22 @@ mod tests {
         assert!(settings.contains("\"PostToolUseFailure\""));
         assert!(settings.contains("existing"));
         let settings_json: Value = serde_json::from_str(&settings).unwrap();
+        let session_start_hooks = settings_json
+            .pointer("/hooks/SessionStart")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert!(!session_start_hooks.iter().any(|group| {
+            group
+                .get("hooks")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|hook| {
+                    hook.get("type").and_then(Value::as_str) == Some("command")
+                        && hook.get("command").and_then(Value::as_str)
+                            == Some(CLAUDE_LEGACY_HOOK_COMMAND)
+                })
+        }));
         let session_end_hooks = settings_json
             .pointer("/hooks/SessionEnd")
             .and_then(Value::as_array)
@@ -3624,6 +3691,18 @@ mod tests {
                 .into_iter()
                 .flatten()
                 .any(|hook| hook.get("type").and_then(Value::as_str) == Some("mcp_tool"))
+        }));
+        assert!(!session_end_hooks.iter().any(|group| {
+            group
+                .get("hooks")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|hook| {
+                    hook.get("type").and_then(Value::as_str) == Some("command")
+                        && hook.get("command").and_then(Value::as_str)
+                            == Some(CLAUDE_LEGACY_SESSION_END_HOOK_COMMAND)
+                })
         }));
         let session_start_hook =
             fs::read_to_string(root.path().join(".claude/hooks/engram-session-start.sh")).unwrap();
@@ -3668,6 +3747,31 @@ mod tests {
             warning.contains("does not prove live effective hook visibility")
                 && warning.contains("Claude Code /hooks")
         }));
+    }
+
+    #[test]
+    fn claude_settings_commands_support_project_and_home_hook_locations() {
+        let settings: Value = serde_json::from_str(&claude_settings_snippet(
+            HarnessEnforcementProfile::default(),
+        ))
+        .unwrap();
+
+        let start_command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(start_command
+            .contains("${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh"));
+        assert!(start_command.contains("${HOME:-}/.claude/hooks/engram-session-start.sh"));
+        assert!(start_command.contains("/usr/bin/env bash"));
+
+        let end_command = settings["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(
+            end_command.contains("${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh")
+        );
+        assert!(end_command.contains("${HOME:-}/.claude/hooks/engram-session-end.sh"));
+        assert!(end_command.contains("/usr/bin/env bash"));
     }
 
     #[test]
