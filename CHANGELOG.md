@@ -284,6 +284,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   approval and a fresh full gate on the release head.
 
 ### Fixed
+- Fixed Claude Code setup for Homebrew/global installs by making generated hook commands fall back
+  from project-local `.claude/hooks` to `$HOME/.claude/hooks`, and by removing legacy project-only
+  Engram hook entries during reinstall.
 - Fixed entity-scoped observation search so long natural-language MCP queries are matched by
   relevant terms inside an entity's observations instead of requiring the whole query as one
   contiguous substring, with exact regression coverage for the live-debugger skill-loading query.
