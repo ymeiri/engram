@@ -24792,6 +24792,8 @@ mod tests {
     fn persistent_cleanup_failures_return_bounded_and_aggregate_production_evidence() {
         use std::os::unix::process::CommandExt;
 
+        let working_directory = canonical_tempdir();
+
         fn kill_and_reap_test_group(process_group_id: i32) {
             // SAFETY: every ID passed here is captured from a process group created by this test.
             let result = unsafe { libc::kill(-process_group_id, libc::SIGKILL) };
@@ -24873,7 +24875,7 @@ mod tests {
             let result = run_bounded_native_correction_command_inner(
                 Path::new("/bin/sh"),
                 &["-c", "sleep 30 & wait"],
-                Path::new("/private/tmp"),
+                working_directory.path(),
                 &BTreeMap::new(),
                 Duration::from_millis(120),
                 1024,
@@ -24932,7 +24934,7 @@ mod tests {
                 "-c",
                 "printf '0123456789abcdef'; printf 'fedcba9876543210' >&2",
             ],
-            Path::new("/private/tmp"),
+            working_directory.path(),
             &BTreeMap::new(),
             Duration::from_secs(1),
             8,
