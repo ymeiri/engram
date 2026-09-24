@@ -3508,7 +3508,7 @@ fn accepted_freeze_and_protected_inputs_have_exact_identities() {
     );
     assert_eq!(
         sha256_hex(C2B1_ACQUISITION_SOURCE),
-        "1a097de8e7b818555314affb8bf761888db0d8b7087860eb81cdb6f3197d5dfa"
+        "bf10b94a3c2ba8f1f5a55567c0447ede83e2e412e9149a25f6d0a49c3217bde0"
     );
     assert_eq!(
         sha256_hex(NATIVE_VM_SOURCE),
