@@ -1,15 +1,20 @@
 #![cfg(unix)]
 
 use engram_eval::native_audit::{AuditStatus, NativeLanePhase};
+#[cfg(target_os = "macos")]
 use engram_eval::native_instructions_control::PreparedNativeInstructionsControl;
+#[cfg(target_os = "macos")]
+use engram_eval::native_pilot::MemoryLayer;
 use engram_eval::native_pilot::{
-    CodexAuthenticationMode, MemoryLayer, NativePilotEvaluationPrerequisiteState,
-    NativePilotProtocol, NativePilotResourceBudgets, NativePilotRunRef, PreparedNativePilot,
+    CodexAuthenticationMode, NativePilotEvaluationPrerequisiteState, NativePilotProtocol,
+    NativePilotResourceBudgets, NativePilotRunRef, PreparedNativePilot,
 };
+#[cfg(target_os = "macos")]
+use engram_eval::native_runner::NativePilotPlanAttestation;
 use engram_eval::native_runner::{
     prepare_native_memory_pilot_evaluation_recovery,
-    prepare_native_memory_pilot_execution_recovery, NativePilotLaneExecution,
-    NativePilotPlanAttestation, NativePilotRunPhase, NativePilotRunReport,
+    prepare_native_memory_pilot_execution_recovery, NativePilotLaneExecution, NativePilotRunPhase,
+    NativePilotRunReport,
 };
 use engram_eval::native_stale::{
     audit_native_stale_safety, audit_native_stale_safety_preparation, NativeStaleSafetyBoundary,
@@ -19,7 +24,9 @@ use engram_eval::native_stale::{
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
-use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
