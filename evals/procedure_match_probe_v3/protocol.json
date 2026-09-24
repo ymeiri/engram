@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "probe_id": "engram-procedure-match-probe-v3-prerequisite-explanation",
+  "baseline_protocol": {
+    "path": "../procedure_match_probe_v2/protocol.json",
+    "sha256": "fe169a08310a9ef2c5c50e1aaf7d700c027a380530a8149e054bd0ee224f51df"
+  },
+  "trigger_results": {
+    "path": "../procedure_match_probe_v2/RESULTS_2026-08-08.md",
+    "sha256": "1078d78e126d702b1ee54f165bf8cfbbc567d70add35f939162f9a0f60a37fe9"
+  },
+  "source_overrides": [
+    {
+      "path": "../../engram-index/src/memory_ranker.rs",
+      "sha256": "2f664db201e11db0c917973b4fb2b5b525b429630fce619f4a4ddb33ada3076a"
+    }
+  ],
+  "correction_policy": "include_procedure_prerequisites_in_text_matching"
+}

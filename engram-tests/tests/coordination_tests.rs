@@ -4,9 +4,12 @@
 //! testing the repository and service layers together.
 
 use engram_core::id::Id;
-use engram_index::CoordinationService;
-use engram_mcp::tools::{self, CoordRequestNew, ToolState};
+use engram_index::{CoordinationService, SearchService, WorkService};
+use engram_mcp::tools::{
+    self, CoordRequestNew, CoordStatsRequest, RetrievalScopeRequest, ToolState,
+};
 use engram_store::{connect_and_init, StoreConfig};
+use serde_json::{json, Value};
 use std::time::Duration;
 
 // =============================================================================
@@ -221,6 +224,55 @@ async fn test_component_conflict_detection() {
     // Cleanup
     service.unregister(&session_a).await.ok();
     service.unregister(&session_b).await.ok();
+}
+
+#[tokio::test]
+async fn test_component_and_file_conflicts_do_not_cross_project_boundaries() {
+    let service = setup_service().await;
+    let session_a = Id::new();
+    let session_b = Id::new();
+
+    service
+        .register_with_components(
+            &session_a,
+            "agent-a",
+            "project-alpha",
+            "Work on shared names",
+            vec!["api".to_string()],
+        )
+        .await
+        .unwrap();
+    service
+        .register_with_components(
+            &session_b,
+            "agent-b",
+            "project-beta",
+            "Work on shared names",
+            vec!["api".to_string()],
+        )
+        .await
+        .unwrap();
+
+    assert!(service
+        .check_conflicts(&session_b)
+        .await
+        .unwrap()
+        .is_empty());
+
+    service
+        .set_current_file(&session_a, Some("src/main.rs"))
+        .await
+        .unwrap();
+    assert!(service
+        .set_current_file(&session_b, Some("src/main.rs"))
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(service
+        .check_file_conflicts(&session_b, "src/main.rs")
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -601,6 +653,100 @@ async fn test_stats_count() {
     service.unregister(&session_b).await.ok();
 }
 
+#[tokio::test]
+async fn mcp_coord_stats_requires_scope_and_never_counts_another_project() {
+    let db = setup_db().await;
+    let coordination = CoordinationService::new(db.clone());
+    coordination.init().await.unwrap();
+    let work = WorkService::new(db.clone());
+    work.init().await.unwrap();
+    work.create_project("coord-alpha", None).await.unwrap();
+    work.create_project("coord-beta", None).await.unwrap();
+    let alpha_task = work
+        .create_task("coord-alpha", "coord-alpha-task", None, None)
+        .await
+        .unwrap();
+
+    for (project, agent) in [
+        ("coord-alpha", "alpha-one"),
+        ("coord-alpha", "alpha-two"),
+        ("coord-beta", "beta-one"),
+    ] {
+        coordination
+            .register(&Id::new(), agent, project, "scope canary")
+            .await
+            .unwrap();
+    }
+
+    let state = ToolState::new();
+    state.init_coordination(coordination).await;
+    state.init_work(work).await;
+    state.init_search(SearchService::new(db)).await;
+    let parse = |response: String| serde_json::from_str::<Value>(&response).unwrap();
+
+    let local = parse(
+        tools::coord_stats(
+            &state,
+            serde_json::from_value::<CoordStatsRequest>(json!({})).unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local["active_sessions"], 0);
+    assert_eq!(local["omitted_layers"], json!(["coord_stats"]));
+
+    let related = parse(
+        tools::coord_stats(
+            &state,
+            CoordStatsRequest {
+                scope: Some(RetrievalScopeRequest {
+                    relevance_mode: Some("related".to_string()),
+                    project: Some("coord-alpha".to_string()),
+                    ..RetrievalScopeRequest::default()
+                }),
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related["active_sessions"], 2);
+    assert_eq!(related["scope_enforced_layers"], json!(["coord_stats"]));
+
+    let exact_task = parse(
+        tools::coord_stats(
+            &state,
+            CoordStatsRequest {
+                scope: Some(RetrievalScopeRequest {
+                    relevance_mode: Some("related".to_string()),
+                    project: Some("coord-alpha".to_string()),
+                    task: Some(alpha_task.id.to_string()),
+                    cwd: None,
+                }),
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(exact_task["active_sessions"], 0);
+    assert_eq!(exact_task["omitted_layers"], json!(["coord_stats"]));
+
+    let global = parse(
+        tools::coord_stats(
+            &state,
+            CoordStatsRequest {
+                scope: Some(RetrievalScopeRequest {
+                    relevance_mode: Some("global".to_string()),
+                    ..RetrievalScopeRequest::default()
+                }),
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global["active_sessions"], 3);
+    assert_eq!(global["authorization_scope_enforced"], false);
+}
+
 // =============================================================================
 // Multi-Session Conflict Scenarios
 // =============================================================================
@@ -895,11 +1041,15 @@ async fn test_conflict_info_contains_all_fields() {
 async fn setup_tool_state() -> ToolState {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config).await.expect("Failed to connect");
-    let coordination_service = CoordinationService::new(db);
+    let coordination_service = CoordinationService::new(db.clone());
     coordination_service.init().await.expect("Failed to init");
+    let work_service = WorkService::new(db.clone());
+    work_service.init().await.expect("Failed to init work");
 
     let state = ToolState::new();
     *state.coordination_service.write().await = Some(coordination_service);
+    state.init_work(work_service).await;
+    state.init_search(SearchService::new(db)).await;
     state
 }
 
@@ -917,6 +1067,7 @@ async fn test_mcp_coord_register_unregister() {
         goal: Some("Testing coordination".to_string()),
         components: vec!["api".to_string(), "auth".to_string()],
         file: None,
+        scope: None,
     };
     let result = tools::coord_new(&state, req).await;
     assert!(result.is_ok());
@@ -933,6 +1084,7 @@ async fn test_mcp_coord_register_unregister() {
         goal: None,
         components: vec![],
         file: None,
+        scope: None,
     };
     let result = tools::coord_new(&state, unreg_req).await;
     assert!(result.is_ok());
@@ -953,6 +1105,7 @@ async fn test_mcp_coord_heartbeat() {
         goal: Some("Testing".to_string()),
         components: vec![],
         file: None,
+        scope: None,
     };
     tools::coord_new(&state, reg_req).await.unwrap();
 
@@ -965,6 +1118,7 @@ async fn test_mcp_coord_heartbeat() {
         goal: None,
         components: vec![],
         file: None,
+        scope: None,
     };
     let result = tools::coord_new(&state, hb_req).await;
     assert!(result.is_ok());
@@ -985,6 +1139,7 @@ async fn test_mcp_coord_set_file() {
         goal: Some("Testing".to_string()),
         components: vec![],
         file: None,
+        scope: None,
     };
     tools::coord_new(&state, reg_req).await.unwrap();
 
@@ -997,6 +1152,7 @@ async fn test_mcp_coord_set_file() {
         goal: None,
         components: vec![],
         file: Some("src/main.rs".to_string()),
+        scope: None,
     };
     let result = tools::coord_new(&state, file_req).await;
     assert!(result.is_ok());
@@ -1017,6 +1173,7 @@ async fn test_mcp_coord_set_components() {
         goal: Some("Testing".to_string()),
         components: vec![],
         file: None,
+        scope: None,
     };
     tools::coord_new(&state, reg_req).await.unwrap();
 
@@ -1029,6 +1186,7 @@ async fn test_mcp_coord_set_components() {
         goal: None,
         components: vec!["api".to_string(), "database".to_string()],
         file: None,
+        scope: None,
     };
     let result = tools::coord_new(&state, comp_req).await;
     assert!(result.is_ok());
@@ -1050,6 +1208,7 @@ async fn test_mcp_coord_check_conflicts() {
         goal: Some("Working on auth".to_string()),
         components: vec!["auth".to_string()],
         file: None,
+        scope: None,
     };
     tools::coord_new(&state, reg_a).await.unwrap();
 
@@ -1062,6 +1221,7 @@ async fn test_mcp_coord_check_conflicts() {
         goal: Some("Also on auth".to_string()),
         components: vec!["auth".to_string()],
         file: None,
+        scope: None,
     };
     tools::coord_new(&state, reg_b).await.unwrap();
 
@@ -1074,6 +1234,7 @@ async fn test_mcp_coord_check_conflicts() {
         goal: None,
         components: vec![],
         file: None,
+        scope: None,
     };
     let result = tools::coord_new(&state, check_req).await;
     assert!(result.is_ok());
@@ -1096,6 +1257,7 @@ async fn test_mcp_coord_list() {
         goal: Some("Testing list".to_string()),
         components: vec![],
         file: None,
+        scope: None,
     };
     tools::coord_new(&state, reg_req).await.unwrap();
 
@@ -1108,6 +1270,10 @@ async fn test_mcp_coord_list() {
         goal: None,
         components: vec![],
         file: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
     };
     let result = tools::coord_new(&state, list_req).await;
     assert!(result.is_ok());
@@ -1124,10 +1290,137 @@ async fn test_mcp_coord_list() {
         goal: None,
         components: vec![],
         file: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
     };
     let result = tools::coord_new(&state, list_filtered_req).await;
     assert!(result.is_ok());
     assert!(result.unwrap().contains("list-test-agent"));
+}
+
+#[tokio::test]
+async fn mcp_coord_list_abstains_locally_and_enforces_related_project_scope() {
+    let state = setup_tool_state().await;
+    {
+        let guard = state.work_service.read().await;
+        let work = guard.as_ref().unwrap();
+        work.create_project("coord-alpha", None).await.unwrap();
+        work.create_project("coord-beta", None).await.unwrap();
+    }
+
+    for (agent, project) in [("alpha-agent", "coord-alpha"), ("beta-agent", "coord-beta")] {
+        tools::coord_new(
+            &state,
+            CoordRequestNew {
+                action: "register".to_string(),
+                session_id: Some(Id::new().to_string()),
+                agent: Some(agent.to_string()),
+                project: Some(project.to_string()),
+                goal: Some("Scope canary".to_string()),
+                components: vec![],
+                file: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    let local: Value = serde_json::from_str(
+        &tools::coord_new(
+            &state,
+            CoordRequestNew {
+                action: "list".to_string(),
+                session_id: None,
+                agent: None,
+                project: None,
+                goal: None,
+                components: vec![],
+                file: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(local["count"], 0);
+    assert_eq!(local["omitted_layers"], json!(["coordination_sessions"]));
+
+    let related: Value = serde_json::from_str(
+        &tools::coord_new(
+            &state,
+            CoordRequestNew {
+                action: "list".to_string(),
+                session_id: None,
+                agent: None,
+                project: None,
+                goal: None,
+                components: vec![],
+                file: None,
+                scope: Some(RetrievalScopeRequest {
+                    relevance_mode: Some("related".to_string()),
+                    project: Some("coord-alpha".to_string()),
+                    ..RetrievalScopeRequest::default()
+                }),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(related["count"], 1);
+    assert_eq!(related["resolved_project"], "coord-alpha");
+    assert_eq!(related["authorization_scope_enforced"], true);
+    assert!(related.to_string().contains("alpha-agent"));
+    assert!(!related.to_string().contains("beta-agent"));
+
+    let mismatch = tools::coord_new(
+        &state,
+        CoordRequestNew {
+            action: "list".to_string(),
+            session_id: None,
+            agent: None,
+            project: Some("coord-beta".to_string()),
+            goal: None,
+            components: vec![],
+            file: None,
+            scope: Some(RetrievalScopeRequest {
+                relevance_mode: Some("related".to_string()),
+                project: Some("coord-alpha".to_string()),
+                ..RetrievalScopeRequest::default()
+            }),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(mismatch.contains("does not match resolved authorization project"));
+
+    let global: Value = serde_json::from_str(
+        &tools::coord_new(
+            &state,
+            CoordRequestNew {
+                action: "list".to_string(),
+                session_id: None,
+                agent: None,
+                project: None,
+                goal: None,
+                components: vec![],
+                file: None,
+                scope: Some(RetrievalScopeRequest {
+                    relevance_mode: Some("global".to_string()),
+                    ..RetrievalScopeRequest::default()
+                }),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(global["count"], 2);
+    assert_eq!(global["authorization_scope_enforced"], false);
 }
 
 #[tokio::test]
@@ -1142,6 +1435,7 @@ async fn test_mcp_coord_invalid_action() {
         goal: None,
         components: vec![],
         file: None,
+        scope: None,
     };
     let result = tools::coord_new(&state, req).await;
     assert!(result.is_err());

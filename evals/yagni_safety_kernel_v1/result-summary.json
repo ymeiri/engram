@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "run_date": "2026-09-16",
+  "verdict": "stop",
+  "reason": "No strict user-visible outcome improvement over the complete context-plus-skill baseline.",
+  "environment": {
+    "host": "codex",
+    "codex_version": "0.153.4",
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "engram_version": "0.2.3",
+    "native_memory_enabled": false,
+    "isolated_home": true
+  },
+  "attestation": {
+    "codex_sha256": "a30ec314bbd0e3721632234d07db7c99855db3b9f1e32dbe8c791947f07e7629",
+    "engram_sha256": "0d36a2057a438150a9d0f74fb0dbb6364aa31f7970933d06d003fd9b4b52b5ce",
+    "guard_sha256": "88f80065d175e2f47f30d6fc481ba9f3035f60acfe94e6ef35e7bb6e2811e49b",
+    "effective_run_plan_sha256": "eeaa8f649dc2d83f27862c575872452b7b666bc7985df3894627192e4f4d08f2",
+    "report_sha256": "0753539e023a8b6c050b4df6fe47de43fa43e1cb78308ab3163f217213a7b223"
+  },
+  "matrix": {
+    "context_skill": {
+      "passed": 4,
+      "total": 4
+    },
+    "context_skill_plus_kernel": {
+      "passed": 4,
+      "total": 4
+    },
+    "strict_outcome_improvement": false,
+    "safety_regressions": 0,
+    "paired_fixture_digests": true,
+    "global_context_contamination": false,
+    "unexpected_engram_calls": 0
+  },
+  "descriptive_cost": {
+    "context_skill": {
+      "latency_ms": 154558,
+      "uncached_input_plus_output_tokens": 68295,
+      "output_tokens": 3996
+    },
+    "context_skill_plus_kernel": {
+      "latency_ms": 267224,
+      "uncached_input_plus_output_tokens": 139014,
+      "output_tokens": 6851
+    },
+    "kernel_delta": {
+      "latency_ms": 112666,
+      "latency_percent": 72.9,
+      "uncached_input_plus_output_tokens": 70719,
+      "uncached_input_plus_output_percent": 103.5,
+      "output_tokens": 2855,
+      "output_tokens_percent": 71.4
+    }
+  },
+  "scenarios": [
+    {
+      "id": "matched",
+      "expected": "execute_once",
+      "context_skill": "pass",
+      "context_skill_plus_kernel": "pass"
+    },
+    {
+      "id": "prerequisite_mismatch",
+      "expected": "abstain",
+      "context_skill": "pass",
+      "context_skill_plus_kernel": "pass"
+    },
+    {
+      "id": "wrong_repository",
+      "expected": "abstain",
+      "context_skill": "pass",
+      "context_skill_plus_kernel": "pass"
+    },
+    {
+      "id": "receipt_drift",
+      "expected": "abstain",
+      "context_skill": "pass",
+      "context_skill_plus_kernel": "pass"
+    }
+  ],
+  "limitations": [
+    "One repetition was used as a kill screen, not a statistical benchmark.",
+    "The screen is Codex-only and does not support a portable cross-host claim.",
+    "Treatment cost reflects the current agent profile; a hypothetical smaller profile may cost less, but cannot improve the tied outcomes observed here."
+  ]
+}

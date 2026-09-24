@@ -3,18 +3,29 @@
 //! Tests the SearchService that searches entities, aliases, observations,
 //! session events, documents, and tool usages with a single query.
 
-use engram_core::entity::EntityType;
+use engram_core::entity::{EntityType, RelationType};
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryFreshness, MemoryItem, MemoryKind,
     MemoryReviewState, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
 };
-use engram_core::search::SearchLayer;
+use engram_core::repository::ProjectRepositoryRole;
+use engram_core::search::{SearchLayer, SearchResultSource};
 use engram_core::session::EventType;
 use engram_core::tool::ToolOutcome;
 use engram_index::{
-    EntityService, MemoryService, SearchOptions, SearchService, SessionService, ToolIntelService,
+    EntityService, MemoryService, RepositoryService, SearchOptions, SearchService, SessionService,
+    ToolIntelService, WorkService,
+};
+use engram_mcp::tools::{
+    self as mcp_tools, DocsRequestNew, EntityObserveRequestNew, EntityRequestNew,
+    EntityStatsRequest, KnowledgeStatsRequest, RetrievalScopeRequest, SessionRequestNew,
+    SessionStatsRequest, ToolIntelStatsRequest, ToolRequestNew, ToolState, WorkStatsRequest,
 };
 use engram_store::{connect_and_init, StoreConfig};
+use serde_json::{json, Value};
+use std::path::Path;
+use std::process::Command;
+use tempfile::tempdir;
 use time::OffsetDateTime;
 
 // =============================================================================
@@ -73,9 +84,63 @@ async fn setup_search_and_memory_service() -> (SearchService, MemoryService) {
     (SearchService::new(db), memory_service)
 }
 
+async fn setup_related_search_service() -> (
+    SearchService,
+    EntityService,
+    SessionService,
+    ToolIntelService,
+    WorkService,
+    MemoryService,
+) {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config).await.expect("Failed to connect");
+    let entity_service = EntityService::new(db.clone());
+    entity_service.init().await.unwrap();
+    let session_service = SessionService::new(db.clone());
+    session_service.init().await.unwrap();
+    let tool_service = ToolIntelService::new(db.clone());
+    tool_service.init().await.unwrap();
+    let work_service = WorkService::new(db.clone());
+    work_service.init().await.unwrap();
+    let memory_service = MemoryService::new(db.clone());
+    memory_service.init_schema().await.unwrap();
+
+    (
+        SearchService::new(db),
+        entity_service,
+        session_service,
+        tool_service,
+        work_service,
+        memory_service,
+    )
+}
+
 fn writer() -> WriterProvenance {
     WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-5.5"))
         .with_surface("search-test")
+}
+
+fn git_available() -> bool {
+    Command::new("git")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn run_git(cwd: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(args)
+        .output()
+        .expect("git should run");
+    assert!(
+        output.status.success(),
+        "git {} failed: {}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 // =============================================================================
@@ -369,7 +434,9 @@ async fn test_search_finds_active_memory_items() {
         .expect("memory result should carry trust metadata");
     assert_eq!(metadata.memory_id, item.id);
     assert_eq!(metadata.status, MemoryStatus::Active);
-    assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
+    assert_eq!(metadata.review_state, MemoryReviewState::ActiveUnreviewed);
+    assert!(metadata.review_asserted);
+    assert!(!metadata.reviewed);
     assert_eq!(metadata.freshness, MemoryFreshness::Unscheduled);
     assert_eq!(metadata.claim_origin, ClaimOrigin::UserStated);
     assert_eq!(metadata.evidence_count, 1);
@@ -378,16 +445,16 @@ async fn test_search_finds_active_memory_items() {
         .context
         .as_deref()
         .unwrap()
-        .contains("review_state: reviewed"));
+        .contains("review_state: active_unreviewed"));
 }
 
 #[tokio::test]
-async fn test_memory_search_metadata_reports_review_and_evidence() {
+async fn test_memory_search_metadata_reports_review_assertion_and_evidence() {
     let (search_service, memory_service) = setup_search_and_memory_service().await;
     let item = MemoryItem::new(
         MemoryKind::Decision,
-        "Reviewed memory metadata",
-        "Unified search should expose reviewed evidence-backed trust metadata.",
+        "Review assertion memory metadata",
+        "Unified search should expose evidence-backed trust metadata without treating caller-supplied review claims as authority.",
         MemoryScope::project("engram"),
         ClaimOrigin::AgentObserved,
         writer(),
@@ -400,7 +467,7 @@ async fn test_memory_search_metadata_reports_review_and_evidence() {
 
     let results = search_service
         .search(
-            "reviewed evidence-backed trust metadata",
+            "review assertion evidence-backed trust metadata",
             10,
             Some(0.0),
             Some(&[SearchLayer::Memory]),
@@ -413,8 +480,9 @@ async fn test_memory_search_metadata_reports_review_and_evidence() {
         .find(|result| result.id == item.id.to_string())
         .and_then(|result| result.memory_metadata.as_ref())
         .expect("memory result should carry trust metadata");
-    assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
-    assert!(metadata.reviewed);
+    assert_eq!(metadata.review_state, MemoryReviewState::ActiveUnreviewed);
+    assert!(!metadata.reviewed);
+    assert!(metadata.review_asserted);
     assert!(metadata.has_evidence);
     assert_eq!(metadata.evidence_count, 1);
     assert_eq!(metadata.evidence_kinds, vec![EvidenceKind::ManualReview]);
@@ -584,7 +652,7 @@ async fn test_memory_search_surfaces_active_design_philosophy_preference() {
             .memory_metadata
             .as_ref()
             .map(|metadata| metadata.review_state),
-        Some(MemoryReviewState::Reviewed)
+        Some(MemoryReviewState::ActiveUnreviewed)
     );
 }
 
@@ -670,7 +738,7 @@ async fn test_memory_search_surfaces_active_telemetry_feedback_rule() {
             .memory_metadata
             .as_ref()
             .map(|metadata| metadata.review_state),
-        Some(MemoryReviewState::Reviewed)
+        Some(MemoryReviewState::ActiveUnreviewed)
     );
 }
 
@@ -760,7 +828,7 @@ async fn test_memory_search_surfaces_active_orient_contract_rule() {
             .memory_metadata
             .as_ref()
             .map(|metadata| metadata.review_state),
-        Some(MemoryReviewState::Reviewed)
+        Some(MemoryReviewState::ActiveUnreviewed)
     );
 }
 
@@ -2396,4 +2464,1661 @@ async fn test_search_empty_database() {
         results.is_empty(),
         "Should handle empty database gracefully"
     );
+}
+
+// =============================================================================
+// Authorization Scope Tests
+// =============================================================================
+
+#[tokio::test]
+async fn local_memory_search_uses_stable_repository_identity_without_cross_project_broadening() {
+    if !git_available() {
+        return;
+    }
+
+    let db = connect_and_init(&StoreConfig::memory()).await.unwrap();
+    let work = WorkService::new(db.clone());
+    work.init().await.unwrap();
+    work.create_project("repo-scope-atlas", None).await.unwrap();
+    work.create_project("repo-scope-orbit", None).await.unwrap();
+    let repositories = RepositoryService::new(db.clone());
+    repositories.init_schema().await.unwrap();
+    let memory = MemoryService::new(db.clone());
+    memory.init_schema().await.unwrap();
+
+    let root = tempdir().unwrap();
+    let atlas_primary = root.path().join("atlas-primary");
+    let atlas_moved = root.path().join("arbitrary-moved-name");
+    let orbit = root.path().join("orbit");
+    for (checkout, remote) in [
+        (&atlas_primary, "git@github.com:acme/atlas.git"),
+        (&atlas_moved, "https://github.com/acme/atlas.git"),
+        (&orbit, "git@github.com:acme/orbit.git"),
+    ] {
+        std::fs::create_dir_all(checkout).unwrap();
+        run_git(checkout, &["init"]);
+        run_git(checkout, &["remote", "add", "origin", remote]);
+    }
+
+    let atlas = repositories
+        .detect_repository(&atlas_primary)
+        .await
+        .unwrap()
+        .context
+        .repository;
+    repositories
+        .link_project(
+            "repo-scope-atlas",
+            Some(&atlas.id),
+            None,
+            ProjectRepositoryRole::Primary,
+            None,
+        )
+        .await
+        .unwrap();
+    let moved = repositories.detect_repository(&atlas_moved).await.unwrap();
+    assert_eq!(moved.context.repository.id, atlas.id);
+
+    let orbit_repository = repositories
+        .detect_repository(&orbit)
+        .await
+        .unwrap()
+        .context
+        .repository;
+    repositories
+        .link_project(
+            "repo-scope-orbit",
+            Some(&orbit_repository.id),
+            None,
+            ProjectRepositoryRole::Primary,
+            None,
+        )
+        .await
+        .unwrap();
+
+    let atlas_memory = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "repository identity canary atlas",
+                "Use the Atlas repository-scoped invocation.",
+                MemoryScope::Repository {
+                    repository_id: Some(atlas.id),
+                    remote_url: atlas.remote_url.clone(),
+                    local_path: None,
+                },
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::File, "atlas-adr.md")),
+        )
+        .await
+        .unwrap();
+    let orbit_memory = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "repository identity canary orbit",
+                "Use the Orbit repository-scoped invocation.",
+                MemoryScope::Repository {
+                    repository_id: Some(orbit_repository.id),
+                    remote_url: orbit_repository.remote_url.clone(),
+                    local_path: None,
+                },
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::File, "orbit-adr.md")),
+        )
+        .await
+        .unwrap();
+
+    let search = SearchService::new(db);
+    let moved_results = search
+        .search_local_memory(
+            "repository identity canary",
+            10,
+            Some(0.0),
+            &SearchOptions {
+                project: Some("repo-scope-atlas".to_string()),
+                cwd: Some(atlas_moved.display().to_string()),
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(moved_results
+        .iter()
+        .any(|result| result.id == atlas_memory.id.to_string()));
+    assert!(moved_results
+        .iter()
+        .all(|result| result.id != orbit_memory.id.to_string()));
+
+    let compatibility_results = search
+        .search_with_options(
+            "repository identity canary",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            SearchOptions {
+                project: Some("repo-scope-atlas".to_string()),
+                cwd: Some(atlas_moved.display().to_string()),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(compatibility_results
+        .iter()
+        .any(|result| result.id == atlas_memory.id.to_string()));
+    assert!(compatibility_results
+        .iter()
+        .all(|result| result.id != orbit_memory.id.to_string()));
+
+    let related_results = search
+        .search_related(
+            "repository identity canary",
+            10,
+            Some(0.0),
+            Some(&[SearchLayer::Memory]),
+            &SearchOptions {
+                project: Some("repo-scope-atlas".to_string()),
+                cwd: Some(atlas_moved.display().to_string()),
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(related_results
+        .results
+        .iter()
+        .any(|result| result.id == atlas_memory.id.to_string()));
+    assert!(related_results
+        .results
+        .iter()
+        .all(|result| result.id != orbit_memory.id.to_string()));
+
+    let cwd_only_results = search
+        .search_local_memory(
+            "repository identity canary",
+            10,
+            Some(0.0),
+            &SearchOptions {
+                project: None,
+                cwd: Some(atlas_moved.display().to_string()),
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(cwd_only_results
+        .iter()
+        .any(|result| result.id == atlas_memory.id.to_string()));
+    assert!(cwd_only_results
+        .iter()
+        .all(|result| result.id != orbit_memory.id.to_string()));
+
+    let conflicting_results = search
+        .search_local_memory(
+            "repository identity canary",
+            10,
+            Some(0.0),
+            &SearchOptions {
+                project: Some("repo-scope-atlas".to_string()),
+                cwd: Some(orbit.display().to_string()),
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(conflicting_results.iter().all(|result| {
+        result.id != atlas_memory.id.to_string() && result.id != orbit_memory.id.to_string()
+    }));
+}
+
+#[tokio::test]
+async fn related_retrieval_never_returns_another_projects_legacy_records() {
+    let (search, entities, sessions, tools, work, _) = setup_related_search_service().await;
+    work.create_project("scope-alpha", None).await.unwrap();
+    work.create_project("scope-beta", None).await.unwrap();
+    work.create_task("scope-alpha", "alpha-task", None, Some("ALPHA-1"))
+        .await
+        .unwrap();
+    work.create_task("scope-beta", "beta-task", None, Some("BETA-1"))
+        .await
+        .unwrap();
+    work.add_pr(
+        "scope-alpha",
+        Some("alpha-task"),
+        "https://github.com/example/alpha/pull/1",
+        None,
+    )
+    .await
+    .unwrap();
+    work.add_pr(
+        "scope-beta",
+        Some("beta-task"),
+        "https://github.com/example/beta/pull/1",
+        None,
+    )
+    .await
+    .unwrap();
+    work.add_project_observation("scope-alpha", "alpha project observation", None)
+        .await
+        .unwrap();
+    work.add_project_observation("scope-beta", "beta project observation", None)
+        .await
+        .unwrap();
+    work.add_task_observation("ALPHA-1", "alpha task observation", None)
+        .await
+        .unwrap();
+    work.add_task_observation("BETA-1", "beta task observation", None)
+        .await
+        .unwrap();
+
+    let alpha_entity = entities
+        .create_entity(
+            "alpha-service",
+            EntityType::Service,
+            Some("scope-canary alpha entity"),
+        )
+        .await
+        .unwrap();
+    let beta_entity = entities
+        .create_entity(
+            "beta-service",
+            EntityType::Service,
+            Some("scope-canary beta entity"),
+        )
+        .await
+        .unwrap();
+    entities
+        .add_alias("alpha-service", "scope-canary-alpha-alias")
+        .await
+        .unwrap();
+    entities
+        .add_alias("beta-service", "scope-canary-beta-alias")
+        .await
+        .unwrap();
+    work.connect_project_to_entity("scope-alpha", "alpha-service", None)
+        .await
+        .unwrap();
+    work.connect_project_to_entity("scope-beta", "beta-service", None)
+        .await
+        .unwrap();
+    entities
+        .relate("alpha-service", RelationType::RelatedTo, "beta-service")
+        .await
+        .unwrap();
+    let alpha_observation = entities
+        .add_observation(
+            "alpha-service",
+            "scope-canary alpha observation",
+            Some("scope.canary"),
+            None,
+        )
+        .await
+        .unwrap()
+        .0;
+    let beta_observation = entities
+        .add_observation(
+            "beta-service",
+            "scope-canary beta observation",
+            Some("scope.canary"),
+            None,
+        )
+        .await
+        .unwrap()
+        .0;
+
+    let alpha_session = sessions
+        .start_session(Some("codex"), Some("scope-alpha"), None)
+        .await
+        .unwrap();
+    let beta_session = sessions
+        .start_session(Some("codex"), Some("scope-beta"), None)
+        .await
+        .unwrap();
+    let alpha_event = sessions
+        .log_event(
+            &alpha_session.id,
+            EventType::Observation,
+            "scope-canary alpha session event",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    let beta_event = sessions
+        .log_event(
+            &beta_session.id,
+            EventType::Observation,
+            "scope-canary beta session event",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    entities
+        .create_entity("scope-alpha-tool", EntityType::Tool, None)
+        .await
+        .unwrap();
+    entities
+        .create_entity("scope-beta-tool", EntityType::Tool, None)
+        .await
+        .unwrap();
+    let alpha_usage = tools
+        .log_usage(
+            "scope-alpha-tool",
+            "scope-canary alpha tool usage",
+            ToolOutcome::Success,
+            Some(&alpha_session.id),
+        )
+        .await
+        .unwrap();
+    let beta_usage = tools
+        .log_usage(
+            "scope-beta-tool",
+            "scope-canary beta tool usage",
+            ToolOutcome::Success,
+            Some(&beta_session.id),
+        )
+        .await
+        .unwrap();
+
+    let related = search
+        .search_related(
+            "scope-canary",
+            20,
+            Some(0.0),
+            None,
+            &SearchOptions {
+                project: Some("scope-alpha".to_string()),
+                cwd: None,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(related.project, "scope-alpha");
+    assert!(related.omitted_layers.contains(&SearchLayer::Document));
+    for expected_id in [
+        alpha_entity.id,
+        alpha_observation.id,
+        alpha_event.id,
+        alpha_usage.id,
+    ] {
+        assert!(
+            related
+                .results
+                .iter()
+                .any(|result| result.id == expected_id.to_string()),
+            "missing alpha result {expected_id}"
+        );
+    }
+    for forbidden_id in [
+        beta_entity.id,
+        beta_observation.id,
+        beta_event.id,
+        beta_usage.id,
+    ] {
+        assert!(
+            related
+                .results
+                .iter()
+                .all(|result| result.id != forbidden_id.to_string()),
+            "related search leaked beta result {forbidden_id}"
+        );
+    }
+
+    let defensive_scoped_api = search
+        .search_with_options(
+            "scope-canary",
+            20,
+            Some(0.0),
+            None,
+            SearchOptions {
+                project: Some("scope-alpha".to_string()),
+                cwd: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(defensive_scoped_api
+        .iter()
+        .all(|result| result.id != beta_observation.id.to_string()));
+    assert!(defensive_scoped_api
+        .iter()
+        .all(|result| result.id != beta_event.id.to_string()));
+    assert!(defensive_scoped_api
+        .iter()
+        .all(|result| result.id != beta_usage.id.to_string()));
+
+    let global = search
+        .search("scope-canary", 20, Some(0.0), None)
+        .await
+        .unwrap();
+    assert!(global
+        .iter()
+        .any(|result| result.id == beta_observation.id.to_string()));
+    assert!(global
+        .iter()
+        .any(|result| result.id == beta_event.id.to_string()));
+    assert!(global
+        .iter()
+        .any(|result| result.id == beta_usage.id.to_string()));
+
+    let state = ToolState::new();
+    state.init_entity(entities).await;
+    state.init_session(sessions).await;
+    state.init_tool_intel(tools).await;
+    state.init_work(work).await;
+    state.init_search(search).await;
+    let related_scope = RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some("scope-alpha".to_string()),
+        ..RetrievalScopeRequest::default()
+    };
+    let global_scope = RetrievalScopeRequest {
+        relevance_mode: Some("global".to_string()),
+        ..RetrievalScopeRequest::default()
+    };
+    let parse = |response: String| serde_json::from_str::<Value>(&response).unwrap();
+
+    let local_entity = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "search",
+                "query": "service"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_entity["count"], 0);
+    assert_eq!(local_entity["relevance_mode"], "local");
+    assert_eq!(local_entity["omitted_layers"], json!(["entity"]));
+
+    let related_entity = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "search",
+                "query": "service",
+                "search_scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_entity["count"], 1);
+    assert!(related_entity
+        .to_string()
+        .contains(&alpha_entity.id.to_string()));
+    assert!(!related_entity
+        .to_string()
+        .contains(&beta_entity.id.to_string()));
+    assert_eq!(related_entity["scope_enforced_layers"], json!(["entity"]));
+
+    let global_entity = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "search",
+                "query": "service",
+                "search_scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(global_entity
+        .to_string()
+        .contains(&alpha_entity.id.to_string()));
+    assert!(global_entity
+        .to_string()
+        .contains(&beta_entity.id.to_string()));
+    assert_eq!(global_entity["authorization_scope_enforced"], false);
+
+    let local_observation = parse(
+        mcp_tools::entity_observe_new(
+            &state,
+            serde_json::from_value::<EntityObserveRequestNew>(json!({
+                "action": "search",
+                "entity": "alpha-service",
+                "query": "scope-canary"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_observation["count"], 0);
+    assert_eq!(local_observation["omitted_layers"], json!(["observation"]));
+
+    let related_other_observation = parse(
+        mcp_tools::entity_observe_new(
+            &state,
+            serde_json::from_value::<EntityObserveRequestNew>(json!({
+                "action": "search",
+                "entity": "beta-service",
+                "query": "scope-canary",
+                "search_scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_other_observation["count"], 0);
+    assert!(!related_other_observation
+        .to_string()
+        .contains(&beta_observation.id.to_string()));
+
+    let related_observation = parse(
+        mcp_tools::entity_observe_new(
+            &state,
+            serde_json::from_value::<EntityObserveRequestNew>(json!({
+                "action": "search",
+                "entity": "alpha-service",
+                "query": "scope-canary",
+                "search_scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_observation
+        .to_string()
+        .contains(&alpha_observation.id.to_string()));
+    assert_eq!(
+        related_observation["scope_enforced_layers"],
+        json!(["observation"])
+    );
+
+    let global_observation = parse(
+        mcp_tools::entity_observe_new(
+            &state,
+            serde_json::from_value::<EntityObserveRequestNew>(json!({
+                "action": "search",
+                "entity": "beta-service",
+                "query": "scope-canary",
+                "search_scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(global_observation
+        .to_string()
+        .contains(&beta_observation.id.to_string()));
+
+    let local_session = parse(
+        mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_session["count"], 0);
+    assert_eq!(local_session["omitted_layers"], json!(["session_event"]));
+
+    let related_session = parse(
+        mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary",
+                "search_scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_session
+        .to_string()
+        .contains(&alpha_event.id.to_string()));
+    assert!(!related_session
+        .to_string()
+        .contains(&beta_event.id.to_string()));
+
+    let global_session = parse(
+        mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary",
+                "search_scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(global_session
+        .to_string()
+        .contains(&alpha_event.id.to_string()));
+    assert!(global_session
+        .to_string()
+        .contains(&beta_event.id.to_string()));
+
+    let local_tool = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_tool["count"], 0);
+    assert_eq!(local_tool["omitted_layers"], json!(["tool_usage"]));
+
+    let related_tool = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary",
+                "search_scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_tool
+        .to_string()
+        .contains(&alpha_usage.id.to_string()));
+    assert!(!related_tool
+        .to_string()
+        .contains(&beta_usage.id.to_string()));
+
+    let global_tool = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary",
+                "search_scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(global_tool
+        .to_string()
+        .contains(&alpha_usage.id.to_string()));
+    assert!(global_tool.to_string().contains(&beta_usage.id.to_string()));
+
+    let local_entity_get = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "get",
+                "name": "alpha-service"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_entity_get["found"], false);
+    assert_eq!(local_entity_get["omitted_layers"], json!(["entity"]));
+
+    let related_other_entity_get = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "get",
+                "name": "beta-service",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_other_entity_get["found"], false);
+    assert!(!related_other_entity_get
+        .to_string()
+        .contains(&beta_entity.id.to_string()));
+
+    let related_entity_get = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "get",
+                "name": "alpha-service",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_entity_get["found"], true);
+    assert!(related_entity_get
+        .to_string()
+        .contains(&alpha_observation.id.to_string()));
+    assert!(!related_entity_get.to_string().contains("beta-service"));
+
+    let global_entity_get = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "get",
+                "name": "alpha-service",
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(global_entity_get.to_string().contains("beta-service"));
+    assert_eq!(global_entity_get["authorization_scope_enforced"], false);
+
+    let related_entity_list = parse(
+        mcp_tools::entity_new(
+            &state,
+            serde_json::from_value::<EntityRequestNew>(json!({
+                "action": "list",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_entity_list
+        .to_string()
+        .contains(&alpha_entity.id.to_string()));
+    assert!(!related_entity_list
+        .to_string()
+        .contains(&beta_entity.id.to_string()));
+
+    let related_other_observation_get = parse(
+        mcp_tools::entity_observe_new(
+            &state,
+            serde_json::from_value::<EntityObserveRequestNew>(json!({
+                "action": "get",
+                "entity": "beta-service",
+                "key": "scope.canary",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_other_observation_get["found"], false);
+    assert!(!related_other_observation_get
+        .to_string()
+        .contains(&beta_observation.id.to_string()));
+
+    let related_observation_get = parse(
+        mcp_tools::entity_observe_new(
+            &state,
+            serde_json::from_value::<EntityObserveRequestNew>(json!({
+                "action": "get",
+                "entity": "alpha-service",
+                "key": "scope.canary",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_observation_get
+        .to_string()
+        .contains(&alpha_observation.id.to_string()));
+
+    let related_other_session_get = parse(
+        mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(json!({
+                "action": "get",
+                "session_id": beta_session.id.to_string(),
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_other_session_get["found"], false);
+    assert!(!related_other_session_get
+        .to_string()
+        .contains(&beta_event.id.to_string()));
+
+    let related_session_get = parse(
+        mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(json!({
+                "action": "get",
+                "session_id": alpha_session.id.to_string(),
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_session_get
+        .to_string()
+        .contains(&alpha_event.id.to_string()));
+
+    let related_session_list = parse(
+        mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(json!({
+                "action": "list",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_session_list
+        .to_string()
+        .contains(&alpha_session.id.to_string()));
+    assert!(!related_session_list
+        .to_string()
+        .contains(&beta_session.id.to_string()));
+
+    let local_recommendations = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "recommend",
+                "context": "scope-canary"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_recommendations["count"], 0);
+
+    let related_recommendations = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "recommend",
+                "context": "scope-canary",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_recommendations
+        .to_string()
+        .contains("scope-alpha-tool"));
+    assert!(!related_recommendations
+        .to_string()
+        .contains("scope-beta-tool"));
+
+    let global_recommendations = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "recommend",
+                "context": "scope-canary",
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(global_recommendations
+        .to_string()
+        .contains("scope-alpha-tool"));
+    assert!(global_recommendations
+        .to_string()
+        .contains("scope-beta-tool"));
+
+    let related_tool_list = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "list",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(related_tool_list
+        .to_string()
+        .contains(&alpha_usage.id.to_string()));
+    assert!(!related_tool_list
+        .to_string()
+        .contains(&beta_usage.id.to_string()));
+
+    let related_alpha_stats = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "stats",
+                "tool_name": "scope-alpha-tool",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_alpha_stats["total_usages"], 1);
+    assert_eq!(related_alpha_stats["preferences_count"], 0);
+
+    let related_beta_stats = parse(
+        mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(json!({
+                "action": "stats",
+                "tool_name": "scope-beta-tool",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_beta_stats["total_usages"], 0);
+
+    let local_entity_stats = parse(
+        mcp_tools::entity_stats(
+            &state,
+            serde_json::from_value::<EntityStatsRequest>(json!({})).unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_entity_stats["entity_count"], 0);
+    assert_eq!(
+        local_entity_stats["omitted_layers"],
+        json!(["entity_stats"])
+    );
+
+    let related_entity_stats = parse(
+        mcp_tools::entity_stats(
+            &state,
+            serde_json::from_value::<EntityStatsRequest>(json!({
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_entity_stats["entity_count"], 1);
+    assert_eq!(related_entity_stats["alias_count"], 2);
+    assert_eq!(related_entity_stats["observation_count"], 1);
+    assert_eq!(related_entity_stats["relationship_count"], 0);
+    assert_eq!(
+        related_entity_stats["scope_enforced_layers"],
+        json!(["entity_stats"])
+    );
+
+    let global_entity_stats = parse(
+        mcp_tools::entity_stats(
+            &state,
+            serde_json::from_value::<EntityStatsRequest>(json!({
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global_entity_stats["entity_count"], 4);
+    assert_eq!(global_entity_stats["relationship_count"], 1);
+    assert_eq!(global_entity_stats["alias_count"], 6);
+    assert_eq!(global_entity_stats["authorization_scope_enforced"], false);
+
+    let related_session_stats = parse(
+        mcp_tools::session_stats(
+            &state,
+            serde_json::from_value::<SessionStatsRequest>(json!({
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_session_stats["total_sessions"], 1);
+    assert_eq!(related_session_stats["total_events"], 1);
+    assert_eq!(related_session_stats["events_by_type"]["observation"], 1);
+
+    let global_session_stats = parse(
+        mcp_tools::session_stats(
+            &state,
+            serde_json::from_value::<SessionStatsRequest>(json!({
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global_session_stats["total_sessions"], 2);
+    assert_eq!(global_session_stats["total_events"], 2);
+
+    let related_tool_intel_stats = parse(
+        mcp_tools::tool_intel_stats(
+            &state,
+            serde_json::from_value::<ToolIntelStatsRequest>(json!({
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_tool_intel_stats["usage_count"], 1);
+    assert_eq!(related_tool_intel_stats["preference_count"], 0);
+
+    let global_tool_intel_stats = parse(
+        mcp_tools::tool_intel_stats(
+            &state,
+            serde_json::from_value::<ToolIntelStatsRequest>(json!({
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global_tool_intel_stats["usage_count"], 2);
+
+    let related_work_stats = parse(
+        mcp_tools::work_stats(
+            &state,
+            serde_json::from_value::<WorkStatsRequest>(json!({
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_work_stats["project_count"], 1);
+    assert_eq!(related_work_stats["task_count"], 1);
+    assert_eq!(related_work_stats["pr_count"], 1);
+    assert_eq!(related_work_stats["project_observation_count"], 1);
+    assert_eq!(related_work_stats["task_observation_count"], 1);
+
+    let global_work_stats = parse(
+        mcp_tools::work_stats(
+            &state,
+            serde_json::from_value::<WorkStatsRequest>(json!({
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global_work_stats["project_count"], 2);
+    assert_eq!(global_work_stats["task_count"], 2);
+    assert_eq!(global_work_stats["pr_count"], 2);
+
+    let local_knowledge_stats = parse(
+        mcp_tools::knowledge_stats(
+            &state,
+            serde_json::from_value::<KnowledgeStatsRequest>(json!({})).unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_knowledge_stats["doc_count"], 0);
+    assert_eq!(
+        local_knowledge_stats["omitted_layers"],
+        json!(["knowledge_stats"])
+    );
+
+    let related_knowledge_stats = parse(
+        mcp_tools::knowledge_stats(
+            &state,
+            serde_json::from_value::<KnowledgeStatsRequest>(json!({
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_knowledge_stats["doc_count"], 0);
+    assert_eq!(
+        related_knowledge_stats["omitted_layers"],
+        json!(["knowledge_stats"])
+    );
+
+    let local_document_stats = parse(
+        mcp_tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(json!({
+                "action": "stats"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_document_stats["source_count"], 0);
+    assert_eq!(
+        local_document_stats["omitted_layers"],
+        json!(["document_stats"])
+    );
+
+    let related_document_stats = parse(
+        mcp_tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(json!({
+                "action": "stats",
+                "scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_document_stats["source_count"], 0);
+    assert_eq!(
+        related_document_stats["omitted_layers"],
+        json!(["document_stats"])
+    );
+
+    let global_document_stats = parse(
+        mcp_tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(json!({
+                "action": "stats",
+                "scope": global_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global_document_stats["source_count"], 0);
+    assert_eq!(global_document_stats["authorization_scope_enforced"], false);
+    assert_eq!(global_document_stats["omitted_layers"], json!([]));
+
+    let local_docs = parse(
+        mcp_tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local_docs["count"], 0);
+    assert_eq!(local_docs["omitted_layers"], json!(["document"]));
+
+    let related_docs = parse(
+        mcp_tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(json!({
+                "action": "search",
+                "query": "scope-canary",
+                "search_scope": related_scope
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(related_docs["count"], 0);
+    assert_eq!(related_docs["resolved_project"], "scope-alpha");
+    assert_eq!(related_docs["omitted_layers"], json!(["document"]));
+}
+
+#[tokio::test]
+async fn related_search_exact_task_excludes_sibling_task_and_unowned_layers() {
+    let (search, entities, sessions, tools, work, memory) = setup_related_search_service().await;
+    let project = work
+        .create_project("task-scope-project", None)
+        .await
+        .unwrap();
+    let current_task = work
+        .create_task("task-scope-project", "current-task", None, Some("SCOPE-1"))
+        .await
+        .unwrap();
+    let sibling_task = work
+        .create_task("task-scope-project", "sibling-task", None, Some("SCOPE-2"))
+        .await
+        .unwrap();
+    work.add_project_observation("task-scope-project", "task-scope project observation", None)
+        .await
+        .unwrap();
+    work.add_task_observation("SCOPE-1", "current task observation", None)
+        .await
+        .unwrap();
+    work.add_task_observation("SCOPE-2", "sibling task observation", None)
+        .await
+        .unwrap();
+    work.add_pr(
+        "task-scope-project",
+        Some("current-task"),
+        "https://github.com/example/task-scope/pull/1",
+        None,
+    )
+    .await
+    .unwrap();
+    work.add_pr(
+        "task-scope-project",
+        Some("sibling-task"),
+        "https://github.com/example/task-scope/pull/2",
+        None,
+    )
+    .await
+    .unwrap();
+    let current_entity = entities
+        .create_entity(
+            "current-task-service",
+            EntityType::Service,
+            Some("task-scope-canary current entity"),
+        )
+        .await
+        .unwrap();
+    let sibling_entity = entities
+        .create_entity(
+            "sibling-task-service",
+            EntityType::Service,
+            Some("task-scope-canary sibling entity"),
+        )
+        .await
+        .unwrap();
+    work.connect_task_to_entity(&current_task.id.to_string(), "current-task-service", None)
+        .await
+        .unwrap();
+    work.connect_task_to_entity(&sibling_task.id.to_string(), "sibling-task-service", None)
+        .await
+        .unwrap();
+    let current_observation = entities
+        .add_observation(
+            "current-task-service",
+            "task-scope-canary current observation",
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+        .0;
+    let sibling_observation = entities
+        .add_observation(
+            "sibling-task-service",
+            "task-scope-canary sibling observation",
+            None,
+            None,
+        )
+        .await
+        .unwrap()
+        .0;
+
+    let project_session = sessions
+        .start_session(Some("codex"), Some("task-scope-project"), None)
+        .await
+        .unwrap();
+    let project_event = sessions
+        .log_event(
+            &project_session.id,
+            EventType::Observation,
+            "task-scope-canary session without task ownership",
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    entities
+        .create_entity("task-scope-tool", EntityType::Tool, None)
+        .await
+        .unwrap();
+    let project_usage = tools
+        .log_usage(
+            "task-scope-tool",
+            "task-scope-canary usage without task ownership",
+            ToolOutcome::Success,
+            Some(&project_session.id),
+        )
+        .await
+        .unwrap();
+
+    let current_memory = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "task-scope-canary current memory",
+                "current task memory",
+                MemoryScope::Task {
+                    project_id: Some(project.id),
+                    project_name: None,
+                    task_id: Some(current_task.id),
+                    task_name: current_task.name.clone(),
+                },
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "scope-test")),
+        )
+        .await
+        .unwrap();
+    let sibling_memory = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "task-scope-canary sibling memory",
+                "sibling task memory",
+                MemoryScope::Task {
+                    project_id: Some(project.id),
+                    project_name: Some(project.name.clone()),
+                    task_id: Some(sibling_task.id),
+                    task_name: sibling_task.name.clone(),
+                },
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "scope-test")),
+        )
+        .await
+        .unwrap();
+
+    let related = search
+        .search_related(
+            "task-scope-canary",
+            20,
+            Some(0.0),
+            None,
+            &SearchOptions {
+                project: Some(project.name.clone()),
+                cwd: None,
+            },
+            Some(&current_task.id.to_string()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(related.task.as_deref(), Some("current-task"));
+    for expected_id in [current_entity.id, current_observation.id, current_memory.id] {
+        assert!(related
+            .results
+            .iter()
+            .any(|result| result.id == expected_id.to_string()));
+    }
+    for forbidden_id in [
+        sibling_entity.id,
+        sibling_observation.id,
+        sibling_memory.id,
+        project_event.id,
+        project_usage.id,
+    ] {
+        assert!(
+            related
+                .results
+                .iter()
+                .all(|result| result.id != forbidden_id.to_string()),
+            "exact-task search leaked result {forbidden_id}"
+        );
+    }
+    assert!(related.omitted_layers.contains(&SearchLayer::Document));
+    assert!(related.omitted_layers.contains(&SearchLayer::SessionEvent));
+    assert!(related.omitted_layers.contains(&SearchLayer::ToolUsage));
+    assert!(!related.results.iter().any(|result| matches!(
+        result.source,
+        SearchResultSource::SessionEvent | SearchResultSource::ToolUsage
+    )));
+
+    let state = ToolState::new();
+    state.init_entity(entities).await;
+    state.init_session(sessions).await;
+    state.init_tool_intel(tools).await;
+    state.init_work(work).await;
+    state.init_search(search).await;
+    let exact_task_scope = RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some("task-scope-project".to_string()),
+        task: Some(current_task.id.to_string()),
+        cwd: None,
+    };
+
+    let session_response = mcp_tools::session_new(
+        &state,
+        serde_json::from_value::<SessionRequestNew>(json!({
+            "action": "search",
+            "query": "task-scope-canary",
+            "search_scope": exact_task_scope
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let session_json: Value = serde_json::from_str(&session_response).unwrap();
+    assert_eq!(session_json["count"], 0);
+    assert_eq!(session_json["resolved_task"], "current-task");
+    assert_eq!(session_json["omitted_layers"], json!(["session_event"]));
+    assert!(!session_response.contains(&project_event.id.to_string()));
+
+    let tool_response = mcp_tools::tool_new(
+        &state,
+        serde_json::from_value::<ToolRequestNew>(json!({
+            "action": "search",
+            "query": "task-scope-canary",
+            "search_scope": exact_task_scope
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let tool_json: Value = serde_json::from_str(&tool_response).unwrap();
+    assert_eq!(tool_json["count"], 0);
+    assert_eq!(tool_json["resolved_task"], "current-task");
+    assert_eq!(tool_json["omitted_layers"], json!(["tool_usage"]));
+    assert!(!tool_response.contains(&project_usage.id.to_string()));
+
+    for request in [
+        json!({
+            "action": "get",
+            "session_id": project_session.id.to_string(),
+            "scope": exact_task_scope
+        }),
+        json!({
+            "action": "list",
+            "scope": exact_task_scope
+        }),
+    ] {
+        let response = mcp_tools::session_new(
+            &state,
+            serde_json::from_value::<SessionRequestNew>(request).unwrap(),
+        )
+        .await
+        .unwrap();
+        let response_json: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response_json["resolved_task"], "current-task");
+        assert_eq!(response_json["omitted_layers"], json!(["session_event"]));
+        assert!(!response.contains(&project_event.id.to_string()));
+    }
+
+    for request in [
+        json!({
+            "action": "list",
+            "scope": exact_task_scope
+        }),
+        json!({
+            "action": "recommend",
+            "context": "task-scope-canary",
+            "scope": exact_task_scope
+        }),
+        json!({
+            "action": "stats",
+            "tool_name": "task-scope-tool",
+            "scope": exact_task_scope
+        }),
+    ] {
+        let response = mcp_tools::tool_new(
+            &state,
+            serde_json::from_value::<ToolRequestNew>(request).unwrap(),
+        )
+        .await
+        .unwrap();
+        let response_json: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(response_json["resolved_task"], "current-task");
+        assert_eq!(response_json["omitted_layers"], json!(["tool_usage"]));
+        assert!(!response.contains(&project_usage.id.to_string()));
+        assert_eq!(response_json["count"].as_u64().unwrap_or(0), 0);
+        assert_eq!(response_json["total_usages"].as_u64().unwrap_or(0), 0);
+    }
+
+    let exact_entity_stats = mcp_tools::entity_stats(
+        &state,
+        serde_json::from_value::<EntityStatsRequest>(json!({
+            "scope": exact_task_scope
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let exact_entity_stats_json: Value = serde_json::from_str(&exact_entity_stats).unwrap();
+    assert_eq!(exact_entity_stats_json["entity_count"], 1);
+    assert_eq!(exact_entity_stats_json["observation_count"], 1);
+    assert_eq!(exact_entity_stats_json["resolved_task"], "current-task");
+
+    let exact_session_stats = mcp_tools::session_stats(
+        &state,
+        serde_json::from_value::<SessionStatsRequest>(json!({
+            "scope": exact_task_scope
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let exact_session_stats_json: Value = serde_json::from_str(&exact_session_stats).unwrap();
+    assert_eq!(exact_session_stats_json["total_sessions"], 0);
+    assert_eq!(
+        exact_session_stats_json["omitted_layers"],
+        json!(["session_stats"])
+    );
+
+    let exact_tool_stats = mcp_tools::tool_intel_stats(
+        &state,
+        serde_json::from_value::<ToolIntelStatsRequest>(json!({
+            "scope": exact_task_scope
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let exact_tool_stats_json: Value = serde_json::from_str(&exact_tool_stats).unwrap();
+    assert_eq!(exact_tool_stats_json["usage_count"], 0);
+    assert_eq!(
+        exact_tool_stats_json["omitted_layers"],
+        json!(["tool_intel_stats"])
+    );
+
+    let exact_work_stats = mcp_tools::work_stats(
+        &state,
+        serde_json::from_value::<WorkStatsRequest>(json!({
+            "scope": exact_task_scope
+        }))
+        .unwrap(),
+    )
+    .await
+    .unwrap();
+    let exact_work_stats_json: Value = serde_json::from_str(&exact_work_stats).unwrap();
+    assert_eq!(exact_work_stats_json["project_count"], 1);
+    assert_eq!(exact_work_stats_json["task_count"], 1);
+    assert_eq!(exact_work_stats_json["pr_count"], 1);
+    assert_eq!(exact_work_stats_json["project_observation_count"], 0);
+    assert_eq!(exact_work_stats_json["task_observation_count"], 1);
+}
+
+#[tokio::test]
+async fn scoped_search_fails_closed_without_a_boundary_and_local_defaults_to_global_user_memory() {
+    let (search, _, _, _, _, memory) = setup_related_search_service().await;
+    let project_memory = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "unscoped-canary project memory",
+                "must not be returned by unscoped local search",
+                MemoryScope::project("another-project"),
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "scope-test")),
+        )
+        .await
+        .unwrap();
+    let global_memory = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Preference,
+                "unscoped-canary global memory",
+                "eligible without a project boundary",
+                MemoryScope::Global,
+                ClaimOrigin::UserStated,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "scope-test")),
+        )
+        .await
+        .unwrap();
+
+    let local = search
+        .search_local_memory(
+            "unscoped-canary",
+            20,
+            Some(0.0),
+            &SearchOptions::default(),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(local
+        .iter()
+        .any(|result| result.id == global_memory.id.to_string()));
+    assert!(local
+        .iter()
+        .all(|result| result.id != project_memory.id.to_string()));
+
+    let error = search
+        .search_related(
+            "unscoped-canary",
+            20,
+            Some(0.0),
+            None,
+            &SearchOptions::default(),
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("related search requires"));
 }

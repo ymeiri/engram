@@ -22,6 +22,15 @@ cargo
 
 # engram data directory (local development)
 .engram/
+/.engram-vault/
+
+# Local handoff and captured command artifacts
+/outputs/
+/*-local-command-*.txt
+
+# Python caches
+__pycache__/
+*.py[cod]
 
 # Test artifacts
 *.profraw

@@ -252,6 +252,12 @@ pub struct MonorepoComponent {
     pub kind: Option<String>,
     /// Optional description.
     pub description: Option<String>,
+    /// Checkout-relative authoritative source path for a live-derived component.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
+    /// SHA-256 of the authoritative source observed for a live-derived component.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sha256: Option<String>,
     /// Creation timestamp.
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
@@ -272,6 +278,8 @@ impl MonorepoComponent {
             path: normalize_component_path(path.into()),
             kind: None,
             description: None,
+            source_path: None,
+            source_sha256: None,
             created_at: now,
             updated_at: now,
         }
@@ -288,6 +296,18 @@ impl MonorepoComponent {
     #[must_use]
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
+        self
+    }
+
+    /// Attach checkout-relative evidence for a component derived from live repository state.
+    #[must_use]
+    pub fn with_source(
+        mut self,
+        source_path: impl Into<String>,
+        source_sha256: impl Into<String>,
+    ) -> Self {
+        self.source_path = Some(source_path.into());
+        self.source_sha256 = Some(source_sha256.into());
         self
     }
 }

@@ -4,6 +4,8 @@
 
 use engram_core::document::{DocChunk, DocSource, SourceType};
 use engram_core::id::Id;
+use engram_index::{SearchService, WorkService};
+use engram_mcp::tools::{self, DocsRequestNew, ToolState};
 use engram_store::repos::DocumentRepo;
 use engram_store::{connect, connect_and_init, StoreConfig};
 
@@ -725,6 +727,139 @@ async fn test_document_stats() {
     let stats = repo.stats().await.expect("Failed to get stats");
     assert_eq!(stats.source_count, 2);
     assert_eq!(stats.chunk_count, 3);
+}
+
+#[tokio::test]
+async fn mcp_document_stats_requires_explicit_global_for_unowned_index_counts() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config).await.expect("Failed to connect");
+    let repo = DocumentRepo::new(db.clone());
+    repo.init_schema().await.unwrap();
+    let source = DocSource::local_file("/docs/scope-canary.md");
+    repo.save_source(&source).await.unwrap();
+    let chunk = DocChunk::new(source.id, "# Scope", 1, "scope canary");
+    repo.save_chunks(&source.id, vec![(chunk, vec![0.1, 0.2, 0.3])])
+        .await
+        .unwrap();
+
+    let state = ToolState::new();
+    state.init_search(SearchService::new(db)).await;
+    let parse = |response: String| serde_json::from_str::<serde_json::Value>(&response).unwrap();
+
+    let local = parse(
+        tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(serde_json::json!({
+                "action": "stats"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(local["source_count"], 0);
+    assert_eq!(local["chunk_count"], 0);
+    assert_eq!(
+        local["omitted_layers"],
+        serde_json::json!(["document_stats"])
+    );
+
+    let global = parse(
+        tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(serde_json::json!({
+                "action": "stats",
+                "scope": {"relevance_mode": "global"}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(global["source_count"], 1);
+    assert_eq!(global["chunk_count"], 1);
+    assert_eq!(global["authorization_scope_enforced"], false);
+}
+
+#[tokio::test]
+async fn mcp_document_admin_actions_abstain_before_explicit_global_scope() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config).await.expect("Failed to connect");
+    let work = WorkService::new(db.clone());
+    work.init().await.unwrap();
+    work.create_project("document-scope", None).await.unwrap();
+    let state = ToolState::new();
+    state.init_work(work).await;
+    state.init_search(SearchService::new(db)).await;
+
+    for action in [
+        "orphan_report",
+        "recovery",
+        "reindex_plan",
+        "reindex_execute",
+        "cleanup_plan",
+        "cleanup_execute",
+        "quarantine_review_export",
+        "quarantine_review_status",
+        "quarantine_review_prioritize",
+        "quarantine_review_apply",
+    ] {
+        let local: serde_json::Value = serde_json::from_str(
+            &tools::docs_new(
+                &state,
+                serde_json::from_value::<DocsRequestNew>(serde_json::json!({
+                    "action": action
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(local["executed"], false, "local {action} should abstain");
+        assert_eq!(
+            local["omitted_layers"],
+            serde_json::json!(["document_admin"])
+        );
+
+        let related: serde_json::Value = serde_json::from_str(
+            &tools::docs_new(
+                &state,
+                serde_json::from_value::<DocsRequestNew>(serde_json::json!({
+                    "action": action,
+                    "scope": {
+                        "relevance_mode": "related",
+                        "project": "document-scope"
+                    }
+                }))
+                .unwrap(),
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            related["executed"], false,
+            "related {action} should abstain"
+        );
+        assert_eq!(related["resolved_project"], "document-scope");
+        assert_eq!(
+            related["omitted_layers"],
+            serde_json::json!(["document_admin"])
+        );
+
+        let global = tools::docs_new(
+            &state,
+            serde_json::from_value::<DocsRequestNew>(serde_json::json!({
+                "action": action,
+                "scope": {"relevance_mode": "global"}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(global, "Document service not initialized");
+    }
 }
 
 #[tokio::test]

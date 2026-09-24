@@ -1,0 +1,581 @@
+{
+  "probe_id": "lean-orient-probe-v1",
+  "protocol_sha256": "2474e56d896be24979619091ed00d70a44ae1b3e13146ca919c26e34a4221760",
+  "fixture_revision": "99662dadc9e5bde6c6bab915bfd926e166433ad5a8a4066d4d651dc3264c10f8",
+  "run_count": 35,
+  "latency_p50_ms": 74,
+  "latency_p95_ms": 84,
+  "packet_p50_bytes": 3737,
+  "packet_p95_bytes": 4512,
+  "targets": {
+    "latency_p50_ms": 150,
+    "latency_p95_ms": 500,
+    "packet_p50_bytes": 4096,
+    "packet_p95_bytes": 8192
+  },
+  "aggregate_violations": [],
+  "passed": true,
+  "runs": [
+    {
+      "scenario_id": "repo_identity_known",
+      "repetition": 1,
+      "packet_bytes": 3737,
+      "latency_ms": 83,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "repetition": 1,
+      "packet_bytes": 3757,
+      "latency_ms": 82,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_ambiguous",
+      "repetition": 1,
+      "packet_bytes": 2897,
+      "latency_ms": 18,
+      "repository_remote": null,
+      "project": null,
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "decision_current",
+      "repetition": 1,
+      "packet_bytes": 3737,
+      "latency_ms": 84,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "stale_superseded_memory",
+      "repetition": 1,
+      "packet_bytes": 3177,
+      "latency_ms": 98,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [
+        "decision-atlas-http-client-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "no_durable_context",
+      "repetition": 1,
+      "packet_bytes": 2946,
+      "latency_ms": 73,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "compaction_resume_current_plan",
+      "repetition": 1,
+      "packet_bytes": 4512,
+      "latency_ms": 79,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2",
+        "decision-atlas-http-client-v2",
+        "plan-atlas-worker-current"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_known",
+      "repetition": 2,
+      "packet_bytes": 3737,
+      "latency_ms": 81,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "repetition": 2,
+      "packet_bytes": 3757,
+      "latency_ms": 82,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_ambiguous",
+      "repetition": 2,
+      "packet_bytes": 2897,
+      "latency_ms": 17,
+      "repository_remote": null,
+      "project": null,
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "decision_current",
+      "repetition": 2,
+      "packet_bytes": 3737,
+      "latency_ms": 83,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "stale_superseded_memory",
+      "repetition": 2,
+      "packet_bytes": 3177,
+      "latency_ms": 70,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [
+        "decision-atlas-http-client-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "no_durable_context",
+      "repetition": 2,
+      "packet_bytes": 2946,
+      "latency_ms": 71,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "compaction_resume_current_plan",
+      "repetition": 2,
+      "packet_bytes": 4512,
+      "latency_ms": 81,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2",
+        "decision-atlas-http-client-v2",
+        "plan-atlas-worker-current"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_known",
+      "repetition": 3,
+      "packet_bytes": 3737,
+      "latency_ms": 79,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "repetition": 3,
+      "packet_bytes": 3757,
+      "latency_ms": 81,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_ambiguous",
+      "repetition": 3,
+      "packet_bytes": 2897,
+      "latency_ms": 17,
+      "repository_remote": null,
+      "project": null,
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "decision_current",
+      "repetition": 3,
+      "packet_bytes": 3737,
+      "latency_ms": 82,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "stale_superseded_memory",
+      "repetition": 3,
+      "packet_bytes": 3177,
+      "latency_ms": 69,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [
+        "decision-atlas-http-client-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "no_durable_context",
+      "repetition": 3,
+      "packet_bytes": 2946,
+      "latency_ms": 68,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "compaction_resume_current_plan",
+      "repetition": 3,
+      "packet_bytes": 4512,
+      "latency_ms": 80,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2",
+        "decision-atlas-http-client-v2",
+        "plan-atlas-worker-current"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_known",
+      "repetition": 4,
+      "packet_bytes": 3737,
+      "latency_ms": 81,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "repetition": 4,
+      "packet_bytes": 3757,
+      "latency_ms": 78,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_ambiguous",
+      "repetition": 4,
+      "packet_bytes": 2897,
+      "latency_ms": 17,
+      "repository_remote": null,
+      "project": null,
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "decision_current",
+      "repetition": 4,
+      "packet_bytes": 3737,
+      "latency_ms": 81,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "stale_superseded_memory",
+      "repetition": 4,
+      "packet_bytes": 3177,
+      "latency_ms": 70,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [
+        "decision-atlas-http-client-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "no_durable_context",
+      "repetition": 4,
+      "packet_bytes": 2946,
+      "latency_ms": 65,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "compaction_resume_current_plan",
+      "repetition": 4,
+      "packet_bytes": 4512,
+      "latency_ms": 71,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2",
+        "decision-atlas-http-client-v2",
+        "plan-atlas-worker-current"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_known",
+      "repetition": 5,
+      "packet_bytes": 3737,
+      "latency_ms": 77,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "repetition": 5,
+      "packet_bytes": 3757,
+      "latency_ms": 74,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "repo_identity_ambiguous",
+      "repetition": 5,
+      "packet_bytes": 2896,
+      "latency_ms": 16,
+      "repository_remote": null,
+      "project": null,
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "decision_current",
+      "repetition": 5,
+      "packet_bytes": 3737,
+      "latency_ms": 74,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "stale_superseded_memory",
+      "repetition": 5,
+      "packet_bytes": 3177,
+      "latency_ms": 65,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [
+        "decision-atlas-http-client-v2"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    },
+    {
+      "scenario_id": "no_durable_context",
+      "repetition": 5,
+      "packet_bytes": 2945,
+      "latency_ms": 66,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [],
+      "returned_context_keys": [],
+      "explanations_complete": true,
+      "ambiguity_reported": true,
+      "failures": []
+    },
+    {
+      "scenario_id": "compaction_resume_current_plan",
+      "repetition": 5,
+      "packet_bytes": 4512,
+      "latency_ms": 74,
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "project": "atlas",
+      "components": [
+        "queue-worker"
+      ],
+      "returned_context_keys": [
+        "decision-atlas-queue-v2",
+        "decision-atlas-http-client-v2",
+        "plan-atlas-worker-current"
+      ],
+      "explanations_complete": true,
+      "ambiguity_reported": false,
+      "failures": []
+    }
+  ],
+  "limitations": [
+    "This probe measures Engram's in-process lean MCP response, not coding-agent task success, token usage, or provider latency.",
+    "Repository remote correctness is checked from the same isolated repository service; the lean packet intentionally requires progressive repository evidence retrieval.",
+    "The compaction/resume scenario sends a resume_session intent to a freshly seeded in-process store; it does not compact a host session, restart Engram, or cross a process boundary.",
+    "Verified procedure, secret-capture, deletion, and host-native-memory claims remain covered by their dedicated tests and execution-gated evaluations."
+  ]
+}

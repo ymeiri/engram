@@ -16,6 +16,7 @@ use engram_core::session::{Event, Session};
 use engram_core::work::{Pr, Project, ProjectObservation, Task, TaskObservation};
 use engram_store::{Db, EntityRepo, MemoryRepo, RepositoryRepo, SessionRepo, WorkRepo};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,17 @@ const REPOSITORY_REVIEW_GENERATED_MARKER: &str =
     "<!-- engram:generated:file repository-migration-review-v1 -->";
 const REPOSITORY_MACHINE_RECORD_HEADING: &str = "## Machine Record";
 const REPOSITORY_MACHINE_RECORD_FENCE: &str = "```json";
+const COMPONENT_MANIFEST_FILE: &str = "component.json";
+const MAX_COMPONENT_MANIFEST_BYTES: u64 = 16 * 1024;
+const MAX_COMPONENT_NAME_BYTES: usize = 128;
+const MAX_COMPONENT_KIND_BYTES: usize = 64;
+
+#[derive(Debug, Deserialize)]
+struct ComponentManifest {
+    name: String,
+    #[serde(default)]
+    kind: Option<String>,
+}
 
 /// Result of detecting a Git checkout from a working directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -679,17 +691,30 @@ impl RepositoryService {
     ) -> IndexResult<GitRepository> {
         validate_non_empty(name, "repository name")?;
 
-        let existing = if let Some(remote_url) = remote_url {
-            self.repo.get_repository_by_remote_url(remote_url).await?
+        let existing = if let Some(remote_url) = remote_url.filter(|value| !value.trim().is_empty())
+        {
+            let normalized_remote = normalize_remote_reference(remote_url);
+            self.repo
+                .list_repositories(None)
+                .await?
+                .into_iter()
+                .find(|repository| {
+                    repository
+                        .remote_url
+                        .as_deref()
+                        .and_then(normalize_remote_reference)
+                        == normalized_remote
+                })
         } else {
             self.repo.get_repository_by_name(name).await?
-        }
-        .or(self.repo.get_repository_by_name(name).await?);
+        };
 
         let mut repository = existing.unwrap_or_else(|| GitRepository::new(name));
         repository.name = name.to_string();
-        if let Some(remote_url) = remote_url.filter(|value| !value.trim().is_empty()) {
-            repository = repository.with_remote_url(remote_url.to_string());
+        if repository.remote_url.is_none() {
+            if let Some(remote_url) = remote_url.filter(|value| !value.trim().is_empty()) {
+                repository = repository.with_remote_url(remote_url.to_string());
+            }
         }
         if let Some(default_branch) = default_branch.filter(|value| !value.trim().is_empty()) {
             repository.default_branch = Some(default_branch.to_string());
@@ -736,6 +761,30 @@ impl RepositoryService {
         Ok(self.repo.list_repositories(limit).await?)
     }
 
+    /// List repositories with an explicit link to a project.
+    pub async fn list_repositories_for_project(
+        &self,
+        project_name: &str,
+        limit: Option<usize>,
+    ) -> IndexResult<Vec<GitRepository>> {
+        let mut repositories = Vec::new();
+        for repository in self.repo.list_repositories(None).await? {
+            let linked = self
+                .repo
+                .list_project_links(&repository.id)
+                .await?
+                .into_iter()
+                .any(|link| link.project_name.eq_ignore_ascii_case(project_name));
+            if linked {
+                repositories.push(repository);
+                if limit.is_some_and(|limit| repositories.len() >= limit) {
+                    break;
+                }
+            }
+        }
+        Ok(repositories)
+    }
+
     /// Detect a Git repository from a working directory and register the checkout.
     pub async fn detect_repository(&self, cwd: &Path) -> IndexResult<RepositoryDetection> {
         let root = run_git_required(cwd, &["rev-parse", "--show-toplevel"])?;
@@ -749,25 +798,30 @@ impl RepositoryService {
         let head_sha = run_git_optional(&root_path, &["rev-parse", "HEAD"])?;
         let is_dirty = detect_dirty(&root_path)?;
 
-        let name = remote_url
-            .as_deref()
-            .and_then(repository_name_from_remote)
-            .or_else(|| {
-                root_path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .map(str::to_string)
-            })
-            .ok_or_else(|| IndexError::Parse("could not derive repository name".into()))?;
-
-        let repository = self
-            .register_repository(
-                &name,
-                remote_url.as_deref(),
-                default_branch.as_deref(),
-                None,
-            )
-            .await?;
+        let repository = if let Some(remote_url) = remote_url.as_deref() {
+            let name = repository_name_from_remote(remote_url)
+                .ok_or_else(|| IndexError::Parse("could not derive repository name".into()))?;
+            self.register_repository(&name, Some(remote_url), default_branch.as_deref(), None)
+                .await?
+        } else if let Some(existing_checkout) = self.repo.get_checkout_by_path(&root).await? {
+            let repository_id = existing_checkout.repository_id.ok_or_else(|| {
+                IndexError::InvalidState(format!(
+                    "registered checkout {root} is not attached to a repository"
+                ))
+            })?;
+            self.repo
+                .get_repository(&repository_id)
+                .await?
+                .ok_or_else(|| {
+                    IndexError::InvalidState(format!(
+                        "registered checkout {root} references missing repository {repository_id}"
+                    ))
+                })?
+        } else {
+            return Err(IndexError::InvalidState(format!(
+                "Git checkout at {root} has no origin remote and no exact registered checkout; add a stable remote or register the repository explicitly before using it as durable identity"
+            )));
+        };
 
         let mut checkout = self
             .repo
@@ -778,7 +832,7 @@ impl RepositoryService {
         checkout.update_detected_state(current_branch, head_sha, is_dirty);
         self.repo.save_checkout(&checkout).await?;
 
-        let context = self.resolve_cwd(Path::new(&root)).await?.ok_or_else(|| {
+        let context = self.resolve_cwd(cwd).await?.ok_or_else(|| {
             IndexError::InvalidState("detected checkout was not resolvable".into())
         })?;
 
@@ -825,6 +879,8 @@ impl RepositoryService {
         component.description = description
             .filter(|value| !value.trim().is_empty())
             .map(str::to_string);
+        component.source_path = None;
+        component.source_sha256 = None;
         component.updated_at = OffsetDateTime::now_utc();
 
         self.repo.save_component(&component).await?;
@@ -909,7 +965,8 @@ impl RepositoryService {
 
         let components = self.repo.list_components(&repository.id).await?;
         let checkout_path = canonical_or_original(Path::new(&checkout.local_path));
-        let matching_components = matching_components(&cwd_path, &checkout_path, components);
+        let matching_components =
+            resolve_matching_components(&repository.id, &cwd_path, &checkout_path, components)?;
         let linked_projects = self.repo.list_project_links(&repository.id).await?;
 
         Ok(Some(RepositoryContext {
@@ -2233,7 +2290,7 @@ fn extract_remote_references(text: &str) -> Vec<RemoteReference> {
     remotes
 }
 
-fn normalize_remote_reference(value: &str) -> Option<String> {
+pub(crate) fn normalize_remote_reference(value: &str) -> Option<String> {
     let raw = value.trim().trim_end_matches('/');
     let raw_without_query = raw.split(['?', '#']).next()?.trim_end_matches('/');
     let explicit_git_suffix = raw_without_query.trim_end_matches('/').ends_with(".git");
@@ -2977,11 +3034,12 @@ fn canonical_or_original(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn matching_components(
+pub(crate) fn resolve_matching_components(
+    repository_id: &Id,
     cwd: &Path,
     checkout_root: &Path,
     components: Vec<MonorepoComponent>,
-) -> Vec<MonorepoComponent> {
+) -> IndexResult<Vec<MonorepoComponent>> {
     let relative = cwd.strip_prefix(checkout_root).unwrap_or(cwd);
     let mut matches: Vec<_> = components
         .into_iter()
@@ -2989,8 +3047,155 @@ fn matching_components(
             component.path == "." || relative.starts_with(Path::new(&component.path))
         })
         .collect();
+    for derived in discover_checked_in_components(repository_id, cwd, checkout_root)? {
+        if let Some(existing) = matches
+            .iter_mut()
+            .find(|component| component.path == derived.path)
+        {
+            existing.name = derived.name;
+            existing.kind = derived.kind;
+            existing.source_path = derived.source_path;
+            existing.source_sha256 = derived.source_sha256;
+        } else {
+            matches.push(derived);
+        }
+    }
     matches.sort_by_key(|component| std::cmp::Reverse(component.path.len()));
-    matches
+    Ok(matches)
+}
+
+fn discover_checked_in_components(
+    repository_id: &Id,
+    cwd: &Path,
+    checkout_root: &Path,
+) -> IndexResult<Vec<MonorepoComponent>> {
+    let mut current = if cwd.is_file() {
+        cwd.parent().unwrap_or(cwd)
+    } else {
+        cwd
+    };
+    if !path_starts_with(current, checkout_root) {
+        return Ok(Vec::new());
+    }
+
+    let mut components = Vec::new();
+    loop {
+        let manifest_path = current.join(COMPONENT_MANIFEST_FILE);
+        if manifest_path.exists() {
+            let relative_manifest = manifest_path.strip_prefix(checkout_root).map_err(|_| {
+                IndexError::InvalidState(format!(
+                    "component manifest {} is outside checkout {}",
+                    manifest_path.display(),
+                    checkout_root.display()
+                ))
+            })?;
+            let relative_manifest_string = relative_manifest.display().to_string();
+            if run_git_optional(
+                checkout_root,
+                &[
+                    "ls-files",
+                    "--error-unmatch",
+                    "--",
+                    &relative_manifest_string,
+                ],
+            )?
+            .is_some()
+            {
+                components.push(read_component_manifest(
+                    repository_id,
+                    checkout_root,
+                    &manifest_path,
+                    relative_manifest,
+                )?);
+            }
+        }
+
+        if current == checkout_root {
+            break;
+        }
+        let Some(parent) = current.parent() else {
+            break;
+        };
+        current = parent;
+    }
+    Ok(components)
+}
+
+fn read_component_manifest(
+    repository_id: &Id,
+    checkout_root: &Path,
+    manifest_path: &Path,
+    relative_manifest: &Path,
+) -> IndexResult<MonorepoComponent> {
+    let metadata = fs::symlink_metadata(manifest_path)?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(IndexError::InvalidState(format!(
+            "tracked component manifest {} must be a regular non-symlink file",
+            relative_manifest.display()
+        )));
+    }
+    if metadata.len() > MAX_COMPONENT_MANIFEST_BYTES {
+        return Err(IndexError::InvalidState(format!(
+            "tracked component manifest {} exceeds {} bytes",
+            relative_manifest.display(),
+            MAX_COMPONENT_MANIFEST_BYTES
+        )));
+    }
+
+    let bytes = fs::read(manifest_path)?;
+    let manifest: ComponentManifest = serde_json::from_slice(&bytes).map_err(|error| {
+        IndexError::Parse(format!(
+            "invalid tracked component manifest {}: {error}",
+            relative_manifest.display()
+        ))
+    })?;
+    let name = validate_component_manifest_value(
+        &manifest.name,
+        "name",
+        MAX_COMPONENT_NAME_BYTES,
+        relative_manifest,
+    )?;
+    let kind = manifest
+        .kind
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            validate_component_manifest_value(
+                value,
+                "kind",
+                MAX_COMPONENT_KIND_BYTES,
+                relative_manifest,
+            )
+        })
+        .transpose()?;
+    let component_dir = manifest_path.parent().unwrap_or(checkout_root);
+    let component_path = component_dir
+        .strip_prefix(checkout_root)
+        .unwrap_or(component_dir)
+        .display()
+        .to_string();
+    let mut component = MonorepoComponent::new(*repository_id, name, component_path).with_source(
+        relative_manifest.display().to_string(),
+        format!("{:x}", Sha256::digest(&bytes)),
+    );
+    component.kind = kind;
+    Ok(component)
+}
+
+fn validate_component_manifest_value(
+    value: &str,
+    field: &str,
+    max_bytes: usize,
+    relative_manifest: &Path,
+) -> IndexResult<String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > max_bytes || value.chars().any(char::is_control) {
+        return Err(IndexError::Parse(format!(
+            "tracked component manifest {} has invalid {field}",
+            relative_manifest.display()
+        )));
+    }
+    Ok(value.to_string())
 }
 
 #[cfg(test)]
@@ -3096,6 +3301,288 @@ mod tests {
             detection.context.checkout.as_ref().unwrap().repository_id,
             Some(detection.context.repository.id)
         );
+    }
+
+    #[tokio::test]
+    async fn tracked_component_manifest_is_live_authoritative_identity() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let component_dir = dir.path().join("services/worker");
+        std::fs::create_dir_all(&component_dir).unwrap();
+        run_git(dir.path(), &["init"]);
+        run_git(
+            dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/acme/atlas.git",
+            ],
+        );
+        let manifest = component_dir.join(COMPONENT_MANIFEST_FILE);
+        std::fs::write(&manifest, r#"{"name":"queue-worker","kind":"service"}"#).unwrap();
+        commit_all(dir.path(), "add component identity");
+
+        let detected = service.detect_repository(&component_dir).await.unwrap();
+        let component = &detected.context.matching_components[0];
+        let initial_hash = component.source_sha256.clone().unwrap();
+        assert_eq!(component.name, "queue-worker");
+        assert_eq!(component.path, "services/worker");
+        assert_eq!(component.kind.as_deref(), Some("service"));
+        assert_eq!(
+            component.source_path.as_deref(),
+            Some("services/worker/component.json")
+        );
+        assert_eq!(initial_hash.len(), 64);
+        assert!(service
+            .repo
+            .list_components(&detected.context.repository.id)
+            .await
+            .unwrap()
+            .is_empty());
+
+        std::fs::write(&manifest, r#"{"name":"queue-worker-v2","kind":"service"}"#).unwrap();
+        let updated = service.resolve_cwd(&component_dir).await.unwrap().unwrap();
+        assert_eq!(updated.matching_components[0].name, "queue-worker-v2");
+        assert_ne!(
+            updated.matching_components[0]
+                .source_sha256
+                .as_deref()
+                .unwrap(),
+            initial_hash
+        );
+
+        std::fs::remove_file(manifest).unwrap();
+        let removed = service.resolve_cwd(&component_dir).await.unwrap().unwrap();
+        assert!(removed.matching_components.is_empty());
+    }
+
+    #[tokio::test]
+    async fn tracked_component_manifest_overrides_without_rewriting_manual_fallback() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let component_dir = dir.path().join("services/worker");
+        std::fs::create_dir_all(&component_dir).unwrap();
+        run_git(dir.path(), &["init"]);
+        run_git(
+            dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/acme/atlas.git",
+            ],
+        );
+        let manifest = component_dir.join(COMPONENT_MANIFEST_FILE);
+        std::fs::write(&manifest, r#"{"name":"queue-worker","kind":"service"}"#).unwrap();
+        commit_all(dir.path(), "add component identity");
+
+        let detected = service.detect_repository(&component_dir).await.unwrap();
+        service
+            .register_component(
+                Some(&detected.context.repository.id),
+                None,
+                "private-worker-alias",
+                "services/worker",
+                Some("private-kind"),
+                Some("user-local fallback"),
+            )
+            .await
+            .unwrap();
+
+        let resolved = service.resolve_cwd(&component_dir).await.unwrap().unwrap();
+        assert_eq!(resolved.matching_components[0].name, "queue-worker");
+        assert_eq!(
+            resolved.matching_components[0].source_path.as_deref(),
+            Some("services/worker/component.json")
+        );
+        let stored = service
+            .repo
+            .list_components(&detected.context.repository.id)
+            .await
+            .unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].name, "private-worker-alias");
+        assert_eq!(stored[0].kind.as_deref(), Some("private-kind"));
+        assert_eq!(
+            stored[0].description.as_deref(),
+            Some("user-local fallback")
+        );
+        assert!(stored[0].source_path.is_none());
+
+        std::fs::remove_file(manifest).unwrap();
+        let fallback = service.resolve_cwd(&component_dir).await.unwrap().unwrap();
+        assert_eq!(fallback.matching_components[0].name, "private-worker-alias");
+        assert_eq!(
+            fallback.matching_components[0].kind.as_deref(),
+            Some("private-kind")
+        );
+        assert!(fallback.matching_components[0].source_path.is_none());
+    }
+
+    #[tokio::test]
+    async fn untracked_component_manifest_cannot_define_identity() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let component_dir = dir.path().join("services/worker");
+        std::fs::create_dir_all(&component_dir).unwrap();
+        run_git(dir.path(), &["init"]);
+        run_git(
+            dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/acme/atlas.git",
+            ],
+        );
+        std::fs::write(
+            component_dir.join(COMPONENT_MANIFEST_FILE),
+            r#"{"name":"untrusted-worker"}"#,
+        )
+        .unwrap();
+
+        let detected = service.detect_repository(&component_dir).await.unwrap();
+
+        assert!(detected.context.matching_components.is_empty());
+    }
+
+    #[tokio::test]
+    async fn malformed_tracked_component_manifest_abstains_with_an_error() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let component_dir = dir.path().join("services/worker");
+        std::fs::create_dir_all(&component_dir).unwrap();
+        run_git(dir.path(), &["init"]);
+        run_git(
+            dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/acme/atlas.git",
+            ],
+        );
+        std::fs::write(component_dir.join(COMPONENT_MANIFEST_FILE), "{not-json\n").unwrap();
+        commit_all(dir.path(), "add malformed component identity");
+
+        let error = service.detect_repository(&component_dir).await.unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("invalid tracked component manifest services/worker/component.json"));
+    }
+
+    #[tokio::test]
+    async fn register_repository_uses_normalized_remote_identity_without_merging_forks() {
+        let service = setup_service().await;
+        let ssh = service
+            .register_repository("atlas", Some("git@github.com:acme/atlas.git"), None, None)
+            .await
+            .unwrap();
+        let https = service
+            .register_repository("atlas", Some("https://github.com/acme/atlas"), None, None)
+            .await
+            .unwrap();
+        let fork = service
+            .register_repository(
+                "atlas",
+                Some("https://github.com/other/atlas.git"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(ssh.id, https.id);
+        assert_ne!(ssh.id, fork.id);
+        assert_eq!(service.list_repositories(None).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn detect_rejects_unregistered_checkout_without_stable_remote_identity() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        run_git(dir.path(), &["init"]);
+
+        let error = service.detect_repository(dir.path()).await.unwrap_err();
+
+        assert!(error.to_string().contains("has no origin remote"));
+        assert!(service.list_repositories(None).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn moved_checkout_reuses_remote_identity_and_component_links() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let first = tempdir().unwrap();
+        let moved = tempdir().unwrap();
+        std::fs::create_dir_all(first.path().join("services/worker")).unwrap();
+        std::fs::create_dir_all(moved.path().join("services/worker")).unwrap();
+        run_git(first.path(), &["init"]);
+        run_git(
+            first.path(),
+            &["remote", "add", "origin", "git@github.com:acme/atlas.git"],
+        );
+        run_git(moved.path(), &["init"]);
+        run_git(
+            moved.path(),
+            &["remote", "add", "origin", "https://github.com/acme/atlas"],
+        );
+
+        let original = service.detect_repository(first.path()).await.unwrap();
+        service
+            .register_component(
+                Some(&original.context.repository.id),
+                None,
+                "queue-worker",
+                "services/worker",
+                Some("service"),
+                None,
+            )
+            .await
+            .unwrap();
+        service
+            .link_project(
+                "atlas",
+                Some(&original.context.repository.id),
+                None,
+                ProjectRepositoryRole::Primary,
+                Some("services/worker"),
+            )
+            .await
+            .unwrap();
+
+        let moved_detection = service.detect_repository(moved.path()).await.unwrap();
+        let moved_context = service
+            .resolve_cwd(&moved.path().join("services/worker"))
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            moved_detection.context.repository.id,
+            original.context.repository.id
+        );
+        assert_eq!(moved_context.matching_components[0].name, "queue-worker");
+        assert_eq!(moved_context.linked_projects[0].project_name, "atlas");
     }
 
     #[tokio::test]

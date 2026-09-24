@@ -3,6 +3,7 @@
 //! Handles persistence of KnowledgeDoc, FileSync, DocEvent, and DocAlias.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::{redact_serialized_secret_material, reject_serialized_secret_material};
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::knowledge::{
@@ -232,47 +233,51 @@ impl KnowledgeRepo {
         self.db
             .query(
                 r#"
-                DEFINE TABLE knowledge_doc SCHEMALESS;
-                DEFINE INDEX idx_knowledge_doc_name ON knowledge_doc FIELDS name;
-                DEFINE INDEX idx_knowledge_doc_hash ON knowledge_doc FIELDS content_hash;
-                DEFINE INDEX idx_knowledge_doc_path ON knowledge_doc FIELDS canonical_path;
+                DEFINE TABLE IF NOT EXISTS knowledge_doc SCHEMALESS;
+                DEFINE INDEX IF NOT EXISTS idx_knowledge_doc_name ON knowledge_doc FIELDS name;
+                DEFINE INDEX IF NOT EXISTS idx_knowledge_doc_hash ON knowledge_doc FIELDS content_hash;
+                DEFINE INDEX IF NOT EXISTS idx_knowledge_doc_path ON knowledge_doc FIELDS canonical_path;
                 "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         // Create file_sync table (schemaless to avoid ID conflicts)
         self.db
             .query(
                 r#"
-                DEFINE TABLE file_sync SCHEMALESS;
-                DEFINE INDEX idx_file_sync_path ON file_sync FIELDS path, repo UNIQUE;
-                DEFINE INDEX idx_file_sync_hash ON file_sync FIELDS last_hash;
-                DEFINE INDEX idx_file_sync_doc ON file_sync FIELDS doc_id;
+                DEFINE TABLE IF NOT EXISTS file_sync SCHEMALESS;
+                DEFINE INDEX IF NOT EXISTS idx_file_sync_path ON file_sync FIELDS path, repo UNIQUE;
+                DEFINE INDEX IF NOT EXISTS idx_file_sync_hash ON file_sync FIELDS last_hash;
+                DEFINE INDEX IF NOT EXISTS idx_file_sync_doc ON file_sync FIELDS doc_id;
                 "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         // Create doc_event table (schemaless to avoid ID conflicts)
         self.db
             .query(
                 r#"
-                DEFINE TABLE doc_event SCHEMALESS;
-                DEFINE INDEX idx_doc_event_doc ON doc_event FIELDS doc_id;
+                DEFINE TABLE IF NOT EXISTS doc_event SCHEMALESS;
+                DEFINE INDEX IF NOT EXISTS idx_doc_event_doc ON doc_event FIELDS doc_id;
                 "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         // Create doc_alias table
         self.db
             .query(
                 r#"
-                DEFINE TABLE doc_alias SCHEMAFULL;
-                DEFINE FIELD alias ON doc_alias TYPE string;
-                DEFINE FIELD doc_id ON doc_alias TYPE string;
-                DEFINE INDEX idx_doc_alias_alias ON doc_alias FIELDS alias UNIQUE;
+                DEFINE TABLE IF NOT EXISTS doc_alias SCHEMAFULL;
+                DEFINE FIELD IF NOT EXISTS alias ON doc_alias TYPE string;
+                DEFINE FIELD IF NOT EXISTS doc_id ON doc_alias TYPE string;
+                DEFINE INDEX IF NOT EXISTS idx_doc_alias_alias ON doc_alias FIELDS alias UNIQUE;
                 "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         info!("Knowledge schema initialized");
         Ok(())
@@ -282,6 +287,7 @@ impl KnowledgeRepo {
 
     /// Save a knowledge document.
     pub async fn save_doc(&self, doc: &KnowledgeDoc) -> StoreResult<()> {
+        reject_serialized_secret_material("knowledge document", doc)?;
         debug!("Saving knowledge doc: {}", doc.name);
 
         // Use raw query to avoid SurrealDB SDK ID serialization conflicts
@@ -322,7 +328,8 @@ impl KnowledgeRepo {
             .bind(("summary", doc.summary.clone()))
             .bind(("created_at", doc.created_at))
             .bind(("updated_at", doc.updated_at))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -333,7 +340,7 @@ impl KnowledgeRepo {
             .db
             .query(r#"SELECT meta::id(id) as record_id, name, canonical_path, doc_type, status, owner, last_reviewed, content_hash, tags, content, summary, created_at, updated_at FROM type::thing("knowledge_doc", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<KnowledgeDocRecordWithId> = result.take(0)?;
         records
@@ -353,7 +360,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT meta::id(id) as record_id, name, canonical_path, doc_type, status, owner, last_reviewed, content_hash, tags, content, summary, created_at, updated_at FROM knowledge_doc WHERE name = $name LIMIT 1")
             .bind(("name", name.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<KnowledgeDocRecordWithId> = result.take(0)?;
         Ok(records.into_iter().next().and_then(|r| {
@@ -369,7 +376,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT meta::id(id) as record_id, name, canonical_path, doc_type, status, owner, last_reviewed, content_hash, tags, content, summary, created_at, updated_at FROM knowledge_doc WHERE canonical_path = $path LIMIT 1")
             .bind(("path", path.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<KnowledgeDocRecordWithId> = result.take(0)?;
         Ok(records.into_iter().next().and_then(|r| {
@@ -385,7 +392,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT meta::id(id) as record_id, name, canonical_path, doc_type, status, owner, last_reviewed, content_hash, tags, content, summary, created_at, updated_at FROM knowledge_doc WHERE content_hash = $hash")
             .bind(("hash", hash.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<KnowledgeDocRecordWithId> = result.take(0)?;
         let docs = records
@@ -406,7 +413,8 @@ impl KnowledgeRepo {
             .query(
                 "SELECT *, meta::id(id) AS record_id FROM knowledge_doc ORDER BY updated_at DESC",
             )
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<KnowledgeDocRecordWithId> = result.take(0)?;
         let docs = records
@@ -427,7 +435,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT meta::id(id) as record_id, name, canonical_path, doc_type, status, owner, last_reviewed, content_hash, tags, content, summary, created_at, updated_at FROM knowledge_doc WHERE doc_type = $doc_type ORDER BY name")
             .bind(("doc_type", type_str))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<KnowledgeDocRecordWithId> = result.take(0)?;
         let docs = records
@@ -449,13 +457,15 @@ impl KnowledgeRepo {
         self.db
             .query("DELETE doc_alias WHERE doc_id = $doc_id")
             .bind(("doc_id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete the document using raw query to avoid deserialization issues
         self.db
             .query(r#"DELETE type::thing("knowledge_doc", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -464,6 +474,7 @@ impl KnowledgeRepo {
 
     /// Save a file sync record.
     pub async fn save_file_sync(&self, sync: &FileSync) -> StoreResult<()> {
+        reject_serialized_secret_material("knowledge file sync", sync)?;
         debug!("Saving file sync: {}", sync.path);
 
         // Use raw query to avoid SurrealDB SDK ID serialization conflicts
@@ -496,7 +507,8 @@ impl KnowledgeRepo {
             .bind(("last_synced", sync.last_synced))
             .bind(("sync_status", sync_status_str))
             .bind(("deleted_at", sync.deleted_at))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -507,7 +519,7 @@ impl KnowledgeRepo {
             .db
             .query(r#"SELECT meta::id(id) as record_id, path, repo, doc_id, last_hash, last_modified, last_synced, sync_status, deleted_at FROM type::thing("file_sync", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<FileSyncRecordWithId> = result.take(0)?;
         records
@@ -524,7 +536,7 @@ impl KnowledgeRepo {
             .query("SELECT *, meta::id(id) AS record_id FROM file_sync WHERE path = $path AND repo = $repo LIMIT 1")
             .bind(("path", path.to_string()))
             .bind(("repo", repo.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<FileSyncRecordWithId> = result.take(0)?;
         Ok(records
@@ -539,7 +551,8 @@ impl KnowledgeRepo {
             .db
             .query("SELECT *, meta::id(id) AS record_id FROM file_sync WHERE last_hash = $hash")
             .bind(("hash", hash.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<FileSyncRecordWithId> = result.take(0)?;
         let syncs = records
@@ -554,7 +567,8 @@ impl KnowledgeRepo {
         let mut result = self
             .db
             .query("SELECT *, meta::id(id) AS record_id FROM file_sync ORDER BY path")
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<FileSyncRecordWithId> = result.take(0)?;
         let syncs = records
@@ -578,7 +592,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT *, meta::id(id) AS record_id FROM file_sync WHERE sync_status = $status ORDER BY path")
             .bind(("status", status_str))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<FileSyncRecordWithId> = result.take(0)?;
         let syncs = records
@@ -594,7 +608,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT *, meta::id(id) AS record_id FROM file_sync WHERE repo = $repo ORDER BY path")
             .bind(("repo", repo.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<FileSyncRecordWithId> = result.take(0)?;
         let syncs = records
@@ -610,7 +624,8 @@ impl KnowledgeRepo {
         self.db
             .query(r#"DELETE type::thing("file_sync", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
         Ok(())
     }
 
@@ -618,6 +633,7 @@ impl KnowledgeRepo {
 
     /// Save a document event.
     pub async fn save_event(&self, event: &DocEvent) -> StoreResult<()> {
+        let (event, _) = redact_serialized_secret_material("knowledge document event", event)?;
         debug!(
             "Saving doc event: {:?} for {}",
             event.event_type, event.doc_id
@@ -646,7 +662,8 @@ impl KnowledgeRepo {
             .bind(("details", event.details.clone()))
             .bind(("actor", event.actor.clone()))
             .bind(("occurred_at", event.occurred_at))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -657,7 +674,7 @@ impl KnowledgeRepo {
             .db
             .query("SELECT meta::id(id) as id, doc_id, event_type, details, actor, occurred_at FROM doc_event WHERE doc_id = $doc_id ORDER BY occurred_at DESC")
             .bind(("doc_id", doc_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<DocEventRecord> = result.take(0)?;
         Ok(records.into_iter().map(|r| r.into_doc_event()).collect())
@@ -667,6 +684,7 @@ impl KnowledgeRepo {
 
     /// Save a document alias.
     pub async fn save_alias(&self, alias: &DocAlias) -> StoreResult<()> {
+        reject_serialized_secret_material("knowledge document alias", alias)?;
         debug!("Saving doc alias: {} -> {}", alias.alias, alias.doc_id);
 
         // Use raw query to avoid SurrealDB SDK ID conflicts
@@ -681,7 +699,8 @@ impl KnowledgeRepo {
             .bind(("alias_key", alias.alias.clone()))
             .bind(("alias", alias.alias.clone()))
             .bind(("doc_id", alias.doc_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -692,7 +711,8 @@ impl KnowledgeRepo {
             .db
             .query("SELECT alias, doc_id FROM doc_alias WHERE alias = $alias LIMIT 1")
             .bind(("alias", alias.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<DocAliasRecord> = result.take(0)?;
         if let Some(record) = records.into_iter().next() {
@@ -708,7 +728,8 @@ impl KnowledgeRepo {
             .db
             .query("SELECT alias, doc_id FROM doc_alias WHERE doc_id = $doc_id")
             .bind(("doc_id", doc_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<DocAliasRecord> = result.take(0)?;
         Ok(records.into_iter().map(|r| r.into_doc_alias()).collect())
@@ -720,7 +741,8 @@ impl KnowledgeRepo {
         self.db
             .query(r#"DELETE type::thing("doc_alias", $alias)"#)
             .bind(("alias", alias.to_string()))
-            .await?;
+            .await?
+            .check()?;
         Ok(())
     }
 
@@ -737,7 +759,8 @@ impl KnowledgeRepo {
                 SELECT count() as count FROM doc_alias GROUP ALL;
                 "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         #[derive(Debug, Deserialize)]
         struct CountResult {
@@ -770,6 +793,47 @@ pub struct KnowledgeStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use engram_core::knowledge::DocEventType;
+
+    async fn setup_repo() -> KnowledgeRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = KnowledgeRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn explicit_knowledge_writes_reject_secrets_and_events_redact_them() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-knowledge-secret";
+        let secret_doc = KnowledgeDoc::new("Secret doc", DocType::Howto, canary);
+
+        let error = repo.save_doc(&secret_doc).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("secret material was not persisted"));
+        assert!(repo.get_doc(&secret_doc.id).await.is_err());
+
+        let doc = KnowledgeDoc::new("Safe doc", DocType::Howto, "Safe content");
+        repo.save_doc(&doc).await.unwrap();
+
+        let event = DocEvent::new(doc.id, DocEventType::Reviewed, "codex")
+            .with_details(serde_json::json!({"note": canary}));
+        repo.save_event(&event).await.unwrap();
+        let events = repo.list_events_for_doc(&doc.id).await.unwrap();
+        let persisted_event = serde_json::to_string(&events[0]).unwrap();
+        assert!(!persisted_event.contains(canary));
+        assert!(persisted_event.contains("redacted"));
+
+        let sync = FileSync::new(canary, "engram", "safe-hash");
+        assert!(repo.save_file_sync(&sync).await.is_err());
+        assert!(repo.get_file_sync(&sync.id).await.is_err());
+
+        let alias = DocAlias::new(canary, doc.id);
+        assert!(repo.save_alias(&alias).await.is_err());
+        assert!(repo.list_aliases_for_doc(&doc.id).await.unwrap().is_empty());
+    }
 
     #[test]
     fn test_knowledge_stats_default() {

@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "kind": "native_memory_pilot_boundary_repair_smoke",
+  "date": "2026-08-10",
+  "case": "learned_procedure_moved_checkout",
+  "status": "passed_on_codex_and_claude",
+  "completion_claim": false,
+  "historical_protocol_schema_4": {
+    "audit_path": "/private/tmp/engram-boundary-repair-smoke.afgsvp/historical-v4-reaudit.json",
+    "sha256": "b1a56bd2891cb5ee218c54d99fc81e611ccf30e6beaf58fccacc8bc468942a4e",
+    "complete": true,
+    "invalid": false,
+    "all_acceptance_passed": false,
+    "semantics_changed": false
+  },
+  "hosts": [
+    {
+      "host": "codex",
+      "isolation": "project_hook_only",
+      "trace_path": "/private/tmp/engram-boundary-repair-smoke.afgsvp/codex-r4/trace.jsonl",
+      "trace_sha256": "ff32f45bc91b6ae18ee05e63d8039886528bf81f1f658f604e547f80539f887a",
+      "first_external_action": "engram.orient",
+      "project_resolution": "unresolved_no_registered_project_link",
+      "procedure_match_scope": "local",
+      "required_condition_keys": ["tool.version"],
+      "observed_conditions": {"tool.version": "3"},
+      "current_checkout_root": "/private/tmp/engram-boundary-repair-smoke.afgsvp/codex-r4/fixture",
+      "executed_command": "./bin/context-probe --channel cobalt",
+      "executed_command_count": 1,
+      "exit_code": 0,
+      "success_marker": "ATLAS_CONTEXT_PROBE_OK",
+      "failure_command_count": 0,
+      "stale_checkout_execution_count": 0
+    },
+    {
+      "host": "claude_code",
+      "isolation": "project_hook_and_settings_only_native_memory_disabled",
+      "trace_path": "/private/tmp/engram-boundary-repair-smoke.afgsvp/claude-r7/trace.jsonl",
+      "trace_sha256": "733f522b2205c3c7b3a1352d192e57707898c36841be0c6d2928bfc6997f5de7",
+      "first_external_action": "engram.orient",
+      "project_resolution": "unresolved_no_registered_project_link",
+      "procedure_match_scope": "local_forced_by_api",
+      "required_condition_keys": ["tool.version"],
+      "observed_conditions": {"tool.version": "3"},
+      "current_checkout_root": "/private/tmp/engram-boundary-repair-smoke.afgsvp/claude-r7/fixture",
+      "executed_command": "./bin/context-probe --channel cobalt",
+      "executed_command_count": 1,
+      "exit_code": 0,
+      "success_marker": "ATLAS_CONTEXT_PROBE_OK",
+      "failure_command_count": 0,
+      "stale_checkout_execution_count": 0,
+      "turns": 9,
+      "cost_usd": 0.05793195
+    }
+  ],
+  "installed_adapter_hashes": {
+    "codex_hooks_json": "dd082ab1c256d8d9967cc18eede108a8d0e6166212eee6287c384cc0f61778dd",
+    "codex_session_start": "3be449f195bce0c263df47309effc7465647e9046591f75bfbb1cbd2aeb6b6d9",
+    "claude_settings_json": "0c9f58d95a7fc26fc1cc5341b5c571589d3aee5bc86012a23c878852af744b9f",
+    "claude_session_start": "fc64392129f243669515bf4bf3d57165b9cda834734338345217b8a8b6263875"
+  },
+  "remaining_gates": [
+    "protocol_schema_5_matched_comparison",
+    "native_wrong_scope",
+    "native_stale_prerequisite",
+    "native_no_result",
+    "native_correction_and_deletion",
+    "native_compaction_and_resume",
+    "host_visible_packet_and_token_bounds",
+    "positive_case_repetitions"
+  ]
+}

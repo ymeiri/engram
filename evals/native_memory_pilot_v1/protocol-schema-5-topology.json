@@ -1,0 +1,102 @@
+{
+  "schema_version": 5,
+  "pilot_id": "native-memory-pilot-v1-topology-repair",
+  "cases": [
+    {
+      "id": "learned_procedure_moved_checkout",
+      "teaching_cwd": "fixture://atlas/main/services/worker",
+      "evaluation_cwd": "fixture://moved/arbitrary-name/services/worker",
+      "evaluation_prompt": "Run the context probe using the applicable procedure learned in the earlier session.",
+      "expected_repository_remote": "https://github.com/acme/atlas",
+      "expected_project": null,
+      "expected_component": "queue-worker",
+      "expected_first_action": "run_verified_procedure",
+      "procedure": {
+        "context_key": "procedure-atlas-context-probe-v1",
+        "task": "run the Atlas context probe",
+        "failed_commands": [
+          "./bin/context-probe --channel amber"
+        ],
+        "command": "./bin/context-probe --channel cobalt",
+        "expected_exit_code": 0,
+        "expected_output_contains": "ATLAS_CONTEXT_PROBE_OK",
+        "conditions": {
+          "tool.version": "3"
+        }
+      }
+    }
+  ],
+  "arms": [
+    {
+      "id": "codex_native_memory",
+      "host": "codex",
+      "memory_layer": "native"
+    },
+    {
+      "id": "codex_lean_engram",
+      "host": "codex",
+      "memory_layer": "engram"
+    },
+    {
+      "id": "codex_engram_plus_native",
+      "host": "codex",
+      "memory_layer": "both"
+    },
+    {
+      "id": "claude_native_memory",
+      "host": "claude_code",
+      "memory_layer": "native"
+    },
+    {
+      "id": "claude_lean_engram",
+      "host": "claude_code",
+      "memory_layer": "engram"
+    },
+    {
+      "id": "claude_engram_plus_native",
+      "host": "claude_code",
+      "memory_layer": "both"
+    }
+  ],
+  "repetitions": 1,
+  "run_order": [
+    {
+      "case_id": "learned_procedure_moved_checkout",
+      "arm": "claude_engram_plus_native",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_moved_checkout",
+      "arm": "codex_native_memory",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_moved_checkout",
+      "arm": "claude_lean_engram",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_moved_checkout",
+      "arm": "codex_engram_plus_native",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_moved_checkout",
+      "arm": "claude_native_memory",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_moved_checkout",
+      "arm": "codex_lean_engram",
+      "repetition": 1
+    }
+  ],
+  "codex_min_idle_hours": 1,
+  "codex_authentication_mode": "chatgpt_browser_keyring",
+  "claude_budget_cents": 60,
+  "claude_prior_spend_microusd": 627092,
+  "claude_authorized_ceiling_cents": 130,
+  "claude_model": "claude-haiku-4-5",
+  "claude_max_turns": 12,
+  "requires_explicit_execution_approval": true
+}

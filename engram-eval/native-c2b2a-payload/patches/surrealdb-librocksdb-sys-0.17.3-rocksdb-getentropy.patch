@@ -1,0 +1,64 @@
+--- a/rocksdb/env/unique_id_gen.cc
++++ b/rocksdb/env/unique_id_gen.cc
+@@ -7,9 +7,11 @@
+ #include <algorithm>
+ #include <array>
+ #include <atomic>
++#include <cstdlib>
+ #include <cstdint>
+ #include <cstring>
+-#include <random>
++
++#include <unistd.h>
+ 
+ #include "port/lang.h"
+ #include "port/port.h"
+@@ -89,18 +91,15 @@ struct EntropyTrackEnvDetails {
+ };
+ 
+ struct EntropyTrackRandomDevice {
+-  using RandType = std::random_device::result_type;
+-  static constexpr size_t kNumRandVals =
+-      /* generous bits */ 192U / (8U * sizeof(RandType));
+-  std::array<RandType, kNumRandVals> rand_vals;
++  std::array<unsigned int, 6> rand_vals;
++  static_assert(sizeof(rand_vals) == 24);
+ 
+   void Populate(const GenerateRawUniqueIdOpts& opts) {
+     if (opts.exclude_random_device) {
+       return;
+     }
+-    std::random_device r;
+-    for (auto& val : rand_vals) {
+-      val = r();
++    if (getentropy(rand_vals.data(), sizeof(rand_vals)) != 0) {
++      std::abort();
+     }
+   }
+ };
+--- a/rocksdb/port/port_posix.cc
++++ b/rocksdb/port/port_posix.cc
+@@ -25,7 +25,6 @@
+ #include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
+-#include <fstream>
+ #include <string>
+ 
+ #include "util/string_util.h"
+@@ -284,14 +283,7 @@ int64_t GetProcessID() { return getpid(); }
+ 
+ bool GenerateRfcUuid(std::string* output) {
+   output->clear();
+-  std::ifstream f("/proc/sys/kernel/random/uuid");
+-  std::getline(f, /*&*/ *output);
+-  if (output->size() == 36) {
+-    return true;
+-  } else {
+-    output->clear();
+-    return false;
+-  }
++  return false;
+ }
+ 
+ }  // namespace port

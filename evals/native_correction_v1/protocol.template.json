@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "family": "native_correction_v1",
+  "pilot_id": "native-correction-replace-before-freeze",
+  "nonce": "replacebeforefreeze",
+  "requires_explicit_provider_execution": true,
+  "lanes": [
+    {
+      "order": 1,
+      "host": "codex",
+      "repetition": 1,
+      "opaque_path_label": "0123456789abcdef01234567"
+    },
+    {
+      "order": 2,
+      "host": "claude_code",
+      "repetition": 1,
+      "opaque_path_label": "89abcdef0123456789abcdef"
+    }
+  ],
+  "claude": {
+    "model": "claude-haiku-4-5",
+    "proposal_max_turns": 10,
+    "proposal_budget_cents": 10,
+    "retrieval_max_turns": 6,
+    "retrieval_budget_cents": 10,
+    "aggregate_budget_cents": 20
+  },
+  "resources": {
+    "provider_calls": 4,
+    "codex_max_tokens_per_call": 50000,
+    "host_timeout_ms": 600000,
+    "max_trace_bytes": 8388608,
+    "max_stderr_bytes": 1048576,
+    "max_engram_result_bytes_per_call": 8192,
+    "max_engram_result_bytes_per_lane": 32768
+  }
+}

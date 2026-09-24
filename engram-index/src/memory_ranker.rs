@@ -1,8 +1,10 @@
 //! Shared MemoryItem ranking for orientation and search.
 
+use crate::repository::normalize_remote_reference;
 use engram_core::memory::{
     MemoryFreshness, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope, MemoryStatus,
 };
+use engram_core::Id;
 use std::path::Path;
 use time::OffsetDateTime;
 
@@ -22,14 +24,26 @@ pub(crate) enum MemoryScopePolicy {
 pub(crate) struct MemoryRankContext<'a> {
     /// Project scope, when known.
     pub project: Option<&'a str>,
+    /// Project ID, when known.
+    pub project_id: Option<&'a Id>,
+    /// Exact task scope, when known.
+    pub task: Option<&'a str>,
+    /// Exact task ID, when known.
+    pub task_id: Option<&'a Id>,
     /// Current working directory, when known.
     pub cwd: Option<&'a str>,
+    /// Stable repository ID resolved from the current working directory, when known.
+    pub repository_id: Option<&'a Id>,
+    /// Canonical repository remote resolved from the current working directory, when known.
+    pub repository_remote: Option<&'a str>,
     /// Prompt or search query.
     pub query: Option<&'a str>,
     /// Scope filtering behavior.
     pub scope_policy: MemoryScopePolicy,
     /// Whether a query text match is required.
     pub require_text_match: bool,
+    /// Whether a project-scoped query may deliberately discover child task memory.
+    pub include_project_task_descendants: bool,
 }
 
 impl<'a> MemoryRankContext<'a> {
@@ -41,11 +55,43 @@ impl<'a> MemoryRankContext<'a> {
     ) -> Self {
         Self {
             project,
+            project_id: None,
+            task: None,
+            task_id: None,
             cwd,
+            repository_id: None,
+            repository_remote: None,
             query,
             scope_policy: MemoryScopePolicy::ScopedOnly,
             require_text_match: false,
+            include_project_task_descendants: false,
         }
+    }
+
+    /// Narrow an orientation context to one exact task.
+    pub(crate) fn with_task(mut self, task: Option<&'a str>) -> Self {
+        self.task = task;
+        if task.is_some() {
+            self.include_project_task_descendants = false;
+        }
+        self
+    }
+
+    /// Attach the stable repository identity resolved for orientation.
+    pub(crate) fn with_repository(
+        mut self,
+        repository_id: Option<&'a Id>,
+        repository_remote: Option<&'a str>,
+    ) -> Self {
+        self.repository_id = repository_id;
+        self.repository_remote = repository_remote;
+        self
+    }
+
+    /// Require a query match after scope filtering.
+    pub(crate) fn requiring_text_match(mut self, required: bool) -> Self {
+        self.require_text_match = required;
+        self
     }
 
     /// Ranking context for memory search.
@@ -56,10 +102,40 @@ impl<'a> MemoryRankContext<'a> {
     ) -> Self {
         Self {
             project,
+            project_id: None,
+            task: None,
+            task_id: None,
             cwd,
+            repository_id: None,
+            repository_remote: None,
             query,
             scope_policy: MemoryScopePolicy::AllWhenUnscoped,
             require_text_match: true,
+            include_project_task_descendants: true,
+        }
+    }
+
+    /// Ranking context for a fail-closed, explicitly scoped memory search.
+    pub(crate) fn scoped_search(
+        project: Option<&'a str>,
+        project_id: Option<&'a Id>,
+        task: Option<&'a str>,
+        task_id: Option<&'a Id>,
+        cwd: Option<&'a str>,
+        query: Option<&'a str>,
+    ) -> Self {
+        Self {
+            project,
+            project_id,
+            task,
+            task_id,
+            cwd,
+            repository_id: None,
+            repository_remote: None,
+            query,
+            scope_policy: MemoryScopePolicy::ScopedOnly,
+            require_text_match: true,
+            include_project_task_descendants: task.is_none() && task_id.is_none(),
         }
     }
 
@@ -71,10 +147,16 @@ impl<'a> MemoryRankContext<'a> {
     ) -> Self {
         Self {
             project,
+            project_id: None,
+            task: None,
+            task_id: None,
             cwd,
+            repository_id: None,
+            repository_remote: None,
             query,
             scope_policy: MemoryScopePolicy::AllWhenUnscoped,
             require_text_match: false,
+            include_project_task_descendants: true,
         }
     }
 }
@@ -178,7 +260,7 @@ pub(crate) fn memory_scope_matches(item: &MemoryItem, context: MemoryRankContext
         return true;
     }
 
-    raw_scope_score(item, context.project, context.cwd) > 0.0
+    raw_scope_score(item, context) > 0.0
 }
 
 /// Human-readable memory scope label.
@@ -444,33 +526,96 @@ fn normalized_scope_score(item: &MemoryItem, context: MemoryRankContext<'_>) -> 
     {
         return 0.0;
     }
-    raw_scope_score(item, context.project, context.cwd) / 4.0
+    raw_scope_score(item, context) / 4.0
 }
 
-fn raw_scope_score(item: &MemoryItem, project: Option<&str>, cwd: Option<&str>) -> f32 {
+fn raw_scope_score(item: &MemoryItem, context: MemoryRankContext<'_>) -> f32 {
     match &item.scope {
-        MemoryScope::Project { project_name, .. } => project
-            .filter(|project| project_name.eq_ignore_ascii_case(project))
-            .map(|_| 4.0)
-            .unwrap_or(0.0),
-        MemoryScope::Task { project_name, .. } => match (project, project_name) {
-            (Some(project), Some(item_project)) if item_project.eq_ignore_ascii_case(project) => {
+        MemoryScope::Project {
+            project_id,
+            project_name,
+        } => match (context.project_id, project_id) {
+            (Some(context_id), Some(item_id)) if context_id == item_id => 4.0,
+            (Some(_), Some(_)) => 0.0,
+            _ => context
+                .project
+                .filter(|project| project_name.eq_ignore_ascii_case(project))
+                .map(|_| 4.0)
+                .unwrap_or(0.0),
+        },
+        MemoryScope::Task {
+            project_id,
+            project_name,
+            task_id,
+            task_name,
+            ..
+        } => {
+            let project_matches = match (context.project_id, project_id) {
+                (Some(context_id), Some(item_id)) => context_id == item_id,
+                _ => match (context.project, project_name) {
+                    (Some(project), Some(item_project)) => {
+                        item_project.eq_ignore_ascii_case(project)
+                    }
+                    (None, None) => true,
+                    _ => false,
+                },
+            };
+            let task_matches = match (context.task_id, task_id) {
+                (Some(context_id), Some(item_id)) => context_id == item_id,
+                _ => context
+                    .task
+                    .is_some_and(|task| task_name.eq_ignore_ascii_case(task)),
+            };
+            if project_matches && task_matches {
+                4.0
+            } else if project_matches && context.include_project_task_descendants {
                 3.5
+            } else {
+                0.0
             }
-            _ => 0.0,
-        },
-        MemoryScope::Repository { local_path, .. } => match (cwd, local_path) {
-            (Some(cwd), Some(local_path)) => {
-                let cwd_path = canonical_or_original(Path::new(cwd));
-                let local_path = canonical_or_original(Path::new(local_path));
-                if path_starts_with(&cwd_path, &local_path) {
-                    3.0
-                } else {
-                    0.0
+        }
+        MemoryScope::Repository {
+            repository_id,
+            remote_url,
+            local_path,
+        } => {
+            if matches!(
+                (context.repository_id, repository_id),
+                (Some(context_id), Some(item_id)) if context_id == item_id
+            ) {
+                return 4.0;
+            }
+            if matches!(
+                (context.repository_id, repository_id),
+                (Some(context_id), Some(item_id)) if context_id != item_id
+            ) {
+                return 0.0;
+            }
+            let remote_matches = match (
+                context
+                    .repository_remote
+                    .and_then(normalize_remote_reference),
+                remote_url.as_deref().and_then(normalize_remote_reference),
+            ) {
+                (Some(context_remote), Some(item_remote)) => context_remote == item_remote,
+                _ => false,
+            };
+            if remote_matches {
+                return 3.5;
+            }
+            match (context.cwd, local_path) {
+                (Some(cwd), Some(local_path)) => {
+                    let cwd_path = canonical_or_original(Path::new(cwd));
+                    let local_path = canonical_or_original(Path::new(local_path));
+                    if path_starts_with(&cwd_path, &local_path) {
+                        3.0
+                    } else {
+                        0.0
+                    }
                 }
+                _ => 0.0,
             }
-            _ => 0.0,
-        },
+        }
         MemoryScope::Global | MemoryScope::User => 1.0,
         MemoryScope::Entity { .. } | MemoryScope::Session { .. } | MemoryScope::Custom { .. } => {
             0.0
@@ -488,11 +633,33 @@ fn text_match_score(item: &MemoryItem, query: Option<&str>) -> Option<f32> {
     let title_lower = item.title.to_lowercase();
     let content_lower = item.content.to_lowercase();
     let tags_lower = item.tags.join(" ").to_lowercase();
+    let procedure_lower = item
+        .procedure
+        .as_ref()
+        .map(|procedure| {
+            let prerequisites = procedure
+                .prerequisites
+                .iter()
+                .map(|prerequisite| format!("{} {}", prerequisite.key, prerequisite.expected))
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!(
+                "{} {} {} {} {}",
+                procedure.task,
+                prerequisites,
+                procedure.commands.join(" "),
+                procedure.failure_signatures.join(" "),
+                procedure.verification.command
+            )
+            .to_lowercase()
+        })
+        .unwrap_or_default();
     let haystack = format!(
-        "{} {} {} {} {}",
+        "{} {} {} {} {} {}",
         title_lower,
         content_lower,
         tags_lower,
+        procedure_lower,
         item.kind,
         memory_scope_label(&item.scope).to_lowercase()
     );
@@ -506,10 +673,14 @@ fn text_match_score(item: &MemoryItem, query: Option<&str>) -> Option<f32> {
     if content_lower.contains(&query_lower) {
         return Some(0.84);
     }
+    if !procedure_lower.is_empty() && procedure_lower.contains(&query_lower) {
+        return Some(0.84);
+    }
 
     let terms = query_lower
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|term| term.len() >= 3)
+        .filter(|term| !is_query_stop_term(term))
         .collect::<Vec<_>>();
     if terms.is_empty() {
         return None;
@@ -534,6 +705,37 @@ fn text_match_score(item: &MemoryItem, query: Option<&str>) -> Option<f32> {
         .count();
     let score = 0.48 + ratio * 0.28 + title_hits as f32 * 0.04 + content_hits as f32 * 0.02;
     Some(score.min(0.88))
+}
+
+fn is_query_stop_term(term: &str) -> bool {
+    matches!(
+        term,
+        "and"
+            | "are"
+            | "can"
+            | "code"
+            | "could"
+            | "does"
+            | "for"
+            | "from"
+            | "how"
+            | "into"
+            | "new"
+            | "our"
+            | "should"
+            | "the"
+            | "this"
+            | "use"
+            | "using"
+            | "what"
+            | "when"
+            | "where"
+            | "which"
+            | "who"
+            | "why"
+            | "with"
+            | "would"
+    )
 }
 
 fn recency_score(updated_at: OffsetDateTime) -> f32 {
@@ -1108,6 +1310,73 @@ fn path_starts_with(path: &Path, base: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use engram_core::memory::{
+        ClaimOrigin, Harness, ModelIdentity, ProcedureCard, ProcedurePrerequisite,
+        ProcedureVerification, WriterProvenance,
+    };
+
+    #[test]
+    fn orientation_requires_exact_task_while_search_can_discover_project_tasks() {
+        let item = MemoryItem::new(
+            MemoryKind::Decision,
+            "Task-specific queue rollout",
+            "Only task alpha should apply this rollout sequence.",
+            MemoryScope::Task {
+                project_id: None,
+                project_name: Some("atlas".to_string()),
+                task_id: None,
+                task_name: "task-alpha".to_string(),
+            },
+            ClaimOrigin::AgentObserved,
+            WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-test")),
+        );
+
+        assert!(rank_memory_item(
+            item.clone(),
+            MemoryRankContext::orientation(Some("atlas"), None, None)
+        )
+        .is_none());
+        assert!(rank_memory_item(
+            item.clone(),
+            MemoryRankContext::orientation(Some("atlas"), None, None).with_task(Some("task-beta"))
+        )
+        .is_none());
+        assert!(rank_memory_item(
+            item.clone(),
+            MemoryRankContext::orientation(Some("atlas"), None, None).with_task(Some("task-alpha"))
+        )
+        .is_some());
+        assert!(rank_memory_item(
+            item,
+            MemoryRankContext::search(Some("atlas"), None, Some("task-specific queue rollout"))
+        )
+        .is_some());
+    }
+
+    #[test]
+    fn procedure_task_and_failure_signatures_are_searchable() {
+        let item = MemoryItem::new(
+            MemoryKind::Procedure,
+            "Queue diagnostics",
+            "Use the stored diagnostic flow.",
+            MemoryScope::project("atlas"),
+            ClaimOrigin::AgentObserved,
+            WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-test")),
+        )
+        .with_procedure(
+            ProcedureCard::new(
+                "run queue worker integration tests",
+                vec!["cargo test -p queue-worker".to_string()],
+                ProcedureVerification::new("cargo test -p queue-worker", 0, "test result: ok"),
+            )
+            .with_prerequisite(ProcedurePrerequisite::new("tool.version", "3"))
+            .with_failure_signature("unknown option --integration"),
+        );
+
+        assert!(text_match_score(&item, Some("run queue worker integration tests")).is_some());
+        assert!(text_match_score(&item, Some("unknown option --integration")).is_some());
+        assert!(text_match_score(&item, Some("tool version 2")).is_some());
+    }
 
     #[test]
     fn approval_gate_phrase_triggers_gate_mode() {

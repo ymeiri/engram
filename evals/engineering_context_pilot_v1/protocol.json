@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "pilot_id": "engineering-context-pilot-v1",
+  "base_manifest": "../engineering_context_v1/manifest.json",
+  "scenario_ids": [
+    "repo_identity_moved_worktree",
+    "procedure_matching_environment"
+  ],
+  "arm_ids": [
+    "codex_instructions_only",
+    "claude_instructions_only",
+    "codex_lean_engram",
+    "claude_lean_engram"
+  ],
+  "repetitions": 1,
+  "run_order": [
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "arm": "claude_instructions_only",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "procedure_matching_environment",
+      "arm": "codex_lean_engram",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "arm": "codex_instructions_only",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "procedure_matching_environment",
+      "arm": "claude_lean_engram",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "procedure_matching_environment",
+      "arm": "codex_instructions_only",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "arm": "claude_lean_engram",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "procedure_matching_environment",
+      "arm": "claude_instructions_only",
+      "repetition": 1
+    },
+    {
+      "scenario_id": "repo_identity_moved_worktree",
+      "arm": "codex_lean_engram",
+      "repetition": 1
+    }
+  ],
+  "claude_budget_cents": 25,
+  "requires_explicit_execution_approval": true
+}

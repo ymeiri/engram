@@ -6,8 +6,9 @@
 use engram_core::entity::EntityType;
 use engram_core::id::Id;
 use engram_core::work::{PrStatus, ProjectStatus, TaskPriority, TaskStatus};
-use engram_index::{EntityService, WorkService};
+use engram_index::{EntityService, SearchService, WorkService};
 use engram_store::{connect_and_init, StoreConfig};
+use serde_json::{json, Value};
 
 // =============================================================================
 // Test Fixtures
@@ -1112,6 +1113,56 @@ async fn test_get_full_context_project_only() {
     assert!(ctx.task_observations.is_empty());
 }
 
+#[tokio::test]
+async fn test_project_task_scope_mismatch_is_rejected_without_writes() {
+    let service = setup_work_service().await;
+    service
+        .create_project("scope-project-a", None)
+        .await
+        .unwrap();
+    service
+        .create_project("scope-project-b", None)
+        .await
+        .unwrap();
+    service
+        .create_task("scope-project-b", "project-b-task", None, Some("SCOPE-B-1"))
+        .await
+        .unwrap();
+
+    for error in [
+        service
+            .get_full_context("scope-project-a", Some("SCOPE-B-1"))
+            .await
+            .unwrap_err(),
+        service
+            .list_prs("scope-project-a", Some("SCOPE-B-1"))
+            .await
+            .unwrap_err(),
+    ] {
+        assert!(error.to_string().contains("not selected project"));
+    }
+
+    let session_id = Id::new();
+    let join_error = service
+        .join_work(&session_id, "scope-project-a", Some("SCOPE-B-1"))
+        .await
+        .unwrap_err();
+    assert!(join_error.to_string().contains("not selected project"));
+    assert!(service
+        .get_work_context(&session_id)
+        .await
+        .unwrap()
+        .is_none());
+
+    let pr_url = "https://github.com/example/repo/pull/404";
+    let add_error = service
+        .add_pr("scope-project-a", Some("SCOPE-B-1"), pr_url, None)
+        .await
+        .unwrap_err();
+    assert!(add_error.to_string().contains("not selected project"));
+    assert!(service.get_pr(pr_url).await.unwrap().is_none());
+}
+
 // =============================================================================
 // Statistics Tests
 // =============================================================================
@@ -1738,14 +1789,14 @@ async fn test_work_stats_comprehensive() {
 // =============================================================================
 
 use engram_mcp::tools::{
-    self, ToolState, WorkContextRequestNew, WorkObserveRequest, WorkPrRequest, WorkProjectRequest,
-    WorkTaskRequest,
+    self, RetrievalScopeRequest, ToolState, WorkContextRequestNew, WorkObserveRequest,
+    WorkPrRequest, WorkProjectRequest, WorkTaskRequest,
 };
 
 /// Create a ToolState with initialized WorkService for MCP tool tests.
 async fn setup_tool_state() -> ToolState {
     let db = setup_db().await;
-    let work_service = WorkService::new(db);
+    let work_service = WorkService::new(db.clone());
     work_service
         .init()
         .await
@@ -1753,7 +1804,15 @@ async fn setup_tool_state() -> ToolState {
 
     let state = ToolState::new();
     state.init_work(work_service).await;
+    state.init_search(SearchService::new(db)).await;
     state
+}
+
+fn global_scope() -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("global".to_string()),
+        ..RetrievalScopeRequest::default()
+    })
 }
 
 #[tokio::test]
@@ -1767,6 +1826,7 @@ async fn test_mcp_work_project_create() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
 
     let result = tools::work_project(&state, request).await;
@@ -1788,6 +1848,7 @@ async fn test_mcp_work_project_get() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, create_req).await.unwrap();
 
@@ -1799,6 +1860,7 @@ async fn test_mcp_work_project_get() {
         status: None,
         entity: None,
         relation: None,
+        scope: global_scope(),
     };
     let result = tools::work_project(&state, get_req).await;
     assert!(result.is_ok());
@@ -1821,6 +1883,7 @@ async fn test_mcp_work_project_list() {
             status: None,
             entity: None,
             relation: None,
+            scope: None,
         };
         tools::work_project(&state, req).await.unwrap();
     }
@@ -1833,6 +1896,7 @@ async fn test_mcp_work_project_list() {
         status: None,
         entity: None,
         relation: None,
+        scope: global_scope(),
     };
     let result = tools::work_project(&state, list_req).await;
     assert!(result.is_ok());
@@ -1852,6 +1916,7 @@ async fn test_mcp_work_project_update() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, create_req).await.unwrap();
 
@@ -1863,6 +1928,7 @@ async fn test_mcp_work_project_update() {
         status: Some("completed".to_string()),
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_project(&state, update_req).await;
     assert!(result.is_ok());
@@ -1881,6 +1947,7 @@ async fn test_mcp_work_project_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, create_req).await.unwrap();
 
@@ -1892,6 +1959,7 @@ async fn test_mcp_work_project_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_project(&state, delete_req).await;
     assert!(result.is_ok());
@@ -1905,6 +1973,7 @@ async fn test_mcp_work_project_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: global_scope(),
     };
     let result = tools::work_project(&state, get_req).await;
     assert!(result.is_err());
@@ -1922,6 +1991,7 @@ async fn test_mcp_work_project_invalid_action() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
 
     let result = tools::work_project(&state, request).await;
@@ -1941,6 +2011,7 @@ async fn test_mcp_work_task_create_get_list() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -1954,6 +2025,7 @@ async fn test_mcp_work_task_create_get_list() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_task(&state, create_req).await;
     assert!(result.is_ok(), "Task create failed: {:?}", result.err());
@@ -1970,6 +2042,7 @@ async fn test_mcp_work_task_create_get_list() {
         status: None,
         entity: None,
         relation: None,
+        scope: global_scope(),
     };
     let result = tools::work_task(&state, get_req).await;
     assert!(result.is_ok(), "Task get failed: {:?}", result.err());
@@ -1987,6 +2060,7 @@ async fn test_mcp_work_task_create_get_list() {
         status: None,
         entity: None,
         relation: None,
+        scope: global_scope(),
     };
     let result = tools::work_task(&state, list_req).await;
     assert!(result.is_ok());
@@ -2005,6 +2079,7 @@ async fn test_mcp_work_task_update_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -2017,6 +2092,7 @@ async fn test_mcp_work_task_update_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_task(&state, task_req).await.unwrap();
 
@@ -2030,6 +2106,7 @@ async fn test_mcp_work_task_update_delete() {
         status: Some("done".to_string()),
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_task(&state, update_req).await;
     assert!(result.is_ok(), "Task update failed: {:?}", result.err());
@@ -2045,6 +2122,7 @@ async fn test_mcp_work_task_update_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_task(&state, delete_req).await;
     assert!(result.is_ok(), "Task delete failed: {:?}", result.err());
@@ -2063,6 +2141,7 @@ async fn test_mcp_work_pr_add_get_list_update_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -2074,6 +2153,7 @@ async fn test_mcp_work_pr_add_get_list_update_delete() {
         task: None,
         title: Some("Fix bug".to_string()),
         status: None,
+        scope: None,
     };
     let result = tools::work_pr(&state, add_req).await;
     assert!(result.is_ok());
@@ -2087,6 +2167,7 @@ async fn test_mcp_work_pr_add_get_list_update_delete() {
         task: None,
         title: None,
         status: None,
+        scope: global_scope(),
     };
     let result = tools::work_pr(&state, get_req).await;
     assert!(result.is_ok());
@@ -2100,6 +2181,7 @@ async fn test_mcp_work_pr_add_get_list_update_delete() {
         task: None,
         title: None,
         status: None,
+        scope: global_scope(),
     };
     let result = tools::work_pr(&state, list_req).await;
     assert!(result.is_ok());
@@ -2113,6 +2195,7 @@ async fn test_mcp_work_pr_add_get_list_update_delete() {
         task: None,
         title: None,
         status: Some("merged".to_string()),
+        scope: None,
     };
     let result = tools::work_pr(&state, update_req).await;
     assert!(result.is_ok());
@@ -2126,6 +2209,7 @@ async fn test_mcp_work_pr_add_get_list_update_delete() {
         task: None,
         title: None,
         status: None,
+        scope: None,
     };
     let result = tools::work_pr(&state, delete_req).await;
     assert!(result.is_ok());
@@ -2144,6 +2228,7 @@ async fn test_mcp_work_observe_add_get_list_delete() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -2156,6 +2241,7 @@ async fn test_mcp_work_observe_add_get_list_delete() {
         key: Some("test.observation".to_string()),
         key_pattern: None,
         limit: None,
+        scope: None,
     };
     let result = tools::work_observe(&state, add_req).await;
     assert!(result.is_ok());
@@ -2170,6 +2256,7 @@ async fn test_mcp_work_observe_add_get_list_delete() {
         key: Some("test.observation".to_string()),
         key_pattern: None,
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::work_observe(&state, get_req).await;
     assert!(result.is_ok());
@@ -2184,6 +2271,7 @@ async fn test_mcp_work_observe_add_get_list_delete() {
         key: Some("test.another".to_string()),
         key_pattern: None,
         limit: None,
+        scope: None,
     };
     tools::work_observe(&state, add_req2).await.unwrap();
 
@@ -2196,6 +2284,7 @@ async fn test_mcp_work_observe_add_get_list_delete() {
         key: None,
         key_pattern: Some("test.*".to_string()),
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::work_observe(&state, list_req).await;
     assert!(result.is_ok());
@@ -2210,6 +2299,7 @@ async fn test_mcp_work_observe_add_get_list_delete() {
         key: Some("test.observation".to_string()),
         key_pattern: None,
         limit: None,
+        scope: None,
     };
     let result = tools::work_observe(&state, delete_req).await;
     assert!(result.is_ok());
@@ -2228,6 +2318,7 @@ async fn test_mcp_work_observe_task_scope() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -2240,6 +2331,7 @@ async fn test_mcp_work_observe_task_scope() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_task(&state, task_req).await.unwrap();
 
@@ -2252,6 +2344,7 @@ async fn test_mcp_work_observe_task_scope() {
         key: Some("task.note".to_string()),
         key_pattern: None,
         limit: None,
+        scope: None,
     };
     let result = tools::work_observe(&state, add_req).await;
     assert!(result.is_ok());
@@ -2266,6 +2359,7 @@ async fn test_mcp_work_observe_task_scope() {
         key: Some("task.note".to_string()),
         key_pattern: None,
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::work_observe(&state, get_req).await;
     assert!(result.is_ok());
@@ -2284,6 +2378,7 @@ async fn test_mcp_work_context_direct_lookup() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -2295,6 +2390,7 @@ async fn test_mcp_work_context_direct_lookup() {
         key: Some("ctx.obs".to_string()),
         key_pattern: None,
         limit: None,
+        scope: None,
     };
     tools::work_observe(&state, obs_req).await.unwrap();
 
@@ -2303,6 +2399,7 @@ async fn test_mcp_work_context_direct_lookup() {
         session_id: None,
         project: Some("context-test-project".to_string()),
         task: None,
+        scope: global_scope(),
     };
     let result = tools::work_context_new(&state, ctx_req).await;
     assert!(result.is_ok());
@@ -2321,10 +2418,503 @@ async fn test_mcp_work_context_missing_params() {
         session_id: None,
         project: None,
         task: None,
+        scope: None,
     };
     let result = tools::work_context_new(&state, ctx_req).await;
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("must be specified"));
+}
+
+#[tokio::test]
+async fn mcp_work_reads_abstain_locally_before_service_access() {
+    let state = ToolState::new();
+
+    let project: Value = serde_json::from_str(
+        &tools::work_project(
+            &state,
+            WorkProjectRequest {
+                action: "list".to_string(),
+                name: None,
+                description: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(project["executed"], false);
+    assert_eq!(project["omitted_layers"], json!(["work_projects"]));
+
+    let task: Value = serde_json::from_str(
+        &tools::work_task(
+            &state,
+            WorkTaskRequest {
+                action: "list".to_string(),
+                project: Some("alpha".to_string()),
+                name: None,
+                description: None,
+                jira_key: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(task["executed"], false);
+    assert_eq!(task["omitted_layers"], json!(["work_tasks"]));
+
+    let pr: Value = serde_json::from_str(
+        &tools::work_pr(
+            &state,
+            WorkPrRequest {
+                action: "list".to_string(),
+                project: Some("alpha".to_string()),
+                url: None,
+                task: None,
+                title: None,
+                status: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(pr["executed"], false);
+    assert_eq!(pr["omitted_layers"], json!(["work_prs"]));
+
+    let observation: Value = serde_json::from_str(
+        &tools::work_observe(
+            &state,
+            WorkObserveRequest {
+                action: "list".to_string(),
+                project: Some("alpha".to_string()),
+                task: None,
+                content: None,
+                key: None,
+                key_pattern: None,
+                limit: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(observation["executed"], false);
+    assert_eq!(observation["omitted_layers"], json!(["work_observations"]));
+
+    let context: Value = serde_json::from_str(
+        &tools::work_context_new(
+            &state,
+            WorkContextRequestNew {
+                session_id: None,
+                project: Some("alpha".to_string()),
+                task: None,
+                scope: None,
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(context["executed"], false);
+    assert_eq!(context["omitted_layers"], json!(["work_context"]));
+}
+
+#[tokio::test]
+async fn mcp_work_related_scope_excludes_other_projects_and_sibling_tasks() {
+    let state = setup_tool_state().await;
+    let alpha_session = Id::new();
+    let beta_session = Id::new();
+    {
+        let guard = state.work_service.read().await;
+        let work = guard.as_ref().unwrap();
+        work.create_project("alpha", None).await.unwrap();
+        work.create_project("beta", None).await.unwrap();
+        work.create_task("alpha", "alpha-one", None, Some("ALPHA-1"))
+            .await
+            .unwrap();
+        work.create_task("alpha", "alpha-two", None, Some("ALPHA-2"))
+            .await
+            .unwrap();
+        work.create_task("beta", "beta-one", None, Some("BETA-1"))
+            .await
+            .unwrap();
+        work.add_pr(
+            "alpha",
+            Some("ALPHA-1"),
+            "https://github.com/example/alpha/pull/1",
+            Some("alpha-one-pr"),
+        )
+        .await
+        .unwrap();
+        work.add_pr(
+            "alpha",
+            Some("ALPHA-2"),
+            "https://github.com/example/alpha/pull/2",
+            Some("alpha-two-pr"),
+        )
+        .await
+        .unwrap();
+        work.add_pr(
+            "beta",
+            Some("BETA-1"),
+            "https://github.com/example/beta/pull/1",
+            Some("beta-one-pr"),
+        )
+        .await
+        .unwrap();
+        work.add_project_observation("alpha", "alpha-project-observation", Some("project.note"))
+            .await
+            .unwrap();
+        work.add_project_observation("beta", "beta-project-observation", Some("project.note"))
+            .await
+            .unwrap();
+        work.add_task_observation("ALPHA-1", "alpha-one-observation", Some("task.note"))
+            .await
+            .unwrap();
+        work.add_task_observation("ALPHA-2", "alpha-two-observation", Some("task.note"))
+            .await
+            .unwrap();
+        work.add_task_observation("BETA-1", "beta-one-observation", Some("task.note"))
+            .await
+            .unwrap();
+        work.join_work(&alpha_session, "alpha", Some("ALPHA-1"))
+            .await
+            .unwrap();
+        work.join_work(&beta_session, "beta", Some("BETA-1"))
+            .await
+            .unwrap();
+    }
+
+    let related_project_scope = Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some("alpha".to_string()),
+        ..RetrievalScopeRequest::default()
+    });
+    let related_task_scope = Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some("alpha".to_string()),
+        task: Some("ALPHA-1".to_string()),
+        ..RetrievalScopeRequest::default()
+    });
+
+    let projects: Value = serde_json::from_str(
+        &tools::work_project(
+            &state,
+            WorkProjectRequest {
+                action: "list".to_string(),
+                name: None,
+                description: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: related_project_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(projects["count"], 1);
+    assert_eq!(projects["resolved_project"], "alpha");
+    assert!(projects.to_string().contains("alpha"));
+    assert!(!projects.to_string().contains("beta"));
+
+    let project: Value = serde_json::from_str(
+        &tools::work_project(
+            &state,
+            WorkProjectRequest {
+                action: "get".to_string(),
+                name: Some("alpha".to_string()),
+                description: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: related_project_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(project["name"], "alpha");
+    assert!(!project.to_string().contains("beta"));
+
+    let project_get_with_task_scope: Value = serde_json::from_str(
+        &tools::work_project(
+            &state,
+            WorkProjectRequest {
+                action: "get".to_string(),
+                name: Some("alpha".to_string()),
+                description: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(project_get_with_task_scope["executed"], false);
+    assert_eq!(
+        project_get_with_task_scope["omitted_layers"],
+        json!(["work_projects"])
+    );
+
+    let tasks: Value = serde_json::from_str(
+        &tools::work_task(
+            &state,
+            WorkTaskRequest {
+                action: "list".to_string(),
+                project: Some("alpha".to_string()),
+                name: None,
+                description: None,
+                jira_key: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(tasks["count"], 1);
+    assert!(tasks.to_string().contains("alpha-one"));
+    assert!(!tasks.to_string().contains("alpha-two"));
+    assert!(!tasks.to_string().contains("beta-one"));
+
+    let task: Value = serde_json::from_str(
+        &tools::work_task(
+            &state,
+            WorkTaskRequest {
+                action: "get".to_string(),
+                project: Some("alpha".to_string()),
+                name: Some("ALPHA-1".to_string()),
+                description: None,
+                jira_key: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(task["name"], "alpha-one");
+    assert!(task.to_string().contains("alpha/pull/1"));
+    assert!(!task.to_string().contains("alpha/pull/2"));
+
+    let prs: Value = serde_json::from_str(
+        &tools::work_pr(
+            &state,
+            WorkPrRequest {
+                action: "list".to_string(),
+                project: Some("alpha".to_string()),
+                url: None,
+                task: Some("ALPHA-1".to_string()),
+                title: None,
+                status: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(prs["count"], 1);
+    assert!(prs.to_string().contains("alpha-one-pr"));
+    assert!(!prs.to_string().contains("alpha-two-pr"));
+    assert!(!prs.to_string().contains("beta-one-pr"));
+
+    let pr: Value = serde_json::from_str(
+        &tools::work_pr(
+            &state,
+            WorkPrRequest {
+                action: "get".to_string(),
+                project: None,
+                url: Some("https://github.com/example/alpha/pull/1".to_string()),
+                task: None,
+                title: None,
+                status: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(pr["pr_number"], 1);
+    assert_eq!(pr["resolved_task"], "alpha-one");
+
+    let observations: Value = serde_json::from_str(
+        &tools::work_observe(
+            &state,
+            WorkObserveRequest {
+                action: "list".to_string(),
+                project: Some("alpha".to_string()),
+                task: Some("ALPHA-1".to_string()),
+                content: None,
+                key: None,
+                key_pattern: None,
+                limit: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(observations["count"], 1);
+    assert!(observations.to_string().contains("alpha-one-observation"));
+    assert!(!observations.to_string().contains("alpha-two-observation"));
+    assert!(!observations.to_string().contains("beta-one-observation"));
+
+    let observation: Value = serde_json::from_str(
+        &tools::work_observe(
+            &state,
+            WorkObserveRequest {
+                action: "get".to_string(),
+                project: Some("alpha".to_string()),
+                task: Some("ALPHA-1".to_string()),
+                content: None,
+                key: Some("task.note".to_string()),
+                key_pattern: None,
+                limit: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(observation["content"], "alpha-one-observation");
+
+    let context: Value = serde_json::from_str(
+        &tools::work_context_new(
+            &state,
+            WorkContextRequestNew {
+                session_id: None,
+                project: Some("alpha".to_string()),
+                task: Some("ALPHA-1".to_string()),
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    let context_text = context.to_string();
+    assert!(context_text.contains("alpha-project-observation"));
+    assert!(context_text.contains("alpha-one-observation"));
+    assert!(context_text.contains("alpha-one-pr"));
+    assert!(!context_text.contains("alpha-two-observation"));
+    assert!(!context_text.contains("alpha-two-pr"));
+    assert!(!context_text.contains("beta-project-observation"));
+    assert_eq!(context["resolved_task"], "alpha-one");
+
+    let session_context: Value = serde_json::from_str(
+        &tools::work_context_new(
+            &state,
+            WorkContextRequestNew {
+                session_id: Some(alpha_session.to_string()),
+                project: None,
+                task: None,
+                scope: related_task_scope.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(session_context["project_name"], "alpha");
+    assert_eq!(session_context["task_name"], "alpha-one");
+
+    let wrong_session = tools::work_context_new(
+        &state,
+        WorkContextRequestNew {
+            session_id: Some(beta_session.to_string()),
+            project: None,
+            task: None,
+            scope: related_task_scope.clone(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(wrong_session.contains("outside the resolved authorization boundary"));
+
+    let wrong_project_pr = tools::work_pr(
+        &state,
+        WorkPrRequest {
+            action: "get".to_string(),
+            project: None,
+            url: Some("https://github.com/example/beta/pull/1".to_string()),
+            task: None,
+            title: None,
+            status: None,
+            scope: related_project_scope,
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(wrong_project_pr.contains("outside the resolved authorization boundary"));
+
+    let wrong_project_task = tools::work_task(
+        &state,
+        WorkTaskRequest {
+            action: "get".to_string(),
+            project: None,
+            name: Some("BETA-1".to_string()),
+            description: None,
+            jira_key: None,
+            status: None,
+            entity: None,
+            relation: None,
+            scope: Some(RetrievalScopeRequest {
+                relevance_mode: Some("related".to_string()),
+                project: Some("alpha".to_string()),
+                ..RetrievalScopeRequest::default()
+            }),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(wrong_project_task.contains("belongs to project"));
+
+    let global: Value = serde_json::from_str(
+        &tools::work_project(
+            &state,
+            WorkProjectRequest {
+                action: "list".to_string(),
+                name: None,
+                description: None,
+                status: None,
+                entity: None,
+                relation: None,
+                scope: global_scope(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(global["count"], 2);
+    assert_eq!(global["authorization_scope_enforced"], false);
 }
 
 #[tokio::test]
@@ -2339,6 +2929,7 @@ async fn test_mcp_work_project_missing_required_params() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_project(&state, req).await;
     assert!(result.is_err());
@@ -2352,6 +2943,7 @@ async fn test_mcp_work_project_missing_required_params() {
         status: None,
         entity: None,
         relation: None,
+        scope: None,
     };
     tools::work_project(&state, proj_req).await.unwrap();
 
@@ -2362,6 +2954,7 @@ async fn test_mcp_work_project_missing_required_params() {
         status: None, // Missing required field
         entity: None,
         relation: None,
+        scope: None,
     };
     let result = tools::work_project(&state, update_req).await;
     assert!(result.is_err());

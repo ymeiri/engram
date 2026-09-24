@@ -8,7 +8,8 @@ use engram_core::harness::{HarnessEnforcementProfile, HarnessKind};
 use engram_core::knowledge::DocType;
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChange, MemoryChangeType, MemoryCursor,
-    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity, WriterProvenance,
+    MemoryItem, MemoryKind, MemoryScope, MemoryStatus, ModelIdentity, ProcedureCard,
+    ProcedurePrerequisite, ProcedurePrerequisiteSource, ProcedureVerification, WriterProvenance,
 };
 use engram_core::obligation::{
     AgentObligation, AgentObligationKind, AgentObligationResolution, AgentObligationResolutionKind,
@@ -23,25 +24,27 @@ use engram_core::telemetry::{
 use engram_core::tool::ToolOutcome;
 use engram_core::Id;
 use engram_index::{
-    BrainLoop, BrainLoopItem, CoordinationService, CurrentPlanCaptureInput,
-    DigestExtractionOptions, DigestExtractionReviewApplyOptions, DigestInventoryOptions,
-    DigestService, DigestSourceIndexOptions, DocumentOrphanCleanupExecutionOptions,
-    DocumentOrphanCleanupPlan, DocumentOrphanCleanupPlanOptions,
-    DocumentOrphanQuarantineReviewApplyOptions, DocumentOrphanQuarantineReviewOptions,
-    DocumentOrphanQuarantineReviewPrioritizationOptions, DocumentRecoveryOptions,
-    DocumentReindexAction, DocumentReindexExecutionOptions, DocumentReindexExecutionReport,
-    DocumentReindexPlan, DocumentService, EntityService, GraphService, HandoffService,
-    HarnessHookEvent, HarnessHookServices, HarnessInstallOptions, HarnessService,
-    HarnessSettingsTarget, KnowledgeService, LintOptions, LintService, MemoryChangesSinceOptions,
-    MemoryService, MigrationInventoryOptions, MigrationReviewApplyOptions, ObligationDetectOptions,
-    ObligationService, ObservationPromotionInput, OrientInput, OrientationPacket,
-    OrientationResolution, RepositoryMigrationOptions, RepositoryMigrationReviewApplyOptions,
-    RepositoryService, SearchOptions, SearchService, SessionService, TelemetryService,
-    ToolIntelService, WorkService,
+    BrainLoop, BrainLoopItem, CoordinationService, CorrectionProposalInput,
+    CurrentPlanCaptureInput, DigestExtractionOptions, DigestExtractionReviewApplyOptions,
+    DigestInventoryOptions, DigestService, DigestSourceIndexOptions,
+    DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupPlan,
+    DocumentOrphanCleanupPlanOptions, DocumentOrphanQuarantineReviewApplyOptions,
+    DocumentOrphanQuarantineReviewOptions, DocumentOrphanQuarantineReviewPrioritizationOptions,
+    DocumentRecoveryOptions, DocumentReindexAction, DocumentReindexExecutionOptions,
+    DocumentReindexExecutionReport, DocumentReindexPlan, DocumentService, EntityService,
+    GraphService, HandoffService, HarnessHookEvent, HarnessHookServices, HarnessInstallOptions,
+    HarnessService, HarnessSettingsTarget, KnowledgeService, LintOptions, LintService,
+    MemoryChangesSinceOptions, MemoryService, MigrationInventoryOptions,
+    MigrationReviewApplyOptions, ObligationDetectOptions, ObligationService,
+    ObservationPromotionInput, OrientInput, OrientationIdentity, OrientationPacket,
+    OrientationResolution, ProcedureMatchInput, RelatedSearchScope, RepositoryMigrationOptions,
+    RepositoryMigrationReviewApplyOptions, RepositoryService, SearchOptions, SearchService,
+    SessionService, TelemetryService, ToolIntelService, WorkService,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::env;
 use std::path::Path;
 use std::sync::Arc;
@@ -750,7 +753,12 @@ pub struct KnowledgeVersionsResponse {
 
 /// Request to get knowledge statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct KnowledgeStatsRequest {}
+pub struct KnowledgeStatsRequest {
+    /// Authorization boundary; knowledge records are global-only until they carry ownership.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
+}
 
 /// Knowledge statistics response.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1002,9 +1010,28 @@ pub async fn knowledge_detect_versions(
 /// Get knowledge statistics.
 pub async fn knowledge_stats(
     state: &ToolState,
-    _request: KnowledgeStatsRequest,
+    request: KnowledgeStatsRequest,
 ) -> Result<String, String> {
     debug!("knowledge_stats");
+
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::None,
+    )
+    .await?;
+    if applied.mode != SearchRelevanceMode::Global {
+        return serialize_scoped_retrieval_response(
+            &KnowledgeStatsResponse {
+                doc_count: 0,
+                file_sync_count: 0,
+                alias_count: 0,
+            },
+            "knowledge_stats",
+            &applied,
+        );
+    }
 
     let service_guard = state.knowledge_service.read().await;
     let service = service_guard
@@ -1022,7 +1049,7 @@ pub async fn knowledge_stats(
         alias_count: stats.alias_count,
     };
 
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    serialize_scoped_retrieval_response(&response, "knowledge_stats", &applied)
 }
 
 // =============================================================================
@@ -1352,7 +1379,12 @@ pub struct EntityObserveHistoryRequest {
 
 /// Request for entity statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct EntityStatsRequest {}
+pub struct EntityStatsRequest {
+    /// Authorization boundary for aggregate entity counts.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
+}
 
 /// Entity statistics response.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -1881,16 +1913,39 @@ pub async fn entity_observe_history(
 /// Get entity statistics.
 pub async fn entity_stats(
     state: &ToolState,
-    _request: EntityStatsRequest,
+    request: EntityStatsRequest,
 ) -> Result<String, String> {
     debug!("entity_stats");
 
-    let service_guard = state.entity_service.read().await;
-    let service = service_guard
-        .as_ref()
-        .ok_or_else(|| "Entity service not initialized".to_string())?;
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::Always,
+    )
+    .await?;
 
-    let stats = service.stats().await.map_err(|e| e.to_string())?;
+    let stats = match applied.mode {
+        SearchRelevanceMode::Local => Default::default(),
+        SearchRelevanceMode::Related if applied.omitted => Default::default(),
+        SearchRelevanceMode::Related => {
+            let search_guard = state.search_service.read().await;
+            let search = search_guard
+                .as_ref()
+                .ok_or_else(|| "Search service not initialized".to_string())?;
+            search
+                .related_entity_stats(applied.related.as_ref().unwrap())
+                .await
+                .map_err(|error| error.to_string())?
+        }
+        SearchRelevanceMode::Global => {
+            let service_guard = state.entity_service.read().await;
+            let service = service_guard
+                .as_ref()
+                .ok_or_else(|| "Entity service not initialized".to_string())?;
+            service.stats().await.map_err(|error| error.to_string())?
+        }
+    };
 
     let response = EntityStatsResponse {
         entity_count: stats.entity_count,
@@ -1899,7 +1954,7 @@ pub async fn entity_stats(
         observation_count: stats.observation_count,
     };
 
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    serialize_scoped_retrieval_response(&response, "entity_stats", &applied)
 }
 
 // =============================================================================
@@ -2131,7 +2186,12 @@ pub struct SessionSearchResponse {
 
 /// Request for session statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SessionStatsRequest {}
+pub struct SessionStatsRequest {
+    /// Authorization boundary for aggregate session counts.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
+}
 
 /// Response with session statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -2403,16 +2463,39 @@ pub async fn session_search(
 /// Get session statistics.
 pub async fn session_stats(
     state: &ToolState,
-    _request: SessionStatsRequest,
+    request: SessionStatsRequest,
 ) -> Result<String, String> {
     debug!("session_stats");
 
-    let service_guard = state.session_service.read().await;
-    let service = service_guard
-        .as_ref()
-        .ok_or_else(|| "Session service not initialized".to_string())?;
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::ProjectOnly,
+    )
+    .await?;
 
-    let stats = service.stats().await.map_err(|e| e.to_string())?;
+    let stats = match applied.mode {
+        SearchRelevanceMode::Local => Default::default(),
+        SearchRelevanceMode::Related if applied.omitted => Default::default(),
+        SearchRelevanceMode::Related => {
+            let search_guard = state.search_service.read().await;
+            let search = search_guard
+                .as_ref()
+                .ok_or_else(|| "Search service not initialized".to_string())?;
+            search
+                .related_session_stats(applied.related.as_ref().unwrap())
+                .await
+                .map_err(|error| error.to_string())?
+        }
+        SearchRelevanceMode::Global => {
+            let service_guard = state.session_service.read().await;
+            let service = service_guard
+                .as_ref()
+                .ok_or_else(|| "Session service not initialized".to_string())?;
+            service.stats().await.map_err(|error| error.to_string())?
+        }
+    };
 
     let response = SessionStatsResponse {
         total_sessions: stats.total_sessions,
@@ -2423,7 +2506,7 @@ pub async fn session_stats(
         events_by_type: stats.events_by_type,
     };
 
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    serialize_scoped_retrieval_response(&response, "session_stats", &applied)
 }
 
 // =============================================================================
@@ -2587,7 +2670,12 @@ pub struct ToolSearchRequest {
 
 /// Request for overall tool intelligence statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ToolIntelStatsRequest {}
+pub struct ToolIntelStatsRequest {
+    /// Authorization boundary for aggregate tool intelligence counts.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
+}
 
 /// Response with overall tool intelligence statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -2783,23 +2871,46 @@ pub async fn tool_search(state: &ToolState, request: ToolSearchRequest) -> Resul
 /// Get overall tool intelligence statistics.
 pub async fn tool_intel_stats(
     state: &ToolState,
-    _request: ToolIntelStatsRequest,
+    request: ToolIntelStatsRequest,
 ) -> Result<String, String> {
     debug!("tool_intel_stats");
 
-    let service_guard = state.tool_intel_service.read().await;
-    let service = service_guard
-        .as_ref()
-        .ok_or_else(|| "Tool intelligence service not initialized".to_string())?;
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::ProjectOnly,
+    )
+    .await?;
 
-    let stats = service.stats().await.map_err(|e| e.to_string())?;
+    let stats = match applied.mode {
+        SearchRelevanceMode::Local => Default::default(),
+        SearchRelevanceMode::Related if applied.omitted => Default::default(),
+        SearchRelevanceMode::Related => {
+            let search_guard = state.search_service.read().await;
+            let search = search_guard
+                .as_ref()
+                .ok_or_else(|| "Search service not initialized".to_string())?;
+            search
+                .related_tool_intel_stats(applied.related.as_ref().unwrap())
+                .await
+                .map_err(|error| error.to_string())?
+        }
+        SearchRelevanceMode::Global => {
+            let service_guard = state.tool_intel_service.read().await;
+            let service = service_guard
+                .as_ref()
+                .ok_or_else(|| "Tool intelligence service not initialized".to_string())?;
+            service.stats().await.map_err(|error| error.to_string())?
+        }
+    };
 
     let response = ToolIntelStatsResponse {
         usage_count: stats.usage_count,
         preference_count: stats.preference_count,
     };
 
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    serialize_scoped_retrieval_response(&response, "tool_intel_stats", &applied)
 }
 
 // =============================================================================
@@ -2980,7 +3091,12 @@ pub struct CoordListResponse {
 
 /// Request for coordination statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct CoordStatsRequest {}
+pub struct CoordStatsRequest {
+    /// Authorization boundary for aggregate active-session counts.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
+}
 
 /// Response with coordination statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -3288,26 +3404,69 @@ pub async fn coord_list(state: &ToolState, request: CoordListRequest) -> Result<
 }
 
 /// Get coordination statistics.
-pub async fn coord_stats(state: &ToolState, _request: CoordStatsRequest) -> Result<String, String> {
+pub async fn coord_stats(state: &ToolState, request: CoordStatsRequest) -> Result<String, String> {
     debug!("coord_stats");
+
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::ProjectOnly,
+    )
+    .await?;
 
     let service_guard = state.coordination_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Coordination service not initialized".to_string())?;
 
-    let stats = service.stats().await.map_err(|e| e.to_string())?;
-
-    let response = CoordStatsResponse {
-        active_sessions: stats.active_session_count,
+    let active_sessions = match applied.mode {
+        SearchRelevanceMode::Local => 0,
+        SearchRelevanceMode::Related if applied.omitted => 0,
+        SearchRelevanceMode::Related => service
+            .list_for_project(&applied.related.as_ref().unwrap().project.name)
+            .await
+            .map_err(|error| error.to_string())?
+            .len() as u64,
+        SearchRelevanceMode::Global => {
+            service
+                .stats()
+                .await
+                .map_err(|error| error.to_string())?
+                .active_session_count
+        }
     };
 
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    serialize_scoped_retrieval_response(
+        &CoordStatsResponse { active_sessions },
+        "coord_stats",
+        &applied,
+    )
 }
 
 // =============================================================================
 // Unified Search Tool
 // =============================================================================
+
+/// Authorization and relevance boundary for standalone retrieval actions.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct RetrievalScopeRequest {
+    /// Relevance boundary: local (default), related, or global.
+    #[schemars(description = "Relevance boundary: local (default), related, or global")]
+    pub relevance_mode: Option<String>,
+    /// Project name for related scope.
+    #[schemars(description = "Project name for related scope")]
+    pub project: Option<String>,
+    /// Exact task ID, JIRA key, or project-scoped task name.
+    #[schemars(description = "Exact task ID, JIRA key, or project-scoped task name")]
+    pub task: Option<String>,
+    /// Current working directory for repository/project resolution.
+    #[schemars(description = "Current working directory for repository/project resolution")]
+    pub cwd: Option<String>,
+}
+
+/// Backward-compatible Rust name for the original search-only scope contract.
+pub type SearchScopeRequest = RetrievalScopeRequest;
 
 /// Request to search across all knowledge layers.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -3358,13 +3517,23 @@ pub struct SearchRequest {
     #[schemars(description = "Host/application session label for telemetry correlation")]
     pub external_session_id: Option<String>,
 
-    /// Project name for telemetry correlation and scoped memory filtering.
-    #[schemars(description = "Project name for telemetry correlation and scoped memory filtering")]
+    /// Project name for telemetry correlation and authorization-scoped retrieval.
+    #[schemars(description = "Project name for telemetry correlation and scoped retrieval")]
     pub project: Option<String>,
 
-    /// Current working directory for repository-scoped memory filtering.
-    #[schemars(description = "Current working directory for repository-scoped memory filtering")]
+    /// Exact task ID, JIRA key, or project-scoped task name.
+    #[schemars(description = "Exact task ID, JIRA key, or project-scoped task name")]
+    pub task: Option<String>,
+
+    /// Current working directory for repository/project scope resolution.
+    #[schemars(description = "Current working directory for repository/project scope resolution")]
     pub cwd: Option<String>,
+
+    /// Relevance boundary: local (default), related, or global.
+    /// Local returns only applicable MemoryItems. Related searches only layers with provable
+    /// project/task ownership and reports omitted layers. Global explicitly searches all scopes.
+    #[schemars(description = "Relevance boundary: local (default), related, or global")]
+    pub relevance_mode: Option<String>,
 }
 
 fn default_search_limit() -> usize {
@@ -3401,6 +3570,351 @@ pub struct SearchResponse {
     pub count: usize,
     /// Results count by layer.
     pub by_layer: std::collections::HashMap<String, usize>,
+    /// Effective relevance boundary.
+    pub relevance_mode: String,
+    /// Whether project/cwd applicability was enforced for returned MemoryItems.
+    pub memory_scope_enforced: bool,
+    /// Whether every returned result was constrained to the declared authorization boundary.
+    pub authorization_scope_enforced: bool,
+    /// Requested layers searched with enforceable ownership.
+    pub scope_enforced_layers: Vec<String>,
+    /// Requested layers omitted because ownership could not be proven.
+    pub omitted_layers: Vec<String>,
+    /// Project selected or declared for the effective boundary, when available.
+    pub resolved_project: Option<String>,
+    /// Exact task selected or declared for the effective boundary, when available.
+    pub resolved_task: Option<String>,
+    /// Explicit limitations or widening notices for this search.
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchRelevanceMode {
+    Local,
+    Related,
+    Global,
+}
+
+impl SearchRelevanceMode {
+    fn parse(value: Option<&str>) -> Result<Self, String> {
+        match value
+            .unwrap_or("local")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "local" => Ok(Self::Local),
+            "related" => Ok(Self::Related),
+            "global" => Ok(Self::Global),
+            other => Err(format!(
+                "Unknown relevance_mode '{other}'. Valid: local, related, global"
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for SearchRelevanceMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Local => write!(f, "local"),
+            Self::Related => write!(f, "related"),
+            Self::Global => write!(f, "global"),
+        }
+    }
+}
+
+struct AppliedStandaloneRetrievalScope {
+    mode: SearchRelevanceMode,
+    related: Option<RelatedSearchScope>,
+    layer_scoped: bool,
+    omitted: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RelatedOwnership {
+    /// Ownership remains provable for both project and exact-task scopes.
+    Always,
+    /// Ownership is provable for a project but not for an exact task.
+    ProjectOnly,
+    /// Legacy records have no project/task ownership metadata.
+    None,
+}
+
+async fn apply_retrieval_scope_with_ownership(
+    state: &ToolState,
+    request: Option<&RetrievalScopeRequest>,
+    project_fallback: Option<&str>,
+    ownership: RelatedOwnership,
+) -> Result<AppliedStandaloneRetrievalScope, String> {
+    let request = request.cloned().unwrap_or_default();
+    let mode = SearchRelevanceMode::parse(request.relevance_mode.as_deref())?;
+    match mode {
+        SearchRelevanceMode::Local => Ok(AppliedStandaloneRetrievalScope {
+            mode,
+            related: None,
+            layer_scoped: false,
+            omitted: true,
+        }),
+        SearchRelevanceMode::Global => Ok(AppliedStandaloneRetrievalScope {
+            mode,
+            related: None,
+            layer_scoped: false,
+            omitted: false,
+        }),
+        SearchRelevanceMode::Related => {
+            let options = SearchOptions {
+                project: request
+                    .project
+                    .or_else(|| project_fallback.map(ToOwned::to_owned)),
+                cwd: request.cwd,
+            };
+            let service_guard = state.search_service.read().await;
+            let service = service_guard
+                .as_ref()
+                .ok_or_else(|| "Search service not initialized".to_string())?;
+            let scope = service
+                .resolve_related_scope(&options, request.task.as_deref())
+                .await
+                .map_err(|error| error.to_string())?;
+            let ownership_is_provable = match ownership {
+                RelatedOwnership::Always => true,
+                RelatedOwnership::ProjectOnly => scope.task.is_none(),
+                RelatedOwnership::None => false,
+            };
+            Ok(AppliedStandaloneRetrievalScope {
+                mode,
+                related: Some(scope),
+                layer_scoped: ownership_is_provable,
+                omitted: !ownership_is_provable,
+            })
+        }
+    }
+}
+
+async fn apply_standalone_retrieval_scope(
+    state: &ToolState,
+    request: Option<&RetrievalScopeRequest>,
+    project_fallback: Option<&str>,
+    layer: SearchLayer,
+) -> Result<AppliedStandaloneRetrievalScope, String> {
+    let ownership = match layer {
+        SearchLayer::Document => RelatedOwnership::None,
+        SearchLayer::SessionEvent | SearchLayer::ToolUsage => RelatedOwnership::ProjectOnly,
+        _ => RelatedOwnership::Always,
+    };
+    apply_retrieval_scope_with_ownership(state, request, project_fallback, ownership).await
+}
+
+fn retrieval_allows_entity(applied: &AppliedStandaloneRetrievalScope, entity_id: &Id) -> bool {
+    match applied.mode {
+        SearchRelevanceMode::Global => true,
+        SearchRelevanceMode::Related if !applied.omitted => applied
+            .related
+            .as_ref()
+            .is_some_and(|scope| scope.entity_ids.contains(entity_id)),
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => false,
+    }
+}
+
+fn retrieval_allows_session(applied: &AppliedStandaloneRetrievalScope, session_id: &Id) -> bool {
+    match applied.mode {
+        SearchRelevanceMode::Global => true,
+        SearchRelevanceMode::Related if !applied.omitted => applied
+            .related
+            .as_ref()
+            .is_some_and(|scope| scope.session_ids.contains(session_id)),
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => false,
+    }
+}
+
+async fn retrieval_allows_named_entity(
+    service: &EntityService,
+    applied: &AppliedStandaloneRetrievalScope,
+    entity_name: &str,
+) -> Result<bool, String> {
+    match applied.mode {
+        SearchRelevanceMode::Global => Ok(true),
+        SearchRelevanceMode::Related if !applied.omitted => Ok(service
+            .resolve(entity_name)
+            .await
+            .map_err(|error| error.to_string())?
+            .is_some_and(|entity| retrieval_allows_entity(applied, &entity.id))),
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => Ok(false),
+    }
+}
+
+fn serialize_standalone_retrieval_response<T: Serialize>(
+    response: &T,
+    layer: SearchLayer,
+    applied: &AppliedStandaloneRetrievalScope,
+) -> Result<String, String> {
+    serialize_scoped_retrieval_response(response, &layer.to_string(), applied)
+}
+
+fn serialize_scoped_retrieval_response<T: Serialize>(
+    response: &T,
+    surface: &str,
+    applied: &AppliedStandaloneRetrievalScope,
+) -> Result<String, String> {
+    let mut response = serde_json::to_value(response).map_err(|error| error.to_string())?;
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| "Standalone retrieval response must serialize as an object".to_string())?;
+    let resolved_project = applied
+        .related
+        .as_ref()
+        .map(|scope| scope.project.name.clone());
+    let resolved_task = applied
+        .related
+        .as_ref()
+        .and_then(|scope| scope.task.as_ref().map(|task| task.name.clone()));
+    let scope_warnings = match applied.mode {
+        SearchRelevanceMode::Local if applied.omitted => vec![format!(
+            "Local mode omitted standalone {} retrieval because no directly applicable local authorization boundary was resolved; use related with a project/task/cwd or explicit global.",
+            surface
+        )],
+        SearchRelevanceMode::Local => vec![format!(
+            "Local mode enforced a directly resolved {} boundary.",
+            surface
+        )],
+        SearchRelevanceMode::Related if applied.omitted => vec![format!(
+            "Related mode omitted {} because ownership cannot be proven at the resolved boundary.",
+            surface
+        )],
+        SearchRelevanceMode::Related => vec![format!(
+            "Related mode enforced project scope '{}'.",
+            resolved_project.as_deref().unwrap_or("unknown")
+        )],
+        SearchRelevanceMode::Global => vec![format!(
+            "Global mode explicitly accessed {} records across all projects; results may belong to unrelated projects.",
+            surface
+        )],
+    };
+    object.insert(
+        "relevance_mode".to_string(),
+        Value::String(applied.mode.to_string()),
+    );
+    object.insert(
+        "authorization_scope_enforced".to_string(),
+        Value::Bool(applied.mode != SearchRelevanceMode::Global),
+    );
+    object.insert(
+        "scope_enforced_layers".to_string(),
+        serde_json::json!(if applied.layer_scoped {
+            vec![surface]
+        } else {
+            Vec::new()
+        }),
+    );
+    object.insert(
+        "omitted_layers".to_string(),
+        serde_json::json!(if applied.omitted {
+            vec![surface]
+        } else {
+            Vec::new()
+        }),
+    );
+    object.insert(
+        "resolved_project".to_string(),
+        serde_json::to_value(resolved_project).map_err(|error| error.to_string())?,
+    );
+    object.insert(
+        "resolved_task".to_string(),
+        serde_json::to_value(resolved_task).map_err(|error| error.to_string())?,
+    );
+    let mut warnings = match object.remove("warnings") {
+        Some(Value::Array(warnings)) => warnings,
+        _ => Vec::new(),
+    };
+    warnings.extend(scope_warnings.into_iter().map(Value::String));
+    object.insert("warnings".to_string(), Value::Array(warnings));
+    serde_json::to_string_pretty(&response).map_err(|error| error.to_string())
+}
+
+fn retrieval_scope_with_fallbacks(
+    request: Option<&RetrievalScopeRequest>,
+    project: Option<&str>,
+    task: Option<&str>,
+) -> RetrievalScopeRequest {
+    let mut scope = request.cloned().unwrap_or_default();
+    if scope.project.is_none() {
+        scope.project = project.map(ToOwned::to_owned);
+    }
+    if scope.task.is_none() {
+        scope.task = task.map(ToOwned::to_owned);
+    }
+    scope
+}
+
+fn work_retrieval_targets(
+    applied: &AppliedStandaloneRetrievalScope,
+    requested_project: Option<&str>,
+    requested_task: Option<&str>,
+    surface: &str,
+) -> Result<(Option<String>, Option<String>), String> {
+    match applied.mode {
+        SearchRelevanceMode::Global => Ok((
+            requested_project.map(ToOwned::to_owned),
+            requested_task.map(ToOwned::to_owned),
+        )),
+        SearchRelevanceMode::Related if !applied.omitted => {
+            let related = applied
+                .related
+                .as_ref()
+                .expect("related retrieval scope was resolved");
+            if let Some(requested) = requested_project {
+                if !requested.eq_ignore_ascii_case(&related.project.name) {
+                    return Err(format!(
+                        "{surface} project target '{requested}' does not match resolved authorization project '{}'",
+                        related.project.name
+                    ));
+                }
+            }
+            if let Some(requested) = requested_task {
+                let resolved = related.task.as_ref().ok_or_else(|| {
+                    format!(
+                        "{surface} task target '{requested}' requires an exact task authorization boundary"
+                    )
+                })?;
+                let matches = requested.eq_ignore_ascii_case(&resolved.name)
+                    || resolved
+                        .jira_key
+                        .as_deref()
+                        .is_some_and(|key| requested.eq_ignore_ascii_case(key))
+                    || requested == resolved.id.to_string();
+                if !matches {
+                    return Err(format!(
+                        "{surface} task target '{requested}' does not match resolved authorization task '{}'",
+                        resolved.name
+                    ));
+                }
+            }
+            Ok((
+                Some(related.project.name.clone()),
+                related.task.as_ref().map(|task| task.id.to_string()),
+            ))
+        }
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => Ok((None, None)),
+    }
+}
+
+fn work_pr_matches_scope(
+    applied: &AppliedStandaloneRetrievalScope,
+    pr: &engram_core::work::Pr,
+) -> bool {
+    match applied.mode {
+        SearchRelevanceMode::Global => true,
+        SearchRelevanceMode::Related if !applied.omitted => {
+            applied.related.as_ref().is_some_and(|related| {
+                pr.project_id == related.project.id
+                    && related
+                        .task
+                        .as_ref()
+                        .map_or(true, |task| pr.task_id == Some(task.id))
+            })
+        }
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => false,
+    }
 }
 
 /// Execute a unified search across all layers.
@@ -3415,28 +3929,136 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
         .as_ref()
         .ok_or_else(|| "Search service not initialized".to_string())?;
 
-    // Parse layers if specified
-    let layers: Option<Vec<SearchLayer>> = request.layers.as_ref().map(|layer_strs| {
+    let relevance_mode = SearchRelevanceMode::parse(request.relevance_mode.as_deref())?;
+
+    let requested_layers: Option<Vec<SearchLayer>> = request.layers.as_ref().map(|layer_strs| {
         layer_strs
             .iter()
             .filter_map(|s| SearchLayer::parse(s))
             .collect()
     });
+    let memory_scope_enforced = relevance_mode != SearchRelevanceMode::Global;
+    let search_options = SearchOptions {
+        project: request.project.clone(),
+        cwd: request.cwd.clone(),
+    };
 
     let started = std::time::Instant::now();
-    let results = service
-        .search_with_options(
-            &request.query,
-            request.limit,
-            request.min_score,
-            layers.as_deref(),
-            SearchOptions {
-                project: request.project.clone(),
-                cwd: request.cwd.clone(),
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+    let (
+        results,
+        authorization_scope_enforced,
+        scope_enforced_layers,
+        omitted_layers,
+        resolved_project,
+        resolved_task,
+        warnings,
+    ) = match relevance_mode {
+        SearchRelevanceMode::Local => {
+            let effective_layers = requested_layers.clone().unwrap_or_else(SearchLayer::all);
+            let memory_requested = effective_layers.contains(&SearchLayer::Memory);
+            let results = if memory_requested {
+                service
+                    .search_local_memory(
+                        &request.query,
+                        request.limit,
+                        request.min_score,
+                        &search_options,
+                        request.task.as_deref(),
+                    )
+                    .await
+                    .map_err(|error| error.to_string())?
+            } else {
+                Vec::new()
+            };
+            let scoped_layers = memory_requested
+                .then_some(SearchLayer::Memory)
+                .into_iter()
+                .collect();
+            let omitted_layers = effective_layers
+                .into_iter()
+                .filter(|layer| *layer != SearchLayer::Memory)
+                .collect();
+            let mut warnings = vec![
+                "Local mode searches only applicable MemoryItems; use related for authorization-scoped cross-layer evidence or global for an explicit all-scope search."
+                    .to_string(),
+            ];
+            if request.project.is_none() && request.task.is_none() && request.cwd.is_none() {
+                warnings.push(
+                    "No local project/task/cwd boundary was supplied, so only global/user MemoryItems were eligible."
+                        .to_string(),
+                );
+            }
+            (
+                results,
+                true,
+                scoped_layers,
+                omitted_layers,
+                request.project.clone(),
+                request.task.clone(),
+                warnings,
+            )
+        }
+        SearchRelevanceMode::Related => {
+            let outcome = service
+                .search_related(
+                    &request.query,
+                    request.limit,
+                    request.min_score,
+                    requested_layers.as_deref(),
+                    &search_options,
+                    request.task.as_deref(),
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            let mut warnings = vec![format!(
+                "Related mode enforced project scope '{}'.",
+                outcome.project
+            )];
+            if !outcome.omitted_layers.is_empty() {
+                warnings.push(format!(
+                    "Omitted layer(s) without provable ownership for this boundary: {}.",
+                    outcome
+                        .omitted_layers
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            (
+                outcome.results,
+                true,
+                outcome.scoped_layers,
+                outcome.omitted_layers,
+                Some(outcome.project),
+                outcome.task,
+                warnings,
+            )
+        }
+        SearchRelevanceMode::Global => {
+            let results = service
+                .search(
+                    &request.query,
+                    request.limit,
+                    request.min_score,
+                    requested_layers.as_deref(),
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            (
+                results,
+                false,
+                Vec::new(),
+                Vec::new(),
+                None,
+                None,
+                vec![
+                    "Global mode explicitly searches all selected layers and memory scopes; results may belong to unrelated projects."
+                        .to_string(),
+                ],
+            )
+        }
+    };
 
     let returned_result_ids = results.iter().map(|result| result.id.clone()).collect();
     let returned_memory_ids = results
@@ -3461,7 +4083,7 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
             .with_scenario_id(request.scenario_id.clone())
             .with_arm(request.arm.clone())
             .with_query(Some(request.query.clone()))
-            .with_project(request.project.clone())
+            .with_project(resolved_project.clone().or_else(|| request.project.clone()))
             .with_returned_memory_ids(returned_memory_ids)
             .with_returned_result_ids(returned_result_ids)
             .with_latency_ms(started.elapsed().as_millis() as u64),
@@ -3492,6 +4114,20 @@ pub async fn search(state: &ToolState, request: SearchRequest) -> Result<String,
             })
             .collect(),
         by_layer,
+        relevance_mode: relevance_mode.to_string(),
+        memory_scope_enforced,
+        authorization_scope_enforced,
+        scope_enforced_layers: scope_enforced_layers
+            .into_iter()
+            .map(|layer| layer.to_string())
+            .collect(),
+        omitted_layers: omitted_layers
+            .into_iter()
+            .map(|layer| layer.to_string())
+            .collect(),
+        resolved_project,
+        resolved_task,
+        warnings,
     };
 
     serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
@@ -3542,6 +4178,10 @@ pub struct TelemetryRequest {
         description = "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
     )]
     pub project: Option<String>,
+    /// Authorization boundary for telemetry retrieval actions; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
     /// Agent or harness label.
     pub agent: Option<String>,
     /// Session ID.
@@ -3605,6 +4245,49 @@ pub struct TelemetryRequest {
 pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Result<String, String> {
     debug!("telemetry_new: action={}", request.action);
 
+    let is_retrieval = matches!(
+        request.action.as_str(),
+        "get_trace"
+            | "list_traces"
+            | "list_feedback"
+            | "stats_by_intent"
+            | "stats"
+            | "real_session_eval"
+            | "eval_report"
+    );
+    let applied_scope = if is_retrieval {
+        let scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            None,
+        );
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::ProjectOnly,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": request.action, "executed": false}),
+                "telemetry",
+                applied,
+            );
+        }
+    }
+    let retrieval_project = if let Some(applied) = applied_scope.as_ref() {
+        work_retrieval_targets(applied, request.project.as_deref(), None, "telemetry")?.0
+    } else {
+        None
+    };
+
     let service_guard = state.telemetry_service.read().await;
     let service = service_guard
         .as_ref()
@@ -3651,29 +4334,41 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
                 &required(&request.trace_id, "trace_id", "get_trace")?,
                 "trace ID",
             )?;
-            let trace = service
+            let mut trace = service
                 .get_trace(&trace_id)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({ "trace": trace }))
-                .map_err(|e| e.to_string())
+            if applied_scope
+                .as_ref()
+                .is_some_and(|applied| !telemetry_trace_matches_scope(applied, trace.as_ref()))
+            {
+                trace = None;
+            }
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({ "trace": trace }),
+                "telemetry",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         "list_traces" => {
             let traces = service
                 .list_traces_scoped(
                     request.limit,
-                    request.project.as_deref(),
+                    retrieval_project.as_deref(),
                     request.scenario_id.as_deref(),
                     request.arm.as_deref(),
                     request.intent.as_deref(),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": traces.len(),
-                "traces": traces
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "count": traces.len(),
+                    "traces": traces
+                }),
+                "telemetry",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         "submit_feedback" | "feedback_submit" => {
             let trace_id = parse_id(
@@ -3736,52 +4431,94 @@ pub async fn telemetry_new(state: &ToolState, request: TelemetryRequest) -> Resu
         "list_feedback" => {
             let feedback = if let Some(trace_id) = &request.trace_id {
                 let trace_id = parse_id(trace_id, "trace ID")?;
-                service
-                    .list_feedback_for_trace(&trace_id)
+                let trace = service
+                    .get_trace(&trace_id)
                     .await
-                    .map_err(|e| e.to_string())?
+                    .map_err(|e| e.to_string())?;
+                if telemetry_trace_matches_scope(
+                    applied_scope.as_ref().expect("retrieval scope applied"),
+                    trace.as_ref(),
+                ) {
+                    service
+                        .list_feedback_for_trace(&trace_id)
+                        .await
+                        .map_err(|e| e.to_string())?
+                } else {
+                    Vec::new()
+                }
             } else {
                 service
                     .list_feedback_scoped(
                         request.limit,
-                        request.project.as_deref(),
+                        retrieval_project.as_deref(),
                         request.scenario_id.as_deref(),
                         request.arm.as_deref(),
                     )
                     .await
                     .map_err(|e| e.to_string())?
             };
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": feedback.len(),
-                "feedback": feedback
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "count": feedback.len(),
+                    "feedback": feedback
+                }),
+                "telemetry",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         "stats_by_intent" | "stats" => {
-            let stats = service.stats_by_intent().await.map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": stats.len(),
-                "stats": stats
-            }))
-            .map_err(|e| e.to_string())
+            let stats = service
+                .stats_by_intent_scoped(retrieval_project.as_deref())
+                .await
+                .map_err(|e| e.to_string())?;
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "count": stats.len(),
+                    "stats": stats
+                }),
+                "telemetry",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         "real_session_eval" | "eval_report" => {
             let report = service
                 .real_session_eval_report_scoped(
                     request.limit,
-                    request.project.as_deref(),
+                    retrieval_project.as_deref(),
                     request.scenario_id.as_deref(),
                     request.arm.as_deref(),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({ "report": report }))
-                .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({ "report": report }),
+                "telemetry",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: record_trace, get_trace, list_traces, submit_feedback, list_feedback, stats_by_intent, real_session_eval",
             request.action
         )),
+    }
+}
+
+fn telemetry_trace_matches_scope(
+    applied: &AppliedStandaloneRetrievalScope,
+    trace: Option<&BrainHarnessTrace>,
+) -> bool {
+    match applied.mode {
+        SearchRelevanceMode::Global => trace.is_some(),
+        SearchRelevanceMode::Related if !applied.omitted => {
+            let Some(trace_project) = trace.and_then(|trace| trace.project.as_deref()) else {
+                return false;
+            };
+            applied
+                .related
+                .as_ref()
+                .is_some_and(|related| trace_project.eq_ignore_ascii_case(&related.project.name))
+        }
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => false,
     }
 }
 
@@ -5285,7 +6022,12 @@ pub async fn work_observe_delete(
 
 /// Request for work statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct WorkStatsRequest {}
+pub struct WorkStatsRequest {
+    /// Authorization boundary for aggregate work counts.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
+}
 
 /// Response with work statistics.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -5303,15 +6045,67 @@ pub struct WorkStatsResponse {
 }
 
 /// Get work statistics.
-pub async fn work_stats(state: &ToolState, _request: WorkStatsRequest) -> Result<String, String> {
+pub async fn work_stats(state: &ToolState, request: WorkStatsRequest) -> Result<String, String> {
     debug!("work_stats");
+
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::Always,
+    )
+    .await?;
 
     let service_guard = state.work_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Work service not initialized".to_string())?;
 
-    let stats = service.stats().await.map_err(|e| e.to_string())?;
+    let stats = match applied.mode {
+        SearchRelevanceMode::Local => engram_store::WorkStats::default(),
+        SearchRelevanceMode::Related if applied.omitted => engram_store::WorkStats::default(),
+        SearchRelevanceMode::Global => service.stats().await.map_err(|error| error.to_string())?,
+        SearchRelevanceMode::Related => {
+            let scope = applied.related.as_ref().unwrap();
+            let project = &scope.project.name;
+            let tasks = if let Some(task) = &scope.task {
+                vec![task.clone()]
+            } else {
+                service
+                    .list_tasks(project, None)
+                    .await
+                    .map_err(|error| error.to_string())?
+            };
+            let prs = service
+                .list_prs(project, scope.task.as_ref().map(|task| task.name.as_str()))
+                .await
+                .map_err(|error| error.to_string())?;
+            let project_observation_count = if scope.task.is_some() {
+                0
+            } else {
+                service
+                    .get_project_observations(project)
+                    .await
+                    .map_err(|error| error.to_string())?
+                    .len() as u64
+            };
+            let mut task_observation_count = 0;
+            for task in &tasks {
+                task_observation_count += service
+                    .get_task_observations(&task.id.to_string())
+                    .await
+                    .map_err(|error| error.to_string())?
+                    .len() as u64;
+            }
+            engram_store::WorkStats {
+                project_count: 1,
+                task_count: tasks.len() as u64,
+                pr_count: prs.len() as u64,
+                project_observation_count,
+                task_observation_count,
+            }
+        }
+    };
 
     let response = WorkStatsResponse {
         project_count: stats.project_count,
@@ -5321,7 +6115,7 @@ pub async fn work_stats(state: &ToolState, _request: WorkStatsRequest) -> Result
         task_observation_count: stats.task_observation_count,
     };
 
-    serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+    serialize_scoped_retrieval_response(&response, "work_stats", &applied)
 }
 
 // =============================================================================
@@ -5353,6 +6147,10 @@ pub struct WorkProjectRequest {
     /// Relation type (for connect_entity).
     #[schemars(description = "Relation type: involves, depends_on, produces (for connect_entity)")]
     pub relation: Option<String>,
+    /// Authorization boundary for get, list, and entities; defaults to local abstention.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Unified project management handler.
@@ -5361,6 +6159,41 @@ pub async fn work_project(
     request: WorkProjectRequest,
 ) -> Result<String, String> {
     debug!("work_project: action={}", request.action);
+
+    let is_retrieval = matches!(request.action.as_str(), "get" | "list" | "entities");
+    let requested_project = if matches!(request.action.as_str(), "get" | "entities") {
+        request.name.as_deref()
+    } else {
+        None
+    };
+    let applied_scope = if is_retrieval {
+        let scope = retrieval_scope_with_fallbacks(request.scope.as_ref(), requested_project, None);
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::ProjectOnly,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": request.action, "executed": false}),
+                "work_projects",
+                applied,
+            );
+        }
+    }
+    let (retrieval_project, _) = if let Some(applied) = applied_scope.as_ref() {
+        work_retrieval_targets(applied, requested_project, None, "work_project")?
+    } else {
+        (None, None)
+    };
 
     let service_guard = state.work_service.read().await;
     let service = service_guard
@@ -5388,7 +6221,7 @@ pub async fn work_project(
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
         "get" => {
-            let name = request.name.ok_or("'name' required for get")?;
+            let name = retrieval_project.ok_or("'name' required for get")?;
             let project = service
                 .get_project(&name)
                 .await
@@ -5431,17 +6264,37 @@ pub async fn work_project(
                 "entity_count": entities.len(),
                 "entities": entities.iter().map(|e| e.name.clone()).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_projects",
+                applied_scope
+                    .as_ref()
+                    .expect("work project get scope was resolved above"),
+            )
         }
         "list" => {
             let status = request
                 .status
                 .map(|s| engram_core::work::ProjectStatus::parse(&s));
 
-            let projects = service
-                .list_projects(status)
-                .await
-                .map_err(|e| e.to_string())?;
+            let projects = if let Some(project_name) = retrieval_project {
+                service
+                    .get_project(&project_name)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .filter(|project| {
+                        status
+                            .as_ref()
+                            .map_or(true, |status| project.status == *status)
+                    })
+                    .collect()
+            } else {
+                service
+                    .list_projects(status)
+                    .await
+                    .map_err(|e| e.to_string())?
+            };
 
             let response = serde_json::json!({
                 "count": projects.len(),
@@ -5452,7 +6305,13 @@ pub async fn work_project(
                     "status": p.status.to_string(),
                 })).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_projects",
+                applied_scope
+                    .as_ref()
+                    .expect("work project list scope was resolved above"),
+            )
         }
         "update" => {
             let name = request.name.ok_or("'name' required for update")?;
@@ -5520,7 +6379,7 @@ pub async fn work_project(
             .map_err(|e| e.to_string())
         }
         "entities" => {
-            let name = request.name.ok_or("'name' required for entities")?;
+            let name = retrieval_project.ok_or("'name' required for entities")?;
             let entities = service
                 .get_project_entities(&name)
                 .await
@@ -5534,7 +6393,13 @@ pub async fn work_project(
                     "description": e.description,
                 })).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_projects",
+                applied_scope
+                    .as_ref()
+                    .expect("work project entities scope was resolved above"),
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: create, get, list, update, delete, connect_entity, disconnect_entity, entities",
@@ -5574,11 +6439,59 @@ pub struct WorkTaskRequest {
     /// Relation type (for connect_entity).
     #[schemars(description = "Relation type: touches, modifies, creates (for connect_entity)")]
     pub relation: Option<String>,
+    /// Authorization boundary for get, list, and entities; defaults to local abstention.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Unified task management handler.
 pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<String, String> {
     debug!("work_task: action={}", request.action);
+
+    let is_retrieval = matches!(request.action.as_str(), "get" | "list" | "entities");
+    let requested_task = if matches!(request.action.as_str(), "get" | "entities") {
+        request.name.as_deref()
+    } else {
+        None
+    };
+    let applied_scope = if is_retrieval {
+        let scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            requested_task,
+        );
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::Always,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": request.action, "executed": false}),
+                "work_tasks",
+                applied,
+            );
+        }
+    }
+    let (retrieval_project, retrieval_task) = if let Some(applied) = applied_scope.as_ref() {
+        work_retrieval_targets(
+            applied,
+            request.project.as_deref(),
+            requested_task,
+            "work_task",
+        )?
+    } else {
+        (None, None)
+    };
 
     let service_guard = state.work_service.read().await;
     let service = service_guard
@@ -5612,7 +6525,7 @@ pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<St
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
         "get" => {
-            let name = request.name.ok_or("'name' required for get")?;
+            let name = retrieval_task.ok_or("'name' required for get")?;
 
             let task = service
                 .get_task(&name)
@@ -5627,7 +6540,7 @@ pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<St
                 .ok_or_else(|| "Parent project not found".to_string())?;
 
             let prs = service
-                .list_prs(&project.name, task.jira_key.as_deref())
+                .list_prs(&project.name, Some(&task.name))
                 .await
                 .unwrap_or_default();
 
@@ -5651,18 +6564,39 @@ pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<St
                 })).collect::<Vec<_>>(),
                 "entities": entities.iter().map(|e| e.name.clone()).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_tasks",
+                applied_scope
+                    .as_ref()
+                    .expect("work task get scope was resolved above"),
+            )
         }
         "list" => {
-            let project = request.project.ok_or("'project' required for list")?;
+            let project = retrieval_project.ok_or("'project' required for list")?;
             let status = request
                 .status
                 .map(|s| engram_core::work::TaskStatus::parse(&s));
 
-            let tasks = service
-                .list_tasks(&project, status)
-                .await
-                .map_err(|e| e.to_string())?;
+            let tasks = if let Some(task) = applied_scope
+                .as_ref()
+                .and_then(|applied| applied.related.as_ref())
+                .and_then(|related| related.task.as_ref())
+            {
+                if status
+                    .as_ref()
+                    .map_or(true, |status| task.status == *status)
+                {
+                    vec![task.clone()]
+                } else {
+                    Vec::new()
+                }
+            } else {
+                service
+                    .list_tasks(&project, status)
+                    .await
+                    .map_err(|e| e.to_string())?
+            };
 
             let response = serde_json::json!({
                 "count": tasks.len(),
@@ -5674,7 +6608,13 @@ pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<St
                     "jira_key": t.jira_key,
                 })).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_tasks",
+                applied_scope
+                    .as_ref()
+                    .expect("work task list scope was resolved above"),
+            )
         }
         "update" => {
             let name = request.name.ok_or("'name' required for update")?;
@@ -5742,7 +6682,7 @@ pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<St
             .map_err(|e| e.to_string())
         }
         "entities" => {
-            let name = request.name.ok_or("'name' required for entities")?;
+            let name = retrieval_task.ok_or("'name' required for entities")?;
             let entities = service
                 .get_task_entities(&name)
                 .await
@@ -5756,7 +6696,13 @@ pub async fn work_task(state: &ToolState, request: WorkTaskRequest) -> Result<St
                     "description": e.description,
                 })).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_tasks",
+                applied_scope
+                    .as_ref()
+                    .expect("work task entities scope was resolved above"),
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: create, get, list, update, delete, connect_entity, disconnect_entity, entities",
@@ -5786,11 +6732,54 @@ pub struct WorkPrRequest {
     /// New status (for update).
     #[schemars(description = "Status: open, merged, closed (for update)")]
     pub status: Option<String>,
+    /// Authorization boundary for get and list; defaults to local abstention.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Unified PR management handler.
 pub async fn work_pr(state: &ToolState, request: WorkPrRequest) -> Result<String, String> {
     debug!("work_pr: action={}", request.action);
+
+    let is_retrieval = matches!(request.action.as_str(), "get" | "list");
+    let applied_scope = if is_retrieval {
+        let scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            request.task.as_deref(),
+        );
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::Always,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": request.action, "executed": false}),
+                "work_prs",
+                applied,
+            );
+        }
+    }
+    let (retrieval_project, retrieval_task) = if let Some(applied) = applied_scope.as_ref() {
+        work_retrieval_targets(
+            applied,
+            request.project.as_deref(),
+            request.task.as_deref(),
+            "work_pr",
+        )?
+    } else {
+        (None, None)
+    };
 
     let service_guard = state.work_service.read().await;
     let service = service_guard
@@ -5829,6 +6818,17 @@ pub async fn work_pr(state: &ToolState, request: WorkPrRequest) -> Result<String
                 .await
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("PR not found: {}", url))?;
+            if !work_pr_matches_scope(
+                applied_scope
+                    .as_ref()
+                    .expect("work PR get scope was resolved above"),
+                &pr,
+            ) {
+                return Err(format!(
+                    "work_pr target '{}' is outside the resolved authorization boundary",
+                    url
+                ));
+            }
 
             let response = WorkPrResponse {
                 id: pr.id.to_string(),
@@ -5837,13 +6837,19 @@ pub async fn work_pr(state: &ToolState, request: WorkPrRequest) -> Result<String
                 pr_number: pr.pr_number,
                 status: pr.status.to_string(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_prs",
+                applied_scope
+                    .as_ref()
+                    .expect("work PR get scope was resolved above"),
+            )
         }
         "list" => {
-            let project = request.project.ok_or("'project' required for list")?;
+            let project = retrieval_project.ok_or("'project' required for list")?;
 
             let prs = service
-                .list_prs(&project, request.task.as_deref())
+                .list_prs(&project, retrieval_task.as_deref())
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -5858,7 +6864,13 @@ pub async fn work_pr(state: &ToolState, request: WorkPrRequest) -> Result<String
                     "status": p.status.to_string(),
                 })).collect::<Vec<_>>(),
             });
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "work_prs",
+                applied_scope
+                    .as_ref()
+                    .expect("work PR list scope was resolved above"),
+            )
         }
         "update" => {
             let url = request.url.ok_or("'url' required for update")?;
@@ -5921,6 +6933,10 @@ pub struct WorkObserveRequest {
     /// Max results (for list).
     #[schemars(description = "Maximum results (default: 50, for list)")]
     pub limit: Option<usize>,
+    /// Authorization boundary for get and list; defaults to local abstention.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Unified work observation handler.
@@ -5929,6 +6945,45 @@ pub async fn work_observe(
     request: WorkObserveRequest,
 ) -> Result<String, String> {
     debug!("work_observe: action={}", request.action);
+
+    let is_retrieval = matches!(request.action.as_str(), "get" | "list");
+    let applied_scope = if is_retrieval {
+        let scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            request.task.as_deref(),
+        );
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::Always,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": request.action, "executed": false}),
+                "work_observations",
+                applied,
+            );
+        }
+    }
+    let (retrieval_project, retrieval_task) = if let Some(applied) = applied_scope.as_ref() {
+        work_retrieval_targets(
+            applied,
+            request.project.as_deref(),
+            request.task.as_deref(),
+            "work_observe",
+        )?
+    } else {
+        (None, None)
+    };
 
     let service_guard = state.work_service.read().await;
     let service = service_guard
@@ -5976,7 +7031,7 @@ pub async fn work_observe(
             let key = request.key.ok_or("'key' required for get")?;
 
             // Task scope takes precedence
-            if let Some(task) = &request.task {
+            if let Some(task) = retrieval_task.as_deref() {
                 let obs = service
                     .get_task_observation_by_key(task, &key)
                     .await
@@ -5991,15 +7046,26 @@ pub async fn work_observe(
                             "content": o.content,
                             "created_at": o.created_at.format(&time::format_description::well_known::Rfc3339).unwrap(),
                         });
-                        serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+                        serialize_scoped_retrieval_response(
+                            &response,
+                            "work_observations",
+                            applied_scope
+                                .as_ref()
+                                .expect("work observation get scope was resolved above"),
+                        )
                     }
-                    None => serde_json::to_string_pretty(&serde_json::json!({
-                        "found": false,
-                        "message": format!("No observation found for task '{}' with key '{}'", task, key),
-                    }))
-                    .map_err(|e| e.to_string()),
+                    None => serialize_scoped_retrieval_response(
+                        &serde_json::json!({
+                            "found": false,
+                            "message": format!("No observation found for task '{}' with key '{}'", task, key),
+                        }),
+                        "work_observations",
+                        applied_scope
+                            .as_ref()
+                            .expect("work observation get scope was resolved above"),
+                    ),
                 }
-            } else if let Some(project) = &request.project {
+            } else if let Some(project) = retrieval_project.as_deref() {
                 let obs = service
                     .get_project_observation_by_key(project, &key)
                     .await
@@ -6014,13 +7080,24 @@ pub async fn work_observe(
                             "content": o.content,
                             "created_at": o.created_at.format(&time::format_description::well_known::Rfc3339).unwrap(),
                         });
-                        serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+                        serialize_scoped_retrieval_response(
+                            &response,
+                            "work_observations",
+                            applied_scope
+                                .as_ref()
+                                .expect("work observation get scope was resolved above"),
+                        )
                     }
-                    None => serde_json::to_string_pretty(&serde_json::json!({
-                        "found": false,
-                        "message": format!("No observation found for project '{}' with key '{}'", project, key),
-                    }))
-                    .map_err(|e| e.to_string()),
+                    None => serialize_scoped_retrieval_response(
+                        &serde_json::json!({
+                            "found": false,
+                            "message": format!("No observation found for project '{}' with key '{}'", project, key),
+                        }),
+                        "work_observations",
+                        applied_scope
+                            .as_ref()
+                            .expect("work observation get scope was resolved above"),
+                    ),
                 }
             } else {
                 Err("Either 'project' or 'task' must be specified".to_string())
@@ -6030,7 +7107,7 @@ pub async fn work_observe(
             let limit = request.limit.unwrap_or(50);
 
             // Task scope takes precedence
-            if let Some(task) = &request.task {
+            if let Some(task) = retrieval_task.as_deref() {
                 let observations = service
                     .get_task_observations(task)
                     .await
@@ -6063,8 +7140,14 @@ pub async fn work_observe(
                         "created_at": o.created_at.format(&time::format_description::well_known::Rfc3339).unwrap(),
                     })).collect::<Vec<_>>(),
                 });
-                serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
-            } else if let Some(project) = &request.project {
+                serialize_scoped_retrieval_response(
+                    &response,
+                    "work_observations",
+                    applied_scope
+                        .as_ref()
+                        .expect("work observation list scope was resolved above"),
+                )
+            } else if let Some(project) = retrieval_project.as_deref() {
                 let observations = service
                     .get_project_observations(project)
                     .await
@@ -6097,7 +7180,13 @@ pub async fn work_observe(
                         "created_at": o.created_at.format(&time::format_description::well_known::Rfc3339).unwrap(),
                     })).collect::<Vec<_>>(),
                 });
-                serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+                serialize_scoped_retrieval_response(
+                    &response,
+                    "work_observations",
+                    applied_scope
+                        .as_ref()
+                        .expect("work observation list scope was resolved above"),
+                )
             } else {
                 Err("Either 'project' or 'task' must be specified".to_string())
             }
@@ -6151,6 +7240,10 @@ pub struct WorkContextRequestNew {
     /// Task name or JIRA key (for direct context lookup).
     #[schemars(description = "Task name or JIRA key (for direct context lookup)")]
     pub task: Option<String>,
+    /// Authorization boundary for context retrieval; defaults to local abstention.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Unified work context handler (merges work_context and work_get_context).
@@ -6162,6 +7255,31 @@ pub async fn work_context_new(
         "work_context: session_id={:?}, project={:?}",
         request.session_id, request.project
     );
+    if request.session_id.is_none() && request.project.is_none() {
+        return Err("Either 'session_id' or 'project' must be specified".to_string());
+    }
+
+    let scope = retrieval_scope_with_fallbacks(
+        request.scope.as_ref(),
+        request.project.as_deref(),
+        request.task.as_deref(),
+    );
+    let applied_scope =
+        apply_retrieval_scope_with_ownership(state, Some(&scope), None, RelatedOwnership::Always)
+            .await?;
+    if applied_scope.omitted {
+        return serialize_scoped_retrieval_response(
+            &serde_json::json!({"action": "context", "executed": false}),
+            "work_context",
+            &applied_scope,
+        );
+    }
+    let (retrieval_project, retrieval_task) = work_retrieval_targets(
+        &applied_scope,
+        request.project.as_deref(),
+        request.task.as_deref(),
+        "work_context",
+    )?;
 
     let service_guard = state.work_service.read().await;
     let service = service_guard
@@ -6169,9 +7287,12 @@ pub async fn work_context_new(
         .ok_or_else(|| "Work service not initialized".to_string())?;
 
     // If project is provided, get direct full context
-    if let Some(project) = &request.project {
+    if request.project.is_some() || request.session_id.is_none() {
+        let project = retrieval_project
+            .as_deref()
+            .ok_or("Either 'session_id' or 'project' must be specified")?;
         let ctx = service
-            .get_full_context(project, request.task.as_deref())
+            .get_full_context(project, retrieval_task.as_deref())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -6215,7 +7336,7 @@ pub async fn work_context_new(
             })).collect::<Vec<_>>(),
         });
 
-        return serde_json::to_string_pretty(&response).map_err(|e| e.to_string());
+        return serialize_scoped_retrieval_response(&response, "work_context", &applied_scope);
     }
 
     // If session_id is provided, get session-based context
@@ -6230,6 +7351,19 @@ pub async fn work_context_new(
 
         match ctx {
             Some(c) => {
+                if let Some(related) = applied_scope.related.as_ref() {
+                    if c.project_id != Some(related.project.id)
+                        || related
+                            .task
+                            .as_ref()
+                            .is_some_and(|task| c.task_id != Some(task.id))
+                    {
+                        return Err(format!(
+                            "work_context session '{}' is outside the resolved authorization boundary",
+                            session_id_str
+                        ));
+                    }
+                }
                 // Get project and task names
                 let project_name = if let Some(pid) = &c.project_id {
                     service
@@ -6261,15 +7395,18 @@ pub async fn work_context_new(
                     "task_name": task_name,
                     "joined_at": c.joined_at.format(&time::format_description::well_known::Rfc3339).unwrap(),
                 });
-                serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+                serialize_scoped_retrieval_response(&response, "work_context", &applied_scope)
             }
-            None => serde_json::to_string_pretty(&serde_json::json!({
-                "session_id": session_id_str,
-                "project_id": null,
-                "task_id": null,
-                "message": "Not currently in a work context",
-            }))
-            .map_err(|e| e.to_string()),
+            None => serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "session_id": session_id_str,
+                    "project_id": null,
+                    "task_id": null,
+                    "message": "Not currently in a work context",
+                }),
+                "work_context",
+                &applied_scope,
+            ),
         }
     } else {
         Err("Either 'session_id' or 'project' must be specified".to_string())
@@ -6312,6 +7449,11 @@ pub struct EntityRequestNew {
     /// Max results (for list, search)
     #[schemars(description = "Maximum results (for list, search)")]
     pub limit: Option<usize>,
+
+    /// Authorization boundary for get, list, and search; defaults to local.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 
     /// Target entity name (for relate action)
     #[schemars(description = "Target entity name (for relate)")]
@@ -6364,6 +7506,11 @@ pub struct EntityObserveRequestNew {
     /// Max results (for list, search)
     #[schemars(description = "Maximum results (for list, search)")]
     pub limit: Option<usize>,
+
+    /// Authorization boundary for get, list, search, and history; defaults to local.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Consolidated entity handler - manages entities with action-based API
@@ -6396,12 +7543,55 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
         }
         "get" => {
             let name = request.name.ok_or("name required for get")?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Entity,
+            )
+            .await?;
+            if applied.mode == SearchRelevanceMode::Local {
+                return serialize_standalone_retrieval_response(
+                    &serde_json::json!({
+                        "found": false,
+                        "entity": null,
+                        "aliases": [],
+                        "relationships_out": [],
+                        "relationships_in": [],
+                        "observations": []
+                    }),
+                    SearchLayer::Entity,
+                    &applied,
+                );
+            }
 
-            let entity = service
-                .resolve(&name)
-                .await
-                .map_err(|e| e.to_string())?
-                .ok_or_else(|| format!("Entity not found: {}", name))?;
+            let entity = service.resolve(&name).await.map_err(|e| e.to_string())?;
+            let entity = match (applied.mode, entity) {
+                (SearchRelevanceMode::Global, Some(entity)) => entity,
+                (SearchRelevanceMode::Global, None) => {
+                    return Err(format!("Entity not found: {}", name));
+                }
+                (SearchRelevanceMode::Related, Some(entity))
+                    if retrieval_allows_entity(&applied, &entity.id) =>
+                {
+                    entity
+                }
+                (SearchRelevanceMode::Related, _) => {
+                    return serialize_standalone_retrieval_response(
+                        &serde_json::json!({
+                            "found": false,
+                            "entity": null,
+                            "aliases": [],
+                            "relationships_out": [],
+                            "relationships_in": [],
+                            "observations": []
+                        }),
+                        SearchLayer::Entity,
+                        &applied,
+                    );
+                }
+                (SearchRelevanceMode::Local, _) => unreachable!("handled above"),
+            };
 
             // Get aliases
             let aliases = service
@@ -6417,6 +7607,7 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
 
             let relationships_out: Vec<RelationshipInfo> = related_from
                 .into_iter()
+                .filter(|(_, target)| retrieval_allows_entity(&applied, &target.id))
                 .map(|(rel, target)| RelationshipInfo {
                     relation_type: rel.relation_type.to_string(),
                     entity_name: target.name,
@@ -6432,6 +7623,7 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
 
             let relationships_in: Vec<RelationshipInfo> = related_to
                 .into_iter()
+                .filter(|(_, source)| retrieval_allows_entity(&applied, &source.id))
                 .map(|(rel, source)| RelationshipInfo {
                     relation_type: rel.relation_type.to_string(),
                     entity_name: source.name,
@@ -6475,7 +7667,15 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
                 relationships_in,
                 observations: observation_infos,
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            let response = serde_json::json!({
+                "found": true,
+                "entity": response.entity,
+                "aliases": response.aliases,
+                "relationships_out": response.relationships_out,
+                "relationships_in": response.relationships_in,
+                "observations": response.observations
+            });
+            serialize_standalone_retrieval_response(&response, SearchLayer::Entity, &applied)
         }
         "list" => {
             let type_filter = if let Some(tf) = &request.type_filter {
@@ -6484,10 +7684,30 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
                 None
             };
 
-            let entities = service
-                .list_entities(type_filter.as_ref())
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Entity,
+            )
+            .await?;
+            let entities = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .list_entities(type_filter.as_ref())
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related => {
+                    let allowed = &applied.related.as_ref().unwrap().entity_ids;
+                    service
+                        .list_entities(type_filter.as_ref())
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .into_iter()
+                        .filter(|entity| allowed.contains(&entity.id))
+                        .collect()
+                }
+            };
 
             let limit = request.limit.unwrap_or(100);
             let entity_infos: Vec<EntityInfo> = entities
@@ -6506,17 +7726,35 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
                 entities: entity_infos,
                 count,
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::Entity, &applied)
         }
         "search" => {
             let query = request.query.ok_or("query required for search")?;
-
-            let entities = service
-                .search_entities(&query)
-                .await
-                .map_err(|e| e.to_string())?;
-
             let limit = request.limit.unwrap_or(50);
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Entity,
+            )
+            .await?;
+            let entities = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .search_entities(&query)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related => {
+                    let allowed = &applied.related.as_ref().unwrap().entity_ids;
+                    service
+                        .search_entities(&query)
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .into_iter()
+                        .filter(|entity| allowed.contains(&entity.id))
+                        .collect()
+                }
+            };
             let entity_infos: Vec<EntityInfo> = entities
                 .into_iter()
                 .take(limit)
@@ -6533,7 +7771,7 @@ pub async fn entity_new(state: &ToolState, request: EntityRequestNew) -> Result<
                 entities: entity_infos,
                 count,
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::Entity, &applied)
         }
         "relate" => {
             let name = request.name.ok_or("name (source) required for relate")?;
@@ -6647,11 +7885,22 @@ pub async fn entity_observe_new(
         }
         "get" => {
             let key = request.key.ok_or("key required for get")?;
-
-            let obs = service
-                .get_observation_by_key(&entity_name, &key)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Observation,
+            )
+            .await?;
+            let allowed = retrieval_allows_named_entity(service, &applied, &entity_name).await?;
+            let obs = if allowed {
+                service
+                    .get_observation_by_key(&entity_name, &key)
+                    .await
+                    .map_err(|e| e.to_string())?
+            } else {
+                None
+            };
 
             match obs {
                 Some(o) => {
@@ -6669,19 +7918,39 @@ pub async fn entity_observe_new(
                             .format(&time::format_description::well_known::Rfc3339)
                             .unwrap(),
                     };
-                    serde_json::to_string_pretty(&info).map_err(|e| e.to_string())
+                    serialize_standalone_retrieval_response(
+                        &info,
+                        SearchLayer::Observation,
+                        &applied,
+                    )
                 }
-                None => serde_json::to_string_pretty(&serde_json::json!({
-                    "error": format!("No observation found with key '{}' for entity '{}'", key, entity_name)
-                }))
-                .map_err(|e| e.to_string()),
+                None => serialize_standalone_retrieval_response(
+                    &serde_json::json!({
+                        "found": false,
+                        "observation": null
+                    }),
+                    SearchLayer::Observation,
+                    &applied,
+                ),
             }
         }
         "list" => {
-            let observations = service
-                .list_observations_by_pattern(&entity_name, request.key_pattern.as_deref())
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Observation,
+            )
+            .await?;
+            let observations =
+                if retrieval_allows_named_entity(service, &applied, &entity_name).await? {
+                    service
+                        .list_observations_by_pattern(&entity_name, request.key_pattern.as_deref())
+                        .await
+                        .map_err(|e| e.to_string())?
+                } else {
+                    Vec::new()
+                };
 
             let limit = request.limit.unwrap_or(50);
             let observation_infos: Vec<ObservationInfo> = observations
@@ -6703,22 +7972,44 @@ pub async fn entity_observe_new(
                 })
                 .collect();
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "entity": entity_name,
-                "pattern": request.key_pattern,
-                "count": observation_infos.len(),
-                "observations": observation_infos
-            }))
-            .map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(
+                &serde_json::json!({
+                    "entity": entity_name,
+                    "pattern": request.key_pattern,
+                    "count": observation_infos.len(),
+                    "observations": observation_infos
+                }),
+                SearchLayer::Observation,
+                &applied,
+            )
         }
         "search" => {
             let query = request.query.ok_or("query required for search")?;
             let limit = request.limit.unwrap_or(20);
-
-            let observations = service
-                .search_observations(&entity_name, &query, limit)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Observation,
+            )
+            .await?;
+            let observations = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .search_observations(&entity_name, &query, limit)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related => {
+                    if retrieval_allows_named_entity(service, &applied, &entity_name).await? {
+                        service
+                            .search_observations(&entity_name, &query, limit)
+                            .await
+                            .map_err(|e| e.to_string())?
+                    } else {
+                        Vec::new()
+                    }
+                }
+            };
 
             let results: Vec<ObservationInfo> = observations
                 .into_iter()
@@ -6738,21 +8029,32 @@ pub async fn entity_observe_new(
                 })
                 .collect();
 
-            serde_json::to_string_pretty(&serde_json::json!({
+            let response = serde_json::json!({
                 "entity": entity_name,
                 "query": query,
                 "count": results.len(),
                 "results": results
-            }))
-            .map_err(|e| e.to_string())
+            });
+            serialize_standalone_retrieval_response(&response, SearchLayer::Observation, &applied)
         }
         "history" => {
             let key = request.key.ok_or("key required for history")?;
-
-            let history = service
-                .get_observation_history(&entity_name, &key)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Observation,
+            )
+            .await?;
+            let allowed = retrieval_allows_named_entity(service, &applied, &entity_name).await?;
+            let history = if allowed {
+                service
+                    .get_observation_history(&entity_name, &key)
+                    .await
+                    .map_err(|e| e.to_string())?
+            } else {
+                Vec::new()
+            };
 
             let archived: Vec<ArchivedObservationInfo> = history
                 .into_iter()
@@ -6771,10 +8073,14 @@ pub async fn entity_observe_new(
                 .collect();
 
             // Also get the current observation
-            let current = service
-                .get_observation_by_key(&entity_name, &key)
-                .await
-                .map_err(|e| e.to_string())?;
+            let current = if allowed {
+                service
+                    .get_observation_by_key(&entity_name, &key)
+                    .await
+                    .map_err(|e| e.to_string())?
+            } else {
+                None
+            };
 
             let current_info = current.map(|o| ObservationInfo {
                 id: o.id.to_string(),
@@ -6791,14 +8097,17 @@ pub async fn entity_observe_new(
                     .unwrap(),
             });
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "entity": entity_name,
-                "key": key,
-                "current": current_info,
-                "history_count": archived.len(),
-                "history": archived
-            }))
-            .map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(
+                &serde_json::json!({
+                    "entity": entity_name,
+                    "key": key,
+                    "current": current_info,
+                    "history_count": archived.len(),
+                    "history": archived
+                }),
+                SearchLayer::Observation,
+                &applied,
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: add, get, list, search, history",
@@ -6879,18 +8188,60 @@ pub struct CoordRequestNew {
     /// File path (for set_file)
     #[schemars(description = "File path being edited, or null to clear (for set_file)")]
     pub file: Option<String>,
+
+    /// Authorization boundary for list; defaults to local abstention.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Consolidated coordination handler - manages session coordination with action-based API
 pub async fn coord_new(state: &ToolState, request: CoordRequestNew) -> Result<String, String> {
     debug!("coord: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    let applied_list_scope = if action == "list" {
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                request.scope.as_ref(),
+                request.project.as_deref(),
+                RelatedOwnership::ProjectOnly,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_list_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &CoordListResponse {
+                    sessions: Vec::new(),
+                    count: 0,
+                },
+                "coordination_sessions",
+                applied,
+            );
+        }
+        if let (Some(requested_project), Some(resolved)) =
+            (request.project.as_deref(), applied.related.as_ref())
+        {
+            if !requested_project.eq_ignore_ascii_case(&resolved.project.name) {
+                return Err(format!(
+                    "coord list project filter '{}' does not match resolved authorization project '{}'",
+                    requested_project, resolved.project.name
+                ));
+            }
+        }
+    }
+
     let service_guard = state.coordination_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Coordination service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "register" => {
             let session_id_str = request.session_id.ok_or("session_id required for register")?;
             let agent = request.agent.ok_or("agent required for register")?;
@@ -7077,7 +8428,12 @@ pub async fn coord_new(state: &ToolState, request: CoordRequestNew) -> Result<St
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
         "list" => {
-            let sessions = if let Some(project) = &request.project {
+            let project_filter = applied_list_scope
+                .as_ref()
+                .and_then(|applied| applied.related.as_ref())
+                .map(|scope| scope.project.name.as_str())
+                .or(request.project.as_deref());
+            let sessions = if let Some(project) = project_filter {
                 service
                     .list_for_project(project)
                     .await
@@ -7111,7 +8467,13 @@ pub async fn coord_new(state: &ToolState, request: CoordRequestNew) -> Result<St
                 sessions: session_infos,
                 count,
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &response,
+                "coordination_sessions",
+                applied_list_scope
+                    .as_ref()
+                    .expect("coordination list scope was resolved above"),
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: register, unregister, heartbeat, set_file, set_components, check_conflicts, list",
@@ -7132,6 +8494,11 @@ pub struct RepoRequest {
         description = "Action: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply"
     )]
     pub action: String,
+
+    /// Authorization boundary for retrieval and migration-administration actions.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 
     /// Current working directory for detect/context
     pub cwd: Option<String>,
@@ -7154,7 +8521,7 @@ pub struct RepoRequest {
     /// Component kind for component_add, such as service, app, package, or crate
     pub component_kind: Option<String>,
 
-    /// Project name for link_project
+    /// Project name for link_project or an explicit global migration/list filter
     pub project_name: Option<String>,
     /// Relationship role: primary, dependency, produces, related
     pub role: Option<String>,
@@ -7195,12 +8562,108 @@ pub struct RepoRequest {
 pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String, String> {
     debug!("repo: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    let target_cwd = request
+        .cwd
+        .clone()
+        .or_else(|| request.scope.as_ref().and_then(|scope| scope.cwd.clone()));
+    let mut applied_scope = None;
+
+    match action.as_str() {
+        "context" => {
+            let _ = required(&target_cwd, "cwd", "context")?;
+            let mut scope = retrieval_scope_with_fallbacks(
+                request.scope.as_ref(),
+                request.project_name.as_deref(),
+                None,
+            );
+            if scope.cwd.is_none() {
+                scope.cwd = target_cwd.clone();
+            }
+            let applied = if SearchRelevanceMode::parse(scope.relevance_mode.as_deref())?
+                == SearchRelevanceMode::Local
+            {
+                AppliedStandaloneRetrievalScope {
+                    mode: SearchRelevanceMode::Local,
+                    related: None,
+                    layer_scoped: true,
+                    omitted: false,
+                }
+            } else {
+                apply_retrieval_scope_with_ownership(
+                    state,
+                    Some(&scope),
+                    request.project_name.as_deref(),
+                    RelatedOwnership::ProjectOnly,
+                )
+                .await?
+            };
+            if applied.omitted {
+                return serialize_scoped_retrieval_response(
+                    &serde_json::json!({"context": null, "matched": false}),
+                    "repository_context",
+                    &applied,
+                );
+            }
+            applied_scope = Some(applied);
+        }
+        "list" | "migration_inventory" | "migration_review_export" => {
+            let scope = retrieval_scope_with_fallbacks(
+                request.scope.as_ref(),
+                request.project_name.as_deref(),
+                None,
+            );
+            let applied = apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                request.project_name.as_deref(),
+                RelatedOwnership::ProjectOnly,
+            )
+            .await?;
+            if applied.omitted {
+                return serialize_scoped_retrieval_response(
+                    &serde_json::json!({"executed": false}),
+                    if action == "list" {
+                        "repositories"
+                    } else {
+                        "repository_migration"
+                    },
+                    &applied,
+                );
+            }
+            applied_scope = Some(applied);
+        }
+        "migration_review_status" | "migration_review_apply" => {
+            let scope = retrieval_scope_with_fallbacks(
+                request.scope.as_ref(),
+                request.project_name.as_deref(),
+                None,
+            );
+            let applied = apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                request.project_name.as_deref(),
+                RelatedOwnership::None,
+            )
+            .await?;
+            if applied.omitted {
+                return serialize_scoped_retrieval_response(
+                    &serde_json::json!({"executed": false}),
+                    "repository_migration_review",
+                    &applied,
+                );
+            }
+            applied_scope = Some(applied);
+        }
+        _ => {}
+    }
+
     let service_guard = state.repository_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Repository service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "detect" => {
             let cwd = required(&request.cwd, "cwd", "detect")?;
             let detection = service
@@ -7214,18 +8677,42 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
             .map_err(|e| e.to_string())
         }
         "context" => {
-            let cwd = required(&request.cwd, "cwd", "context")?;
-            let context = service
+            let cwd = required(&target_cwd, "cwd", "context")?;
+            let mut context = service
                 .resolve_cwd(Path::new(&cwd))
                 .await
                 .map_err(|e| e.to_string())?;
+            let applied = applied_scope
+                .as_ref()
+                .expect("repository context scope was applied");
+            if applied.mode == SearchRelevanceMode::Related {
+                let related = applied
+                    .related
+                    .as_ref()
+                    .expect("related repository context scope was resolved");
+                if let Some(context) = context.as_mut() {
+                    context.linked_projects.retain(|link| {
+                        link.project_name
+                            .eq_ignore_ascii_case(&related.project.name)
+                    });
+                    if context.linked_projects.is_empty() {
+                        return Err(format!(
+                            "repository context at '{}' is outside resolved authorization project '{}'",
+                            cwd, related.project.name
+                        ));
+                    }
+                }
+            }
             let matched = context.is_some();
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "context": context,
-                "matched": matched
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "context": context,
+                    "matched": matched
+                }),
+                "repository_context",
+                applied,
+            )
         }
         "register" => {
             let name = required(&request.repository_name, "repository_name", "register")?;
@@ -7245,16 +8732,31 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
             .map_err(|e| e.to_string())
         }
         "list" => {
-            let repositories = service
-                .list_repositories(request.limit)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = applied_scope
+                .as_ref()
+                .expect("repository list scope was applied");
+            let project = repository_retrieval_project(
+                applied,
+                request.project_name.as_deref(),
+                "repo list",
+            )?;
+            let repositories = if let Some(project) = project {
+                service
+                    .list_repositories_for_project(&project, request.limit)
+                    .await
+            } else {
+                service.list_repositories(request.limit).await
+            }
+            .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": repositories.len(),
-                "repositories": repositories
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "count": repositories.len(),
+                    "repositories": repositories
+                }),
+                "repositories",
+                applied,
+            )
         }
         "component_add" | "add_component" => {
             let repository_id = request
@@ -7315,17 +8817,34 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
             .map_err(|e| e.to_string())
         }
         "migration_inventory" => {
+            let applied = applied_scope
+                .as_ref()
+                .expect("repository migration scope was applied");
+            let project = repository_retrieval_project(
+                applied,
+                request.project_name.as_deref(),
+                "repo migration_inventory",
+            )?;
             let inventory = service
-                .migration_inventory(repository_migration_options(&request))
+                .migration_inventory(repository_migration_options(&request, project))
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "inventory": inventory
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({"inventory": inventory}),
+                "repository_migration",
+                applied,
+            )
         }
         "migration_review_export" => {
+            let applied = applied_scope
+                .as_ref()
+                .expect("repository migration scope was applied");
+            let project = repository_retrieval_project(
+                applied,
+                request.project_name.as_deref(),
+                "repo migration_review_export",
+            )?;
             let review_path = required(
                 &request.migration_review_path,
                 "migration_review_path",
@@ -7334,17 +8853,21 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
             let export = service
                 .export_migration_review(
                     Path::new(&review_path),
-                    repository_migration_options(&request),
+                    repository_migration_options(&request, project),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "export": export
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({"export": export}),
+                "repository_migration",
+                applied,
+            )
         }
         "migration_review_status" => {
+            let applied = applied_scope
+                .as_ref()
+                .expect("repository migration review scope was applied");
             let review_path = required(
                 &request.migration_review_path,
                 "migration_review_path",
@@ -7355,12 +8878,16 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "status": status
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({"status": status}),
+                "repository_migration_review",
+                applied,
+            )
         }
         "migration_review_apply" => {
+            let applied = applied_scope
+                .as_ref()
+                .expect("repository migration review scope was applied");
             let review_path = required(
                 &request.migration_review_path,
                 "migration_review_path",
@@ -7385,10 +8912,11 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "apply": apply
-            }))
-            .map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({"apply": apply}),
+                "repository_migration_review",
+                applied,
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: detect, context, register, list, component_add, link_project, migration_inventory, migration_review_export, migration_review_status, migration_review_apply",
@@ -7397,9 +8925,39 @@ pub async fn repo_new(state: &ToolState, request: RepoRequest) -> Result<String,
     }
 }
 
-fn repository_migration_options(request: &RepoRequest) -> RepositoryMigrationOptions {
+fn repository_retrieval_project(
+    applied: &AppliedStandaloneRetrievalScope,
+    requested_project: Option<&str>,
+    surface: &str,
+) -> Result<Option<String>, String> {
+    match applied.mode {
+        SearchRelevanceMode::Global => Ok(requested_project.map(ToOwned::to_owned)),
+        SearchRelevanceMode::Related if !applied.omitted => {
+            let project = &applied
+                .related
+                .as_ref()
+                .expect("related repository scope was resolved")
+                .project
+                .name;
+            if let Some(requested) = requested_project {
+                if !requested.eq_ignore_ascii_case(project) {
+                    return Err(format!(
+                        "{surface} project target '{requested}' does not match resolved authorization project '{project}'"
+                    ));
+                }
+            }
+            Ok(Some(project.clone()))
+        }
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => Ok(None),
+    }
+}
+
+fn repository_migration_options(
+    request: &RepoRequest,
+    project_filter: Option<String>,
+) -> RepositoryMigrationOptions {
     let mut options = RepositoryMigrationOptions::all();
-    options.project_filter = request.project_name.clone();
+    options.project_filter = project_filter;
     options.limit = request.limit;
     if let Some(include) = request.include_entity_observations {
         options.include_entity_observations = include;
@@ -7464,18 +9022,23 @@ fn parse_project_repository_role(value: &str) -> Result<ProjectRepositoryRole, S
 /// Request an orientation context packet for the current user prompt.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct OrientRequest {
-    /// Current working directory for repository/project resolution and scoped memory selection.
+    /// Current working directory for checkout identity and scoped memory selection.
     #[schemars(
-        description = "Current working directory for repository/project resolution and scoped memory selection."
+        description = "Current working directory for deterministic repository/component identity and scoped memory selection. A cwd never authorizes a project by directory basename."
     )]
     pub cwd: Option<String>,
     /// Current user prompt or task request
     pub prompt: Option<String>,
-    /// Explicit project name for project resolution and project-scoped memory selection.
+    /// Explicit project authorization for project-scoped memory selection.
     #[schemars(
-        description = "Explicit project name for project resolution and project-scoped memory selection."
+        description = "Explicit project authorization for project-scoped memory selection. Omit when unknown; the response identity reports candidates or requires_confirmation without inventing scope."
     )]
     pub project: Option<String>,
+    /// Explicit task name or tracker key for exact task-scoped memory selection.
+    #[schemars(
+        description = "Explicit task name or tracker key. Engram validates its parent project and excludes sibling-task memory."
+    )]
+    pub task: Option<String>,
     /// Agent/harness name
     pub agent: Option<String>,
     /// Host/application session label for telemetry correlation
@@ -7490,10 +9053,10 @@ pub struct OrientRequest {
     pub include_recent_commits: Option<bool>,
     /// Maximum memory items per grouped bucket
     pub limit: Option<usize>,
-    /// Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance.
+    /// Response shape: full (default) or lean for compact identity/trace/Brain Loop guidance.
     /// When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output.
     #[schemars(
-        description = "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
+        description = "Response shape: full (default) or lean for compact identity/trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
     )]
     pub response_shape: Option<OrientResponseShape>,
 }
@@ -7506,7 +9069,7 @@ pub enum OrientResponseShape {
     /// Preserve the complete orientation packet.
     #[default]
     Full,
-    /// Return compact trace/cursor/Brain Loop guidance without duplicate raw memory payloads.
+    /// Return compact identity/trace/cursor/Brain Loop guidance without duplicate raw memory payloads.
     Lean,
 }
 
@@ -7514,6 +9077,7 @@ pub enum OrientResponseShape {
 struct OrientResponse {
     #[serde(flatten)]
     packet: OrientationPacket,
+    task_context: Option<OrientTaskContext>,
     obligation_summary: OrientObligationSummary,
     open_obligations: Vec<OrientOpenObligation>,
 }
@@ -7523,10 +9087,13 @@ struct OrientLeanResponse {
     response_shape: OrientResponseShape,
     project: Option<String>,
     cwd: Option<String>,
+    task: Option<String>,
+    task_context: Option<OrientTaskContext>,
     agent: Option<String>,
     intent: Option<BrainHarnessIntent>,
     trace_id: Option<Id>,
     scope: String,
+    identity: OrientationIdentity,
     resolution: OrientationResolution,
     memory_cursor: MemoryCursor,
     hot_context_ids: Vec<Id>,
@@ -7575,6 +9142,61 @@ struct OrientOpenObligation {
     required_resolutions: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct OrientTaskContext {
+    id: Id,
+    name: String,
+    jira_key: Option<String>,
+    status: String,
+    project: String,
+}
+
+async fn resolve_orient_task(
+    state: &ToolState,
+    task_reference: Option<&str>,
+    project_reference: Option<&str>,
+) -> Result<Option<OrientTaskContext>, String> {
+    let Some(task_reference) = task_reference.filter(|value| !value.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let service_guard = state.work_service.read().await;
+    let service = service_guard
+        .as_ref()
+        .ok_or_else(|| "Work service not initialized; cannot resolve explicit task".to_string())?;
+    let task = if let Some(project) = project_reference {
+        service
+            .get_task_in_project(project, task_reference)
+            .await
+            .map_err(|error| error.to_string())?
+    } else {
+        None
+    };
+    let task = match task {
+        Some(task) => task,
+        None => service
+            .get_task(task_reference)
+            .await
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                format!(
+                    "Task not found: {task_reference}; supply its project when using a task name"
+                )
+            })?,
+    };
+    let project = service
+        .get_project_by_id(&task.project_id)
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("Parent project not found for task {}", task.name))?;
+    Ok(Some(OrientTaskContext {
+        id: task.id,
+        name: task.name,
+        jira_key: task.jira_key,
+        status: task.status.to_string(),
+        project: project.name,
+    }))
+}
+
 /// Build an orientation context packet.
 pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String, String> {
     debug!(
@@ -7586,7 +9208,22 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
         .response_shape
         .unwrap_or_else(|| default_orient_response_shape(request.agent.as_deref()));
     let cwd = request.cwd;
-    let project = request.project;
+    let requested_project = request.project;
+    let task_context =
+        resolve_orient_task(state, request.task.as_deref(), requested_project.as_deref()).await?;
+    if let (Some(project), Some(task)) = (requested_project.as_deref(), task_context.as_ref()) {
+        if !project.eq_ignore_ascii_case(&task.project) {
+            return Err(format!(
+                "Task '{}' belongs to project '{}', not explicit project '{}'",
+                task.name, task.project, project
+            ));
+        }
+    }
+    let project = requested_project
+        .clone()
+        .or_else(|| task_context.as_ref().map(|task| task.project.clone()));
+    let task = task_context.as_ref().map(|task| task.name.clone());
+    let task_project = task_context.as_ref().map(|task| task.project.clone());
     let external_session_id = resolve_external_session_id(request.external_session_id.clone());
     let mut packet = {
         let service_guard = state.memory_service.read().await;
@@ -7594,39 +9231,54 @@ pub async fn orient(state: &ToolState, request: OrientRequest) -> Result<String,
             .as_ref()
             .ok_or_else(|| "Memory service not initialized".to_string())?;
 
-        service
-            .orient(OrientInput {
-                cwd: cwd.clone(),
-                prompt: request.prompt,
-                project: project.clone(),
-                agent: request.agent,
-                external_session_id,
-                intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
-                scenario_id: request.scenario_id,
-                arm: request.arm,
-                include_recent_commits: request.include_recent_commits.unwrap_or(true),
-                limit: request.limit,
-            })
-            .await
-            .map_err(|e| e.to_string())?
+        let input = OrientInput {
+            cwd: cwd.clone(),
+            prompt: request.prompt,
+            project: requested_project.clone(),
+            agent: request.agent,
+            external_session_id,
+            intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
+            scenario_id: request.scenario_id,
+            arm: request.arm,
+            include_recent_commits: request.include_recent_commits.unwrap_or(true),
+            limit: request.limit,
+        };
+        match (task, task_project) {
+            (Some(task), Some(task_project)) => {
+                service.orient_for_task(input, task, task_project).await
+            }
+            (None, None) => service.orient(input).await,
+            _ => unreachable!("resolved task must include its parent project"),
+        }
+        .map_err(|e| e.to_string())?
     };
     apply_knowledge_onboarding_to_packet(state, &mut packet).await?;
-    let (obligation_summary, open_obligations) =
-        orient_open_obligations(state, project.as_deref(), cwd.as_deref()).await?;
+    let (obligation_summary, open_obligations) = orient_open_obligations(
+        state,
+        project.as_deref(),
+        cwd.as_deref(),
+        task_context.as_ref(),
+    )
+    .await?;
     apply_obligation_summary_to_packet(&mut packet, &obligation_summary, &open_obligations);
 
     match response_shape {
         OrientResponseShape::Full => {
             let response = OrientResponse {
                 packet,
+                task_context,
                 obligation_summary,
                 open_obligations,
             };
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
         OrientResponseShape::Lean => {
-            let response =
-                OrientLeanResponse::from_packet(packet, obligation_summary, open_obligations);
+            let response = OrientLeanResponse::from_packet(
+                packet,
+                task_context,
+                obligation_summary,
+                open_obligations,
+            );
             serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
         }
     }
@@ -7649,6 +9301,7 @@ async fn orient_open_obligations(
     state: &ToolState,
     project: Option<&str>,
     cwd: Option<&str>,
+    task: Option<&OrientTaskContext>,
 ) -> Result<(OrientObligationSummary, Vec<OrientOpenObligation>), String> {
     let service_guard = state.obligation_service.read().await;
     let Some(service) = service_guard.as_ref() else {
@@ -7663,10 +9316,13 @@ async fn orient_open_obligations(
         ));
     };
 
-    let obligations = service
+    let mut obligations = service
         .list_open_for_context(project, cwd)
         .await
         .map_err(|e| e.to_string())?;
+    if let Some(task) = task {
+        obligations.retain(|obligation| obligation_matches_orient_task(obligation, task));
+    }
     let has_more = obligations.len() > ORIENT_OPEN_OBLIGATION_LIMIT;
     let open_obligations = obligations
         .into_iter()
@@ -7695,6 +9351,27 @@ async fn orient_open_obligations(
         },
         open_obligations,
     ))
+}
+
+fn obligation_matches_orient_task(obligation: &AgentObligation, task: &OrientTaskContext) -> bool {
+    let MemoryScope::Task {
+        project_name,
+        task_id,
+        task_name,
+        ..
+    } = &obligation.scope
+    else {
+        return true;
+    };
+    task_id.is_some_and(|id| id == task.id)
+        || (project_name
+            .as_deref()
+            .is_some_and(|project| project.eq_ignore_ascii_case(&task.project))
+            && (task_name.eq_ignore_ascii_case(&task.name)
+                || task
+                    .jira_key
+                    .as_deref()
+                    .is_some_and(|key| task_name.eq_ignore_ascii_case(key))))
 }
 
 fn apply_obligation_summary_to_packet(
@@ -7764,6 +9441,7 @@ fn needs_knowledge_onboarding_prompt(
 impl OrientLeanResponse {
     fn from_packet(
         packet: OrientationPacket,
+        task_context: Option<OrientTaskContext>,
         obligation_summary: OrientObligationSummary,
         open_obligations: Vec<OrientOpenObligation>,
     ) -> Self {
@@ -7771,10 +9449,13 @@ impl OrientLeanResponse {
             response_shape: OrientResponseShape::Lean,
             project: packet.project,
             cwd: packet.cwd,
+            task: packet.task,
+            task_context,
             agent: packet.agent,
             intent: packet.intent,
             trace_id: packet.trace_id,
             scope: packet.scope,
+            identity: packet.identity,
             resolution: packet.resolution,
             memory_cursor: packet.memory_cursor,
             hot_context_ids: packet.hot_context_ids,
@@ -7853,9 +9534,9 @@ pub struct HarnessRequest {
     /// Harness name: claude_code, codex, gemini_cli, cursor, or generic
     #[schemars(description = "Harness name: claude_code, codex, gemini_cli, cursor, or generic")]
     pub harness: Option<String>,
-    /// Lifecycle enforcement profile: soft, graduated, or strict. Defaults to graduated.
+    /// Lifecycle enforcement profile: soft, graduated, or strict. Defaults to soft.
     #[schemars(
-        description = "Lifecycle enforcement profile: soft, graduated, or strict. Defaults to graduated."
+        description = "Lifecycle enforcement profile: soft, graduated, or strict. Defaults to soft."
     )]
     pub enforcement: Option<String>,
     /// Install root. Defaults to the user's home directory.
@@ -7872,11 +9553,14 @@ pub struct HarnessRequest {
     /// MCP tool names observed by the client for doctor/status checks.
     #[serde(default)]
     pub observed_mcp_tools: Vec<String>,
+    /// Resolve and attest the host's Engram MCP configuration without launching Engram.
+    #[serde(default)]
+    pub attest_host_configuration: bool,
     /// Claude hook event name for hook_event.
     pub hook_event_name: Option<String>,
     /// Claude session ID for hook_event.
     pub session_id: Option<String>,
-    /// Current working directory for hook_event.
+    /// Current working directory for hook_event or host configuration attestation.
     pub cwd: Option<String>,
     /// Transcript path for hook_event.
     pub transcript_path: Option<String>,
@@ -7888,6 +9572,8 @@ pub struct HarnessRequest {
     pub tool_error: Option<String>,
     /// Tool input command for hook_event.
     pub tool_input_command: Option<String>,
+    /// Engram tool action for hook_event.
+    pub tool_input_action: Option<String>,
     /// File path touched by a tool for hook_event.
     pub file_path: Option<String>,
     /// Last assistant message for Stop hooks.
@@ -7904,6 +9590,10 @@ pub struct HarnessRequest {
     pub write_policy: Option<String>,
     /// Project scope override.
     pub project: Option<String>,
+    /// Authorization boundary for status and doctor; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
     /// Writer model provider.
     pub model_provider: Option<String>,
     /// Writer model.
@@ -7918,6 +9608,59 @@ pub struct HarnessRequest {
 pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<String, String> {
     debug!("harness: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    if !matches!(
+        action.as_str(),
+        "status"
+            | "doctor"
+            | "render_policy"
+            | "render"
+            | "render_adapter"
+            | "install"
+            | "hook_event"
+            | "hook"
+    ) {
+        return Err(format!(
+            "Unknown action: '{}'. Valid actions: status, doctor, render_policy, render_adapter, install, hook_event",
+            request.action
+        ));
+    }
+
+    let mut applied_scope = if matches!(action.as_str(), "status" | "doctor") {
+        let scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            None,
+        );
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::Always,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_mut() {
+        if applied.mode == SearchRelevanceMode::Related
+            && !applied.omitted
+            && !checkout_path_matches_related_scope(state, applied, request.root.as_deref()).await?
+        {
+            applied.layer_scoped = false;
+            applied.omitted = true;
+        }
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": action, "executed": false}),
+                "harness",
+                applied,
+            );
+        }
+    }
+
     let service = HarnessService::new();
     let harness = request
         .harness
@@ -7927,9 +9670,9 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
     let enforcement_profile = parse_optional_enforcement(&request.enforcement)?;
     let root = request.root.as_deref().map(Path::new);
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "status" => {
-            let report = service
+            let mut report = service
                 .status_with_enforcement(
                     harness,
                     root,
@@ -7937,10 +9680,19 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                     enforcement_profile,
                 )
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+            if request.attest_host_configuration {
+                service
+                    .attest_host_configuration(&mut report, request.cwd.as_deref().map(Path::new))
+                    .map_err(|e| e.to_string())?;
+            }
+            serialize_scoped_retrieval_response(
+                &report,
+                "harness",
+                applied_scope.as_ref().expect("status scope applied"),
+            )
         }
         "doctor" => {
-            let report = service
+            let mut report = service
                 .doctor_with_enforcement(
                     harness,
                     root,
@@ -7948,7 +9700,16 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                     enforcement_profile,
                 )
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+            if request.attest_host_configuration {
+                service
+                    .attest_host_configuration(&mut report, request.cwd.as_deref().map(Path::new))
+                    .map_err(|e| e.to_string())?;
+            }
+            serialize_scoped_retrieval_response(
+                &report,
+                "harness",
+                applied_scope.as_ref().expect("doctor scope applied"),
+            )
         }
         "render_policy" | "render" => service
             .render_policy_with_enforcement(harness, enforcement_profile)
@@ -7981,6 +9742,10 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
             serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
         }
         "hook_event" | "hook" => {
+            let cwd = clean_hook_string(request.cwd);
+            let project =
+                resolve_hook_project(state, clean_hook_string(request.project), cwd.as_deref())
+                    .await?;
             let memory_guard = state.memory_service.read().await;
             let obligation_guard = state.obligation_service.read().await;
             let handoff_guard = state.handoff_service.read().await;
@@ -7992,12 +9757,13 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                     .clone()
                     .unwrap_or_else(|| "Unknown".to_string()),
                 session_id: clean_hook_string(request.session_id),
-                cwd: clean_hook_string(request.cwd),
+                cwd,
                 transcript_path: clean_hook_string(request.transcript_path),
                 prompt: clean_hook_string(request.prompt),
                 tool_name: clean_hook_string(request.tool_name),
                 tool_error: clean_hook_string(request.tool_error),
                 tool_input_command: clean_hook_string(request.tool_input_command),
+                tool_input_action: clean_hook_string(request.tool_input_action),
                 file_path: clean_hook_string(request.file_path),
                 last_assistant_message: clean_hook_string(request.last_assistant_message),
                 compact_summary: clean_hook_string(request.compact_summary),
@@ -8009,7 +9775,7 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                     .map(|value| value.eq_ignore_ascii_case("true"))
                     .unwrap_or(false),
                 write_policy: request.write_policy.clone(),
-                project: clean_hook_string(request.project),
+                project,
                 model_provider: clean_hook_string(request.model_provider),
                 model: clean_hook_string(request.model),
                 surface: clean_hook_string(request.surface),
@@ -8028,11 +9794,72 @@ pub async fn harness_new(state: &ToolState, request: HarnessRequest) -> Result<S
                 .map_err(|e| e.to_string())?;
             serde_json::to_string_pretty(&outcome.response).map_err(|e| e.to_string())
         }
-        _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: status, doctor, render_policy, render_adapter, install, hook_event",
-            request.action
-        )),
+        _ => unreachable!("harness action validated above"),
     }
+}
+
+async fn resolve_hook_project(
+    state: &ToolState,
+    requested_project: Option<String>,
+    cwd: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(cwd) = cwd else {
+        return Ok(requested_project);
+    };
+    let search_guard = state.search_service.read().await;
+    let Some(search) = search_guard.as_ref() else {
+        return Ok(requested_project);
+    };
+    let resolved = search
+        .resolve_related_scope(
+            &SearchOptions {
+                project: None,
+                cwd: Some(cwd.to_string()),
+            },
+            None,
+        )
+        .await;
+    let Ok(resolved) = resolved else {
+        return Ok(requested_project);
+    };
+    if let Some(requested) = requested_project.as_deref() {
+        if !requested.eq_ignore_ascii_case(&resolved.project.name) {
+            return Err(format!(
+                "hook project '{}' does not match canonical project '{}' resolved from cwd '{}'",
+                requested, resolved.project.name, cwd
+            ));
+        }
+    }
+    Ok(Some(resolved.project.name))
+}
+
+async fn checkout_path_matches_related_scope(
+    state: &ToolState,
+    applied: &AppliedStandaloneRetrievalScope,
+    root: Option<&str>,
+) -> Result<bool, String> {
+    let Some(root) = root.map(str::trim).filter(|root| !root.is_empty()) else {
+        return Ok(false);
+    };
+    let Some(expected) = applied.related.as_ref() else {
+        return Ok(false);
+    };
+    let search_guard = state.search_service.read().await;
+    let search = search_guard
+        .as_ref()
+        .ok_or_else(|| "Search service not initialized".to_string())?;
+    let resolved = search
+        .resolve_related_scope(
+            &SearchOptions {
+                project: None,
+                cwd: Some(root.to_string()),
+            },
+            None,
+        )
+        .await;
+    Ok(resolved
+        .ok()
+        .is_some_and(|resolved| resolved.project.id == expected.project.id))
 }
 
 fn clean_hook_string(value: Option<String>) -> Option<String> {
@@ -8070,6 +9897,10 @@ pub struct LintRequest {
     /// Optional project scope to lint.
     #[schemars(description = "Optional project scope to lint.")]
     pub project: Option<String>,
+    /// Authorization boundary for lint findings and safe-remediation planning.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
     /// Optional Memory OS vault root to scan.
     pub vault_path: Option<String>,
     /// Maximum findings to return.
@@ -8082,36 +9913,75 @@ pub struct LintRequest {
 pub async fn lint_new(state: &ToolState, request: LintRequest) -> Result<String, String> {
     debug!("lint: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    if !matches!(
+        action.as_str(),
+        "run" | "list" | "apply_safe" | "apply-safe"
+    ) {
+        return Err(format!(
+            "Unknown action: '{}'. Valid actions: run, list, apply_safe",
+            request.action
+        ));
+    }
+
+    let scope =
+        retrieval_scope_with_fallbacks(request.scope.as_ref(), request.project.as_deref(), None);
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        Some(&scope),
+        None,
+        RelatedOwnership::ProjectOnly,
+    )
+    .await?;
+    if applied.omitted {
+        return serialize_scoped_retrieval_response(
+            &serde_json::json!({"action": request.action, "executed": false}),
+            "lint",
+            &applied,
+        );
+    }
+    let project = work_retrieval_targets(&applied, request.project.as_deref(), None, "lint")?.0;
+    if applied.mode != SearchRelevanceMode::Global && request.vault_path.is_some() {
+        return Err(
+            "lint vault_path requires scope.relevance_mode=global because filesystem vault pages do not carry provable project ownership"
+                .to_string(),
+        );
+    }
+
     let service_guard = state.lint_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Lint service not initialized".to_string())?;
     let options = LintOptions {
-        project: request.project,
+        project,
         vault_path: request.vault_path,
         limit: request.limit,
     };
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "run" | "list" => {
             let report = service.run(options).await.map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(&report, "lint", &applied)
         }
         "apply_safe" | "apply-safe" => {
             let report = if request.write.unwrap_or(false) {
-                service
-                    .apply_safe(options)
-                    .await
-                    .map_err(|e| e.to_string())?
+                if applied.mode == SearchRelevanceMode::Global {
+                    service
+                        .apply_safe(options)
+                        .await
+                        .map_err(|e| e.to_string())?
+                } else {
+                    service
+                        .apply_safe_project_scoped(options)
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
             } else {
                 service.run(options).await.map_err(|e| e.to_string())?
             };
-            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(&report, "lint", &applied)
         }
-        _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: run, list, apply_safe",
-            request.action
-        )),
+        _ => unreachable!("lint action validated above"),
     }
 }
 
@@ -8135,56 +10005,143 @@ pub struct GraphRequest {
     pub depth: Option<usize>,
     /// Maximum traversal depth for path.
     pub max_depth: Option<usize>,
+    /// Authorization boundary for graph retrieval; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Traverse the derived Memory OS graph.
 pub async fn graph_new(state: &ToolState, request: GraphRequest) -> Result<String, String> {
     debug!("graph: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    if !matches!(action.as_str(), "around" | "path" | "subgraph" | "export") {
+        return Err(format!(
+            "Unknown action: '{}'. Valid actions: around, path, subgraph, export",
+            request.action
+        ));
+    }
+
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::Always,
+    )
+    .await?;
+    if applied.omitted {
+        return serialize_scoped_retrieval_response(
+            &serde_json::json!({"action": action, "executed": false}),
+            "graph",
+            &applied,
+        );
+    }
+
     let service_guard = state.graph_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Graph service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "around" => {
             let node = required(&request.node, "node", "around")?;
-            let graph = service
-                .around(&node, request.depth.unwrap_or(2))
-                .await
-                .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&graph).map_err(|e| e.to_string())
+            let graph = match applied.mode {
+                SearchRelevanceMode::Global => {
+                    service.around(&node, request.depth.unwrap_or(2)).await
+                }
+                SearchRelevanceMode::Related => {
+                    service
+                        .around_related(
+                            applied.related.as_ref().expect("related scope resolved"),
+                            &node,
+                            request.depth.unwrap_or(2),
+                        )
+                        .await
+                }
+                SearchRelevanceMode::Local => unreachable!("local graph retrieval abstains"),
+            }
+            .map_err(|e| e.to_string())?;
+            serialize_scoped_retrieval_response(&graph, "graph", &applied)
         }
         "path" => {
             let from = required(&request.from, "from", "path")?;
             let to = required(&request.to, "to", "path")?;
-            let path = service
-                .path(&from, &to, request.max_depth.unwrap_or(6))
-                .await
-                .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&path).map_err(|e| e.to_string())
+            let path = match applied.mode {
+                SearchRelevanceMode::Global => {
+                    service
+                        .path(&from, &to, request.max_depth.unwrap_or(6))
+                        .await
+                }
+                SearchRelevanceMode::Related => {
+                    service
+                        .path_related(
+                            applied.related.as_ref().expect("related scope resolved"),
+                            &from,
+                            &to,
+                            request.max_depth.unwrap_or(6),
+                        )
+                        .await
+                }
+                SearchRelevanceMode::Local => unreachable!("local graph retrieval abstains"),
+            }
+            .map_err(|e| e.to_string())?;
+            match path {
+                Some(path) => serialize_scoped_retrieval_response(&path, "graph", &applied),
+                None => serialize_scoped_retrieval_response(
+                    &serde_json::json!({"path": null}),
+                    "graph",
+                    &applied,
+                ),
+            }
         }
         "subgraph" => {
-            let graph = service
-                .subgraph(request.node.as_deref(), request.depth.unwrap_or(2))
-                .await
-                .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&graph).map_err(|e| e.to_string())
+            let graph = match applied.mode {
+                SearchRelevanceMode::Global => {
+                    service
+                        .subgraph(request.node.as_deref(), request.depth.unwrap_or(2))
+                        .await
+                }
+                SearchRelevanceMode::Related => {
+                    service
+                        .subgraph_related(
+                            applied.related.as_ref().expect("related scope resolved"),
+                            request.node.as_deref(),
+                            request.depth.unwrap_or(2),
+                        )
+                        .await
+                }
+                SearchRelevanceMode::Local => unreachable!("local graph retrieval abstains"),
+            }
+            .map_err(|e| e.to_string())?;
+            serialize_scoped_retrieval_response(&graph, "graph", &applied)
         }
         "export" => {
-            let output = service
-                .export_mermaid(request.node.as_deref(), request.depth.unwrap_or(2))
-                .await
-                .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(
+            let output = match applied.mode {
+                SearchRelevanceMode::Global => {
+                    service
+                        .export_mermaid(request.node.as_deref(), request.depth.unwrap_or(2))
+                        .await
+                }
+                SearchRelevanceMode::Related => {
+                    service
+                        .export_mermaid_related(
+                            applied.related.as_ref().expect("related scope resolved"),
+                            request.node.as_deref(),
+                            request.depth.unwrap_or(2),
+                        )
+                        .await
+                }
+                SearchRelevanceMode::Local => unreachable!("local graph retrieval abstains"),
+            }
+            .map_err(|e| e.to_string())?;
+            serialize_scoped_retrieval_response(
                 &serde_json::json!({ "format": "mermaid", "content": output }),
+                "graph",
+                &applied,
             )
-            .map_err(|e| e.to_string())
         }
-        _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: around, path, subgraph, export",
-            request.action
-        )),
+        _ => unreachable!("graph action validated above"),
     }
 }
 
@@ -8200,6 +10157,10 @@ pub struct HandoffRequest {
     pub action: String,
     /// Project scope.
     pub project: Option<String>,
+    /// Authorization boundary for get and compile; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
     /// Session ID for session-scoped handoffs or compile.
     pub session_id: Option<String>,
     /// Handoff Markdown content for update.
@@ -8223,23 +10184,77 @@ pub struct HandoffRequest {
 pub async fn handoff_new(state: &ToolState, request: HandoffRequest) -> Result<String, String> {
     debug!("handoff: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    let is_retrieval = matches!(action.as_str(), "get" | "compile");
+    let applied_scope = if is_retrieval {
+        let scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            None,
+        );
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                Some(&scope),
+                None,
+                RelatedOwnership::ProjectOnly,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": action, "executed": false}),
+                "handoff",
+                applied,
+            );
+        }
+    }
+    let retrieval_project = if let Some(applied) = applied_scope.as_ref() {
+        work_retrieval_targets(applied, request.project.as_deref(), None, "handoff")?.0
+    } else {
+        None
+    };
+
     let service_guard = state.handoff_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Handoff service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "get" => {
             let session_id = request
                 .session_id
                 .as_deref()
                 .map(|id| parse_id(id, "session ID"))
                 .transpose()?;
+            if let Some(session_id) = session_id {
+                if !handoff_session_matches_scope(
+                    service,
+                    applied_scope.as_ref().expect("retrieval scope applied"),
+                    &session_id,
+                )
+                .await?
+                {
+                    return serialize_scoped_retrieval_response(
+                        &serde_json::json!({"item": null}),
+                        "handoff",
+                        applied_scope.as_ref().expect("retrieval scope applied"),
+                    );
+                }
+            }
             let result = service
-                .get(request.project.as_deref(), session_id)
+                .get(retrieval_project.as_deref(), session_id)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &result,
+                "handoff",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         "update" => {
             let session_id = request
@@ -8267,22 +10282,62 @@ pub async fn handoff_new(state: &ToolState, request: HandoffRequest) -> Result<S
                 &required(&request.session_id, "session_id", "compile")?,
                 "session ID",
             )?;
+            if !handoff_session_matches_scope(
+                service,
+                applied_scope.as_ref().expect("retrieval scope applied"),
+                &session_id,
+            )
+            .await?
+            {
+                return serialize_scoped_retrieval_response(
+                    &serde_json::json!({"action": action, "executed": false}),
+                    "handoff",
+                    applied_scope.as_ref().expect("retrieval scope applied"),
+                );
+            }
             let writer = parse_handoff_writer(&request)?;
             let result = service
                 .compile(
                     session_id,
-                    request.project,
+                    retrieval_project,
                     writer,
                     request.dry_run.unwrap_or(true),
                 )
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+            serialize_scoped_retrieval_response(
+                &result,
+                "handoff",
+                applied_scope.as_ref().expect("retrieval scope applied"),
+            )
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: get, update, compile",
             request.action
         )),
+    }
+}
+
+async fn handoff_session_matches_scope(
+    service: &HandoffService,
+    applied: &AppliedStandaloneRetrievalScope,
+    session_id: &Id,
+) -> Result<bool, String> {
+    match applied.mode {
+        SearchRelevanceMode::Global => Ok(true),
+        SearchRelevanceMode::Related if !applied.omitted => {
+            let session_project = service
+                .session_project(session_id)
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok(session_project.is_some_and(|project| {
+                applied
+                    .related
+                    .as_ref()
+                    .is_some_and(|related| project.eq_ignore_ascii_case(&related.project.name))
+            }))
+        }
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => Ok(false),
     }
 }
 
@@ -8320,6 +10375,10 @@ pub struct ObligationRequest {
     /// Optional project scope for detect, add, list, open, and doctor.
     #[schemars(description = "Optional project scope for detect, add, list, open, and doctor.")]
     pub project: Option<String>,
+    /// Authorization boundary for get, list, open, and doctor; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
     /// Maximum obligations to return or create.
     pub limit: Option<usize>,
     /// Write detected obligations. Defaults to false for detect.
@@ -8373,12 +10432,68 @@ pub async fn obligations_new(
 ) -> Result<String, String> {
     debug!("obligations: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    if !matches!(
+        action.as_str(),
+        "detect" | "add" | "get" | "list" | "open" | "resolve" | "skip" | "doctor"
+    ) {
+        return Err(format!(
+            "Unknown action: '{}'. Valid actions: detect, add, get, list, open, resolve, skip, doctor",
+            request.action
+        ));
+    }
+
+    let is_retrieval = matches!(action.as_str(), "get" | "list" | "open" | "doctor");
+    let applied_scope = if is_retrieval {
+        let mut scope = retrieval_scope_with_fallbacks(
+            request.scope.as_ref(),
+            request.project.as_deref(),
+            None,
+        );
+        if let Some(cwd) = request.cwd.as_deref() {
+            if scope.cwd.as_deref().is_some_and(|scoped| scoped != cwd) {
+                return Err(
+                    "obligations cwd target does not match the declared authorization cwd"
+                        .to_string(),
+                );
+            }
+            scope.cwd = Some(cwd.to_string());
+        }
+        let mut applied = apply_retrieval_scope_with_ownership(
+            state,
+            Some(&scope),
+            None,
+            RelatedOwnership::Always,
+        )
+        .await?;
+        if applied.mode == SearchRelevanceMode::Related && !applied.omitted {
+            work_retrieval_targets(&applied, request.project.as_deref(), None, "obligations")?;
+            if scope.cwd.is_some()
+                && !checkout_path_matches_related_scope(state, &applied, scope.cwd.as_deref())
+                    .await?
+            {
+                applied.layer_scoped = false;
+                applied.omitted = true;
+            }
+        }
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": action, "executed": false}),
+                "obligations",
+                &applied,
+            );
+        }
+        Some((applied, scope))
+    } else {
+        None
+    };
+
     let service_guard = state.obligation_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Obligation service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "detect" => {
             let writer = parse_obligation_writer(&request)?;
             let detection = service
@@ -8431,15 +10546,28 @@ pub async fn obligations_new(
         }
         "get" => {
             let id = parse_id(&required(&request.id, "id", "get")?, "obligation ID")?;
-            let obligation = service.get(id).await.map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({
-                "found": obligation.is_some(),
-                "obligation": obligation
-            }))
-            .map_err(|e| e.to_string())
+            let (applied, scope) = applied_scope
+                .as_ref()
+                .expect("obligation get scope was applied");
+            let obligation =
+                service
+                    .get(id)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .filter(|obligation| {
+                        obligation_matches_retrieval_scope(obligation, applied, scope)
+                    });
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "found": obligation.is_some(),
+                    "obligation": obligation
+                }),
+                "obligations",
+                applied,
+            )
         }
         "list" | "open" => {
-            let status = if request.action.to_lowercase() == "open" {
+            let status = if action == "open" {
                 Some(AgentObligationStatus::Open)
             } else {
                 request
@@ -8451,16 +10579,28 @@ pub async fn obligations_new(
                     })
                     .transpose()?
             };
-            let obligations = service
-                .list(
-                    status,
-                    request.project.as_deref(),
-                    request.cwd.as_deref(),
-                    request.limit,
-                )
+            let (applied, scope) = applied_scope
+                .as_ref()
+                .expect("obligation list scope was applied");
+            let (project, cwd) = obligation_retrieval_filters(&request, applied, scope);
+            let mut obligations = service
+                .list(status, project.as_deref(), cwd.as_deref(), None)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&obligations).map_err(|e| e.to_string())
+            obligations.retain(|obligation| {
+                obligation_matches_retrieval_scope(obligation, applied, scope)
+            });
+            if let Some(limit) = request.limit {
+                obligations.truncate(limit);
+            }
+            serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "count": obligations.len(),
+                    "obligations": obligations
+                }),
+                "obligations",
+                applied,
+            )
         }
         "resolve" => {
             let id = parse_id(&required(&request.id, "id", "resolve")?, "obligation ID")?;
@@ -8499,20 +10639,115 @@ pub async fn obligations_new(
             serde_json::to_string_pretty(&obligation).map_err(|e| e.to_string())
         }
         "doctor" => {
-            let report = service
-                .doctor(
-                    request.project.as_deref(),
-                    request.cwd.as_deref(),
-                    request.limit,
-                )
+            let (applied, scope) = applied_scope
+                .as_ref()
+                .expect("obligation doctor scope was applied");
+            let (project, cwd) = obligation_retrieval_filters(&request, applied, scope);
+            let mut report = service
+                .doctor(project.as_deref(), cwd.as_deref(), None)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+            report.open.retain(|obligation| {
+                obligation_matches_retrieval_scope(obligation, applied, scope)
+            });
+            if let Some(limit) = request.limit {
+                report.open.truncate(limit);
+            }
+            report.warnings = report
+                .open
+                .iter()
+                .map(|obligation| {
+                    format!(
+                        "Open obligation '{}' ({}) must be resolved or skipped before final response.",
+                        obligation.title, obligation.kind
+                    )
+                })
+                .collect();
+            serialize_scoped_retrieval_response(&report, "obligations", applied)
         }
-        _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: detect, add, get, list, open, resolve, skip, doctor",
-            request.action
-        )),
+        _ => unreachable!("obligation action validated above"),
+    }
+}
+
+fn obligation_retrieval_filters(
+    request: &ObligationRequest,
+    applied: &AppliedStandaloneRetrievalScope,
+    scope: &RetrievalScopeRequest,
+) -> (Option<String>, Option<String>) {
+    match applied.mode {
+        SearchRelevanceMode::Global => (request.project.clone(), request.cwd.clone()),
+        SearchRelevanceMode::Related => (
+            applied
+                .related
+                .as_ref()
+                .map(|related| related.project.name.clone()),
+            scope.cwd.clone(),
+        ),
+        SearchRelevanceMode::Local => (None, None),
+    }
+}
+
+fn obligation_matches_retrieval_scope(
+    obligation: &AgentObligation,
+    applied: &AppliedStandaloneRetrievalScope,
+    scope: &RetrievalScopeRequest,
+) -> bool {
+    match applied.mode {
+        SearchRelevanceMode::Global => true,
+        SearchRelevanceMode::Related if !applied.omitted => {
+            let related = applied
+                .related
+                .as_ref()
+                .expect("related obligation scope was resolved");
+            match &obligation.scope {
+                MemoryScope::Global | MemoryScope::User => true,
+                MemoryScope::Project {
+                    project_id,
+                    project_name,
+                } => {
+                    project_id.is_some_and(|id| id == related.project.id)
+                        || project_name.eq_ignore_ascii_case(&related.project.name)
+                }
+                MemoryScope::Task {
+                    project_id,
+                    project_name,
+                    task_id,
+                    task_name,
+                } => {
+                    let project_matches = project_id.is_some_and(|id| id == related.project.id)
+                        || project_name
+                            .as_deref()
+                            .is_some_and(|name| name.eq_ignore_ascii_case(&related.project.name));
+                    match related.task.as_ref() {
+                        Some(task) => {
+                            task_id.is_some_and(|id| id == task.id)
+                                || (project_matches
+                                    && (task_name.eq_ignore_ascii_case(&task.name)
+                                        || task.jira_key.as_deref().is_some_and(|key| {
+                                            task_name.eq_ignore_ascii_case(key)
+                                        })))
+                        }
+                        None => project_matches,
+                    }
+                }
+                MemoryScope::Entity { entity_id, .. } => entity_id
+                    .as_ref()
+                    .is_some_and(|id| related.entity_ids.contains(id)),
+                MemoryScope::Repository { local_path, .. } => {
+                    scope.cwd.as_deref().is_some_and(|cwd| {
+                        local_path
+                            .as_deref()
+                            .is_some_and(|root| Path::new(cwd).starts_with(Path::new(root)))
+                    })
+                }
+                MemoryScope::Session { session_id } => related.session_ids.contains(session_id),
+                MemoryScope::Custom { name } => scope
+                    .cwd
+                    .as_deref()
+                    .is_some_and(|cwd| name == &format!("cwd:{cwd}")),
+            }
+        }
+        SearchRelevanceMode::Local | SearchRelevanceMode::Related => false,
     }
 }
 
@@ -8553,18 +10788,54 @@ pub struct VaultRequest {
     /// Page path relative to the vault root. If no extension is supplied, .md is used.
     #[schemars(description = "Vault page path relative to the vault root")]
     pub page: Option<String>,
+
+    /// Authorization boundary for compile, status, and page; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Manage the generated Memory OS Markdown vault.
 pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<String, String> {
     debug!("vault: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    if !matches!(action.as_str(), "init" | "compile" | "status" | "page") {
+        return Err(format!(
+            "Unknown action: '{}'. Valid actions: init, compile, status, page",
+            request.action
+        ));
+    }
+
+    let applied_scope = if action == "init" {
+        None
+    } else {
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                request.scope.as_ref(),
+                None,
+                RelatedOwnership::None,
+            )
+            .await?,
+        )
+    };
+    if let Some(applied) = applied_scope.as_ref() {
+        if applied.omitted {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({"action": action, "executed": false}),
+                "vault",
+                applied,
+            );
+        }
+    }
+
     let service_guard = state.memory_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Memory service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    let response = match action.as_str() {
         "init" => {
             let vault_path = required(&request.vault_path, "vault_path", "init")?;
             let init = service
@@ -8572,10 +10843,7 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "init": init
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "init": init })
         }
         "compile" => {
             let vault_path = required(&request.vault_path, "vault_path", "compile")?;
@@ -8584,10 +10852,7 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "export": export
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "export": export })
         }
         "status" => {
             let vault_path = required(&request.vault_path, "vault_path", "status")?;
@@ -8596,10 +10861,7 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "status": status
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "status": status })
         }
         "page" => {
             let vault_path = required(&request.vault_path, "vault_path", "page")?;
@@ -8609,16 +10871,17 @@ pub async fn vault_new(state: &ToolState, request: VaultRequest) -> Result<Strin
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
+            serde_json::json!({
                 "found": page.is_some(),
                 "page": page
-            }))
-            .map_err(|e| e.to_string())
+            })
         }
-        _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: init, compile, status, page",
-            request.action
-        )),
+        _ => unreachable!("vault action validated above"),
+    };
+
+    match applied_scope.as_ref() {
+        Some(applied) => serialize_scoped_retrieval_response(&response, "vault", applied),
+        None => serde_json::to_string_pretty(&response).map_err(|e| e.to_string()),
     }
 }
 
@@ -8662,13 +10925,44 @@ pub struct DigestRequest {
 
     /// Actually index reviewed source_only digest documents for source_index; defaults to false
     pub write: Option<bool>,
+
+    /// Authorization boundary for filesystem retrieval; defaults to local abstention.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Inventory digest-like source files and process review-gated digest batches.
 pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<String, String> {
     debug!("digest: action={}", request.action);
 
-    match request.action.to_lowercase().as_str() {
+    let action = request.action.to_lowercase();
+    if !matches!(
+        action.as_str(),
+        "inventory" | "review_export" | "review_apply" | "extraction_plan" | "source_index"
+    ) {
+        return Err(format!(
+            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply, extraction_plan, source_index",
+            request.action
+        ));
+    }
+
+    let applied = apply_retrieval_scope_with_ownership(
+        state,
+        request.scope.as_ref(),
+        None,
+        RelatedOwnership::None,
+    )
+    .await?;
+    if applied.omitted {
+        return serialize_scoped_retrieval_response(
+            &serde_json::json!({"action": action, "executed": false}),
+            "digest",
+            &applied,
+        );
+    }
+
+    let response = match action.as_str() {
         "inventory" => {
             let root_path = required(&request.root_path, "root_path", "inventory")?;
             let mut options = DigestInventoryOptions::new(Path::new(&root_path));
@@ -8678,10 +10972,7 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
                 .inventory(options)
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "inventory": inventory
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "inventory": inventory })
         }
         "review_export" => {
             let root_path = required(&request.root_path, "root_path", "review_export")?;
@@ -8693,10 +10984,7 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
                 .export_review_batch(Path::new(&output_path), options)
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "export": export
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "export": export })
         }
         "review_apply" => {
             let review_path = request
@@ -8708,10 +10996,7 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
                 .apply_review_batch(Path::new(review_path))
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "apply": apply
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "apply": apply })
         }
         "extraction_plan" => {
             let review_path = required(&request.review_path, "review_path", "extraction_plan")?;
@@ -8735,10 +11020,7 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
                 )
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "plan": plan
-            }))
-            .map_err(|e| e.to_string())
+            serde_json::json!({ "plan": plan })
         }
         "source_index" => {
             let review_path = required(&request.review_path, "review_path", "source_index")?;
@@ -8774,32 +11056,75 @@ pub async fn digest_new(state: &ToolState, request: DigestRequest) -> Result<Str
                 }
             }
 
-            serde_json::to_string_pretty(&serde_json::json!({
+            serde_json::json!({
                 "plan": plan,
                 "dry_run": !write,
                 "indexed_documents": indexed_documents
-            }))
-            .map_err(|e| e.to_string())
+            })
         }
-        _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: inventory, review_export, review_apply, extraction_plan, source_index",
-            request.action
-        )),
-    }
+        _ => unreachable!("digest action validated above"),
+    };
+
+    serialize_scoped_retrieval_response(&response, "digest", &applied)
 }
 
 // =============================================================================
 // Memory OS Tool
 // =============================================================================
 
+/// Declarative current-checkout source for one procedure prerequisite.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryProcedurePrerequisiteSourceRequest {
+    /// Source format. The first deterministic slice supports `toml` only.
+    pub format: String,
+    /// Safe path relative to the currently resolved checkout root.
+    pub relative_path: String,
+    /// TOML table/key names leading to one scalar value.
+    #[serde(default)]
+    pub key_path: Vec<String>,
+}
+
+/// Structured procedure candidate supplied through `memory(action="add", kind="procedure")`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MemoryProcedureRequest {
+    /// Task or triggering cue.
+    pub task: String,
+    /// Exact successful command sequence.
+    pub commands: Vec<String>,
+    /// Exact prerequisite key/value pairs, such as `cargo.version=1.80.0`.
+    #[serde(default)]
+    pub prerequisites: BTreeMap<String, String>,
+    /// Optional deterministic current-checkout source for each named prerequisite.
+    #[serde(default)]
+    pub prerequisite_sources: BTreeMap<String, MemoryProcedurePrerequisiteSourceRequest>,
+    /// Known failed-output signatures retained as cold diagnostic cues.
+    #[serde(default)]
+    pub failure_signatures: Vec<String>,
+    /// Command recorded in a future verification receipt.
+    pub verification_command: String,
+    /// Expected verification exit code.
+    #[serde(default)]
+    pub verification_exit_code: i32,
+    /// Output marker required in a future verification receipt.
+    pub verification_output_contains: String,
+}
+
 /// Consolidated request for Memory OS operations.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MemoryRequestNew {
-    /// Action to perform: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
+    /// Action to perform: add, propose_correction, get_correction_proposal, list_correction_proposals, verify_correction_procedure, apply_correction, procedure_match, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, correct, commit, cursor, changes_since, log, diff, writer_stats, archive, forget, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session
     #[schemars(
-        description = "Action: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
+        description = "Action: add, propose_correction, get_correction_proposal, list_correction_proposals, verify_correction_procedure, apply_correction, procedure_match, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, correct, commit, cursor, changes_since, log, diff, writer_stats, archive, forget, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session"
     )]
     pub action: String,
+
+    /// Authorization boundary for Memory OS retrieval and administrative read actions.
+    /// procedure_match is always forced to local scope before evaluation.
+    #[serde(default, alias = "search_scope")]
+    #[schemars(
+        description = "Authorization boundary for retrieval actions. procedure_match always applies local scope; related/global requests cannot widen executable procedure lookup."
+    )]
+    pub scope: Option<RetrievalScopeRequest>,
 
     /// Memory item ID (for get)
     #[schemars(description = "Memory item ID (for get)")]
@@ -8894,6 +11219,15 @@ pub struct MemoryRequestNew {
     #[serde(default)]
     pub evidence: Vec<MemoryEvidenceRequest>,
 
+    /// Structured procedure candidate details; required when kind=procedure.
+    pub procedure: Option<MemoryProcedureRequest>,
+    /// Exact observed conditions for unsourced procedure_match prerequisites. Engram resolves
+    /// source-backed prerequisites from the current checkout itself; caller values cannot override
+    /// them. Missing or mismatched unsourced prerequisites cause abstention with
+    /// required_condition_keys and bounded next_actions for an authoritative retry.
+    #[serde(default)]
+    pub conditions: BTreeMap<String, String>,
+
     /// Status filter for list
     #[schemars(description = "Status filter for list")]
     pub status_filter: Option<String>,
@@ -8919,22 +11253,43 @@ pub struct MemoryRequestNew {
     pub relevance_project: Option<String>,
     /// Current working directory for changes_since relevance scoring.
     pub cwd: Option<String>,
-    /// Query/prompt text for changes_since relevance scoring.
+    /// Bounded task-focused query text for procedure_match or changes_since relevance scoring.
+    #[schemars(
+        length(max = 512),
+        description = "Task-focused retrieval text of at most 512 characters. Preserve concrete operation terms and identifiers; omit unrelated instructions and secret values. Query text does not authorize scope or execution."
+    )]
     pub query: Option<String>,
     /// Caller intent for changes_since telemetry correlation.
     pub intent: Option<String>,
-    /// Archive reason for archive action.
+    /// Reason for archive or irreversible forget action.
     pub archive_reason: Option<String>,
     /// Actor/harness archiving the item for archive action.
     pub archived_by: Option<String>,
-    /// Reviewer identity for promote/reject/supersede actions.
+    /// Unverified reviewer label for promote/reject/supersede audit records.
+    /// This caller-supplied value does not confer human-review authority.
     pub reviewer: Option<String>,
     /// Review rationale for promote/reject/supersede actions.
     pub rationale: Option<String>,
     /// Existing memory item ID replaced by `id` for supersede action.
     pub supersedes_id: Option<String>,
+    /// Existing active replacement item ID for exact-ID correct action.
+    pub replacement_id: Option<String>,
+    /// Auditable reason for an exact-ID correction.
+    pub correction_reason: Option<String>,
+    /// Explicit confirmation for an exact-ID correction.
+    pub confirm_correction: Option<bool>,
+    /// Server-minted correction proposal ID for operator-only verification or apply.
+    pub proposal_id: Option<String>,
+    /// Exact canonical proposal digest selected by the operator for verification or apply.
+    pub expected_digest: Option<String>,
+    /// Machine-readable verification receipt path for verify_correction_procedure.
+    pub receipt: Option<String>,
+    /// Exact RFC3339 expiry for verify_correction_procedure.
+    pub expires_at: Option<String>,
+    /// Explicit confirmation for irreversible forget action.
+    pub confirm_forget: Option<bool>,
 
-    /// Markdown vault root path (required for export_vault)
+    /// Markdown vault root path (required for export_vault; optional on forget to refresh generated projections)
     pub vault_path: Option<String>,
     /// Migration review output path (required for migration_review_export)
     pub migration_review_path: Option<String>,
@@ -8955,10 +11310,210 @@ pub struct MemoryRequestNew {
     pub include_work_observations: Option<bool>,
 }
 
+async fn apply_memory_retrieval_scope(
+    state: &ToolState,
+    request: &MemoryRequestNew,
+    ownership: RelatedOwnership,
+    local_allowed: bool,
+    force_local: bool,
+) -> Result<(AppliedStandaloneRetrievalScope, RetrievalScopeRequest), String> {
+    let project = request
+        .project_name
+        .as_deref()
+        .or(request.relevance_project.as_deref());
+    let task = request.task_id.as_deref().or(request.task_name.as_deref());
+    let mut scope = retrieval_scope_with_fallbacks(request.scope.as_ref(), project, task);
+    if scope.cwd.is_none() {
+        scope.cwd = request.cwd.clone();
+    }
+    if force_local {
+        scope.relevance_mode = Some(SearchRelevanceMode::Local.to_string());
+    }
+    let applied = if local_allowed
+        && SearchRelevanceMode::parse(scope.relevance_mode.as_deref())?
+            == SearchRelevanceMode::Local
+    {
+        AppliedStandaloneRetrievalScope {
+            mode: SearchRelevanceMode::Local,
+            related: None,
+            layer_scoped: true,
+            omitted: false,
+        }
+    } else {
+        apply_retrieval_scope_with_ownership(state, Some(&scope), project, ownership).await?
+    };
+    Ok((applied, scope))
+}
+
+fn validate_memory_retrieval_targets(
+    applied: &AppliedStandaloneRetrievalScope,
+    request: &MemoryRequestNew,
+    surface: &str,
+) -> Result<(), String> {
+    if applied.mode != SearchRelevanceMode::Related || applied.omitted {
+        return Ok(());
+    }
+    let related = applied
+        .related
+        .as_ref()
+        .expect("related memory scope was resolved");
+    for requested in [
+        request.project_name.as_deref(),
+        request.relevance_project.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !requested.eq_ignore_ascii_case(&related.project.name) {
+            return Err(format!(
+                "{surface} project target '{requested}' does not match resolved authorization project '{}'",
+                related.project.name
+            ));
+        }
+    }
+    if let Some(project_id) = request.project_id.as_deref() {
+        if project_id != related.project.id.to_string() {
+            return Err(format!(
+                "{surface} project ID target '{project_id}' does not match resolved authorization project '{}' ({})",
+                related.project.name, related.project.id
+            ));
+        }
+    }
+    for requested in [request.task_name.as_deref(), request.task_id.as_deref()]
+        .into_iter()
+        .flatten()
+    {
+        let task = related.task.as_ref().ok_or_else(|| {
+            format!(
+                "{surface} task target '{requested}' requires an exact task authorization boundary"
+            )
+        })?;
+        let matches = requested.eq_ignore_ascii_case(&task.name)
+            || task
+                .jira_key
+                .as_deref()
+                .is_some_and(|key| requested.eq_ignore_ascii_case(key))
+            || requested == task.id.to_string();
+        if !matches {
+            return Err(format!(
+                "{surface} task target '{requested}' does not match resolved authorization task '{}'",
+                task.name
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn memory_retrieval_boundary(
+    applied: &AppliedStandaloneRetrievalScope,
+    declared: &RetrievalScopeRequest,
+) -> (Option<String>, Option<String>, Option<String>, bool) {
+    match applied.mode {
+        SearchRelevanceMode::Local => (
+            declared.project.clone(),
+            declared.task.clone(),
+            declared.cwd.clone(),
+            true,
+        ),
+        SearchRelevanceMode::Related if !applied.omitted => {
+            let related = applied
+                .related
+                .as_ref()
+                .expect("related memory scope was resolved");
+            (
+                Some(related.project.name.clone()),
+                related.task.as_ref().map(|task| task.name.clone()),
+                declared.cwd.clone(),
+                true,
+            )
+        }
+        SearchRelevanceMode::Global | SearchRelevanceMode::Related => (None, None, None, false),
+    }
+}
+
+fn serialize_memory_retrieval_response<T: Serialize>(
+    response: &T,
+    surface: &str,
+    applied: &AppliedStandaloneRetrievalScope,
+    declared: &RetrievalScopeRequest,
+) -> Result<String, String> {
+    let serialized = serialize_scoped_retrieval_response(response, surface, applied)?;
+    if applied.mode != SearchRelevanceMode::Local {
+        return Ok(serialized);
+    }
+    let mut response: Value =
+        serde_json::from_str(&serialized).map_err(|error| error.to_string())?;
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| "Memory retrieval response must be an object".to_string())?;
+    object.insert(
+        "resolved_project".to_string(),
+        serde_json::to_value(&declared.project).map_err(|error| error.to_string())?,
+    );
+    object.insert(
+        "resolved_task".to_string(),
+        serde_json::to_value(&declared.task).map_err(|error| error.to_string())?,
+    );
+    let mut warnings = vec![
+        "Local mode returned only global/user MemoryItems and MemoryItems applicable to the supplied project/task/cwd boundary."
+            .to_string(),
+    ];
+    if declared.project.is_none() && declared.task.is_none() && declared.cwd.is_none() {
+        warnings.push(
+            "No local project/task/cwd boundary was supplied, so only global/user MemoryItems were eligible."
+                .to_string(),
+        );
+    }
+    object.insert("warnings".to_string(), serde_json::json!(warnings));
+    serde_json::to_string_pretty(&response).map_err(|error| error.to_string())
+}
+
+fn serialize_correction_selector_response<T: Serialize>(
+    response: &T,
+    applied: &AppliedStandaloneRetrievalScope,
+    declared: &RetrievalScopeRequest,
+) -> Result<String, String> {
+    let serialized = serialize_memory_retrieval_response(response, "memory", applied, declared)?;
+    let mut response: Value =
+        serde_json::from_str(&serialized).map_err(|error| error.to_string())?;
+    let object = response
+        .as_object_mut()
+        .ok_or_else(|| "Correction response must serialize as an object".to_string())?;
+    object.remove("authorization_scope_enforced");
+    object.remove("scope_enforced_layers");
+    object.insert(
+        "scope_selector_match_enforced".to_string(),
+        Value::Bool(true),
+    );
+    object.insert(
+        "scope_selector_authenticated".to_string(),
+        Value::Bool(false),
+    );
+    object.insert(
+        "scope_selector_source".to_string(),
+        Value::String(
+            match applied.mode {
+                SearchRelevanceMode::Local => "caller_declared_local",
+                SearchRelevanceMode::Related => "related_scope_resolution",
+                SearchRelevanceMode::Global => "unsupported_global",
+            }
+            .to_string(),
+        ),
+    );
+    object.insert(
+        "warnings".to_string(),
+        serde_json::json!([
+            "Correction records were matched against a selected project/task/cwd scope; this is not identity authentication or an authorization principal."
+        ]),
+    );
+    serde_json::to_string_pretty(&response).map_err(|error| error.to_string())
+}
+
 /// Evidence request for Memory OS items.
 #[derive(Debug, Clone, Serialize)]
 pub struct MemoryEvidenceRequest {
-    /// Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review
+    /// Evidence kind: session_event, tool_call, file, git_commit, url, document, observation,
+    /// manual_review. Manual review is an unverified assertion, not reviewer authority.
     pub kind: String,
     /// Stable evidence target: ID, path, URL, or commit SHA
     pub target: String,
@@ -8984,7 +11539,7 @@ impl JsonSchema for MemoryEvidenceRequest {
             "properties": {
                 "kind": {
                     "type": "string",
-                    "description": "Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review"
+                    "description": "Evidence kind: session_event, tool_call, file, git_commit, url, document, observation, manual_review. manual_review is an unverified assertion and does not confer reviewed trust."
                 },
                 "target": {
                     "type": "string",
@@ -9065,12 +11620,65 @@ pub struct MemoryChangeRequest {
 pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<String, String> {
     debug!("memory: action={}", request.action);
 
+    let action = request.action.to_lowercase();
+    let scope_spec = match action.as_str() {
+        "procedure_match" | "procedure-match" => {
+            Some((RelatedOwnership::Always, true, true, "memory"))
+        }
+        "correct"
+        | "propose_correction"
+        | "propose-correction"
+        | "get_correction_proposal"
+        | "get-correction-proposal"
+        | "list_correction_proposals"
+        | "list-correction-proposals"
+        | "verify_correction_procedure"
+        | "verify-correction-procedure"
+        | "apply_correction"
+        | "apply-correction" => Some((RelatedOwnership::Always, true, false, "memory")),
+        "get" | "list" | "review" | "changes_since" => {
+            Some((RelatedOwnership::Always, true, false, "memory"))
+        }
+        "migration_inventory" | "migration_review_export" => Some((
+            RelatedOwnership::ProjectOnly,
+            false,
+            false,
+            "memory_migration",
+        )),
+        "log"
+        | "diff"
+        | "writer_stats"
+        | "writer-stats"
+        | "export_vault"
+        | "migration_review_status"
+        | "migration_review_apply"
+        | "digest_extraction_apply" => Some((RelatedOwnership::None, false, false, "memory_admin")),
+        _ => None,
+    };
+    let applied_scope = if let Some((ownership, local_allowed, force_local, surface)) = scope_spec {
+        let (applied, declared) =
+            apply_memory_retrieval_scope(state, &request, ownership, local_allowed, force_local)
+                .await?;
+        if applied.omitted {
+            return serialize_memory_retrieval_response(
+                &serde_json::json!({"executed": false}),
+                surface,
+                &applied,
+                &declared,
+            );
+        }
+        validate_memory_retrieval_targets(&applied, &request, surface)?;
+        Some((applied, declared))
+    } else {
+        None
+    };
+
     let service_guard = state.memory_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Memory service not initialized".to_string())?;
 
-    match request.action.to_lowercase().as_str() {
+    match action.as_str() {
         "add" => {
             let kind = MemoryKind::parse(&required(&request.kind, "kind", "add")?);
             let title = required(&request.title, "title", "add")?;
@@ -9080,6 +11688,9 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             let writer = parse_writer(&request)?;
 
             let mut item = MemoryItem::new(kind, title, content, scope, origin, writer);
+            if let Some(procedure) = request.procedure {
+                item = item.with_procedure(parse_memory_procedure(procedure)?);
+            }
             for evidence in request.evidence {
                 item = item.with_evidence(parse_evidence(evidence)?);
             }
@@ -9101,6 +11712,36 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 "item": item
             }))
             .map_err(|e| e.to_string())
+        }
+        "procedure_match" | "procedure-match" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("procedure_match scope was applied");
+            let (boundary_project, _boundary_task, boundary_cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
+            let query = required(&request.query, "query", "procedure_match")?;
+            let report = service
+                .match_procedures(ProcedureMatchInput {
+                    query,
+                    project: if enforced {
+                        boundary_project
+                    } else {
+                        request
+                            .project_name
+                            .clone()
+                            .or(request.relevance_project.clone())
+                    },
+                    cwd: if enforced {
+                        boundary_cwd
+                    } else {
+                        request.cwd.clone()
+                    },
+                    conditions: request.conditions,
+                    limit: request.limit,
+                })
+                .await
+                .map_err(|e| e.to_string())?;
+            serialize_memory_retrieval_response(&report, "memory", applied, declared)
         }
         "capture_current_plan" | "capture-current-plan" => {
             if request.supersedes_id.is_some() {
@@ -9178,19 +11819,43 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         "get" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory get scope was applied");
+            let (project, task, cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
             let id = parse_id(&required(&request.id, "id", "get")?, "memory item ID")?;
             let item = service
                 .get_memory(&id)
                 .await
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Memory item not found: {id}"))?;
+            if enforced
+                && !MemoryService::item_matches_boundary(
+                    &item,
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+            {
+                return Err(format!(
+                    "memory item '{id}' is outside the resolved authorization boundary"
+                ));
+            }
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "item": item
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"item": item}),
+                "memory",
+                applied,
+                declared,
+            )
         }
         "list" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory list scope was applied");
+            let (project, task, cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
             let status = request
                 .status_filter
                 .as_deref()
@@ -9206,15 +11871,31 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 None
             };
             let tags = request.tags;
-            let fetch_limit = if tags.is_empty() && scope_filter.is_none() {
+            let may_include_proposal_replacements =
+                status.is_none() || status == Some(MemoryStatus::NeedsReview);
+            let fetch_limit = if tags.is_empty()
+                && scope_filter.is_none()
+                && !may_include_proposal_replacements
+            {
                 request.limit
             } else {
                 None
             };
-            let mut items = service
-                .list_memory(status, fetch_limit)
-                .await
-                .map_err(|e| e.to_string())?;
+            let mut items = if enforced {
+                service
+                    .list_memory_for_boundary(
+                        status,
+                        fetch_limit,
+                        project.as_deref(),
+                        task.as_deref(),
+                        cwd.as_deref(),
+                    )
+                    .await
+            } else {
+                service.list_memory(status, fetch_limit).await
+            }
+            .map_err(|e| e.to_string())?;
+            items.retain(|item| item.correction_proposal_id.is_none());
             if let Some(scope_filter) = &scope_filter {
                 items.retain(|item| match (scope_filter, &item.scope) {
                     (MemoryScope::Global, MemoryScope::Global)
@@ -9324,23 +12005,46 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 }
             }
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": items.len(),
-                "items": items
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({
+                    "count": items.len(),
+                    "items": items
+                }),
+                "memory",
+                applied,
+                declared,
+            )
         }
         "review" => {
-            let items = service
-                .list_memory_needing_review(request.limit)
-                .await
-                .map_err(|e| e.to_string())?;
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory review scope was applied");
+            let (project, task, cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
+            let items = if enforced {
+                service
+                    .list_memory_for_boundary(
+                        Some(MemoryStatus::NeedsReview),
+                        request.limit,
+                        project.as_deref(),
+                        task.as_deref(),
+                        cwd.as_deref(),
+                    )
+                    .await
+            } else {
+                service.list_memory_needing_review(request.limit).await
+            }
+            .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": items.len(),
-                "items": items
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({
+                    "count": items.len(),
+                    "items": items
+                }),
+                "memory",
+                applied,
+                declared,
+            )
         }
         "promote" => {
             let id = parse_id(
@@ -9471,6 +12175,326 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             }))
             .map_err(|e| e.to_string())
         }
+        "propose_correction" | "propose-correction" => {
+            let obsolete_id = parse_id(
+                &required(&request.id, "id", "propose_correction")?,
+                "obsolete memory item ID",
+            )?;
+            let title = required(&request.title, "title", "propose_correction")?;
+            let content = required(&request.content, "content", "propose_correction")?;
+            let writer = parse_writer(&request)?;
+            let procedure = request.procedure.map(parse_memory_procedure).transpose()?;
+            let evidence = request
+                .evidence
+                .into_iter()
+                .map(parse_evidence)
+                .collect::<Result<Vec<_>, _>>()?;
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory propose_correction scope was applied");
+            if applied.mode == SearchRelevanceMode::Global {
+                return Err(
+                    "memory propose_correction forbids relevance_mode=global; supply a local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (project, task, cwd, enforced) = memory_retrieval_boundary(applied, declared);
+            if !enforced {
+                return Err(
+                    "memory propose_correction requires an enforceable local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (proposal, replacement, obsolete) = service
+                .propose_correction(
+                    CorrectionProposalInput {
+                        obsolete_id,
+                        title,
+                        content,
+                        writer,
+                        evidence,
+                        procedure,
+                    },
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let proposal_id = proposal.id;
+            let replacement_id = replacement.id;
+            let obsolete_id = obsolete.id;
+            let canonical_digest = proposal.canonical_digest.clone();
+            serialize_correction_selector_response(
+                &serde_json::json!({
+                    "proposal": proposal,
+                    "proposal_id": proposal_id,
+                    "replacement": replacement,
+                    "replacement_id": replacement_id,
+                    "obsolete_id": obsolete_id,
+                    "canonical_digest": canonical_digest,
+                    "digest_phase": "p0",
+                    "activated": false,
+                    "human_identity_authenticated": false,
+                    "intent_verified": false,
+                    "human_review_verified": false,
+                    "reviewer_authority_conferred": false
+                }),
+                applied,
+                declared,
+            )
+        }
+        "get_correction_proposal" | "get-correction-proposal" => {
+            let proposal_id = parse_id(
+                &required(
+                    &request.proposal_id,
+                    "proposal_id",
+                    "get_correction_proposal",
+                )?,
+                "correction proposal ID",
+            )?;
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory get_correction_proposal scope was applied");
+            if applied.mode == SearchRelevanceMode::Global {
+                return Err(
+                    "memory get_correction_proposal forbids relevance_mode=global; supply a local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (project, task, cwd, enforced) = memory_retrieval_boundary(applied, declared);
+            if !enforced {
+                return Err(
+                    "memory get_correction_proposal requires an enforceable local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let inspection = service
+                .inspect_correction_proposal(
+                    &proposal_id,
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serialize_correction_selector_response(
+                &inspection,
+                applied,
+                declared,
+            )
+        }
+        "list_correction_proposals" | "list-correction-proposals" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory list_correction_proposals scope was applied");
+            if applied.mode == SearchRelevanceMode::Global {
+                return Err(
+                    "memory list_correction_proposals forbids relevance_mode=global; supply a local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (project, task, cwd, enforced) = memory_retrieval_boundary(applied, declared);
+            if !enforced {
+                return Err(
+                    "memory list_correction_proposals requires an enforceable local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let proposals = service
+                .list_correction_proposals(
+                    request.limit,
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serialize_correction_selector_response(
+                &serde_json::json!({
+                    "count": proposals.len(),
+                    "proposals": proposals
+                }),
+                applied,
+                declared,
+            )
+        }
+        "verify_correction_procedure" | "verify-correction-procedure" => {
+            let proposal_id = parse_id(
+                &required(
+                    &request.proposal_id,
+                    "proposal_id",
+                    "verify_correction_procedure",
+                )?,
+                "correction proposal ID",
+            )?;
+            let expected_digest = required(
+                &request.expected_digest,
+                "expected_digest",
+                "verify_correction_procedure",
+            )?;
+            let p0_digest = expected_digest.trim().to_string();
+            let receipt = required(
+                &request.receipt,
+                "receipt",
+                "verify_correction_procedure",
+            )?;
+            let expires_at = parse_rfc3339(&required(
+                &request.expires_at,
+                "expires_at",
+                "verify_correction_procedure",
+            )?)?;
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory verify_correction_procedure scope was applied");
+            if applied.mode == SearchRelevanceMode::Global {
+                return Err(
+                    "memory verify_correction_procedure forbids relevance_mode=global; supply a local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (project, task, cwd, enforced) = memory_retrieval_boundary(applied, declared);
+            if !enforced {
+                return Err(
+                    "memory verify_correction_procedure requires an enforceable local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (proposal, replacement, obsolete) = service
+                .verify_correction_procedure(
+                    &proposal_id,
+                    &expected_digest,
+                    std::path::Path::new(&receipt),
+                    expires_at,
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let p1_digest = proposal.canonical_digest.clone();
+            serialize_correction_selector_response(
+                &serde_json::json!({
+                    "proposal": proposal,
+                    "replacement": replacement,
+                    "obsolete": obsolete,
+                    "p0_digest": p0_digest,
+                    "p1_digest": p1_digest,
+                    "digest_phase": "p1",
+                    "activated": false,
+                    "authority_boundary": "operator_selected",
+                    "human_identity_authenticated": false,
+                    "intent_verified": false,
+                    "human_review_verified": false,
+                    "reviewer_authority_conferred": false
+                }),
+                applied,
+                declared,
+            )
+        }
+        "apply_correction" | "apply-correction" => {
+            let proposal_id = parse_id(
+                &required(&request.proposal_id, "proposal_id", "apply_correction")?,
+                "correction proposal ID",
+            )?;
+            let expected_digest = required(
+                &request.expected_digest,
+                "expected_digest",
+                "apply_correction",
+            )?;
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory apply_correction scope was applied");
+            if applied.mode == SearchRelevanceMode::Global {
+                return Err(
+                    "memory apply_correction forbids relevance_mode=global; supply a local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (project, task, cwd, enforced) = memory_retrieval_boundary(applied, declared);
+            if !enforced {
+                return Err(
+                    "memory apply_correction requires an enforceable local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (proposal, replacement, obsolete) = service
+                .apply_correction(
+                    &proposal_id,
+                    &expected_digest,
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serialize_correction_selector_response(
+                &serde_json::json!({
+                    "proposal": proposal,
+                    "item": replacement,
+                    "corrected_item": obsolete,
+                    "authority_boundary": "operator_selected",
+                    "human_identity_authenticated": false,
+                    "intent_verified": false,
+                    "reviewer_authority_conferred": false
+                }),
+                applied,
+                declared,
+            )
+        }
+        "correct" => {
+            if request.confirm_correction != Some(true) {
+                return Err(
+                    "correct requires confirm_correction=true after verifying both exact memory item IDs"
+                        .to_string(),
+                );
+            }
+            let obsolete_id = parse_id(
+                &required(&request.id, "id", "correct")?,
+                "obsolete memory item ID",
+            )?;
+            let replacement_id = parse_id(
+                &required(&request.replacement_id, "replacement_id", "correct")?,
+                "replacement memory item ID",
+            )?;
+            let reason = required(&request.correction_reason, "correction_reason", "correct")?;
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory correct scope was applied");
+            if applied.mode == SearchRelevanceMode::Global {
+                return Err(
+                    "memory correct forbids relevance_mode=global; supply a local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (project, task, cwd, enforced) = memory_retrieval_boundary(applied, declared);
+            if !enforced {
+                return Err(
+                    "memory correct requires an enforceable local or related authorization boundary"
+                        .to_string(),
+                );
+            }
+            let (item, corrected_item) = service
+                .correct_memory(
+                    &obsolete_id,
+                    &replacement_id,
+                    reason,
+                    project.as_deref(),
+                    task.as_deref(),
+                    cwd.as_deref(),
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            serialize_correction_selector_response(
+                &serde_json::json!({
+                    "item": item,
+                    "corrected_item": corrected_item,
+                    "reviewer_authority_conferred": false
+                }),
+                applied,
+                declared,
+            )
+        }
         "commit" => {
             let writer = parse_writer(&request)?;
             let message = required(&request.message, "message", "commit")?;
@@ -9508,6 +12532,11 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         "changes_since" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory changes_since scope was applied");
+            let (boundary_project, boundary_task, boundary_cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
             let timestamp = parse_rfc3339(&required_changes_since_timestamp(&request)?)?;
             let commit_id = request
                 .commit_id
@@ -9533,60 +12562,102 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                         model: request.model.clone(),
                         surface: request.surface.clone(),
                         writer_session_id,
-                        project: request.relevance_project.clone().or(request.project_name.clone()),
-                        cwd: request.cwd.clone(),
+                        project: if enforced {
+                            boundary_project
+                        } else {
+                            request
+                                .relevance_project
+                                .clone()
+                                .or(request.project_name.clone())
+                        },
+                        task: if enforced {
+                            boundary_task
+                        } else {
+                            request.task_name.clone()
+                        },
+                        cwd: if enforced {
+                            boundary_cwd
+                        } else {
+                            request.cwd.clone()
+                        },
                         query: request.query.clone(),
                         intent: request.intent.as_deref().map(BrainHarnessIntent::parse),
                         external_session_id: resolve_external_session_id(
                             request.external_session_id.clone(),
                         ),
+                        enforce_scope: enforced,
+                        omit_commits: enforced,
                     },
                 )
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "since": changes.since,
-                "next_cursor": changes.next_cursor,
-                "trace_id": changes.trace_id,
-                "item_count": changes.items.len(),
-                "commit_count": changes.commits.len(),
-                "item_relevance": changes.item_relevance,
-                "items": changes.items,
-                "commits": changes.commits
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({
+                    "since": changes.since,
+                    "next_cursor": changes.next_cursor,
+                    "trace_id": changes.trace_id,
+                    "item_count": changes.items.len(),
+                    "commit_count": changes.commits.len(),
+                    "commits_omitted": enforced,
+                    "item_relevance": changes.item_relevance,
+                    "items": changes.items,
+                    "commits": changes.commits
+                }),
+                "memory",
+                applied,
+                declared,
+            )
         }
         "log" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory log scope was applied");
             let commits = service
                 .list_commits(request.limit)
                 .await
                 .map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": commits.len(),
-                "commits": commits
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({
+                    "count": commits.len(),
+                    "commits": commits
+                }),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "diff" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory diff scope was applied");
             let id = parse_id(&required(&request.commit_id, "commit_id", "diff")?, "commit ID")?;
             let commit = service
                 .get_commit(&id)
                 .await
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("Knowledge commit not found: {id}"))?;
-            serde_json::to_string_pretty(&serde_json::json!({
-                "commit": commit
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"commit": commit}),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "writer_stats" | "writer-stats" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory writer_stats scope was applied");
             let stats = service.writer_stats().await.map_err(|e| e.to_string())?;
-            serde_json::to_string_pretty(&serde_json::json!({
-                "count": stats.len(),
-                "stats": stats
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({
+                    "count": stats.len(),
+                    "stats": stats
+                }),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "archive" => {
             let id = parse_id(&required(&request.id, "id", "archive")?, "memory item ID")?;
@@ -9600,21 +12671,81 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             }))
             .map_err(|e| e.to_string())
         }
+        "forget" => {
+            if !request.confirm_forget.unwrap_or(false) {
+                return Err(
+                    "forget is irreversible; set confirm_forget=true after confirming the exact memory item ID"
+                        .to_string(),
+                );
+            }
+            let id = parse_id(&required(&request.id, "id", "forget")?, "memory item ID")?;
+            let reason = required(&request.archive_reason, "archive_reason", "forget")?;
+            let forget_report = service
+                .forget_memory(&id)
+                .await
+                .map_err(|e| e.to_string())?;
+            let vault_refresh = if forget_report.deleted {
+                match request.vault_path.as_deref() {
+                    Some(path) => Some(
+                        service
+                            .export_vault(std::path::Path::new(path))
+                            .await
+                            .map_err(|e| e.to_string())?,
+                    ),
+                    None => None,
+                }
+            } else {
+                None
+            };
+            let warnings = if request.vault_path.is_some() {
+                vec![
+                    "External copies outside the selected generated vault must be deleted separately."
+                ]
+            } else {
+                vec![
+                    "Generated vault exports and external copies are not canonical projections; pass vault_path to refresh one generated vault during forget, and delete other copies separately."
+                ]
+            };
+            serde_json::to_string_pretty(&serde_json::json!({
+                "id": id.to_string(),
+                "deleted": forget_report.deleted,
+                "reason": reason,
+                "canonical_store_purged": forget_report.deleted,
+                "internal_purge": forget_report,
+                "vault_refresh": vault_refresh,
+                "warnings": warnings
+            }))
+            .map_err(|e| e.to_string())
+        }
         "export_vault" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory export_vault scope was applied");
             let vault_path = required(&request.vault_path, "vault_path", "export_vault")?;
             let export = service
                 .export_vault(std::path::Path::new(&vault_path))
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "export": export
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"export": export}),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "migration_inventory" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory migration_inventory scope was applied");
+            let (boundary_project, _task, _cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
             let mut options = MigrationInventoryOptions::all();
-            options.project_filter = request.project_name.clone();
+            options.project_filter = if enforced {
+                boundary_project
+            } else {
+                request.project_name.clone()
+            };
             options.limit = request.limit;
             options.exclude_reviewed_path = request.exclude_reviewed_path.clone();
             if let Some(include) = request.include_entity_observations {
@@ -9632,19 +12763,30 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "inventory": inventory
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"inventory": inventory}),
+                "memory_migration",
+                applied,
+                declared,
+            )
         }
         "migration_review_export" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory migration_review_export scope was applied");
+            let (boundary_project, _task, _cwd, enforced) =
+                memory_retrieval_boundary(applied, declared);
             let review_path = required(
                 &request.migration_review_path,
                 "migration_review_path",
                 "migration_review_export",
             )?;
             let mut options = MigrationInventoryOptions::all();
-            options.project_filter = request.project_name.clone();
+            options.project_filter = if enforced {
+                boundary_project
+            } else {
+                request.project_name.clone()
+            };
             options.limit = request.limit;
             options.exclude_reviewed_path = request.exclude_reviewed_path.clone();
             if let Some(include) = request.include_entity_observations {
@@ -9662,12 +12804,17 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "export": export
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"export": export}),
+                "memory_migration",
+                applied,
+                declared,
+            )
         }
         "migration_review_status" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory migration_review_status scope was applied");
             let review_path = required(
                 &request.migration_review_path,
                 "migration_review_path",
@@ -9678,12 +12825,17 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "status": status
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"status": status}),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "migration_review_apply" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory migration_review_apply scope was applied");
             let review_path = required(
                 &request.migration_review_path,
                 "migration_review_path",
@@ -9702,12 +12854,17 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "apply": apply
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"apply": apply}),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "digest_extraction_apply" => {
+            let (applied, declared) = applied_scope
+                .as_ref()
+                .expect("memory digest_extraction_apply scope was applied");
             let extraction_path = required(
                 &request.digest_extraction_path,
                 "digest_extraction_path",
@@ -9726,10 +12883,12 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
                 .await
                 .map_err(|e| e.to_string())?;
 
-            serde_json::to_string_pretty(&serde_json::json!({
-                "apply": apply
-            }))
-            .map_err(|e| e.to_string())
+            serialize_memory_retrieval_response(
+                &serde_json::json!({"apply": apply}),
+                "memory_admin",
+                applied,
+                declared,
+            )
         }
         "distill_session" => {
             let session_id = parse_id(
@@ -9748,7 +12907,7 @@ pub async fn memory_new(state: &ToolState, request: MemoryRequestNew) -> Result<
             .map_err(|e| e.to_string())
         }
         _ => Err(format!(
-            "Unknown action: '{}'. Valid actions: add, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, commit, cursor, changes_since, log, diff, writer_stats, archive, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
+            "Unknown action: '{}'. Valid actions: add, propose_correction, get_correction_proposal, list_correction_proposals, verify_correction_procedure, apply_correction, procedure_match, capture_current_plan, get, list, review, promote, promote_observation, reject, supersede, correct, commit, cursor, changes_since, log, diff, writer_stats, archive, forget, export_vault, migration_inventory, migration_review_export, migration_review_status, migration_review_apply, digest_extraction_apply, distill_session",
             request.action
         )),
     }
@@ -9803,6 +12962,63 @@ fn parse_optional_id(
 fn parse_rfc3339(value: &str) -> Result<time::OffsetDateTime, String> {
     time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
         .map_err(|e| format!("Invalid RFC3339 timestamp: {e}"))
+}
+
+fn parse_procedure_prerequisite_source(
+    request: MemoryProcedurePrerequisiteSourceRequest,
+) -> Result<ProcedurePrerequisiteSource, String> {
+    match request.format.trim().to_ascii_lowercase().as_str() {
+        "toml" => Ok(ProcedurePrerequisiteSource::Toml {
+            relative_path: request.relative_path,
+            key_path: request.key_path,
+        }),
+        other => Err(format!(
+            "unsupported procedure prerequisite source format '{other}'; expected toml"
+        )),
+    }
+}
+
+fn parse_memory_procedure(request: MemoryProcedureRequest) -> Result<ProcedureCard, String> {
+    let MemoryProcedureRequest {
+        task,
+        commands,
+        prerequisites,
+        mut prerequisite_sources,
+        failure_signatures,
+        verification_command,
+        verification_exit_code,
+        verification_output_contains,
+    } = request;
+    let mut card = ProcedureCard::new(
+        task,
+        commands,
+        ProcedureVerification::new(
+            verification_command,
+            verification_exit_code,
+            verification_output_contains,
+        ),
+    );
+    for (key, expected) in prerequisites {
+        let mut prerequisite = ProcedurePrerequisite::new(&key, expected);
+        if let Some(source) = prerequisite_sources.remove(&key) {
+            prerequisite = prerequisite.with_source(parse_procedure_prerequisite_source(source)?);
+        }
+        card = card.with_prerequisite(prerequisite);
+    }
+    if !prerequisite_sources.is_empty() {
+        return Err(format!(
+            "procedure prerequisite_sources contains unknown condition key(s): {}",
+            prerequisite_sources
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    for signature in failure_signatures {
+        card = card.with_failure_signature(signature);
+    }
+    Ok(card)
 }
 
 fn parse_writer(request: &MemoryRequestNew) -> Result<WriterProvenance, String> {
@@ -10007,6 +13223,11 @@ pub struct KnowledgeRequestNew {
         description = "Document type: adr, runbook, howto, research, design, readme, changelog"
     )]
     pub doc_type: Option<String>,
+
+    /// Authorization boundary for list, duplicates, and versions; defaults to local.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Parse doc_type string to DocType enum
@@ -10033,12 +13254,38 @@ pub async fn knowledge_new(
 ) -> Result<String, String> {
     debug!("knowledge_new: action={}", request.action);
 
+    let applied_admin_scope =
+        if matches!(request.action.as_str(), "list" | "duplicates" | "versions") {
+            Some(
+                apply_retrieval_scope_with_ownership(
+                    state,
+                    request.scope.as_ref(),
+                    None,
+                    RelatedOwnership::None,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+    if let Some(applied) = applied_admin_scope.as_ref() {
+        if applied.mode != SearchRelevanceMode::Global {
+            let response = match request.action.as_str() {
+                "list" => serde_json::json!({"count": 0, "documents": []}),
+                "duplicates" => serde_json::json!({"count": 0, "groups": []}),
+                "versions" => serde_json::json!({"count": 0, "chains": []}),
+                _ => unreachable!("knowledge administrative scope only covers read actions"),
+            };
+            return serialize_scoped_retrieval_response(&response, "knowledge_admin", applied);
+        }
+    }
+
     let service_guard = state.knowledge_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Knowledge service not initialized".to_string())?;
 
-    match request.action.as_str() {
+    let response = match request.action.as_str() {
         "init" => {
             service.init().await.map_err(|e| e.to_string())?;
 
@@ -10188,6 +13435,13 @@ pub async fn knowledge_new(
             "Unknown action: '{}'. Valid actions: init, scan, register, import, list, duplicates, versions",
             request.action
         )),
+    }?;
+
+    if let Some(applied) = applied_admin_scope.as_ref() {
+        let response: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        serialize_scoped_retrieval_response(&response, "knowledge_admin", applied)
+    } else {
+        Ok(response)
     }
 }
 
@@ -10249,6 +13503,11 @@ pub struct SessionRequestNew {
     /// Max results (for list, search actions)
     #[schemars(description = "Maximum results")]
     pub limit: Option<usize>,
+
+    /// Authorization boundary for get, list, and search; defaults to local.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Parse session status string
@@ -10341,6 +13600,24 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
             let session_id = request.session_id.ok_or("session_id required for get")?;
             let id = engram_core::id::Id::parse(&session_id)
                 .map_err(|e| format!("Invalid session ID: {}", e))?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                request.project.as_deref(),
+                SearchLayer::SessionEvent,
+            )
+            .await?;
+            if !retrieval_allows_session(&applied, &id) {
+                return serialize_standalone_retrieval_response(
+                    &serde_json::json!({
+                        "found": false,
+                        "session": null,
+                        "events": []
+                    }),
+                    SearchLayer::SessionEvent,
+                    &applied,
+                );
+            }
 
             let (session, events) = service
                 .get_session_with_events(&id)
@@ -10380,7 +13657,12 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
                     })
                     .collect(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            let response = serde_json::json!({
+                "found": true,
+                "session": response.session,
+                "events": response.events
+            });
+            serialize_standalone_retrieval_response(&response, SearchLayer::SessionEvent, &applied)
         }
         "list" => {
             let status: Option<SessionStatus> = if let Some(s) = &request.status {
@@ -10389,15 +13671,35 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
                 None
             };
 
-            let sessions = service
-                .list_sessions(
-                    status.as_ref(),
-                    request.agent.as_deref(),
-                    request.project.as_deref(),
-                    Some(request.limit.unwrap_or(20)),
-                )
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                request.project.as_deref(),
+                SearchLayer::SessionEvent,
+            )
+            .await?;
+            let sessions = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .list_sessions(
+                        status.as_ref(),
+                        request.agent.as_deref(),
+                        request.project.as_deref(),
+                        Some(request.limit.unwrap_or(20)),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related if applied.omitted => Vec::new(),
+                SearchRelevanceMode::Related => service
+                    .list_sessions(
+                        status.as_ref(),
+                        request.agent.as_deref(),
+                        Some(&applied.related.as_ref().unwrap().project.name),
+                        Some(request.limit.unwrap_or(20)),
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?,
+            };
 
             let response = SessionListResponse {
                 count: sessions.len(),
@@ -10421,7 +13723,7 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
                     })
                     .collect(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::SessionEvent, &applied)
         }
         "log" => {
             let session_id = request.session_id.ok_or("session_id required for log")?;
@@ -10461,11 +13763,36 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
         }
         "search" => {
             let query = request.query.ok_or("query required for search")?;
-
-            let events = service
-                .search_events(&query, Some(request.limit.unwrap_or(20)))
-                .await
-                .map_err(|e| e.to_string())?;
+            let limit = request.limit.unwrap_or(20);
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                request.project.as_deref(),
+                SearchLayer::SessionEvent,
+            )
+            .await?;
+            let events = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .search_events(&query, Some(limit))
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related if applied.omitted => Vec::new(),
+                SearchRelevanceMode::Related => {
+                    let search_guard = state.search_service.read().await;
+                    let search = search_guard
+                        .as_ref()
+                        .ok_or_else(|| "Search service not initialized".to_string())?;
+                    search
+                        .search_related_session_events(
+                            applied.related.as_ref().unwrap(),
+                            &query,
+                            limit,
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+            };
 
             let response = SessionSearchResponse {
                 count: events.len(),
@@ -10485,7 +13812,7 @@ pub async fn session_new(state: &ToolState, request: SessionRequestNew) -> Resul
                     })
                     .collect(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::SessionEvent, &applied)
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: start, end, get, list, log, search",
@@ -10641,22 +13968,138 @@ pub struct DocsRequestNew {
     /// Minimum score threshold (for search action)
     #[schemars(description = "Minimum similarity score 0.0-1.0 (for search)")]
     pub min_score: Option<f32>,
+
+    /// Authorization boundary for search and administrative actions; defaults to local.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Consolidated document handler.
 pub async fn docs_new(state: &ToolState, request: DocsRequestNew) -> Result<String, String> {
     debug!("docs_new: action={}", request.action);
 
+    let applied_retrieval_scope = if request.action == "search" {
+        request
+            .query
+            .as_deref()
+            .ok_or("query required for search")?;
+        Some(
+            apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::Document,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_retrieval_scope.as_ref() {
+        if applied.mode != SearchRelevanceMode::Global {
+            let response = SearchDocsResponse {
+                count: 0,
+                results: Vec::new(),
+            };
+            return serialize_standalone_retrieval_response(
+                &response,
+                SearchLayer::Document,
+                applied,
+            );
+        }
+    }
+
+    let applied_stats_scope = if request.action == "stats" {
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                request.scope.as_ref(),
+                None,
+                RelatedOwnership::None,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_stats_scope.as_ref() {
+        let response = if applied.mode == SearchRelevanceMode::Global {
+            let search_guard = state.search_service.read().await;
+            let search = search_guard
+                .as_ref()
+                .ok_or_else(|| "Search service not initialized".to_string())?;
+            let stats = search
+                .document_stats()
+                .await
+                .map_err(|error| error.to_string())?;
+            GetStatsResponse {
+                source_count: stats.source_count,
+                chunk_count: stats.chunk_count,
+                searchable_chunk_count: stats.searchable_chunk_count,
+                orphan_chunk_count: stats.orphan_chunk_count,
+                embedding_dimension: stats.embedding_dimension,
+            }
+        } else {
+            GetStatsResponse {
+                source_count: 0,
+                chunk_count: 0,
+                searchable_chunk_count: 0,
+                orphan_chunk_count: 0,
+                embedding_dimension: 0,
+            }
+        };
+        return serialize_scoped_retrieval_response(&response, "document_stats", applied);
+    }
+
+    let applied_admin_scope = if matches!(
+        request.action.as_str(),
+        "orphan_report"
+            | "recovery"
+            | "reindex_plan"
+            | "reindex_execute"
+            | "cleanup_plan"
+            | "cleanup_execute"
+            | "quarantine_review_export"
+            | "quarantine_review_status"
+            | "quarantine_review_prioritize"
+            | "quarantine_review_apply"
+    ) {
+        Some(
+            apply_retrieval_scope_with_ownership(
+                state,
+                request.scope.as_ref(),
+                None,
+                RelatedOwnership::None,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    if let Some(applied) = applied_admin_scope.as_ref() {
+        if applied.mode != SearchRelevanceMode::Global {
+            return serialize_scoped_retrieval_response(
+                &serde_json::json!({
+                    "action": request.action.clone(),
+                    "executed": false
+                }),
+                "document_admin",
+                applied,
+            );
+        }
+    }
+
     let service_guard = state.doc_service.read().await;
     let service = service_guard
         .as_ref()
         .ok_or_else(|| "Document service not initialized".to_string())?;
 
-    match request.action.as_str() {
+    let response = match request.action.as_str() {
         "search" => {
             let query = request.query.ok_or("query required for search")?;
             let limit = request.limit.unwrap_or(5);
-
+            let applied = applied_retrieval_scope.expect("search scope was resolved above");
             let results = if let Some(min_score) = request.min_score {
                 service
                     .search_threshold(&query, limit, min_score)
@@ -10673,7 +14116,7 @@ pub async fn docs_new(state: &ToolState, request: DocsRequestNew) -> Result<Stri
                 count: results.len(),
                 results: results.into_iter().map(SearchResult::from).collect(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::Document, &applied)
         }
         "index" => {
             let path_str = request.path.ok_or("path required for index")?;
@@ -11004,22 +14447,18 @@ pub async fn docs_new(state: &ToolState, request: DocsRequestNew) -> Result<Stri
             }))
             .map_err(|e| e.to_string())
         }
-        "stats" => {
-            let stats = service.stats().await.map_err(|e| e.to_string())?;
-
-            let response = GetStatsResponse {
-                source_count: stats.source_count,
-                chunk_count: stats.chunk_count,
-                searchable_chunk_count: stats.searchable_chunk_count,
-                orphan_chunk_count: stats.orphan_chunk_count,
-                embedding_dimension: stats.embedding_dimension,
-            };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
-        }
+        "stats" => unreachable!("stats is handled before document service initialization"),
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: search, index, plan, orphan_report, reindex_plan, reindex_execute, cleanup_plan, cleanup_execute, quarantine_review_export, quarantine_review_status, quarantine_review_prioritize, quarantine_review_apply, stats",
             request.action
         )),
+    }?;
+
+    if let Some(applied) = applied_admin_scope.as_ref() {
+        let response: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        serialize_scoped_retrieval_response(&response, "document_admin", applied)
+    } else {
+        Ok(response)
     }
 }
 
@@ -11075,6 +14514,11 @@ pub struct ToolRequestNew {
     /// Max results (for list, search actions)
     #[schemars(description = "Maximum results")]
     pub limit: Option<usize>,
+
+    /// Authorization boundary for recommend, stats, list, and search; defaults to local.
+    #[serde(alias = "search_scope")]
+    #[schemars(description = "Authorization boundary for retrieval actions")]
+    pub scope: Option<RetrievalScopeRequest>,
 }
 
 /// Parse tool outcome string
@@ -11131,32 +14575,83 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
         }
         "recommend" => {
             let context = request.context.ok_or("context required for recommend")?;
-
-            let recommendations = service
-                .get_recommendations(&context)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::ToolUsage,
+            )
+            .await?;
+            let recommendations = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .get_recommendations(&context)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .map(|recommendation| ToolRecommendationInfo {
+                        tool_name: recommendation.tool_name,
+                        confidence: recommendation.confidence,
+                        reason: recommendation.reason,
+                    })
+                    .collect(),
+                SearchRelevanceMode::Related if applied.omitted => Vec::new(),
+                SearchRelevanceMode::Related => {
+                    let search_guard = state.search_service.read().await;
+                    let search = search_guard
+                        .as_ref()
+                        .ok_or_else(|| "Search service not initialized".to_string())?;
+                    search
+                        .recommend_related_tools(
+                            applied.related.as_ref().unwrap(),
+                            &context,
+                            request.limit.unwrap_or(20),
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?
+                        .into_iter()
+                        .map(|recommendation| ToolRecommendationInfo {
+                            tool_name: recommendation.tool_name,
+                            confidence: recommendation.confidence,
+                            reason: recommendation.reason,
+                        })
+                        .collect()
+                }
+            };
 
             let response = ToolRecommendResponse {
                 count: recommendations.len(),
-                recommendations: recommendations
-                    .into_iter()
-                    .map(|r| ToolRecommendationInfo {
-                        tool_name: r.tool_name,
-                        confidence: r.confidence,
-                        reason: r.reason,
-                    })
-                    .collect(),
+                recommendations,
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::ToolUsage, &applied)
         }
         "stats" => {
             let tool_name = request.tool_name.ok_or("tool_name required for stats")?;
-
-            let stats = service
-                .get_tool_stats(&tool_name)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::ToolUsage,
+            )
+            .await?;
+            let stats = match applied.mode {
+                SearchRelevanceMode::Local => Default::default(),
+                SearchRelevanceMode::Global => service
+                    .get_tool_stats(&tool_name)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related if applied.omitted => Default::default(),
+                SearchRelevanceMode::Related => {
+                    let search_guard = state.search_service.read().await;
+                    let search = search_guard
+                        .as_ref()
+                        .ok_or_else(|| "Search service not initialized".to_string())?;
+                    search
+                        .related_tool_stats(applied.related.as_ref().unwrap(), &tool_name)
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+            };
 
             let response = ToolGetStatsResponse {
                 tool_name,
@@ -11166,7 +14661,7 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
                 success_rate: stats.success_rate,
                 preferences_count: stats.preferences_count,
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::ToolUsage, &applied)
         }
         "list" => {
             let outcome: Option<ToolOutcome> = if let Some(o) = &request.outcome_filter {
@@ -11175,10 +14670,40 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
                 None
             };
 
-            let usages = service
-                .list_usages(outcome.as_ref(), request.limit)
-                .await
-                .map_err(|e| e.to_string())?;
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::ToolUsage,
+            )
+            .await?;
+            let usages = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .list_usages(outcome.as_ref(), request.limit)
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related if applied.omitted => Vec::new(),
+                SearchRelevanceMode::Related => {
+                    let search_guard = state.search_service.read().await;
+                    let search = search_guard
+                        .as_ref()
+                        .ok_or_else(|| "Search service not initialized".to_string())?;
+                    let mut usages = search
+                        .search_related_tool_usages(
+                            applied.related.as_ref().unwrap(),
+                            "",
+                            usize::MAX,
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    if let Some(outcome) = outcome.as_ref() {
+                        usages.retain(|usage| usage.outcome == *outcome);
+                    }
+                    usages.truncate(request.limit.unwrap_or(100));
+                    usages
+                }
+            };
 
             let response = ToolListUsagesResponse {
                 count: usages.len(),
@@ -11196,15 +14721,40 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
                     })
                     .collect(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::ToolUsage, &applied)
         }
         "search" => {
             let query = request.query.ok_or("query required for search")?;
-
-            let usages = service
-                .search_usages(&query, request.limit)
-                .await
-                .map_err(|e| e.to_string())?;
+            let limit = request.limit.unwrap_or(20);
+            let applied = apply_standalone_retrieval_scope(
+                state,
+                request.scope.as_ref(),
+                None,
+                SearchLayer::ToolUsage,
+            )
+            .await?;
+            let usages = match applied.mode {
+                SearchRelevanceMode::Local => Vec::new(),
+                SearchRelevanceMode::Global => service
+                    .search_usages(&query, Some(limit))
+                    .await
+                    .map_err(|e| e.to_string())?,
+                SearchRelevanceMode::Related if applied.omitted => Vec::new(),
+                SearchRelevanceMode::Related => {
+                    let search_guard = state.search_service.read().await;
+                    let search = search_guard
+                        .as_ref()
+                        .ok_or_else(|| "Search service not initialized".to_string())?;
+                    search
+                        .search_related_tool_usages(
+                            applied.related.as_ref().unwrap(),
+                            &query,
+                            limit,
+                        )
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+            };
 
             let response = ToolListUsagesResponse {
                 count: usages.len(),
@@ -11222,7 +14772,7 @@ pub async fn tool_new(state: &ToolState, request: ToolRequestNew) -> Result<Stri
                     })
                     .collect(),
             };
-            serde_json::to_string_pretty(&response).map_err(|e| e.to_string())
+            serialize_standalone_retrieval_response(&response, SearchLayer::ToolUsage, &applied)
         }
         _ => Err(format!(
             "Unknown action: '{}'. Valid actions: log, recommend, stats, list, search",
@@ -11265,7 +14815,7 @@ mod tests {
     }
 
     #[test]
-    fn lint_request_schema_exposes_project_filter() {
+    fn lint_request_schema_exposes_project_filter_and_scope() {
         let schema = schemars::schema_for!(LintRequest);
         let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
         let properties = schema_json["properties"]
@@ -11277,6 +14827,66 @@ mod tests {
             properties["project"]["description"],
             "Optional project scope to lint."
         );
+        assert_eq!(
+            properties["scope"]["description"],
+            "Authorization boundary for retrieval actions"
+        );
+        assert!(!properties.contains_key("search_scope"));
+    }
+
+    #[test]
+    fn graph_request_schema_exposes_scope() {
+        let schema = schemars::schema_for!(GraphRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("GraphRequest schema should have properties");
+
+        assert_eq!(
+            properties["scope"]["description"],
+            "Authorization boundary for retrieval actions"
+        );
+        assert!(!properties.contains_key("search_scope"));
+    }
+
+    #[test]
+    fn harness_request_schema_exposes_scope() {
+        let schema = schemars::schema_for!(HarnessRequest);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let properties = schema_json["properties"]
+            .as_object()
+            .expect("HarnessRequest schema should have properties");
+
+        assert_eq!(
+            properties["scope"]["description"],
+            "Authorization boundary for retrieval actions"
+        );
+        assert!(!properties.contains_key("search_scope"));
+    }
+
+    #[test]
+    fn vault_and_digest_request_schemas_expose_scope() {
+        for (surface, schema) in [
+            (
+                "VaultRequest",
+                serde_json::to_value(schemars::schema_for!(VaultRequest))
+                    .expect("schema should serialize"),
+            ),
+            (
+                "DigestRequest",
+                serde_json::to_value(schemars::schema_for!(DigestRequest))
+                    .expect("schema should serialize"),
+            ),
+        ] {
+            let properties = schema["properties"]
+                .as_object()
+                .unwrap_or_else(|| panic!("{surface} schema should have properties"));
+            assert_eq!(
+                properties["scope"]["description"],
+                "Authorization boundary for retrieval actions"
+            );
+            assert!(!properties.contains_key("search_scope"));
+        }
     }
 
     #[test]
@@ -11295,10 +14905,15 @@ mod tests {
             properties["cwd"]["description"],
             "Current working directory for detect/list/open/doctor scoping."
         );
+        assert_eq!(
+            properties["scope"]["description"],
+            "Authorization boundary for retrieval actions"
+        );
+        assert!(!properties.contains_key("search_scope"));
     }
 
     #[test]
-    fn telemetry_request_schema_exposes_project_filter() {
+    fn telemetry_request_schema_exposes_project_filter_and_scope() {
         let schema = schemars::schema_for!(TelemetryRequest);
         let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
         let properties = schema_json["properties"]
@@ -11309,6 +14924,11 @@ mod tests {
             properties["project"]["description"],
             "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
         );
+        assert_eq!(
+            properties["scope"]["description"],
+            "Authorization boundary for retrieval actions"
+        );
+        assert!(!properties.contains_key("search_scope"));
     }
 
     #[test]
@@ -11321,15 +14941,50 @@ mod tests {
 
         assert_eq!(
             properties["cwd"]["description"],
-            "Current working directory for repository/project resolution and scoped memory selection."
+            "Current working directory for deterministic repository/component identity and scoped memory selection. A cwd never authorizes a project by directory basename."
         );
         assert_eq!(
             properties["project"]["description"],
-            "Explicit project name for project resolution and project-scoped memory selection."
+            "Explicit project authorization for project-scoped memory selection. Omit when unknown; the response identity reports candidates or requires_confirmation without inventing scope."
+        );
+        assert_eq!(
+            properties["task"]["description"],
+            "Explicit task name or tracker key. Engram validates its parent project and excludes sibling-task memory."
         );
         assert_eq!(
             properties["response_shape"]["description"],
-            "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
+            "Response shape: full (default) or lean for compact identity/trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
+        );
+    }
+
+    #[test]
+    fn memory_request_schema_exposes_bounded_non_authorizing_query_contract() {
+        let schema = schemars::schema_for!(MemoryRequestNew);
+        let schema_json = serde_json::to_value(&schema).expect("schema should serialize");
+        let query = &schema_json["properties"]["query"];
+
+        assert_eq!(query["maxLength"], 512);
+        assert!(query["description"]
+            .as_str()
+            .is_some_and(|description| description.contains("Task-focused retrieval text")));
+        assert!(query["description"]
+            .as_str()
+            .is_some_and(|description| description.contains("does not authorize")));
+        assert_eq!(
+            schema_json["properties"]["replacement_id"]["description"],
+            "Existing active replacement item ID for exact-ID correct action."
+        );
+        assert_eq!(
+            schema_json["properties"]["confirm_correction"]["description"],
+            "Explicit confirmation for an exact-ID correction."
+        );
+        assert_eq!(
+            schema_json["properties"]["proposal_id"]["description"],
+            "Server-minted correction proposal ID for operator-only verification or apply."
+        );
+        assert_eq!(
+            schema_json["properties"]["expected_digest"]["description"],
+            "Exact canonical proposal digest selected by the operator for verification or apply."
         );
     }
 
@@ -11668,6 +15323,7 @@ mod tests {
                 arm: None,
                 query: Some("runtime env fallback".to_string()),
                 project: Some("engram".to_string()),
+                scope: None,
                 agent: Some("codex".to_string()),
                 session_id: None,
                 external_session_id: None,

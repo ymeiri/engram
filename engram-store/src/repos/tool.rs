@@ -4,6 +4,7 @@
 //! Provides queries for recommendations and statistics.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::{redact_serialized_secret_material, reject_serialized_secret_material};
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::tool::{ToolOutcome, ToolPreference, ToolStats, ToolUsage};
@@ -143,7 +144,8 @@ impl ToolRepo {
                 DEFINE INDEX IF NOT EXISTS idx_usage_timestamp ON {TABLE_USAGE} FIELDS timestamp;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // Tool preference table
         self.db
@@ -154,7 +156,7 @@ impl ToolRepo {
                 DEFINE INDEX IF NOT EXISTS idx_pref_tool ON {TABLE_PREFERENCE} FIELDS preferred_tool_id;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         info!("Tool schema initialized");
         Ok(())
@@ -166,6 +168,7 @@ impl ToolRepo {
 
     /// Save a tool usage record.
     pub async fn save_usage(&self, usage: &ToolUsage) -> StoreResult<()> {
+        let (usage, _) = redact_serialized_secret_material("tool usage", usage)?;
         debug!("Saving tool usage: {} ({})", usage.tool_id, usage.outcome);
 
         self.db
@@ -199,7 +202,8 @@ impl ToolRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -212,7 +216,8 @@ impl ToolRepo {
             .db
             .query(r#"SELECT * FROM type::thing("tool_usage", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<ToolUsageRecord> = result.take(0)?;
 
@@ -245,7 +250,7 @@ impl ToolRepo {
             ),
         };
 
-        let mut result = self.db.query(query).await?;
+        let mut result = self.db.query(query).await?.check()?;
         let records: Vec<ToolUsageRecordWithId> = result.take(0)?;
 
         let mut usages = Vec::new();
@@ -265,7 +270,7 @@ impl ToolRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, tool_id, session_id, context, outcome, switched_to, timestamp FROM tool_usage WHERE tool_id = $tool_id ORDER BY timestamp DESC")
             .bind(("tool_id", tool_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ToolUsageRecordWithId> = result.take(0)?;
 
@@ -286,7 +291,7 @@ impl ToolRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, tool_id, session_id, context, outcome, switched_to, timestamp FROM tool_usage WHERE session_id = $session_id ORDER BY timestamp DESC")
             .bind(("session_id", session_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ToolUsageRecordWithId> = result.take(0)?;
 
@@ -314,7 +319,7 @@ impl ToolRepo {
                 limit.unwrap_or(50)
             ))
             .bind(("query", query.to_lowercase()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ToolUsageRecordWithId> = result.take(0)?;
 
@@ -334,6 +339,7 @@ impl ToolRepo {
 
     /// Save a tool preference.
     pub async fn save_preference(&self, pref: &ToolPreference) -> StoreResult<()> {
+        reject_serialized_secret_material("tool preference", pref)?;
         debug!(
             "Saving tool preference: {} -> {}",
             pref.context_pattern, pref.preferred_tool_id
@@ -364,7 +370,8 @@ impl ToolRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -385,7 +392,7 @@ impl ToolRepo {
                 ORDER BY confidence DESC, sample_count DESC
             "#)
             .bind(("context", context.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ToolPreferenceRecordWithId> = result.take(0)?;
 
@@ -403,7 +410,7 @@ impl ToolRepo {
 
         let mut result = self.db
             .query("SELECT meta::id(id) as id, context_pattern, preferred_tool_id, confidence, sample_count, updated_at FROM tool_preference ORDER BY confidence DESC")
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ToolPreferenceRecordWithId> = result.take(0)?;
 
@@ -436,7 +443,8 @@ impl ToolRepo {
             "#,
             )
             .bind(("tool_id", tool_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         #[derive(Debug, Deserialize)]
         struct RateResult {
@@ -474,7 +482,7 @@ impl ToolRepo {
                 SELECT count() as count FROM tool_preference WHERE preferred_tool_id = $tool_id GROUP ALL;
             "#)
             .bind(("tool_id", tool_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         #[derive(Debug, Deserialize)]
         struct UsageStats {
@@ -515,7 +523,8 @@ impl ToolRepo {
                 SELECT count() as count FROM {TABLE_PREFERENCE} GROUP ALL;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let usage_count: Option<CountResult> = result.take(0)?;
         let preference_count: Option<CountResult> = result.take(1)?;
@@ -615,6 +624,33 @@ pub struct ToolIntelStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn setup_repo() -> ToolRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = ToolRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn tool_usage_redacts_secrets_and_preferences_reject_them() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-tool-secret";
+        let usage = ToolUsage::new(Id::new(), canary, ToolOutcome::Failed);
+
+        repo.save_usage(&usage).await.unwrap();
+        let stored = repo.get_usage(&usage.id).await.unwrap().unwrap();
+        assert!(!stored.context.contains(canary));
+        assert!(stored.context.contains("redacted"));
+
+        let preference = ToolPreference::new(canary, Id::new(), 1.0, 1);
+        let error = repo.save_preference(&preference).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("secret material was not persisted"));
+        assert!(repo.list_preferences().await.unwrap().is_empty());
+    }
 
     #[test]
     fn test_tool_intel_stats_default() {

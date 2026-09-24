@@ -3,6 +3,7 @@
 //! Handles persistence of Session and Event data.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::redact_serialized_secret_material;
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::session::{Event, EventType, Session, SessionStats, SessionStatus};
@@ -120,7 +121,8 @@ impl SessionRepo {
                 DEFINE INDEX IF NOT EXISTS idx_session_project ON {TABLE_SESSION} FIELDS project;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // Event table
         self.db
@@ -132,7 +134,8 @@ impl SessionRepo {
                 DEFINE INDEX IF NOT EXISTS idx_event_timestamp ON {TABLE_EVENT} FIELDS timestamp;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         info!("Session schema initialized");
         Ok(())
@@ -144,6 +147,7 @@ impl SessionRepo {
 
     /// Save a session.
     pub async fn save_session(&self, session: &Session) -> StoreResult<()> {
+        let (session, _) = redact_serialized_secret_material("session", session)?;
         debug!("Saving session: {}", session.id);
 
         let ended_at_str = session.ended_at.map(|dt| {
@@ -180,7 +184,8 @@ impl SessionRepo {
                     .unwrap(),
             ))
             .bind(("ended_at", ended_at_str))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -192,7 +197,7 @@ impl SessionRepo {
         let mut result = self.db
             .query(r#"SELECT meta::id(id) as id, project, agent, goal, status, summary, key_decisions, started_at, ended_at FROM type::thing("session", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<SessionRecord> = result.take(0)?;
 
@@ -240,7 +245,7 @@ impl SessionRepo {
             TABLE_SESSION, where_clause, limit_clause
         );
 
-        let mut result = self.db.query(query).await?;
+        let mut result = self.db.query(query).await?.check()?;
         let records: Vec<SessionRecord> = result.take(0)?;
 
         let mut sessions = Vec::new();
@@ -264,6 +269,7 @@ impl SessionRepo {
         status: SessionStatus,
         summary: Option<String>,
     ) -> StoreResult<()> {
+        let (summary, _) = redact_serialized_secret_material("session summary", &summary)?;
         debug!("Ending session: {} with status {:?}", id, status);
 
         let ended_at = time::OffsetDateTime::now_utc()
@@ -283,7 +289,8 @@ impl SessionRepo {
             .bind(("status", status.to_string()))
             .bind(("summary", summary))
             .bind(("ended_at", ended_at))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -296,13 +303,15 @@ impl SessionRepo {
         self.db
             .query("DELETE FROM session_event WHERE session_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete the session
         self.db
             .query(r#"DELETE type::thing("session", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -313,6 +322,7 @@ impl SessionRepo {
 
     /// Add an event to a session.
     pub async fn add_event(&self, event: &Event) -> StoreResult<()> {
+        let (event, _) = redact_serialized_secret_material("session event", event)?;
         debug!(
             "Adding event to session {}: {:?}",
             event.session_id, event.event_type
@@ -353,7 +363,8 @@ impl SessionRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -365,7 +376,7 @@ impl SessionRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, session_id, event_type, actor, content, context, source, entities_mentioned, timestamp FROM session_event WHERE session_id = $session_id ORDER BY timestamp ASC")
             .bind(("session_id", session_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EventRecord> = result.take(0)?;
 
@@ -395,7 +406,7 @@ impl SessionRepo {
                 limit_clause
             ))
             .bind(("query", query.to_lowercase()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EventRecord> = result.take(0)?;
 
@@ -425,7 +436,7 @@ impl SessionRepo {
                 limit_clause
             ))
             .bind(("event_type", event_type.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EventRecord> = result.take(0)?;
 
@@ -458,7 +469,8 @@ impl SessionRepo {
                 FROM session GROUP ALL
             "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         #[derive(Debug, Deserialize)]
         struct SessionCounts {
@@ -480,7 +492,8 @@ impl SessionRepo {
         let mut result = self
             .db
             .query("SELECT event_type, count() as count FROM session_event GROUP BY event_type")
-            .await?;
+            .await?
+            .check()?;
 
         #[derive(Debug, Deserialize)]
         struct EventCount {
@@ -559,5 +572,48 @@ impl SessionRepo {
             entities_mentioned,
             timestamp,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn setup_repo() -> SessionRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = SessionRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn incidental_session_writes_redact_secrets_without_failing() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-session-secret";
+        let session = Session::new().with_goal(canary);
+
+        repo.save_session(&session).await.unwrap();
+        let stored = repo.get_session(&session.id).await.unwrap().unwrap();
+        assert!(!stored.goal.as_deref().unwrap().contains(canary));
+        assert!(stored.goal.as_deref().unwrap().contains("redacted"));
+
+        let event = Event::new(session.id, EventType::Error, "codex", canary);
+        repo.add_event(&event).await.unwrap();
+        let events = repo.get_events(&session.id).await.unwrap();
+        assert_eq!(events.len(), 1);
+        assert!(!events[0].content.contains(canary));
+        assert!(events[0].content.contains("redacted"));
+
+        repo.end_session(
+            &session.id,
+            SessionStatus::Completed,
+            Some(canary.to_string()),
+        )
+        .await
+        .unwrap();
+        let stored = repo.get_session(&session.id).await.unwrap().unwrap();
+        assert!(!stored.summary.as_deref().unwrap().contains(canary));
+        assert!(stored.summary.as_deref().unwrap().contains("redacted"));
     }
 }

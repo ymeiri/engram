@@ -9,8 +9,11 @@ use engram_core::telemetry::{
 };
 use engram_index::{
     MemoryChangesSinceOptions, MemoryService, OrientInput, SearchService, TelemetryService,
+    WorkService,
 };
-use engram_mcp::tools::{self, OrientRequest, SearchRequest, TelemetryRequest, ToolState};
+use engram_mcp::tools::{
+    self, OrientRequest, RetrievalScopeRequest, SearchRequest, TelemetryRequest, ToolState,
+};
 use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
 use time::{Duration, OffsetDateTime};
@@ -51,6 +54,10 @@ fn telemetry_request(action: &str) -> TelemetryRequest {
         arm: None,
         query: None,
         project: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
         agent: None,
         session_id: None,
         external_session_id: None,
@@ -80,6 +87,182 @@ fn telemetry_request(action: &str) -> TelemetryRequest {
 
 fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+fn related_scope(project: &str) -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some(project.to_string()),
+        ..RetrievalScopeRequest::default()
+    })
+}
+
+fn related_task_scope(project: &str, task: &str) -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some(project.to_string()),
+        task: Some(task.to_string()),
+        ..RetrievalScopeRequest::default()
+    })
+}
+
+#[tokio::test]
+async fn mcp_telemetry_reads_abstain_locally_before_service_access() {
+    let state = ToolState::new();
+
+    for action in [
+        "get_trace",
+        "list_traces",
+        "list_feedback",
+        "stats_by_intent",
+        "real_session_eval",
+    ] {
+        let mut request = telemetry_request(action);
+        request.scope = None;
+        let response = tools::telemetry_new(&state, request)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("{action} should abstain before service access: {error}")
+            });
+        let json = parse_json(&response);
+        assert_eq!(json["executed"], false, "unexpected response for {action}");
+        assert_eq!(json["relevance_mode"], "local");
+        assert_eq!(json["authorization_scope_enforced"], true);
+        assert_eq!(json["omitted_layers"], serde_json::json!(["telemetry"]));
+    }
+}
+
+#[tokio::test]
+async fn mcp_telemetry_related_scope_filters_all_project_owned_reads() {
+    let config = StoreConfig::memory();
+    let db = connect_and_init(&config)
+        .await
+        .expect("failed to connect to in-memory store");
+    let telemetry = TelemetryService::new(db.clone());
+    telemetry
+        .init_schema()
+        .await
+        .expect("failed to initialize telemetry schema");
+    let work = WorkService::new(db.clone());
+    work.init().await.expect("failed to initialize work schema");
+    work.create_project("alpha", None).await.unwrap();
+    work.create_project("beta", None).await.unwrap();
+    work.create_task("alpha", "alpha-one", None, Some("ALPHA-1"))
+        .await
+        .unwrap();
+
+    let now = OffsetDateTime::now_utc();
+    let mut alpha_trace = BrainHarnessTrace::new(BrainHarnessOperation::Search)
+        .with_project(Some("alpha".to_string()))
+        .with_intent(Some(BrainHarnessIntent::AnswerQuestion))
+        .with_query(Some("alpha-only prompt".to_string()));
+    alpha_trace.created_at = now - Duration::seconds(3);
+    let alpha_trace = telemetry.record_trace(alpha_trace).await.unwrap();
+
+    let mut beta_trace = BrainHarnessTrace::new(BrainHarnessOperation::Search)
+        .with_project(Some("beta".to_string()))
+        .with_intent(Some(BrainHarnessIntent::PlanWork))
+        .with_query(Some("beta-only prompt".to_string()));
+    beta_trace.created_at = now - Duration::seconds(2);
+    let beta_trace = telemetry.record_trace(beta_trace).await.unwrap();
+
+    let mut unowned_trace = BrainHarnessTrace::new(BrainHarnessOperation::Search)
+        .with_query(Some("unowned prompt".to_string()));
+    unowned_trace.created_at = now - Duration::seconds(1);
+    let unowned_trace = telemetry.record_trace(unowned_trace).await.unwrap();
+
+    for (trace_id, task_success, created_at) in [
+        (alpha_trace.id, true, now - Duration::seconds(3)),
+        (beta_trace.id, false, now - Duration::seconds(2)),
+        (unowned_trace.id, false, now - Duration::seconds(1)),
+    ] {
+        let mut feedback = AgentFeedback::new(trace_id);
+        feedback.task_success = Some(task_success);
+        feedback.created_at = created_at;
+        telemetry.submit_feedback(feedback).await.unwrap();
+    }
+
+    let state = ToolState::new();
+    state.init_telemetry(telemetry).await;
+    state.init_search(SearchService::new(db)).await;
+    state.init_work(work).await;
+
+    let mut alpha_get = telemetry_request("get_trace");
+    alpha_get.scope = related_scope("alpha");
+    alpha_get.trace_id = Some(alpha_trace.id.to_string());
+    let alpha_get = parse_json(&tools::telemetry_new(&state, alpha_get).await.unwrap());
+    assert_eq!(alpha_get["trace"]["id"], alpha_trace.id.to_string());
+    assert_eq!(alpha_get["resolved_project"], "alpha");
+
+    for hidden_id in [beta_trace.id, unowned_trace.id] {
+        let mut get = telemetry_request("get_trace");
+        get.scope = related_scope("alpha");
+        get.trace_id = Some(hidden_id.to_string());
+        let get = parse_json(&tools::telemetry_new(&state, get).await.unwrap());
+        assert!(get["trace"].is_null());
+    }
+
+    let mut traces = telemetry_request("list_traces");
+    traces.scope = related_scope("alpha");
+    traces.limit = Some(1);
+    let traces = parse_json(&tools::telemetry_new(&state, traces).await.unwrap());
+    assert_eq!(traces["count"], 1);
+    assert_eq!(traces["traces"][0]["id"], alpha_trace.id.to_string());
+
+    let mut feedback = telemetry_request("list_feedback");
+    feedback.scope = related_scope("alpha");
+    feedback.limit = Some(1);
+    let feedback = parse_json(&tools::telemetry_new(&state, feedback).await.unwrap());
+    assert_eq!(feedback["count"], 1);
+    assert_eq!(
+        feedback["feedback"][0]["trace_id"],
+        alpha_trace.id.to_string()
+    );
+
+    let mut hidden_feedback = telemetry_request("list_feedback");
+    hidden_feedback.scope = related_scope("alpha");
+    hidden_feedback.trace_id = Some(beta_trace.id.to_string());
+    let hidden_feedback = parse_json(&tools::telemetry_new(&state, hidden_feedback).await.unwrap());
+    assert_eq!(hidden_feedback["count"], 0);
+
+    let mut stats = telemetry_request("stats_by_intent");
+    stats.scope = related_scope("alpha");
+    let stats = parse_json(&tools::telemetry_new(&state, stats).await.unwrap());
+    assert_eq!(stats["count"], 1);
+    assert_eq!(stats["stats"][0]["intent"], "answer_question");
+    assert_eq!(stats["stats"][0]["trace_count"], 1);
+    assert_eq!(stats["stats"][0]["feedback_count"], 1);
+
+    let mut report = telemetry_request("real_session_eval");
+    report.scope = related_scope("alpha");
+    let report = parse_json(&tools::telemetry_new(&state, report).await.unwrap());
+    assert_eq!(report["report"]["trace_count"], 1);
+    assert_eq!(report["report"]["feedback_count"], 1);
+    assert_eq!(report["report"]["applied_filters"]["project"], "alpha");
+
+    let mut exact_task = telemetry_request("list_traces");
+    exact_task.scope = related_task_scope("alpha", "ALPHA-1");
+    let exact_task = parse_json(&tools::telemetry_new(&state, exact_task).await.unwrap());
+    assert_eq!(exact_task["executed"], false);
+    assert_eq!(exact_task["resolved_task"], "alpha-one");
+    assert_eq!(
+        exact_task["omitted_layers"],
+        serde_json::json!(["telemetry"])
+    );
+
+    let mut conflicting_project = telemetry_request("list_traces");
+    conflicting_project.scope = related_scope("alpha");
+    conflicting_project.project = Some("beta".to_string());
+    let error = tools::telemetry_new(&state, conflicting_project)
+        .await
+        .expect_err("conflicting project target should fail");
+    assert!(error.contains("does not match resolved authorization project 'alpha'"));
+
+    let mut global = telemetry_request("list_traces");
+    global.limit = Some(10);
+    let global = parse_json(&tools::telemetry_new(&state, global).await.unwrap());
+    assert_eq!(global["count"], 3);
+    assert_eq!(global["relevance_mode"], "global");
 }
 
 #[tokio::test]
@@ -1477,6 +1660,7 @@ async fn mcp_orient_tags_trace_with_scenario_and_arm() {
             cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
             prompt: Some("continue controlled telemetry eval".to_string()),
             project: Some("engram".to_string()),
+            task: None,
             agent: Some("codex".to_string()),
             external_session_id: Some("codex://threads/orient-test".to_string()),
             intent: Some("verify_decision".to_string()),
@@ -1512,6 +1696,51 @@ async fn mcp_orient_tags_trace_with_scenario_and_arm() {
 }
 
 #[tokio::test]
+async fn mcp_orient_redacts_secret_prompt_in_durable_trace_without_failing() {
+    let (telemetry, memory) = setup_services().await;
+    let state = ToolState::new();
+    state.init_memory(memory).await;
+    state.init_telemetry(telemetry.clone()).await;
+
+    let canary = "Authorization: Bearer synthetic-mcp-trace-secret";
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
+            prompt: Some(canary.to_string()),
+            project: Some("engram".to_string()),
+            task: None,
+            agent: Some("codex".to_string()),
+            external_session_id: Some("codex://threads/secret-redaction-test".to_string()),
+            intent: Some("answer_question".to_string()),
+            scenario_id: Some("secret_redaction".to_string()),
+            arm: Some("engram".to_string()),
+            include_recent_commits: Some(false),
+            limit: Some(10),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("orient should remain available when its prompt contains secret material");
+
+    let json = parse_json(&response);
+    let trace_id = json["trace_id"].as_str().expect("trace_id should be set");
+    let trace = telemetry
+        .get_trace(&engram_core::Id::parse(trace_id).unwrap())
+        .await
+        .expect("trace lookup should run")
+        .expect("trace should exist");
+    let persisted = serde_json::to_string(&trace).expect("trace should serialize");
+
+    assert!(!persisted.contains(canary));
+    assert!(persisted.contains("redacted"));
+    assert!(trace
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("secret-bearing telemetry field")));
+}
+
+#[tokio::test]
 async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     let config = StoreConfig::memory();
     let db = connect_and_init(&config)
@@ -1527,6 +1756,11 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         .init_schema()
         .await
         .expect("failed to initialize memory schema");
+    let work = WorkService::new(db.clone());
+    work.init().await.expect("failed to initialize work schema");
+    work.create_project("engram", None)
+        .await
+        .expect("failed to create scoped search project");
     let memory_item = memory
         .capture_memory(
             MemoryItem::new(
@@ -1544,6 +1778,20 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         )
         .await
         .expect("memory should be captured");
+    let other_project_item = memory
+        .capture_memory(
+            MemoryItem::new(
+                MemoryKind::Decision,
+                "Intent aware telemetry in another project",
+                "MCP search must not silently return this other-project guidance in local mode.",
+                MemoryScope::project("other-project"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            )
+            .with_evidence(EvidenceRef::new(EvidenceKind::ToolCall, "telemetry-test")),
+        )
+        .await
+        .expect("other-project memory should be captured");
     let state = ToolState::new();
     state.init_search(SearchService::new(db)).await;
     state.init_telemetry(telemetry.clone()).await;
@@ -1562,7 +1810,9 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
             session_id: None,
             external_session_id: Some("codex://threads/search-test".to_string()),
             project: Some("engram".to_string()),
+            task: None,
             cwd: None,
+            relevance_mode: Some("local".to_string()),
         },
     )
     .await
@@ -1580,7 +1830,26 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
         memory_result["memory_metadata"]["memory_id"],
         memory_item.id.to_string()
     );
-    assert_eq!(memory_result["memory_metadata"]["review_state"], "reviewed");
+    assert_eq!(
+        memory_result["memory_metadata"]["review_state"],
+        "active_unreviewed"
+    );
+    assert_eq!(memory_result["memory_metadata"]["review_asserted"], true);
+    assert_eq!(memory_result["memory_metadata"]["reviewed"], false);
+    assert_eq!(json["relevance_mode"], "local");
+    assert_eq!(json["memory_scope_enforced"], true);
+    assert_eq!(json["authorization_scope_enforced"], true);
+    assert_eq!(json["scope_enforced_layers"][0], "memory");
+    assert!(json["omitted_layers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|layer| layer == "entity"));
+    assert!(!json["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|result| result["id"] == other_project_item.id.to_string()));
     assert_eq!(
         memory_result["memory_metadata"]["writer"]["harness"],
         "codex"
@@ -1605,6 +1874,74 @@ async fn mcp_search_returns_trace_id_when_telemetry_is_initialized() {
     assert_eq!(trace.arm.as_deref(), Some("memory_items"));
     assert_eq!(trace.query.as_deref(), Some("intent aware telemetry"));
     assert_eq!(trace.project.as_deref(), Some("engram"));
+
+    let global = tools::search(
+        &state,
+        SearchRequest {
+            query: "intent aware telemetry".to_string(),
+            limit: 5,
+            min_score: Some(0.0),
+            layers: Some(vec!["memory".to_string()]),
+            intent: None,
+            scenario_id: None,
+            arm: None,
+            agent: Some("codex".to_string()),
+            session_id: None,
+            external_session_id: None,
+            project: Some("engram".to_string()),
+            task: None,
+            cwd: None,
+            relevance_mode: Some("global".to_string()),
+        },
+    )
+    .await
+    .expect("explicit global search should work");
+    let global = parse_json(&global);
+    assert_eq!(global["relevance_mode"], "global");
+    assert_eq!(global["memory_scope_enforced"], false);
+    assert_eq!(global["authorization_scope_enforced"], false);
+    assert!(global["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|result| result["id"] == other_project_item.id.to_string()));
+
+    let related = tools::search(
+        &state,
+        SearchRequest {
+            query: "intent aware telemetry".to_string(),
+            limit: 5,
+            min_score: Some(0.0),
+            layers: Some(vec!["memory".to_string()]),
+            intent: None,
+            scenario_id: None,
+            arm: None,
+            agent: Some("codex".to_string()),
+            session_id: None,
+            external_session_id: None,
+            project: Some("engram".to_string()),
+            task: None,
+            cwd: None,
+            relevance_mode: Some("related".to_string()),
+        },
+    )
+    .await
+    .expect("related search should enforce project ownership");
+    let related = parse_json(&related);
+    assert_eq!(related["relevance_mode"], "related");
+    assert_eq!(related["authorization_scope_enforced"], true);
+    assert_eq!(related["resolved_project"], "engram");
+    assert_eq!(related["scope_enforced_layers"][0], "memory");
+    assert!(related["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|result| result["id"] == memory_item.id.to_string()));
+    assert!(!related["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|result| result["id"] == other_project_item.id.to_string()));
     assert_eq!(trace.returned_memory_ids, vec![memory_item.id]);
     assert!(trace
         .returned_result_ids

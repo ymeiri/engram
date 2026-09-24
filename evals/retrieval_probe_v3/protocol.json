@@ -1,0 +1,246 @@
+{
+  "schema_version": 3,
+  "probe_id": "engram-retrieval-probe-v3-selective-application",
+  "calibration_protocol": {
+    "path": "../retrieval_probe_v2/protocol.json",
+    "sha256": "6b72ddbb3282659292d6c8de00415a18bb3fab6afe49602acef372d5ca0cccf9"
+  },
+  "calibration_report_sha256": "ee8d8d398c9a2e0d9fff0d5d10253bb4ae4f8d431d28797d42b6d084864f0e67",
+  "top_k": 5,
+  "current_min_score": 0.3,
+  "repetitions": 3,
+  "arms": [
+    "current_lexical",
+    "dense_candidate_top5",
+    "conservative_auto_apply"
+  ],
+  "selector": {
+    "high_similarity": 0.45,
+    "high_margin": 0.08,
+    "margin_min_similarity": 0.2,
+    "agreement_min_similarity": 0.2,
+    "agreement_min_overlap_terms": 1,
+    "lifecycle_policy": "all_query_terms_match_inactive_then_follow_explicit_successor",
+    "opaque_cue_policy": "require_exact_active_scoped_match"
+  },
+  "quality_gates": {
+    "candidate_min_recall_at_k": 0.9,
+    "auto_apply_min_precision": 1.0,
+    "auto_apply_min_quality_coverage": 0.5,
+    "auto_apply_max_unsafe_applications": 0,
+    "max_scope_leakage": 0,
+    "max_stale_results": 0,
+    "max_forbidden_results": 0,
+    "semantic_query_p95_ms": 100
+  },
+  "held_out_queries": [
+    {
+      "id": "heldout-queue-semantic",
+      "category": "semantic_paraphrase",
+      "query": "what powers durable event delivery with bounded retries?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-queue-v2"],
+      "forbidden_keys": ["decision-atlas-queue-v1", "decision-nova-queue"]
+    },
+    {
+      "id": "heldout-http-semantic",
+      "category": "semantic_paraphrase",
+      "query": "which Rust library owns outbound requests and common timeouts?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1", "decision-orbit-http-client", "decision-nova-http-client"]
+    },
+    {
+      "id": "heldout-retry-semantic",
+      "category": "semantic_paraphrase",
+      "query": "what prevents retry storms from synchronizing?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-worker-retries"],
+      "forbidden_keys": ["decision-orbit-worker-retries", "decision-nova-worker-retries"]
+    },
+    {
+      "id": "heldout-bits-semantic",
+      "category": "semantic_paraphrase",
+      "query": "which context links the bitmask investigation to its ticket and dashboard?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["concept-atlas-debug-with-bits"],
+      "forbidden_keys": ["concept-orbit-debug-with-bits", "concept-nova-debug-with-bits"]
+    },
+    {
+      "id": "heldout-database-semantic",
+      "category": "semantic_paraphrase",
+      "query": "where are transactional leases persisted?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-database"],
+      "forbidden_keys": ["decision-orbit-database"]
+    },
+    {
+      "id": "heldout-observability-semantic",
+      "category": "semantic_paraphrase",
+      "query": "what tracing and service-level signals surround each consumer?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-observability"],
+      "forbidden_keys": ["decision-orbit-observability"]
+    },
+    {
+      "id": "heldout-test-partition-semantic",
+      "category": "semantic_paraphrase",
+      "query": "how are service integration suites divided while worker fixtures stay repeatable?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-test-partitioning"],
+      "forbidden_keys": ["decision-nova-test-partitioning"]
+    },
+    {
+      "id": "heldout-deploy-window-semantic",
+      "category": "semantic_paraphrase",
+      "query": "when may production consumers be rolled out?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["rule-atlas-deploy-window"],
+      "forbidden_keys": []
+    },
+    {
+      "id": "heldout-deploy-procedure-semantic",
+      "category": "semantic_paraphrase",
+      "query": "what verified command releases the Atlas queue consumer?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["procedure-atlas-worker-deploy"],
+      "forbidden_keys": ["procedure-orbit-worker-deploy", "procedure-nova-worker-deploy"]
+    },
+    {
+      "id": "heldout-resume-semantic",
+      "category": "semantic_paraphrase",
+      "query": "what work remains on the consumer after resuming?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["plan-atlas-worker-current"],
+      "forbidden_keys": ["plan-atlas-worker-previous", "plan-orbit-current"]
+    },
+    {
+      "id": "heldout-lifecycle-redis",
+      "category": "lifecycle_correction",
+      "query": "Redis",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-queue-v2"],
+      "forbidden_keys": ["decision-atlas-queue-v1"]
+    },
+    {
+      "id": "heldout-lifecycle-isahc",
+      "category": "lifecycle_correction",
+      "query": "isahc HTTP client",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1"]
+    },
+    {
+      "id": "heldout-no-result-android-signing",
+      "category": "no_result",
+      "query": "renew the Android Play signing key",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "heldout-no-result-elasticsearch",
+      "category": "no_result",
+      "query": "tune Elasticsearch shard allocation watermarks",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "heldout-no-result-kafka-mtls",
+      "category": "no_result",
+      "query": "rotate mTLS certificates for Kafka brokers",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "heldout-no-result-graphql-cdn",
+      "category": "no_result",
+      "query": "change GraphQL persisted-query CDN policy",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "heldout-no-result-gpu",
+      "category": "no_result",
+      "query": "debug GPU kernel occupancy regression",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "heldout-no-result-snowflake",
+      "category": "no_result",
+      "query": "set Snowflake warehouse auto-suspend",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "heldout-wrong-scope-nova",
+      "category": "wrong_scope",
+      "query": "use NOVA_QUEUE_CANARY for broker migration",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["decision-nova-queue"],
+      "abstain": true
+    },
+    {
+      "id": "heldout-wrong-scope-orbit",
+      "category": "wrong_scope",
+      "query": "follow ORBIT_TELEMETRY_CANARY dashboards",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["decision-orbit-observability"],
+      "abstain": true
+    }
+  ]
+}

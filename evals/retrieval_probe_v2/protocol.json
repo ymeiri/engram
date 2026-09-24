@@ -1,0 +1,155 @@
+{
+  "schema_version": 2,
+  "probe_id": "engram-retrieval-probe-v2",
+  "base_protocol": {
+    "path": "../retrieval_probe_v1/protocol.json",
+    "sha256": "4d2f7e4ee663822603db26bdef4c50990bc240a483b8b1eabb5007d590bfcd02"
+  },
+  "top_k": 5,
+  "current_min_score": 0.3,
+  "repetitions": 3,
+  "model": {
+    "repository": "Qdrant/all-MiniLM-L6-v2-onnx",
+    "revision": "5f1b8cd78bc4fb444dd171e59b18f3a3af89a079",
+    "dimension": 384,
+    "pooling": "mean",
+    "files": {
+      "config.json": "1b4d8e2a3988377ed8b519a31d8d31025a25f1c5f8606998e8014111438efcd7",
+      "model.onnx": "bbd7b466f6d58e646fdc2bd5fd67b2f5e93c0b687011bd4548c420f7bd46f0c5",
+      "special_tokens_map.json": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a",
+      "tokenizer.json": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+      "tokenizer_config.json": "bd2e06a5b20fd1b13ca988bedc8763d332d242381b4fbc98f8fead4524158f79"
+    }
+  },
+  "arms": [
+    "current_lexical",
+    "dense_all_minilm_l6_v2",
+    "hybrid_rrf",
+    "hybrid_lifecycle",
+    "hybrid_lifecycle_abstain"
+  ],
+  "ranking": {
+    "rrf_k": 60,
+    "lifecycle_successor_boost": 1.0,
+    "dense_min_similarity": 0.35,
+    "opaque_cue_policy": "require_exact_scoped_match"
+  },
+  "quality_gates": {
+    "current_min_recall_at_k": 0.6,
+    "current_min_mrr": 0.55,
+    "candidate_arm": "hybrid_lifecycle_abstain",
+    "candidate_min_recall_at_k": 0.9,
+    "candidate_min_mrr": 0.8,
+    "candidate_min_abstention_accuracy": 1.0,
+    "max_scope_leakage": 0,
+    "max_stale_results": 0,
+    "max_forbidden_results": 0,
+    "semantic_query_p95_ms": 100
+  },
+  "additional_queries": [
+    {
+      "id": "http-client-concept-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "which client do we use for outbound web calls?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1", "decision-orbit-http-client", "decision-nova-http-client"]
+    },
+    {
+      "id": "retry-concept-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "how should delayed attempts be spread out?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-worker-retries"],
+      "forbidden_keys": ["decision-orbit-worker-retries", "decision-nova-worker-retries"]
+    },
+    {
+      "id": "debug-cue-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "where do I look when inspecting packed flags?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["concept-atlas-debug-with-bits"],
+      "forbidden_keys": ["concept-orbit-debug-with-bits", "concept-nova-debug-with-bits"]
+    },
+    {
+      "id": "resume-plan-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "resume the unfinished consumer migration",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["plan-atlas-worker-current"],
+      "forbidden_keys": ["plan-atlas-worker-previous", "plan-orbit-current"]
+    },
+    {
+      "id": "superseded-http-choice",
+      "category": "lifecycle_correction",
+      "query": "isahc",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1"]
+    },
+    {
+      "id": "superseded-procedure-version",
+      "category": "lifecycle_correction",
+      "query": "tool version 2 integration",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["procedure-atlas-integration-v3"],
+      "forbidden_keys": ["procedure-atlas-integration-v2"]
+    },
+    {
+      "id": "wrong-project-nova-canary",
+      "category": "wrong_scope",
+      "query": "reuse the web client NOVA_HTTP_CANARY",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["decision-nova-http-client"],
+      "abstain": true
+    },
+    {
+      "id": "no-result-ios-signing",
+      "category": "no_result",
+      "query": "rotate iOS distribution signing certificates",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "no-result-terraform-billing",
+      "category": "no_result",
+      "query": "reconcile Terraform billing-account drift",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    },
+    {
+      "id": "no-result-pii-retention",
+      "category": "no_result",
+      "query": "customer PII retention and erasure policy",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    }
+  ]
+}

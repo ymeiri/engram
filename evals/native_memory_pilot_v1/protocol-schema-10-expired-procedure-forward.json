@@ -1,0 +1,118 @@
+{
+  "schema_version": 10,
+  "pilot_id": "native-memory-pilot-v1-expired-procedure-forward",
+  "cases": [
+    {
+      "id": "learned_procedure_expired",
+      "teaching_cwd": "fixture://atlas/main/services/worker",
+      "evaluation_cwd": "fixture://moved/arbitrary-name/services/worker",
+      "evaluation_prompt": "Handle the context probe using durable procedure memory only when it is applicable and still fresh for the current checkout.",
+      "expected_repository_remote": "https://github.com/acme/atlas",
+      "expected_project": null,
+      "expected_component": "queue-worker",
+      "expected_first_action": "inspect_procedure_prerequisites",
+      "expected_outcome": "abstain",
+      "condition_evidence_target": "toolchain.toml",
+      "condition_evidence_output_contains": "version = \"3\"",
+      "procedure_expiry_seconds": 300,
+      "component_evidence_target": "services/worker/component.json",
+      "component_evidence_output_contains": "queue-worker",
+      "procedure": {
+        "context_key": "procedure-atlas-context-probe-v1",
+        "task": "run the Atlas context probe",
+        "failed_commands": [
+          "./bin/context-probe --channel amber"
+        ],
+        "command": "./bin/context-probe --channel cobalt",
+        "expected_exit_code": 0,
+        "expected_output_contains": "ATLAS_CONTEXT_PROBE_OK",
+        "conditions": {
+          "tool.version": "3"
+        },
+        "prerequisite_sources": {
+          "tool.version": {
+            "format": "toml",
+            "relative_path": "toolchain.toml",
+            "key_path": [
+              "tools",
+              "version"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "arms": [
+    {
+      "id": "codex_native_memory",
+      "host": "codex",
+      "memory_layer": "native"
+    },
+    {
+      "id": "codex_lean_engram",
+      "host": "codex",
+      "memory_layer": "engram"
+    },
+    {
+      "id": "codex_engram_plus_native",
+      "host": "codex",
+      "memory_layer": "both"
+    },
+    {
+      "id": "claude_native_memory",
+      "host": "claude_code",
+      "memory_layer": "native"
+    },
+    {
+      "id": "claude_lean_engram",
+      "host": "claude_code",
+      "memory_layer": "engram"
+    },
+    {
+      "id": "claude_engram_plus_native",
+      "host": "claude_code",
+      "memory_layer": "both"
+    }
+  ],
+  "repetitions": 1,
+  "run_order": [
+    {
+      "case_id": "learned_procedure_expired",
+      "arm": "claude_engram_plus_native",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_expired",
+      "arm": "codex_native_memory",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_expired",
+      "arm": "claude_lean_engram",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_expired",
+      "arm": "codex_engram_plus_native",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_expired",
+      "arm": "claude_native_memory",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_expired",
+      "arm": "codex_lean_engram",
+      "repetition": 1
+    }
+  ],
+  "codex_min_idle_hours": 1,
+  "codex_authentication_mode": "chatgpt_browser_keyring",
+  "claude_budget_cents": 50,
+  "claude_prior_spend_microusd": 6752912,
+  "claude_authorized_ceiling_cents": 750,
+  "claude_model": "claude-haiku-4-5",
+  "claude_max_turns": 12,
+  "requires_explicit_execution_approval": true
+}

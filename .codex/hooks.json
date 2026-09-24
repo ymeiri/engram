@@ -1,0 +1,19 @@
+{
+  "description": "# engram:harness-adapter:v1\nDeterministic, advisory Engram orientation and verified-procedure startup context.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "project_root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; project_hook=\"${project_root:+$project_root/.codex/hooks/engram-session-start.sh}\"; home_hook=\"${CODEX_HOME:-${HOME:-}/.codex}/hooks/engram-session-start.sh\"; if [ -n \"$project_hook\" ] && [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; if [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; printf '%s\\n' 'Engram Codex SessionStart hook skipped: generated hook script was not found at the repository root or under CODEX_HOME.' >&2; exit 0",
+            "timeout": 10,
+            "statusMessage": "Loading Engram startup context",
+            "additionalContextLimit": 3000
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "assessment_date": "2026-09-18",
+  "checkout": "/Users/yuval.meiri/projects/engram",
+  "head": "4e2b4c1e0047633bbc0a640c1966e60774925f82",
+  "dirty_at_start": true,
+  "initial_git_status_entries": 82,
+  "product_code_changes_by_assessment": false,
+  "fresh_provider_model_runs": 0,
+  "historical_reaudit": {
+    "source_root": "/private/tmp/engram-yagni-final.Lua81h",
+    "original_report_sha256": "0753539e023a8b6c050b4df6fe47de43fa43e1cb78308ab3163f217213a7b223",
+    "original_plan_sha256": "eeaa8f649dc2d83f27862c575872452b7b666bc7985df3894627192e4f4d08f2",
+    "exact_json_regrade_match": true,
+    "all_eight_raw_command_traces_inspected": true,
+    "cost": {
+      "codex_context_skill": {
+        "passed": 4,
+        "total": 4,
+        "elapsed_ms": 154558,
+        "uncached_input_plus_output_tokens": 68295,
+        "output_tokens": 3996
+      },
+      "codex_context_skill_plus_kernel": {
+        "passed": 4,
+        "total": 4,
+        "elapsed_ms": 267224,
+        "uncached_input_plus_output_tokens": 139014,
+        "output_tokens": 6851
+      }
+    },
+    "script": "/Users/yuval.meiri/projects/engram/evals/yagni_safety_kernel_v1/run.py",
+    "method": "Imported original run.py and called audit(original effective plan, new output). Separately parsed completed command_execution events, inspected every shell command, and checked exact direct procedure execution plus exit/marker. This is a reanalysis, not new provider sampling."
+  },
+  "fresh_lean_probe": {
+    "binary": "/private/tmp/engram-yagni-build.hC766A/debug/engram-eval",
+    "binary_sha256": "7c760c4527d62991360f8317b00bf3b788483f6c8b0fbefa72788c0b5ee72b67",
+    "binary_build_date": "2026-09-16",
+    "binary_current_dirty_source_attested": false,
+    "environment": {
+      "DYLD_LIBRARY_PATH": "/private/tmp/engram-yagni-onnx.4XEOyr/onnxruntime-osx-arm64-1.20.0/lib"
+    },
+    "command": [
+      "/private/tmp/engram-yagni-build.hC766A/debug/engram-eval",
+      "probe-lean-orient",
+      "--protocol",
+      "evals/lean_orient_probe_v1/protocol.json",
+      "--output",
+      "/var/folders/86/rnl5p3bn04164bt630mhg3tr0000gp/T/engram-value-audit-20260918-krfd7a8i/lean"
+    ],
+    "protocol_sha256": "2474e56d896be24979619091ed00d70a44ae1b3e13146ca919c26e34a4221760",
+    "fixture_revision": "99662dadc9e5bde6c6bab915bfd926e166433ad5a8a4066d4d651dc3264c10f8",
+    "run_count": 35,
+    "latency_p50_ms": 74,
+    "latency_p95_ms": 84,
+    "packet_p50_bytes": 3737,
+    "packet_p95_bytes": 4512,
+    "passed": true,
+    "meaning": "Fresh in-process mechanism measurements from an existing binary, not provider latency or task success."
+  },
+  "procedure_v4_attempt": {
+    "status": "refused_before_execution",
+    "reason": "frozen source hash mismatch",
+    "source": "engram-index/src/memory.rs",
+    "expected_sha256": "c83733ada921a056a69f62ce775089f39e95ff2b8307a02cc80fdd55e53791e8",
+    "observed_sha256": "c984207a9ed6c9ec14dfc00583364f527a8fdf191a770189664f89203b04b203",
+    "protocol_modified": false
+  },
+  "current_source_tests": {
+    "command": "cargo test -p engram-tests --test memory_tests --target-dir /private/tmp/engram-yagni-build.hC766A",
+    "environment": {
+      "ORT_LIB_LOCATION": "/private/tmp/engram-yagni-onnx.4XEOyr/onnxruntime-osx-arm64-1.20.0/lib",
+      "ORT_PREFER_DYNAMIC_LINK": "1",
+      "DYLD_LIBRARY_PATH": "/private/tmp/engram-yagni-onnx.4XEOyr/onnxruntime-osx-arm64-1.20.0/lib",
+      "CARGO_PROFILE_TEST_DEBUG": "0",
+      "CARGO_PROFILE_DEV_DEBUG": "0"
+    },
+    "passed": 53,
+    "failed": 0,
+    "ignored": 0,
+    "exit_code": 0,
+    "nested_restart_worker": {
+      "passed": 1,
+      "already_included_in_outer_suite_claim": true
+    },
+    "initial_attempt": "Default ONNX binary download returned HTTP 403; retried using already present ONNX Runtime 1.20.0 dynamic library. No source fix required.",
+    "log": "memory-tests.log"
+  },
+  "live_mcp_observation": {
+    "orient_trace_id": "01a0b5f6-e0f8-7261-982f-a05e2dfe816e",
+    "repository": "github.com/ymeiri/engram",
+    "project_status": "requires_confirmation",
+    "project_candidates": [
+      "engram",
+      "engram-open-source"
+    ],
+    "procedure_match_abstained": true,
+    "interpretation": "One observed identity ambiguity; not a measured failure rate."
+  },
+  "schema15_report_reaudit": {
+    "path": "/Users/yuval.meiri/.engram/evals/native-memory-pilot/required-host-action-bounded-query-repeated-exact-bash-20260905-04/run/comparison-report.json",
+    "sha256": "ac43cace5b008eb9281c1036a9f2b1a4f84a947bd7aae4644357766c2204ed92",
+    "verified_by_parallel_auditor": true,
+    "treatment_full_contract": "12/12",
+    "native_full_contract": "0/6",
+    "all_arms_safe_abstention": "18/18",
+    "all_matched_outcome_correct_deltas": 0
+  },
+  "source_sha256_at_assessment": {
+    "engram-core/src/memory.rs": "9da20a6905d65995f539b30187790e3e66eeac12d3ac02b8a920a5f44b5e1ccb",
+    "engram-index/src/memory.rs": "c984207a9ed6c9ec14dfc00583364f527a8fdf191a770189664f89203b04b203",
+    "engram-index/src/memory_ranker.rs": "2f664db201e11db0c917973b4fb2b5b525b429630fce619f4a4ddb33ada3076a",
+    "engram-index/src/harness.rs": "092437afd98a8c2fab548dcfb484dc8888a4c4e928553159a90b4da2fca0253d",
+    "engram-index/src/search.rs": "5173fe5530c697607fa0299159a41929a86df4d57bf46c54207e35bd2498236c",
+    "engram-store/src/repos/memory.rs": "3a662c41515e009c4a46d1f61e2c5609d8cbb0245cad5f0ea40c9851cb1f143e",
+    "engram-mcp/src/tools.rs": "465ca1c507f41e77a6d3594510fe034bfd20e94439a0fb0676c99390d9c6486d",
+    "engram-tests/tests/memory_tests.rs": "61bbaa632029dee90b025a4aa7dfc442b1e738935ce1b9d1ed6aebf4bd306a44",
+    "engram-eval/src/lean_probe.rs": "4cfd2187237d811c81136764269579e1bc6facd36a1ac62f34ffe62cda914353",
+    "engram-eval/src/fixture.rs": "60f4d305e7209d3dc7a2016dfbff6e31de1b3bd2b6993e412084fa6429dd66cb",
+    "evals/yagni_safety_kernel_v1/run.py": "b0f4fe97aca2831fa19129c5415830f7c0361b781fab45e8268bf1b3c6949014"
+  },
+  "artifact_sha256": {
+    "historical-trace-audit.json": "0b1738005c00bd8ffcef5da49a6990ec173f941365894e38987eb7191c74939d",
+    "historical-regrade.json": "e2f354550d893ea64885de9f3d17b3a5402a3edb4f2df17175b05ee975d975d2",
+    "fresh-lean-report.json": "c3fbb91d4ca33482ab0d08d590a23d9af1e721d66ebb2213650b9ade44a3132f",
+    "memory-tests.log": "40b0dd7f5a774c505d2f6c29bf81863904fa186b608547fb38009f3ff1567628"
+  },
+  "future_coding_pilot": {
+    "status": "design_only_not_executed",
+    "reader_runs": 24,
+    "distinct_tasks": 4,
+    "arms": 3,
+    "variants": 2,
+    "teaching_and_activation_runs": "Additional, separately accounted",
+    "primary_comparison": "native + shared indexed files versus native + Engram",
+    "primary_metric": "hidden-test verified final patch correctness"
+  }
+}

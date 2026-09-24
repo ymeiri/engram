@@ -1,0 +1,14 @@
+[build]
+target-dir = "/private/tmp/engram-stage-b-20260906"
+
+[target.aarch64-unknown-linux-musl]
+linker = "/opt/homebrew/bin/aarch64-linux-musl-gcc"
+ar = "/opt/homebrew/bin/aarch64-linux-musl-ar"
+rustflags = [
+    "--cfg",
+    "getrandom_backend=\"linux_getrandom\"",
+    "-C",
+    "relocation-model=pie",
+    "-C",
+    "link-arg=-static-pie",
+]

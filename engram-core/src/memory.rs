@@ -32,6 +32,8 @@ pub enum MemoryKind {
     SessionInsight,
     /// A handoff or progress marker.
     Handoff,
+    /// A condition-aware, evidence-verified engineering procedure or gotcha.
+    Procedure,
     /// Custom kind.
     Custom(String),
 }
@@ -49,6 +51,7 @@ impl std::fmt::Display for MemoryKind {
             Self::UserFact => write!(f, "user_fact"),
             Self::SessionInsight => write!(f, "session_insight"),
             Self::Handoff => write!(f, "handoff"),
+            Self::Procedure => write!(f, "procedure"),
             Self::Custom(value) => write!(f, "{}", value),
         }
     }
@@ -69,8 +72,152 @@ impl MemoryKind {
             "user_fact" | "userfact" => Self::UserFact,
             "session_insight" | "sessioninsight" => Self::SessionInsight,
             "handoff" => Self::Handoff,
+            "procedure" | "gotcha" | "runbook" => Self::Procedure,
             other => Self::Custom(other.to_string()),
         }
+    }
+}
+
+/// A deterministic checkout-local source for a procedure prerequisite.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "format", rename_all = "snake_case")]
+pub enum ProcedurePrerequisiteSource {
+    /// A scalar selected from a Git-tracked TOML file in the current checkout.
+    Toml {
+        /// Safe checkout-relative path to the TOML file.
+        relative_path: String,
+        /// Non-empty sequence of TOML table/key names leading to one scalar value.
+        key_path: Vec<String>,
+    },
+}
+
+/// An exact environmental prerequisite for a procedure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProcedurePrerequisite {
+    /// Stable condition key, such as `cargo.version` or `os`.
+    pub key: String,
+    /// Exact expected value after Unicode/case normalization by the caller.
+    pub expected: String,
+    /// Optional trusted source that Engram resolves from the current checkout at match time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<ProcedurePrerequisiteSource>,
+}
+
+impl ProcedurePrerequisite {
+    /// Create a prerequisite.
+    #[must_use]
+    pub fn new(key: impl Into<String>, expected: impl Into<String>) -> Self {
+        Self {
+            key: key.into(),
+            expected: expected.into(),
+            source: None,
+        }
+    }
+
+    /// Attach a deterministic checkout-local source.
+    #[must_use]
+    pub fn with_source(mut self, source: ProcedurePrerequisiteSource) -> Self {
+        self.source = Some(source);
+        self
+    }
+}
+
+/// Proof-at-use metadata for a verified procedure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProcedureVerification {
+    /// Verification command recorded in the receipt.
+    pub command: String,
+    /// Required process exit code.
+    pub expected_exit_code: i32,
+    /// Required marker in the receipt's captured output.
+    pub expected_output_contains: String,
+    /// Receipt file path, absolute or relative to the repository checkout root.
+    pub evidence_path: Option<String>,
+    /// SHA-256 of the verified receipt file.
+    pub evidence_sha256: Option<String>,
+    /// Time the receipt was verified by Engram.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub verified_at: Option<OffsetDateTime>,
+}
+
+impl ProcedureVerification {
+    /// Create unverified verification requirements for a procedure candidate.
+    #[must_use]
+    pub fn new(
+        command: impl Into<String>,
+        expected_exit_code: i32,
+        expected_output_contains: impl Into<String>,
+    ) -> Self {
+        Self {
+            command: command.into(),
+            expected_exit_code,
+            expected_output_contains: expected_output_contains.into(),
+            evidence_path: None,
+            evidence_sha256: None,
+            verified_at: None,
+        }
+    }
+}
+
+/// Structured procedure card retained separately from raw failed trajectories.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProcedureCard {
+    /// Task or triggering cue for this procedure.
+    pub task: String,
+    /// Exact caller-observed conditions required before applying it.
+    #[serde(default)]
+    pub prerequisites: Vec<ProcedurePrerequisite>,
+    /// Exact successful command sequence.
+    pub commands: Vec<String>,
+    /// Known failure signatures that led to this procedure.
+    #[serde(default)]
+    pub failure_signatures: Vec<String>,
+    /// How successful completion is verified.
+    pub verification: ProcedureVerification,
+    /// Expiry after which the procedure must abstain until reverified.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub expires_at: Option<OffsetDateTime>,
+}
+
+impl ProcedureCard {
+    /// Create a procedure candidate.
+    #[must_use]
+    pub fn new(
+        task: impl Into<String>,
+        commands: Vec<String>,
+        verification: ProcedureVerification,
+    ) -> Self {
+        Self {
+            task: task.into(),
+            prerequisites: Vec::new(),
+            commands,
+            failure_signatures: Vec::new(),
+            verification,
+            expires_at: None,
+        }
+    }
+
+    /// Add an exact prerequisite.
+    #[must_use]
+    pub fn with_prerequisite(mut self, prerequisite: ProcedurePrerequisite) -> Self {
+        self.prerequisites.push(prerequisite);
+        self
+    }
+
+    /// Add a known failure signature.
+    #[must_use]
+    pub fn with_failure_signature(mut self, signature: impl Into<String>) -> Self {
+        self.failure_signatures.push(signature.into());
+        self
+    }
+
+    /// Whether this card currently carries complete, unexpired receipt proof.
+    #[must_use]
+    pub fn is_verified_at(&self, now: OffsetDateTime) -> bool {
+        self.verification.verified_at.is_some()
+            && self.verification.evidence_path.is_some()
+            && self.verification.evidence_sha256.is_some()
+            && self.expires_at.map_or(true, |expires_at| expires_at > now)
     }
 }
 
@@ -422,13 +569,133 @@ impl MemoryStatus {
     }
 }
 
-/// Review state derived from lifecycle status and available evidence.
+/// Lifecycle status for a server-minted correction proposal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CorrectionProposalStatus {
+    /// The proposed replacement is awaiting an operator decision. It is immutable except for the
+    /// dedicated atomic P0-to-P1 verification transition used by procedure corrections.
+    Pending,
+    /// The exact proposal pair was applied atomically.
+    Applied,
+}
+
+impl std::fmt::Display for CorrectionProposalStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pending => write!(f, "pending"),
+            Self::Applied => write!(f, "applied"),
+        }
+    }
+}
+
+/// Typed, server-minted link between an obsolete item and a proposed replacement.
+///
+/// The proposal is not reviewer authority. Its digest binds the exact pending pair so an operator
+/// can reject a changed proposal instead of silently applying it. Pair identity, kind, and scope
+/// never change; a procedure replacement may gain receipt proof only through the atomic P0-to-P1
+/// verification transition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorrectionProposal {
+    /// Stable proposal identifier.
+    pub id: Id,
+    /// Active item the proposal would supersede.
+    pub obsolete_id: Id,
+    /// `needs_review` replacement created with the proposal. Procedure proof may change only in
+    /// the dedicated atomic P0-to-P1 verification transition.
+    pub replacement_id: Id,
+    /// Server-derived kind shared by the pair.
+    pub memory_kind: MemoryKind,
+    /// Server-derived scope shared by the pair.
+    pub scope: MemoryScope,
+    /// SHA-256 over the canonical pending pair.
+    ///
+    /// For a procedure correction this is the proposal-time P0 digest until Engram verifies the
+    /// inactive replacement's receipt, then the verification transition rotates it to P1. The
+    /// proposal remains pending throughout that transition.
+    pub canonical_digest: String,
+    /// Frozen canonicalization version used for both pending and applied pair digests.
+    #[serde(default = "default_correction_digest_schema_version")]
+    pub digest_schema_version: u32,
+    /// SHA-256 over the exact applied pair, used to make completed retries fail closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_digest: Option<String>,
+    /// Proposal lifecycle state.
+    pub status: CorrectionProposalStatus,
+    /// Agent provenance recorded when the proposal was created.
+    pub proposer: WriterProvenance,
+    /// Proposal creation timestamp.
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    /// Time the exact pair was applied, if it was applied.
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub applied_at: Option<OffsetDateTime>,
+}
+
+impl CorrectionProposal {
+    /// Create a pending proposal for an exact memory pair.
+    #[must_use]
+    pub fn new(
+        obsolete_id: Id,
+        replacement_id: Id,
+        memory_kind: MemoryKind,
+        scope: MemoryScope,
+        canonical_digest: impl Into<String>,
+        proposer: WriterProvenance,
+    ) -> Self {
+        Self {
+            id: Id::new(),
+            obsolete_id,
+            replacement_id,
+            memory_kind,
+            scope,
+            canonical_digest: canonical_digest.into(),
+            digest_schema_version: default_correction_digest_schema_version(),
+            applied_digest: None,
+            status: CorrectionProposalStatus::Pending,
+            proposer,
+            created_at: OffsetDateTime::now_utc(),
+            applied_at: None,
+        }
+    }
+
+    /// Mark a proposal applied without changing its immutable pair or digest.
+    #[must_use]
+    pub fn with_applied(mut self) -> Self {
+        self.status = CorrectionProposalStatus::Applied;
+        self.applied_at = Some(OffsetDateTime::now_utc());
+        self
+    }
+
+    /// Bind the exact persisted pair produced by applying this proposal.
+    #[must_use]
+    pub fn with_applied_digest(mut self, digest: impl Into<String>) -> Self {
+        self.applied_digest = Some(digest.into());
+        self
+    }
+
+    /// Rotate the canonical digest after an atomic, still-inactive proposal transition.
+    #[must_use]
+    pub fn with_canonical_digest(mut self, digest: impl Into<String>) -> Self {
+        self.canonical_digest = digest.into();
+        self
+    }
+}
+
+const fn default_correction_digest_schema_version() -> u32 {
+    1
+}
+
+/// Review state derived from lifecycle status and verified reviewer authority.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryReviewState {
-    /// Active memory with explicit manual-review evidence.
+    /// Active memory with review evidence from a verified authority.
+    ///
+    /// Engram does not currently expose a verified reviewer-authority channel, so caller-supplied
+    /// `manual_review` evidence never produces this state.
     Reviewed,
-    /// Active memory without explicit manual-review evidence.
+    /// Active memory without verified reviewer authority.
     ActiveUnreviewed,
     /// Memory captured but awaiting review.
     NeedsReview,
@@ -535,7 +802,10 @@ pub enum EvidenceKind {
     Document,
     /// A prior observation.
     Observation,
-    /// Manual human review.
+    /// Unverified assertion that a manual review occurred.
+    ///
+    /// This legacy evidence kind remains serializable for auditability but does not confer reviewed
+    /// trust. A caller-controlled field cannot prove human authority.
     ManualReview,
     /// Custom evidence.
     Custom(String),
@@ -629,7 +899,7 @@ pub struct MemoryTrustMetadata {
     pub scope: MemoryScope,
     /// Lifecycle status.
     pub status: MemoryStatus,
-    /// Review state derived from status and manual-review evidence.
+    /// Review state derived from lifecycle status and verified reviewer authority.
     pub review_state: MemoryReviewState,
     /// Freshness signal derived from review_after.
     pub freshness: MemoryFreshness,
@@ -643,8 +913,10 @@ pub struct MemoryTrustMetadata {
     pub has_evidence: bool,
     /// Evidence kinds attached to the memory.
     pub evidence_kinds: Vec<EvidenceKind>,
-    /// Whether the memory has manual-review evidence.
+    /// Whether the memory has verified reviewer authority.
     pub reviewed: bool,
+    /// Whether the memory contains an unverified manual-review assertion.
+    pub review_asserted: bool,
     /// Whether review_after is due.
     pub review_due: bool,
     /// Last update timestamp.
@@ -664,10 +936,13 @@ impl MemoryTrustMetadata {
     /// Build metadata for a memory item using a supplied current timestamp.
     #[must_use]
     pub fn from_item(item: &MemoryItem, now: OffsetDateTime) -> Self {
-        let reviewed = item
+        let review_asserted = item
             .evidence
             .iter()
             .any(|evidence| matches!(&evidence.kind, EvidenceKind::ManualReview));
+        // There is intentionally no caller-controlled path to verified reviewer authority. Keep
+        // manual-review claims visible for auditability without upgrading their trust state.
+        let reviewed = false;
         let review_state = match item.status {
             MemoryStatus::Active if reviewed => MemoryReviewState::Reviewed,
             MemoryStatus::Active => MemoryReviewState::ActiveUnreviewed,
@@ -695,6 +970,7 @@ impl MemoryTrustMetadata {
                 .map(|evidence| evidence.kind.clone())
                 .collect(),
             reviewed,
+            review_asserted,
             review_due: freshness == MemoryFreshness::ReviewDue,
             updated_at: item.updated_at,
             last_used_at: item.last_used_at,
@@ -749,6 +1025,15 @@ pub struct MemoryItem {
     /// Archive metadata when the item has been archived.
     #[serde(default)]
     pub archive: Option<ArchiveMetadata>,
+    /// Structured procedure details when kind is `procedure`.
+    #[serde(default)]
+    pub procedure: Option<ProcedureCard>,
+    /// Server-minted proposal link while this item is an inactive correction replacement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correction_proposal_id: Option<Id>,
+    /// Server-minted proposal lock while this active item is the obsolete half of a pending pair.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_correction_proposal_id: Option<Id>,
 }
 
 impl MemoryItem {
@@ -783,6 +1068,9 @@ impl MemoryItem {
             last_used_at: None,
             review_after: None,
             archive: None,
+            procedure: None,
+            correction_proposal_id: None,
+            pending_correction_proposal_id: None,
         }
     }
 
@@ -831,6 +1119,14 @@ impl MemoryItem {
     #[must_use]
     pub fn with_superseded_item(mut self, item_id: Id) -> Self {
         self.supersedes.push(item_id);
+        self.updated_at = OffsetDateTime::now_utc();
+        self
+    }
+
+    /// Attach structured procedure details.
+    #[must_use]
+    pub fn with_procedure(mut self, procedure: ProcedureCard) -> Self {
+        self.procedure = Some(procedure);
         self.updated_at = OffsetDateTime::now_utc();
         self
     }
@@ -1161,5 +1457,80 @@ mod tests {
         assert_eq!(value["type"], "repository");
         assert_eq!(value["remote_url"], "git@github.com:ymeiri/engram.git");
         assert_eq!(value["local_path"], "/Users/yuval.meiri/projects/engram");
+    }
+
+    #[test]
+    fn caller_supplied_manual_review_is_an_assertion_not_authority() {
+        let item = MemoryItem::new(
+            MemoryKind::Decision,
+            "Claimed review",
+            "This item contains an unverified review assertion.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            codex_writer(),
+        )
+        .with_evidence(EvidenceRef::new(
+            EvidenceKind::ManualReview,
+            "claimed-reviewer",
+        ));
+
+        let trust = item.trust_metadata();
+
+        assert!(trust.review_asserted);
+        assert!(!trust.reviewed);
+        assert_eq!(trust.review_state, MemoryReviewState::ActiveUnreviewed);
+    }
+
+    #[test]
+    fn procedure_card_requires_complete_unexpired_receipt_proof() {
+        let now = OffsetDateTime::now_utc();
+        let mut card = ProcedureCard::new(
+            "run queue integration tests",
+            vec!["cargo test -p queue-tests".to_string()],
+            ProcedureVerification::new("cargo test -p queue-tests", 0, "test result: ok"),
+        )
+        .with_prerequisite(
+            ProcedurePrerequisite::new("cargo.version", "1.80.0").with_source(
+                ProcedurePrerequisiteSource::Toml {
+                    relative_path: "rust-toolchain.toml".to_string(),
+                    key_path: vec!["toolchain".to_string(), "channel".to_string()],
+                },
+            ),
+        )
+        .with_failure_signature("unknown option --all");
+
+        assert!(!card.is_verified_at(now));
+        card.verification.evidence_path = Some(".engram/proofs/queue.json".to_string());
+        card.verification.evidence_sha256 = Some("abc123".to_string());
+        card.verification.verified_at = Some(now);
+        card.expires_at = Some(now + Duration::days(30));
+        assert!(card.is_verified_at(now));
+        assert!(!card.is_verified_at(now + Duration::days(31)));
+
+        let item = MemoryItem::new(
+            MemoryKind::Procedure,
+            "Queue integration test procedure",
+            "Use the verified queue integration command for this toolchain.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            codex_writer(),
+        )
+        .with_procedure(card);
+        let round_trip: MemoryItem =
+            serde_json::from_value(serde_json::to_value(&item).unwrap()).unwrap();
+        assert_eq!(round_trip.procedure, item.procedure);
+    }
+
+    #[test]
+    fn legacy_prerequisite_without_source_remains_deserializable() {
+        let prerequisite: ProcedurePrerequisite = serde_json::from_value(serde_json::json!({
+            "key": "cargo.version",
+            "expected": "1.80.0"
+        }))
+        .unwrap();
+
+        assert_eq!(prerequisite.key, "cargo.version");
+        assert_eq!(prerequisite.expected, "1.80.0");
+        assert!(prerequisite.source.is_none());
     }
 }

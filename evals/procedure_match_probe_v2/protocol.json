@@ -1,0 +1,19 @@
+{
+  "schema_version": 2,
+  "probe_id": "engram-procedure-match-probe-v2-scope-correction",
+  "baseline_protocol": {
+    "path": "../procedure_match_probe_v1/protocol.json",
+    "sha256": "f21be9e903f020da909d0b82c38dd293460a0d57b8e8782e5a13eaa7413a88f1"
+  },
+  "trigger_results": {
+    "path": "../procedure_match_probe_v1/RESULTS_2026-08-08.md",
+    "sha256": "ff02d49205b76ef85f19fdd2adf1861584786734a0c6e0039844029421fccb4f"
+  },
+  "source_overrides": [
+    {
+      "path": "../../engram-index/src/memory.rs",
+      "sha256": "a510dcd7a71cb2ffb1299a872a10701bd476a73d462e742d2c138c24a2fb0ad6"
+    }
+  ],
+  "correction_policy": "fail_closed_on_material_project_repository_ambiguity"
+}

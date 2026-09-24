@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "probe_id": "engram-procedure-match-probe-v4-bounded-no-result-actions",
+  "baseline_protocol": {
+    "path": "../procedure_match_probe_v3/protocol.json",
+    "sha256": "bb1bfca815efba9dc7fd31ddd806f92b8cb4ad416a4f8c7aa8f8e3c17f99bf09"
+  },
+  "trigger_results": {
+    "path": "../procedure_match_probe_v3/RESULTS_2026-08-08.md",
+    "sha256": "89fd1084e14e8b6e861ada59ef7ad172cb6829ca4321e08815a59325c3d59dea"
+  },
+  "source_overrides": [
+    {
+      "path": "../../engram-index/src/memory.rs",
+      "sha256": "c83733ada921a056a69f62ce775089f39e95ff2b8307a02cc80fdd55e53791e8"
+    },
+    {
+      "path": "../../engram-core/src/memory.rs",
+      "sha256": "cbc06dad6b7d64448148e81e8d40b40a3305eff28b322d19c9752b0286e6ee06"
+    },
+    {
+      "path": "../../engram-eval/src/fixture.rs",
+      "sha256": "0f7e8b8c0a26362883f4cb983e9315ae23f09eba97f9a2d8469ea2eef91f03c7"
+    }
+  ],
+  "correction_policy": "attest_current_procedure_boundary_and_bounded_no_result_actions",
+  "repetitions": 5
+}

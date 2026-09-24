@@ -1,6 +1,7 @@
 //! Agent obligation repository.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::redact_serialized_secret_material;
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::obligation::{AgentObligation, AgentObligationStatus};
@@ -52,7 +53,7 @@ impl ObligationRepo {
                 DEFINE INDEX IF NOT EXISTS idx_agent_obligation_updated ON agent_obligation FIELDS updated_at;
                 "#,
             )
-            .await?;
+            .await?.check()?;
 
         info!("Obligation schema initialized");
         Ok(())
@@ -60,6 +61,7 @@ impl ObligationRepo {
 
     /// Save an obligation.
     pub async fn save_obligation(&self, obligation: &AgentObligation) -> StoreResult<()> {
+        let (obligation, _) = redact_serialized_secret_material("agent obligation", obligation)?;
         debug!("Saving obligation: {}", obligation.id);
 
         self.db
@@ -77,10 +79,10 @@ impl ObligationRepo {
                 "#,
             )
             .bind(("id", obligation.id.to_string()))
-            .bind(("obligation", to_json(obligation)?))
+            .bind(("obligation", to_json(&obligation)?))
             .bind(("kind_key", obligation.kind.to_string()))
             .bind(("status_key", obligation.status.to_string()))
-            .bind(("scope_key", scope_key(obligation)))
+            .bind(("scope_key", scope_key(&obligation)))
             .bind(("harness_key", obligation.writer.harness.to_string()))
             .bind((
                 "session_id",
@@ -88,7 +90,8 @@ impl ObligationRepo {
             ))
             .bind(("created_at", format_rfc3339(obligation.created_at)?))
             .bind(("updated_at", format_rfc3339(obligation.updated_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -106,7 +109,8 @@ impl ObligationRepo {
                 "#,
             )
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<AgentObligationRecord> = result.take(0)?;
         records
@@ -138,8 +142,9 @@ impl ObligationRepo {
                 .query(query)
                 .bind(("status", status.to_string()))
                 .await?
+                .check()?
         } else {
-            self.db.query(query).await?
+            self.db.query(query).await?.check()?
         };
 
         decode_obligations(result.take(0)?)
@@ -248,6 +253,26 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(open.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn obligation_writes_redact_secrets_without_failing() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-obligation-secret";
+        let obligation = AgentObligation::new(
+            AgentObligationKind::SourceReading,
+            "Inspect secret-bearing failure",
+            canary,
+            MemoryScope::project("engram"),
+            AgentObligationTrigger::new("tool_failure", canary),
+            writer(),
+        );
+
+        repo.save_obligation(&obligation).await.unwrap();
+        let stored = repo.get_obligation(&obligation.id).await.unwrap().unwrap();
+        let persisted = serde_json::to_string(&stored).unwrap();
+        assert!(!persisted.contains(canary));
+        assert!(persisted.contains("redacted"));
     }
 
     #[tokio::test]

@@ -14,7 +14,7 @@
 //!
 //! ## Example
 //!
-//! ```ignore
+//! ```no_run
 //! use engram_mcp::server::EngramServer;
 //! use engram_index::DocumentService;
 //! use engram_store::{connect_and_init, StoreConfig};

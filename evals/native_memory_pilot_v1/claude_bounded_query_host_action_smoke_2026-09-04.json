@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "forward_only_non_preregistered_diagnostic",
+  "claim_boundary": "One isolated Claude Code repetition demonstrates that a bounded task-focused retrieval query and the required operation-evidence host read can coexist. It does not establish repeated reliability, portability, or flagship completion.",
+  "host": {
+    "name": "claude_code",
+    "version": "2.1.260",
+    "model": "claude-haiku-4-5"
+  },
+  "candidate": {
+    "binary_path": "/private/tmp/engram-claude-bounded-query-final-target-20260904-01/debug/engram",
+    "binary_sha256": "830005b6f93b5130cb5b37c79cf8c29207ce11c9628e136c1fdc3cb7eff0487a",
+    "adapter_path": "/private/tmp/engram-claude-bounded-query-smoke-20260904-02/adapter/.claude/commands/engram-memory-session.md",
+    "adapter_sha256": "6cbd8060ec1318e3773d4f49ce695b65cf304af6da422b586a3541a137a45808",
+    "source_hashes": {
+      "engram-index/src/memory.rs": "226fe40ab0c292ba2234b84900d580314fbe78ee5bf856ccabdf80de4ed2ecd4",
+      "engram-index/src/harness.rs": "092437afd98a8c2fab548dcfb484dc8888a4c4e928553159a90b4da2fca0253d",
+      "engram-mcp/src/tools.rs": "47b4bb190eaec316c186d36fcf11789065436311a4418b093807a70cd7efd1bc",
+      "engram-cli/src/proxy.rs": "45ecb1709dd84cba3252af379b9f4c4920e60d983bcb86313374f5494c9d578e"
+    }
+  },
+  "trace": {
+    "path": "/private/tmp/engram-claude-bounded-query-smoke-20260904-02/claude-smoke-trace.jsonl",
+    "sha256": "3f798309f7b5c68c52143af7c7d0c6741850a8ddf9e6d30677d71156eef14573"
+  },
+  "fixture": {
+    "cwd": "/private/tmp/engram-claude-bounded-query-smoke-20260904-02/fixture/orbit/main/services/worker",
+    "repository": "orbit",
+    "component": "queue-worker",
+    "project_status": "requires_confirmation",
+    "operation_evidence_path": "runbooks/deploy-worker.md",
+    "operation_evidence_resolved_path": "/private/tmp/engram-claude-bounded-query-smoke-20260904-02/fixture/orbit/main/runbooks/deploy-worker.md",
+    "operation_evidence_sha256": "a5a568ef2c46b1f883cba756bcd2d70bde46d0390031e2e47757f9fcbeb64983",
+    "expected_marker": "ORBIT_ONLY_CANARY"
+  },
+  "query_contract": {
+    "max_characters": 512,
+    "observed_query": "Handle the worker procedure",
+    "observed_query_characters": 27,
+    "observed_query_sha256": "ffe85477f45384bcfc274d8ebee341233b487262e52e157745ed29d506473523",
+    "operation_terms_preserved": [
+      "worker",
+      "procedure"
+    ],
+    "unrelated_evaluation_instructions_omitted": true,
+    "used_as_authorization": false
+  },
+  "observations": {
+    "tool_sequence": [
+      "mcp__engram__memory:procedure_match",
+      "Read:operation_evidence_resolved_path"
+    ],
+    "procedure_match_calls": 1,
+    "orient_calls": 0,
+    "repo_calls": 0,
+    "host_reads": 1,
+    "exact_resolved_path_read": true,
+    "expected_marker_observed": true,
+    "safe_abstention": true,
+    "procedure_command_executed": false,
+    "wrong_scope_atlas_context_observed": false,
+    "network_tool_calls": 0,
+    "native_memory_write_attempts": 0,
+    "permission_denials": []
+  },
+  "provider_result": {
+    "success": true,
+    "num_turns": 3,
+    "cost_usd": 0.0274039,
+    "duration_ms": 22972,
+    "duration_api_ms": 24278,
+    "usage": {
+      "input_tokens": 28,
+      "cache_creation_input_tokens": 12384,
+      "cache_read_input_tokens": 21649,
+      "output_tokens": 1734,
+      "thinking_tokens": 1144
+    }
+  },
+  "verification": {
+    "engram_index_tests_passed": 275,
+    "engram_index_tests_ignored": 1,
+    "engram_cli_tests_passed": 57,
+    "engram_mcp_tests_passed": 36,
+    "strict_clippy_passed": true,
+    "format_check_passed": true,
+    "diff_check_passed": true,
+    "repository_target_debug_absent": true
+  },
+  "limitations": [
+    "The run was diagnostic rather than preregistered.",
+    "Only one Claude Code repetition and one wrong-scope case ran.",
+    "No Codex comparison or native-memory control ran.",
+    "The candidate was not installed into live adapters or settings.",
+    "The token, latency, and cost difference from the prior diagnostic is descriptive and confounded by normal provider variability."
+  ]
+}

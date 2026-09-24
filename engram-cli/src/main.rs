@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! # engram CLI
 //!
 //! Command-line interface for managing the engram knowledge system.
@@ -55,11 +57,12 @@ use engram_index::{
     TelemetryService, ToolIntelService, WorkService,
 };
 use engram_mcp::EngramServer;
-use engram_store::{connect_and_init, StoreConfig};
+use engram_store::{connect_and_init, StorageBackend, StoreConfig};
+use serde::Serialize;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -127,6 +130,43 @@ enum Commands {
         /// Project-specific mode (isolated data store per project)
         #[arg(long)]
         project: Option<String>,
+
+        /// MCP tool surface for stdio clients (defaults to full for compatibility)
+        #[arg(long, value_enum)]
+        profile: Option<McpToolProfileArg>,
+
+        /// Connect to one exact existing project daemon without start, repair, or control cleanup.
+        /// This is not a read-only operation: /health commits and removes a storage canary, MCP
+        /// tools may mutate within --profile, and proxy shutdown deletes its MCP session.
+        #[arg(
+            long,
+            requires_all = ["expected_daemon_port", "expected_daemon_pid", "project", "profile"],
+            conflicts_with_all = ["http", "memory", "remote", "username", "password", "port"]
+        )]
+        connect_existing_only: bool,
+
+        /// Exact existing daemon port required by --connect-existing-only
+        #[arg(long, requires = "connect_existing_only")]
+        expected_daemon_port: Option<u16>,
+
+        /// Exact existing daemon PID required by --connect-existing-only
+        #[arg(long, requires = "connect_existing_only")]
+        expected_daemon_pid: Option<u32>,
+    },
+
+    /// Attest the exact MCP contract embedded in this executable
+    Contract {
+        /// MCP tool surface to attest
+        #[arg(long, value_enum, default_value = "agent")]
+        profile: McpToolProfileArg,
+
+        /// Emit machine-readable JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Verify the agent profile through a real isolated stdio MCP handshake
+        #[arg(long)]
+        verify_runtime: bool,
     },
 
     /// Manage the engram daemon
@@ -158,6 +198,10 @@ enum Commands {
         /// Skip interactive confirmation; requires --agent
         #[arg(long)]
         yes: bool,
+
+        /// Lifecycle enforcement profile
+        #[arg(long, value_enum, default_value = "soft")]
+        enforcement: HarnessEnforcementArg,
 
         /// Claude Code settings target when writing settings
         #[arg(long, value_parser = parse_harness_settings_target, default_value = "settings.json")]
@@ -675,6 +719,48 @@ enum Commands {
     },
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum McpToolProfileArg {
+    /// Six compact, action-restricted tools for normal coding-agent sessions
+    Agent,
+    /// Complete administrative, migration, and diagnostics tool surface
+    Full,
+}
+
+impl From<McpToolProfileArg> for proxy::ToolProfile {
+    fn from(value: McpToolProfileArg) -> Self {
+        match value {
+            McpToolProfileArg::Agent => Self::Agent,
+            McpToolProfileArg::Full => Self::Full,
+        }
+    }
+}
+
+impl McpToolProfileArg {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Agent => "agent",
+            Self::Full => "full",
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct McpContractAttestation {
+    schema_version: u32,
+    cli_version: &'static str,
+    health_schema_version: u32,
+    mcp_contract_version: u32,
+    mcp_protocol_version: &'static str,
+    profile: &'static str,
+    mcp_tool_count: usize,
+    mcp_tools_sha256: String,
+    profile_instructions_sha256: Option<String>,
+    effective_runtime: Option<proxy::AgentProfileRuntimeAttestation>,
+    executable_path: String,
+    executable_sha256: String,
+}
+
 /// Export format for document orphan recovery reports.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum OrphanExportFormat {
@@ -1159,6 +1245,10 @@ enum DaemonCommands {
         /// Project name (for project-specific daemon)
         #[arg(long)]
         project: Option<String>,
+
+        /// Emit machine-readable runtime attestation JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Start the daemon (if not running)
@@ -1697,6 +1787,32 @@ enum MemoryCommands {
         json: bool,
     },
 
+    /// Verify a procedure candidate from a machine-readable success receipt
+    VerifyProcedure {
+        /// Exact procedure memory item ID
+        id: String,
+
+        /// JSON receipt containing command, exit_code, output, and observed conditions
+        #[arg(long)]
+        receipt: String,
+
+        /// Days until the procedure must be reverified (defaults to 30)
+        #[arg(long, conflicts_with = "expires_in_seconds")]
+        expires_in_days: Option<i64>,
+
+        /// Seconds until the procedure must be reverified
+        #[arg(long, conflicts_with = "expires_in_days")]
+        expires_in_seconds: Option<i64>,
+
+        /// Confirm activation of this exact procedure and receipt
+        #[arg(long)]
+        confirm: bool,
+
+        /// Print the verified procedure as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Print a Memory OS cursor for later changes-since calls
     Cursor {
         /// Print cursor as JSON
@@ -1798,6 +1914,28 @@ enum MemoryCommands {
         archived_by: Option<String>,
 
         /// Print item as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Permanently forget a memory item and purge linked internal projections
+    Forget {
+        /// Exact memory item ID
+        id: String,
+
+        /// Reason for irreversible deletion
+        #[arg(long)]
+        reason: String,
+
+        /// Confirm irreversible deletion of the exact ID
+        #[arg(long)]
+        confirm: bool,
+
+        /// Recompile this generated vault and remove obsolete Engram pages
+        #[arg(long)]
+        vault_path: Option<String>,
+
+        /// Print result as JSON
         #[arg(long)]
         json: bool,
     },
@@ -2053,7 +2191,7 @@ enum HarnessCommands {
         harness: HarnessKindArg,
 
         /// Lifecycle enforcement profile
-        #[arg(long, value_enum, default_value = "graduated")]
+        #[arg(long, value_enum, default_value = "soft")]
         enforcement: HarnessEnforcementArg,
 
         /// Install root, defaults to home directory
@@ -2063,6 +2201,10 @@ enum HarnessCommands {
         /// MCP tool name observed by the client; repeat to verify required tools
         #[arg(long = "observed-mcp-tool", value_name = "TOOL")]
         observed_mcp_tools: Vec<String>,
+
+        /// Resolve and attest the host's Engram MCP configuration without launching Engram
+        #[arg(long)]
+        attest_host_configuration: bool,
 
         /// Print report as JSON
         #[arg(long)]
@@ -2076,7 +2218,7 @@ enum HarnessCommands {
         harness: HarnessKindArg,
 
         /// Lifecycle enforcement profile
-        #[arg(long, value_enum, default_value = "graduated")]
+        #[arg(long, value_enum, default_value = "soft")]
         enforcement: HarnessEnforcementArg,
 
         /// Install root, defaults to home directory
@@ -2086,6 +2228,10 @@ enum HarnessCommands {
         /// MCP tool name observed by the client; repeat to verify required tools
         #[arg(long = "observed-mcp-tool", value_name = "TOOL")]
         observed_mcp_tools: Vec<String>,
+
+        /// Resolve and attest the host's Engram MCP configuration without launching Engram
+        #[arg(long)]
+        attest_host_configuration: bool,
 
         /// Print report as JSON
         #[arg(long)]
@@ -2099,7 +2245,7 @@ enum HarnessCommands {
         harness: HarnessKindArg,
 
         /// Lifecycle enforcement profile
-        #[arg(long, value_enum, default_value = "graduated")]
+        #[arg(long, value_enum, default_value = "soft")]
         enforcement: HarnessEnforcementArg,
 
         /// Render a specific adapter by name instead of the policy JSON
@@ -2118,7 +2264,7 @@ enum HarnessCommands {
         harness: HarnessKindArg,
 
         /// Lifecycle enforcement profile
-        #[arg(long, value_enum, default_value = "graduated")]
+        #[arg(long, value_enum, default_value = "soft")]
         enforcement: HarnessEnforcementArg,
 
         /// Install root, defaults to home directory
@@ -2149,7 +2295,7 @@ enum HarnessCommands {
         harness: HarnessKindArg,
 
         /// Lifecycle enforcement profile
-        #[arg(long, value_enum, default_value = "graduated")]
+        #[arg(long, value_enum, default_value = "soft")]
         enforcement: HarnessEnforcementArg,
 
         /// Hook event name, e.g. UserPromptSubmit, PostToolUseFailure, Stop
@@ -2966,12 +3112,7 @@ fn scoped_store_config(project: Option<&str>, data_dir: Option<&str>) -> Result<
     }
 
     if let Some(project) = project {
-        let base = dirs::home_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join(".engram")
-            .join("projects")
-            .join(project)
-            .join("data");
+        let base = StoreConfig::project_data_dir(project);
         std::fs::create_dir_all(&base)?;
         return Ok(StoreConfig::rocksdb(base));
     }
@@ -3015,7 +3156,9 @@ async fn handle_harness_hook_via_daemon(
     };
 
     let arguments = harness_hook_daemon_arguments(hook_event);
-    let response = proxy::call_tool_once(info.port, "harness", arguments).await?;
+    let auth_token = daemon::read_daemon_token(&daemon_config)?;
+    let response =
+        proxy::call_tool_once(info.port, auth_token.as_deref(), "harness", arguments).await?;
     extract_mcp_tool_json_text(response).map(Some)
 }
 
@@ -3049,6 +3192,7 @@ fn harness_hook_daemon_arguments(hook_event: &HarnessHookEvent) -> serde_json::V
         "tool_input_command",
         &hook_event.tool_input_command,
     );
+    insert_optional_string(&mut map, "tool_input_action", &hook_event.tool_input_action);
     insert_optional_string(&mut map, "file_path", &hook_event.file_path);
     insert_optional_string(
         &mut map,
@@ -3109,7 +3253,9 @@ async fn call_daemon_tool_if_available(
         _ => return Ok(None),
     };
 
-    let response = proxy::call_tool_once(info.port, tool_name, arguments).await?;
+    let auth_token = daemon::read_daemon_token(&daemon_config)?;
+    let response =
+        proxy::call_tool_once(info.port, auth_token.as_deref(), tool_name, arguments).await?;
     extract_mcp_tool_json_text(response).map(Some)
 }
 
@@ -3165,6 +3311,10 @@ fn lint_daemon_arguments(command: &LintCommands) -> serde_json::Value {
             insert_optional_usize(&mut map, "limit", *limit);
         }
     }
+    map.insert(
+        "scope".to_string(),
+        serde_json::json!({ "relevance_mode": "global" }),
+    );
     serde_json::Value::Object(map)
 }
 
@@ -3346,6 +3496,15 @@ fn obligation_daemon_arguments(
             map.insert("actor".to_string(), serde_json::json!(actor));
         }
     }
+    if matches!(
+        command,
+        ObligationCommands::List { .. } | ObligationCommands::Doctor { .. }
+    ) {
+        map.insert(
+            "scope".to_string(),
+            serde_json::json!({ "relevance_mode": "global" }),
+        );
+    }
     Ok(serde_json::Value::Object(map))
 }
 
@@ -3373,7 +3532,12 @@ fn print_obligation_command_result(
             }
         }
         ObligationCommands::List { json, .. } => {
-            let obligations: Vec<AgentObligation> = serde_json::from_value(response)?;
+            let obligations: Vec<AgentObligation> =
+                if let Some(obligations) = response.get("obligations").cloned() {
+                    serde_json::from_value(obligations)?
+                } else {
+                    serde_json::from_value(response)?
+                };
             if *json {
                 println!("{}", serde_json::to_string_pretty(&obligations)?);
             } else {
@@ -3427,6 +3591,12 @@ fn vault_daemon_arguments(command: &VaultCommands) -> serde_json::Value {
             map.insert("vault_path".to_string(), serde_json::json!(path));
             map.insert("page".to_string(), serde_json::json!(page));
         }
+    }
+    if !matches!(command, VaultCommands::Init { .. }) {
+        map.insert(
+            "scope".to_string(),
+            serde_json::json!({ "relevance_mode": "global" }),
+        );
     }
     serde_json::Value::Object(map)
 }
@@ -3557,12 +3727,44 @@ fn validate_serve_options(
     password: Option<&str>,
     http: bool,
     port: Option<u16>,
+    connection: ServeConnectionOptions<'_>,
 ) -> Result<()> {
     if memory && remote.is_some() {
         anyhow::bail!("--memory and --remote cannot be used together");
     }
     if remote.is_none() && (username.is_some() || password.is_some()) {
         anyhow::bail!("--username and --password require --remote");
+    }
+    if connection.connect_existing_only {
+        if http {
+            anyhow::bail!("--connect-existing-only cannot be used with --http");
+        }
+        if match connection.project {
+            Some(project) => project.trim().is_empty(),
+            None => true,
+        } {
+            anyhow::bail!("--connect-existing-only requires an explicit nonempty --project");
+        }
+        daemon::validate_exact_project_name(connection.project.expect("checked project"))?;
+        if connection.profile.is_none() {
+            anyhow::bail!("--connect-existing-only requires an explicit --profile");
+        }
+        if connection.expected_port.is_none() || connection.expected_pid.is_none() {
+            anyhow::bail!(
+                "--connect-existing-only requires both --expected-daemon-port and \
+                 --expected-daemon-pid"
+            );
+        }
+        if connection.expected_port == Some(0) {
+            anyhow::bail!("--expected-daemon-port must be nonzero");
+        }
+        if connection.expected_pid == Some(0) {
+            anyhow::bail!("--expected-daemon-pid must be nonzero");
+        }
+    } else if connection.expected_port.is_some() || connection.expected_pid.is_some() {
+        anyhow::bail!(
+            "--expected-daemon-port and --expected-daemon-pid require --connect-existing-only"
+        );
     }
     if !http {
         if memory {
@@ -3582,8 +3784,19 @@ fn validate_serve_options(
                 "--port is only honored with --http; omit it for the default stdio proxy"
             );
         }
+    } else if connection.profile.is_some() {
+        anyhow::bail!("--profile configures the stdio proxy and cannot be used with --http");
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ServeConnectionOptions<'a> {
+    project: Option<&'a str>,
+    profile: Option<McpToolProfileArg>,
+    connect_existing_only: bool,
+    expected_port: Option<u16>,
+    expected_pid: Option<u32>,
 }
 
 fn cwd_or_current(cwd: Option<String>) -> Result<std::path::PathBuf> {
@@ -3778,6 +3991,74 @@ fn print_harness_status(report: &HarnessStatusReport) {
             report.mcp_tools.required_tools.len()
         );
     }
+    if report.host.checked {
+        println!(
+            "Host: {}",
+            report
+                .host
+                .version
+                .as_deref()
+                .unwrap_or("version unavailable")
+        );
+        if let Some(path) = &report.host.executable_path {
+            println!("  Executable: {path}");
+        }
+        if let Some(hash) = &report.host.executable_sha256 {
+            println!("  SHA-256:    {hash}");
+        }
+        println!(
+            "  Effective configuration verified: {}",
+            report.host.effective_configuration_verified
+        );
+    }
+    if report.mcp_server.checked {
+        println!("Configured Engram MCP server:");
+        println!(
+            "  Evidence:   {}",
+            report
+                .mcp_server
+                .evidence_kind
+                .as_deref()
+                .unwrap_or("unknown")
+        );
+        if let Some(source) = &report.mcp_server.source {
+            println!("  Source:     {source}");
+        }
+        if let Some(command) = &report.mcp_server.command {
+            println!("  Command:    {command}");
+        }
+        if !report.mcp_server.args.is_empty() {
+            println!("  Args:       {}", report.mcp_server.args.join(" "));
+        }
+        if !report.mcp_server.env_keys.is_empty() {
+            println!(
+                "  Environment keys (values redacted): {}",
+                report.mcp_server.env_keys.join(", ")
+            );
+        }
+        if let Some(path) = &report.mcp_server.executable_path {
+            println!("  Executable: {path}");
+        }
+        if let Some(hash) = &report.mcp_server.executable_sha256 {
+            println!("  SHA-256:    {hash}");
+        }
+        println!(
+            "  Agent profile launch configured: {}",
+            report.mcp_server.agent_profile_launch_configured
+        );
+        println!(
+            "  Resolved configuration verified: {}",
+            report.mcp_server.resolved_configuration_verified
+        );
+        println!(
+            "  Running host loaded verified: {}",
+            report.mcp_server.running_host_loaded_verified
+        );
+        println!(
+            "  Live runtime verified: {}",
+            report.mcp_server.live_runtime_verified
+        );
+    }
     println!("Adapters:");
     for adapter in &report.adapters {
         let marker = match adapter.status {
@@ -3787,6 +4068,10 @@ fn print_harness_status(report: &HarnessStatusReport) {
             HarnessAdapterStatus::UserOwned => "user-owned",
         };
         println!("  - {} [{}] {}", adapter.name, marker, adapter.path);
+        println!("    Expected SHA-256: {}", adapter.expected_sha256);
+        if let Some(hash) = &adapter.actual_sha256 {
+            println!("    Actual SHA-256:   {hash}");
+        }
     }
     if !report.missing_mcp_tools.is_empty() {
         println!("Missing MCP tools: {}", report.missing_mcp_tools.join(", "));
@@ -3930,7 +4215,7 @@ fn claude_mcp_add_engram(binary: &Path) -> std::io::Result<std::process::Output>
     Command::new("claude")
         .args(["mcp", "add", "-s", "user", "engram", "--"])
         .arg(binary)
-        .arg("serve")
+        .args(["serve", "--profile", "agent"])
         .output()
 }
 
@@ -4041,25 +4326,25 @@ fn print_claude_mcp_registration(status: &ClaudeMcpRegistrationStatus) {
     match status {
         ClaudeMcpRegistrationStatus::DryRun { binary } => {
             println!(
-                "Claude MCP server: will register `engram` -> {} serve",
+                "Claude MCP server: will register `engram` -> {} serve --profile agent",
                 binary.display()
             );
         }
         ClaudeMcpRegistrationStatus::Added { binary } => {
             println!(
-                "Claude MCP server: registered `engram` -> {} serve",
+                "Claude MCP server: registered `engram` -> {} serve --profile agent",
                 binary.display()
             );
         }
         ClaudeMcpRegistrationStatus::Updated { binary } => {
             println!(
-                "Claude MCP server: updated `engram` -> {} serve",
+                "Claude MCP server: updated `engram` -> {} serve --profile agent",
                 binary.display()
             );
         }
         ClaudeMcpRegistrationStatus::ClaudeCliMissing { binary } => {
             println!(
-                "Warning: Claude Code CLI was not found; could not register MCP server `engram` -> {} serve.",
+                "Warning: Claude Code CLI was not found; could not register MCP server `engram` -> {} serve --profile agent.",
                 binary.display()
             );
             println!(
@@ -4068,7 +4353,7 @@ fn print_claude_mcp_registration(status: &ClaudeMcpRegistrationStatus) {
         }
         ClaudeMcpRegistrationStatus::Failed { binary, message } => {
             println!(
-                "Warning: could not register Claude MCP server `engram` -> {} serve: {}",
+                "Warning: could not register Claude MCP server `engram` -> {} serve --profile agent: {}",
                 binary.display(),
                 message
             );
@@ -4105,6 +4390,7 @@ fn run_setup(
     root: Option<String>,
     write: bool,
     yes: bool,
+    enforcement: HarnessEnforcementArg,
     settings_target: HarnessSettingsTarget,
 ) -> Result<()> {
     let agent = resolve_setup_agent(agent, yes)?;
@@ -4122,7 +4408,7 @@ fn run_setup(
             write,
             adopt_user_owned: false,
             settings_target,
-            enforcement_profile: HarnessEnforcementProfile::default(),
+            enforcement_profile: enforcement.into(),
         },
     )?;
     print_harness_install(&report);
@@ -4312,6 +4598,30 @@ fn print_memory_items(title: &str, items: &[MemoryItem]) {
             println!("    Tags:    {}", item.tags.join(", "));
         }
         println!("    Content: {}", item.content.replace('\n', " "));
+        if let Some(procedure) = &item.procedure {
+            println!("    Task:    {}", procedure.task);
+            println!("    Commands:");
+            for command in &procedure.commands {
+                println!("      - {command}");
+            }
+            if !procedure.prerequisites.is_empty() {
+                println!("    Prerequisites:");
+                for prerequisite in &procedure.prerequisites {
+                    println!("      - {}={}", prerequisite.key, prerequisite.expected);
+                }
+            }
+            let verification = &procedure.verification;
+            println!(
+                "    Receipt: {}",
+                verification
+                    .evidence_path
+                    .as_deref()
+                    .unwrap_or("unverified")
+            );
+            if let Some(expires_at) = procedure.expires_at {
+                println!("    Expires: {expires_at}");
+            }
+        }
     }
 }
 
@@ -6539,6 +6849,39 @@ fn setup_logging(verbose: bool) {
         .init();
 }
 
+fn mcp_contract_attestation(
+    profile: McpToolProfileArg,
+    executable_path: &Path,
+) -> Result<McpContractAttestation> {
+    let executable_path = executable_path.canonicalize()?;
+    let (mcp_tool_count, mcp_tools_sha256, profile_instructions_sha256) = match profile {
+        McpToolProfileArg::Agent => (
+            proxy::agent_profile_tool_contract().len(),
+            proxy::agent_profile_tools_sha256(),
+            Some(proxy::agent_profile_instructions_sha256()),
+        ),
+        McpToolProfileArg::Full => (
+            engram_mcp::server::mcp_tool_count(),
+            engram_mcp::server::mcp_tools_sha256().to_string(),
+            None,
+        ),
+    };
+    Ok(McpContractAttestation {
+        schema_version: 4,
+        cli_version: env!("CARGO_PKG_VERSION"),
+        health_schema_version: engram_mcp::server::DAEMON_HEALTH_SCHEMA_VERSION,
+        mcp_contract_version: engram_mcp::server::MCP_CONTRACT_VERSION,
+        mcp_protocol_version: engram_mcp::server::MCP_PROTOCOL_VERSION,
+        profile: profile.label(),
+        mcp_tool_count,
+        mcp_tools_sha256,
+        profile_instructions_sha256,
+        effective_runtime: None,
+        executable_sha256: daemon::executable_sha256(&executable_path)?,
+        executable_path: executable_path.display().to_string(),
+    })
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -6566,6 +6909,82 @@ async fn main() -> Result<()> {
             println!("  3. Open your agent and ask it to run `orient` for this project.");
         }
 
+        Commands::Contract {
+            profile,
+            json,
+            verify_runtime,
+        } => {
+            let mut report = mcp_contract_attestation(profile, &std::env::current_exe()?)?;
+            if verify_runtime {
+                if !matches!(profile, McpToolProfileArg::Agent) {
+                    anyhow::bail!("--verify-runtime currently requires --profile agent");
+                }
+                let runtime =
+                    proxy::probe_agent_profile_runtime(Path::new(&report.executable_path)).await?;
+                if runtime.mcp_tool_count != report.mcp_tool_count
+                    || runtime.mcp_tools_sha256 != report.mcp_tools_sha256
+                    || Some(runtime.profile_instructions_sha256.as_str())
+                        != report.profile_instructions_sha256.as_deref()
+                    || !runtime.restricted_tool_rejected
+                    || !runtime.review_authority_rejected
+                    || !runtime.correction_proposal_path_verified
+                    || !runtime.direct_correction_unavailable
+                    || !runtime.correction_apply_unavailable
+                    || !runtime.correction_verification_unavailable
+                    || !runtime.correction_inspection_unavailable
+                {
+                    anyhow::bail!(
+                        "effective stdio agent profile differs from the embedded contract"
+                    );
+                }
+                report.effective_runtime = Some(runtime);
+            }
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("Engram MCP contract: {}", report.profile);
+                println!("  CLI version: {}", report.cli_version);
+                println!("  Tool count: {}", report.mcp_tool_count);
+                println!("  Tools SHA-256: {}", report.mcp_tools_sha256);
+                if let Some(hash) = &report.profile_instructions_sha256 {
+                    println!("  Instructions SHA-256: {hash}");
+                }
+                if let Some(runtime) = &report.effective_runtime {
+                    println!("  Effective stdio runtime verified: {}", runtime.verified);
+                    println!(
+                        "  Restricted administrative tool rejected: {}",
+                        runtime.restricted_tool_rejected
+                    );
+                    println!(
+                        "  Caller-asserted review authority rejected: {}",
+                        runtime.review_authority_rejected
+                    );
+                    println!(
+                        "  Inactive correction proposal path verified: {}",
+                        runtime.correction_proposal_path_verified
+                    );
+                    println!(
+                        "  Direct correction unavailable to agent profile: {}",
+                        runtime.direct_correction_unavailable
+                    );
+                    println!(
+                        "  Correction apply unavailable to agent profile: {}",
+                        runtime.correction_apply_unavailable
+                    );
+                    println!(
+                        "  Correction procedure verification unavailable to agent profile: {}",
+                        runtime.correction_verification_unavailable
+                    );
+                    println!(
+                        "  Correction proposal inspection unavailable to agent profile: {}",
+                        runtime.correction_inspection_unavailable
+                    );
+                }
+                println!("  Executable: {}", report.executable_path);
+                println!("  Executable SHA-256: {}", report.executable_sha256);
+            }
+        }
+
         Commands::Serve {
             memory,
             remote,
@@ -6574,6 +6993,10 @@ async fn main() -> Result<()> {
             http,
             port,
             project,
+            profile,
+            connect_existing_only,
+            expected_daemon_port,
+            expected_daemon_pid,
         } => {
             validate_serve_options(
                 memory,
@@ -6582,6 +7005,13 @@ async fn main() -> Result<()> {
                 password.as_deref(),
                 http,
                 port,
+                ServeConnectionOptions {
+                    project: project.as_deref(),
+                    profile,
+                    connect_existing_only,
+                    expected_port: expected_daemon_port,
+                    expected_pid: expected_daemon_pid,
+                },
             )?;
 
             // If http mode is requested, run the HTTP server directly (daemon mode)
@@ -6605,12 +7035,7 @@ async fn main() -> Result<()> {
                     (false, None) => {
                         // Use project-specific or global data directory
                         let data_dir = if let Some(proj) = &project {
-                            let base = dirs::home_dir()
-                                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                                .join(".engram")
-                                .join("projects")
-                                .join(proj)
-                                .join("data");
+                            let base = StoreConfig::project_data_dir(proj);
                             std::fs::create_dir_all(&base)?;
                             base
                         } else {
@@ -6625,6 +7050,10 @@ async fn main() -> Result<()> {
                 };
 
                 let db = connect_and_init(&store_config).await?;
+                let storage_path = match &store_config.backend {
+                    StorageBackend::RocksDb(path) => Some(path.clone()),
+                    StorageBackend::Memory | StorageBackend::Remote { .. } => None,
+                };
 
                 // Create entity service (Layer 1) - with embeddings for vector search
                 let entity_service = EntityService::with_defaults(db.clone())?;
@@ -6686,7 +7115,9 @@ async fn main() -> Result<()> {
                 telemetry_service.init_schema().await?;
 
                 // Start MCP HTTP server
-                let server = EngramServer::new();
+                let server = storage_path.map_or_else(EngramServer::new, |path| {
+                    EngramServer::new().with_storage_path(path)
+                });
                 server.init_entity(entity_service).await;
                 server.init_session(session_service).await;
                 server.init(doc_service).await;
@@ -6715,19 +7146,37 @@ async fn main() -> Result<()> {
                     daemon::DaemonConfig::global()
                 };
 
-                // Ensure daemon is running (starts one if needed)
-                let daemon_port = daemon::ensure_daemon_running(&daemon_config).await?;
+                let (daemon_port, auth_token) = if connect_existing_only {
+                    let transport = daemon::connect_existing_exact_transport(
+                        &daemon_config,
+                        expected_daemon_port.expect("validated exact daemon port"),
+                        expected_daemon_pid.expect("validated exact daemon PID"),
+                    )
+                    .await?;
+                    let (port, auth_token) = transport.into_proxy_parts();
+                    (port, Some(auth_token))
+                } else {
+                    // Default mode may reuse or start the configured daemon. Unresolved identity
+                    // controls fail closed and require explicit operator recovery.
+                    let daemon_port = daemon::ensure_daemon_running(&daemon_config).await?;
+                    let auth_token = daemon::read_daemon_token(&daemon_config)?;
+                    (daemon_port, auth_token)
+                };
                 info!("Connected to daemon on port {}", daemon_port);
 
-                // Run the stdio-to-HTTP proxy
-                let proxy_config = proxy::ProxyConfig::new(daemon_port);
+                // Run the stdio-to-HTTP proxy. Connect-only mode never falls back to daemon start,
+                // repair, or control cleanup. Its health canary, selected MCP profile, and session
+                // deletion still have the bounded side effects documented on the flag.
+                let tool_profile = profile.unwrap_or(McpToolProfileArg::Full).into();
+                let proxy_config = proxy::ProxyConfig::new(daemon_port, auth_token)
+                    .with_tool_profile(tool_profile);
                 proxy::run_proxy(proxy_config).await?;
             }
         }
 
         Commands::Daemon { command } => {
             match command {
-                DaemonCommands::Status { project } => {
+                DaemonCommands::Status { project, json } => {
                     let config = match project {
                         Some(p) => daemon::DaemonConfig::project(p),
                         None => daemon::DaemonConfig::global(),
@@ -6735,8 +7184,56 @@ async fn main() -> Result<()> {
 
                     match daemon::get_daemon_info(&config).await {
                         Ok(info) => {
+                            let current_exe = std::env::current_exe().ok();
+                            let current_exe_sha256 = current_exe
+                                .as_deref()
+                                .and_then(|path| daemon::executable_sha256(path).ok());
+                            let current_version = env!("CARGO_PKG_VERSION");
+                            let current_build_sha = option_env!("ENGRAM_BUILD_SHA");
+                            let current_mcp_tools_sha256 = engram_mcp::server::mcp_tools_sha256();
+                            let attestation = daemon::attest_daemon_runtime(
+                                &info,
+                                current_exe.as_deref(),
+                                current_version,
+                                current_build_sha,
+                            );
+                            if json {
+                                let report = serde_json::json!({
+                                    "schema_version": 1,
+                                    "running": true,
+                                    "ready": info.healthy,
+                                    "project": &config.project,
+                                    "port": info.port,
+                                    "pid": info.pid,
+                                    "live": &info.health,
+                                    "spawn": &info.metadata,
+                                    "current": {
+                                        "executable_path": current_exe
+                                            .as_ref()
+                                            .map(|path| path.display().to_string()),
+                                        "executable_sha256": &current_exe_sha256,
+                                        "version": current_version,
+                                        "build_sha": current_build_sha,
+                                        "health_schema_version":
+                                            engram_mcp::server::DAEMON_HEALTH_SCHEMA_VERSION,
+                                        "mcp_contract_version":
+                                            engram_mcp::server::MCP_CONTRACT_VERSION,
+                                        "mcp_tools_sha256": &current_mcp_tools_sha256,
+                                        "mcp_protocol_version":
+                                            engram_mcp::server::MCP_PROTOCOL_VERSION,
+                                    },
+                                    "runtime_attestation": {
+                                        "status": attestation.status.to_string(),
+                                        "warnings": &attestation.warnings,
+                                    },
+                                });
+                                println!("{}", serde_json::to_string_pretty(&report)?);
+                                return Ok(());
+                            }
                             let status = if info.healthy {
-                                "🟢 running"
+                                "🟢 running and writable"
+                            } else if info.health.is_some() {
+                                "🟡 responding but not writable"
                             } else {
                                 "🔴 not responding"
                             };
@@ -6746,30 +7243,52 @@ async fn main() -> Result<()> {
                             if let Some(project) = &config.project {
                                 println!("  Project: {}", project);
                             }
-                            let current_exe = std::env::current_exe().ok();
-                            let current_version = env!("CARGO_PKG_VERSION");
+                            println!("  Current MCP tools SHA-256: {}", current_mcp_tools_sha256);
+                            if let Some(health) = &info.health {
+                                println!("  Live version: {}", health.version);
+                                if let Some(build_sha) = &health.build_sha {
+                                    println!("  Live build SHA: {}", build_sha);
+                                }
+                                if let Some(schema) = health.health_schema_version {
+                                    println!("  Health schema: {}", schema);
+                                }
+                                if let Some(contract) = health.mcp_contract_version {
+                                    println!("  MCP contract: {}", contract);
+                                }
+                                if let Some(hash) = &health.mcp_tools_sha256 {
+                                    println!("  Live MCP tools SHA-256: {}", hash);
+                                }
+                                if let Some(protocol) = &health.mcp_protocol_version {
+                                    println!("  MCP protocol: {}", protocol);
+                                }
+                                if let Some(auth_required) = health.auth_required {
+                                    println!("  MCP bearer auth: {}", auth_required);
+                                }
+                                if let Some(storage_status) = &health.storage_status {
+                                    println!("  Datastore status: {}", storage_status);
+                                }
+                                if let Some(storage_ready) = health.storage_ready {
+                                    println!("  Datastore writable: {}", storage_ready);
+                                }
+                                if let Some(available_bytes) = health.storage_available_bytes {
+                                    println!("  Datastore free bytes: {}", available_bytes);
+                                }
+                                if let Some(required_bytes) = health.storage_required_bytes {
+                                    println!("  Datastore reserve bytes: {}", required_bytes);
+                                }
+                            }
                             if let Some(metadata) = &info.metadata {
                                 println!("  Spawned by: {}", metadata.executable_path);
                                 println!("  Spawn version: {}", metadata.executable_version);
+                                if let Some(hash) = &metadata.executable_sha256 {
+                                    println!("  Spawn SHA-256: {}", hash);
+                                }
                                 if let Some(path) = &current_exe {
                                     let current_path = path.display().to_string();
                                     println!("  Current CLI: {}", current_path);
-                                    if metadata.executable_path != current_path {
-                                        println!(
-                                            "  Warning: daemon was spawned by a different executable path; restart it after updating Engram if runtime drift is suspected"
-                                        );
+                                    if let Some(hash) = &current_exe_sha256 {
+                                        println!("  Current CLI SHA-256: {}", hash);
                                     }
-                                }
-                                if metadata.executable_version != current_version {
-                                    println!(
-                                        "  Warning: daemon version {} differs from current CLI version {}",
-                                        metadata.executable_version, current_version
-                                    );
-                                }
-                                if metadata.pid != info.pid || metadata.port != info.port {
-                                    println!(
-                                        "  Warning: daemon spawn metadata does not match pid/port files"
-                                    );
                                 }
                             } else {
                                 println!(
@@ -6777,13 +7296,53 @@ async fn main() -> Result<()> {
                                 );
                                 if let Some(path) = &current_exe {
                                     println!("  Current CLI: {}", path.display());
+                                    if let Some(hash) = &current_exe_sha256 {
+                                        println!("  Current CLI SHA-256: {}", hash);
+                                    }
                                 }
+                            }
+                            println!("  Runtime attestation: {}", attestation.status);
+                            for warning in attestation.warnings {
+                                println!("  Warning: {}", warning);
                             }
                         }
                         Err(_) => {
-                            println!("Daemon status: 🔴 not running");
-                            if let Some(proj) = config.project {
-                                println!("  Project: {}", proj);
+                            if json {
+                                let current_exe = std::env::current_exe().ok();
+                                let current_exe_sha256 = current_exe
+                                    .as_deref()
+                                    .and_then(|path| daemon::executable_sha256(path).ok());
+                                let report = serde_json::json!({
+                                    "schema_version": 1,
+                                    "running": false,
+                                    "ready": false,
+                                    "project": &config.project,
+                                    "current": {
+                                        "executable_path": current_exe
+                                            .as_ref()
+                                            .map(|path| path.display().to_string()),
+                                        "executable_sha256": current_exe_sha256,
+                                        "version": env!("CARGO_PKG_VERSION"),
+                                        "build_sha": option_env!("ENGRAM_BUILD_SHA"),
+                                        "health_schema_version":
+                                            engram_mcp::server::DAEMON_HEALTH_SCHEMA_VERSION,
+                                        "mcp_contract_version":
+                                            engram_mcp::server::MCP_CONTRACT_VERSION,
+                                        "mcp_tools_sha256":
+                                            engram_mcp::server::mcp_tools_sha256(),
+                                        "mcp_protocol_version":
+                                            engram_mcp::server::MCP_PROTOCOL_VERSION,
+                                    },
+                                    "live": null,
+                                    "spawn": null,
+                                    "runtime_attestation": null,
+                                });
+                                println!("{}", serde_json::to_string_pretty(&report)?);
+                            } else {
+                                println!("Daemon status: 🔴 not running");
+                                if let Some(proj) = config.project {
+                                    println!("  Project: {}", proj);
+                                }
                             }
                         }
                     }
@@ -6847,9 +7406,10 @@ async fn main() -> Result<()> {
             root,
             write,
             yes,
+            enforcement,
             settings_target,
         } => {
-            run_setup(agent, root, write, yes, settings_target)?;
+            run_setup(agent, root, write, yes, enforcement, settings_target)?;
         }
 
         Commands::Add { what } => {
@@ -8919,14 +9479,18 @@ async fn main() -> Result<()> {
                     enforcement,
                     root,
                     observed_mcp_tools,
+                    attest_host_configuration,
                     json,
                 } => {
-                    let report = service.status_with_enforcement(
+                    let mut report = service.status_with_enforcement(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
                         &observed_mcp_tools,
                         enforcement.into(),
                     )?;
+                    if attest_host_configuration {
+                        service.attest_host_configuration(&mut report, None)?;
+                    }
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -8938,14 +9502,18 @@ async fn main() -> Result<()> {
                     enforcement,
                     root,
                     observed_mcp_tools,
+                    attest_host_configuration,
                     json,
                 } => {
-                    let report = service.doctor_with_enforcement(
+                    let mut report = service.doctor_with_enforcement(
                         harness.into(),
                         root.as_deref().map(std::path::Path::new),
                         &observed_mcp_tools,
                         enforcement.into(),
                     )?;
+                    if attest_host_configuration {
+                        service.attest_host_configuration(&mut report, None)?;
+                    }
                     if json {
                         println!("{}", serde_json::to_string_pretty(&report)?);
                     } else {
@@ -9046,6 +9614,7 @@ async fn main() -> Result<()> {
                         tool_name,
                         tool_error,
                         tool_input_command,
+                        tool_input_action: None,
                         file_path,
                         last_assistant_message,
                         compact_summary,
@@ -9549,6 +10118,59 @@ async fn main() -> Result<()> {
                         print_memory_items("Memory items needing review", &items);
                     }
                 }
+                MemoryCommands::VerifyProcedure {
+                    id,
+                    receipt,
+                    expires_in_days,
+                    expires_in_seconds,
+                    confirm,
+                    json,
+                } => {
+                    if !confirm {
+                        return Err(anyhow::anyhow!(
+                            "procedure verification activates durable guidance; rerun with --confirm after checking the exact ID and receipt"
+                        ));
+                    }
+                    let expiry_duration = match (expires_in_days, expires_in_seconds) {
+                        (Some(days), None) if (1..=365).contains(&days) => Duration::days(days),
+                        (Some(_), None) => {
+                            return Err(anyhow::anyhow!(
+                                "--expires-in-days must be between 1 and 365"
+                            ));
+                        }
+                        (None, Some(seconds)) if (1..=86_400).contains(&seconds) => {
+                            Duration::seconds(seconds)
+                        }
+                        (None, Some(_)) => {
+                            return Err(anyhow::anyhow!(
+                                "--expires-in-seconds must be between 1 and 86400"
+                            ));
+                        }
+                        (None, None) => Duration::days(30),
+                        (Some(_), Some(_)) => {
+                            return Err(anyhow::anyhow!(
+                                "choose only one procedure expiry interval"
+                            ));
+                        }
+                    };
+                    let id = Id::parse(&id)
+                        .map_err(|e| anyhow::anyhow!("Invalid memory item ID: {}", e))?;
+                    let expires_at = OffsetDateTime::now_utc()
+                        .checked_add(expiry_duration)
+                        .ok_or_else(|| anyhow::anyhow!("procedure expiry overflow"))?;
+                    let item = service
+                        .verify_procedure(&id, Path::new(&receipt), Some(expires_at))
+                        .await?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&item)?);
+                    } else {
+                        println!("Verified procedure: {} ({})", item.title, item.id);
+                        println!("Expires: {expires_at}");
+                        println!(
+                            "Receipt content was not copied; its path and SHA-256 will be rechecked at use time."
+                        );
+                    }
+                }
                 MemoryCommands::Cursor { json } => {
                     let cursor = service.current_cursor().await?;
 
@@ -9596,12 +10218,15 @@ async fn main() -> Result<()> {
                                 surface,
                                 writer_session_id,
                                 project: relevance_project,
+                                task: None,
                                 cwd,
                                 query,
                                 intent: None,
                                 external_session_id: external_session_id_from_cli(
                                     external_session_id,
                                 ),
+                                enforce_scope: false,
+                                omit_commits: false,
                             },
                         )
                         .await?;
@@ -9684,6 +10309,73 @@ async fn main() -> Result<()> {
                         println!("{}", serde_json::to_string_pretty(&item)?);
                     } else {
                         println!("Archived memory item: {}", item.id);
+                    }
+                }
+                MemoryCommands::Forget {
+                    id,
+                    reason,
+                    confirm,
+                    vault_path,
+                    json,
+                } => {
+                    if !confirm {
+                        return Err(anyhow::anyhow!(
+                            "forget is irreversible; rerun with --confirm after verifying the exact memory item ID"
+                        ));
+                    }
+                    let id = Id::parse(&id)
+                        .map_err(|e| anyhow::anyhow!("Invalid memory item ID: {}", e))?;
+                    let forget_report = service.forget_memory(&id).await?;
+                    let vault_refresh = if forget_report.deleted {
+                        match vault_path.as_deref() {
+                            Some(path) => {
+                                Some(service.export_vault(std::path::Path::new(path)).await?)
+                            }
+                            None => None,
+                        }
+                    } else {
+                        None
+                    };
+                    if json {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "id": id,
+                                "deleted": forget_report.deleted,
+                                "reason": reason,
+                                "canonical_store_purged": forget_report.deleted,
+                                "internal_purge": forget_report,
+                                "vault_refresh": vault_refresh,
+                                "warnings": if vault_path.is_some() {
+                                    vec!["External copies outside the selected generated vault must be deleted separately."]
+                                } else {
+                                    vec!["Generated vault exports and external copies must be recompiled or deleted separately; pass --vault-path to refresh one generated vault during forget."]
+                                }
+                            }))?
+                        );
+                    } else if forget_report.deleted {
+                        println!("Permanently forgot memory item: {id}");
+                        println!("Reason: {reason}");
+                        println!(
+                            "Purged internal references: {} memory item(s), {} commit(s), {} trace(s), {} feedback record(s)",
+                            forget_report.memory_items_updated,
+                            forget_report.commits_redacted,
+                            forget_report.traces_deleted,
+                            forget_report.feedback_deleted
+                        );
+                        if let Some(refresh) = vault_refresh {
+                            println!("Recompiled generated vault: {}", refresh.root);
+                            println!("Removed generated files: {}", refresh.files_removed.len());
+                            println!(
+                                "Warning: external copies outside that vault must be deleted separately."
+                            );
+                        } else {
+                            println!(
+                                "Warning: recompile or delete generated vault exports separately; pass --vault-path to refresh one during forget."
+                            );
+                        }
+                    } else {
+                        println!("Memory item not found: {id}");
                     }
                 }
                 MemoryCommands::ExportVault { path } => {
@@ -10359,6 +11051,51 @@ mod tests {
     use super::*;
 
     #[test]
+    fn contract_parses_agent_json_profile() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "contract",
+            "--profile",
+            "agent",
+            "--verify-runtime",
+            "--json",
+        ])
+        .expect("contract command should parse");
+
+        match cli.command {
+            Commands::Contract {
+                profile: McpToolProfileArg::Agent,
+                json: true,
+                verify_runtime: true,
+            } => {}
+            _ => panic!("expected agent contract JSON command"),
+        }
+    }
+
+    #[test]
+    fn contract_attestation_distinguishes_effective_profiles() {
+        let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("engram");
+        std::fs::write(&executable, b"test executable").unwrap();
+
+        let agent = mcp_contract_attestation(McpToolProfileArg::Agent, &executable).unwrap();
+        let full = mcp_contract_attestation(McpToolProfileArg::Full, &executable).unwrap();
+
+        assert_eq!(agent.profile, "agent");
+        assert_eq!(agent.schema_version, 4);
+        assert_eq!(agent.mcp_tool_count, 6);
+        assert_eq!(agent.mcp_tools_sha256.len(), 64);
+        assert_eq!(
+            agent.profile_instructions_sha256.as_ref().unwrap().len(),
+            64
+        );
+        assert_ne!(agent.mcp_tools_sha256, full.mcp_tools_sha256);
+        assert!(full.mcp_tool_count > agent.mcp_tool_count);
+        assert_eq!(full.profile_instructions_sha256, None);
+        assert_eq!(agent.executable_sha256, full.executable_sha256);
+    }
+
+    #[test]
     fn invalid_rfc3339_timestamp_error_names_cursor_timestamp() {
         let error = parse_rfc3339_timestamp("not-a-timestamp")
             .expect_err("invalid timestamp should fail")
@@ -10384,6 +11121,7 @@ mod tests {
         assert_eq!(args["vault_path"], serde_json::json!("/tmp/vault"));
         assert_eq!(args["limit"], serde_json::json!(7));
         assert_eq!(args["write"], serde_json::json!(false));
+        assert_eq!(args["scope"]["relevance_mode"], serde_json::json!("global"));
     }
 
     #[test]
@@ -10434,6 +11172,7 @@ mod tests {
         assert_eq!(args["project"], serde_json::json!("engram"));
         assert!(args.get("cwd").is_none());
         assert_eq!(args["limit"], serde_json::json!(3));
+        assert_eq!(args["scope"]["relevance_mode"], serde_json::json!("global"));
     }
 
     #[test]
@@ -10453,6 +11192,7 @@ mod tests {
         assert_eq!(args["project"], serde_json::json!("engram"));
         assert_eq!(args["cwd"], serde_json::json!("/tmp/engram"));
         assert_eq!(args["limit"], serde_json::json!(5));
+        assert_eq!(args["scope"]["relevance_mode"], serde_json::json!("global"));
     }
 
     #[test]
@@ -10464,6 +11204,13 @@ mod tests {
 
         assert_eq!(args["action"], serde_json::json!("status"));
         assert_eq!(args["vault_path"], serde_json::json!("/tmp/vault"));
+        assert_eq!(args["scope"]["relevance_mode"], serde_json::json!("global"));
+
+        let init = vault_daemon_arguments(&VaultCommands::Init {
+            path: "/tmp/vault".to_string(),
+            json: true,
+        });
+        assert!(init.get("scope").is_none());
     }
 
     #[test]
@@ -10792,6 +11539,100 @@ mod tests {
     }
 
     #[test]
+    fn memory_verify_procedure_parses_receipt_and_expiry() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "memory",
+            "verify-procedure",
+            "019fdc00-0000-7000-8000-000000000001",
+            "--receipt",
+            ".engram/proofs/queue.json",
+            "--expires-in-days",
+            "14",
+            "--confirm",
+            "--json",
+        ])
+        .expect("memory verify-procedure command should parse");
+
+        match cli.command {
+            Commands::Memory { command, .. } => match command {
+                MemoryCommands::VerifyProcedure {
+                    id,
+                    receipt,
+                    expires_in_days,
+                    expires_in_seconds,
+                    confirm,
+                    json,
+                } => {
+                    assert_eq!(id, "019fdc00-0000-7000-8000-000000000001");
+                    assert_eq!(receipt, ".engram/proofs/queue.json");
+                    assert_eq!(expires_in_days, Some(14));
+                    assert_eq!(expires_in_seconds, None);
+                    assert!(confirm);
+                    assert!(json);
+                }
+                _ => panic!("expected verify-procedure command"),
+            },
+            _ => panic!("expected memory command"),
+        }
+    }
+
+    #[test]
+    fn memory_verify_procedure_parses_short_expiry() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "memory",
+            "verify-procedure",
+            "019fdc00-0000-7000-8000-000000000001",
+            "--receipt",
+            ".engram/proofs/queue.json",
+            "--expires-in-seconds",
+            "300",
+            "--confirm",
+            "--json",
+        ])
+        .expect("memory verify-procedure short expiry should parse");
+
+        match cli.command {
+            Commands::Memory { command, .. } => match command {
+                MemoryCommands::VerifyProcedure {
+                    expires_in_days,
+                    expires_in_seconds,
+                    ..
+                } => {
+                    assert_eq!(expires_in_days, None);
+                    assert_eq!(expires_in_seconds, Some(300));
+                }
+                _ => panic!("expected verify-procedure command"),
+            },
+            _ => panic!("expected memory command"),
+        }
+    }
+
+    #[test]
+    fn memory_verify_procedure_rejects_conflicting_expiry_units() {
+        let result = Cli::try_parse_from([
+            "engram",
+            "memory",
+            "verify-procedure",
+            "019fdc00-0000-7000-8000-000000000001",
+            "--receipt",
+            ".engram/proofs/queue.json",
+            "--expires-in-days",
+            "1",
+            "--expires-in-seconds",
+            "300",
+            "--confirm",
+        ]);
+        let error = match result {
+            Ok(_) => panic!("conflicting procedure expiry units must be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("cannot be used with"));
+    }
+
+    #[test]
     fn harness_status_parses_observed_mcp_tool_flags() {
         let cli = Cli::try_parse_from([
             "engram",
@@ -10805,6 +11646,7 @@ mod tests {
             "orient",
             "--observed-mcp-tool",
             "telemetry",
+            "--attest-host-configuration",
             "--json",
         ])
         .expect("harness status command should parse observed MCP tools");
@@ -10814,14 +11656,34 @@ mod tests {
                 HarnessCommands::Status {
                     enforcement,
                     observed_mcp_tools,
+                    attest_host_configuration,
                     ..
                 } => {
                     assert!(matches!(enforcement, HarnessEnforcementArg::Strict));
                     assert_eq!(observed_mcp_tools, vec!["orient", "telemetry"]);
+                    assert!(attest_host_configuration);
                 }
                 _ => panic!("expected status command"),
             },
             _ => panic!("expected harness command"),
+        }
+    }
+
+    #[test]
+    fn daemon_status_parses_machine_readable_attestation_flag() {
+        let cli =
+            Cli::try_parse_from(["engram", "daemon", "status", "--project", "atlas", "--json"])
+                .expect("daemon status should parse JSON attestation output");
+
+        match cli.command {
+            Commands::Daemon { command } => match command {
+                DaemonCommands::Status { project, json } => {
+                    assert_eq!(project.as_deref(), Some("atlas"));
+                    assert!(json);
+                }
+                _ => panic!("expected daemon status command"),
+            },
+            _ => panic!("expected daemon command"),
         }
     }
 
@@ -10855,6 +11717,8 @@ mod tests {
             "codex",
             "--write",
             "--yes",
+            "--enforcement",
+            "graduated",
             "--root",
             "/tmp/engram-setup",
         ])
@@ -10866,12 +11730,14 @@ mod tests {
                 root,
                 write,
                 yes,
+                enforcement,
                 ..
             } => {
                 assert_eq!(agent, Some(SetupAgentArg::Codex));
                 assert_eq!(root.as_deref(), Some("/tmp/engram-setup"));
                 assert!(write);
                 assert!(yes);
+                assert!(matches!(enforcement, HarnessEnforcementArg::Graduated));
             }
             _ => panic!("expected setup command"),
         }
@@ -10904,7 +11770,16 @@ mod tests {
 
     #[test]
     fn serve_stdio_rejects_http_only_storage_flags() {
-        let err = validate_serve_options(true, None, None, None, false, None).unwrap_err();
+        let err = validate_serve_options(
+            true,
+            None,
+            None,
+            None,
+            false,
+            None,
+            ServeConnectionOptions::default(),
+        )
+        .unwrap_err();
         assert!(err
             .to_string()
             .contains("--memory is only honored with --http"));
@@ -10916,13 +11791,23 @@ mod tests {
             Some("root"),
             false,
             None,
+            ServeConnectionOptions::default(),
         )
         .unwrap_err();
         assert!(err
             .to_string()
             .contains("--remote/--username/--password are only honored with --http"));
 
-        let err = validate_serve_options(false, None, None, None, false, Some(8766)).unwrap_err();
+        let err = validate_serve_options(
+            false,
+            None,
+            None,
+            None,
+            false,
+            Some(8766),
+            ServeConnectionOptions::default(),
+        )
+        .unwrap_err();
         assert!(err
             .to_string()
             .contains("--port is only honored with --http"));
@@ -10930,8 +11815,16 @@ mod tests {
 
     #[test]
     fn serve_http_accepts_storage_flags() {
-        validate_serve_options(true, None, None, None, true, Some(8766))
-            .expect("--http --memory should be valid");
+        validate_serve_options(
+            true,
+            None,
+            None,
+            None,
+            true,
+            Some(8766),
+            ServeConnectionOptions::default(),
+        )
+        .expect("--http --memory should be valid");
         validate_serve_options(
             false,
             Some("ws://localhost:8000"),
@@ -10939,6 +11832,7 @@ mod tests {
             Some("root"),
             true,
             Some(8766),
+            ServeConnectionOptions::default(),
         )
         .expect("--http --remote with credentials should be valid");
     }
@@ -10952,13 +11846,214 @@ mod tests {
             Some("root"),
             true,
             None,
+            ServeConnectionOptions::default(),
         )
         .unwrap_err();
         assert!(err.to_string().contains("--memory and --remote"));
 
-        let err = validate_serve_options(false, None, Some("root"), None, true, None).unwrap_err();
+        let err = validate_serve_options(
+            false,
+            None,
+            Some("root"),
+            None,
+            true,
+            None,
+            ServeConnectionOptions::default(),
+        )
+        .unwrap_err();
         assert!(err
             .to_string()
             .contains("--username and --password require --remote"));
+    }
+
+    #[test]
+    fn serve_http_rejects_stdio_tool_profile() {
+        let err = validate_serve_options(
+            false,
+            None,
+            None,
+            None,
+            true,
+            None,
+            ServeConnectionOptions {
+                profile: Some(McpToolProfileArg::Agent),
+                ..ServeConnectionOptions::default()
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("--profile"));
+    }
+
+    #[test]
+    fn serve_connect_existing_only_parses_exact_explicit_selection() {
+        let cli = Cli::try_parse_from([
+            "engram",
+            "serve",
+            "--project",
+            "pilot-partition",
+            "--profile",
+            "full",
+            "--connect-existing-only",
+            "--expected-daemon-port",
+            "9876",
+            "--expected-daemon-pid",
+            "42",
+        ])
+        .expect("exact existing-daemon selection should parse");
+
+        match cli.command {
+            Commands::Serve {
+                project,
+                profile,
+                connect_existing_only,
+                expected_daemon_port,
+                expected_daemon_pid,
+                ..
+            } => {
+                assert_eq!(project.as_deref(), Some("pilot-partition"));
+                assert!(matches!(profile, Some(McpToolProfileArg::Full)));
+                assert!(connect_existing_only);
+                assert_eq!(expected_daemon_port, Some(9876));
+                assert_eq!(expected_daemon_pid, Some(42));
+            }
+            _ => panic!("expected serve command"),
+        }
+    }
+
+    #[test]
+    fn serve_connect_existing_only_parser_rejects_partial_or_incompatible_selection() {
+        let invalid = [
+            vec![
+                "engram",
+                "serve",
+                "--project",
+                "pilot",
+                "--profile",
+                "full",
+                "--connect-existing-only",
+                "--expected-daemon-port",
+                "9876",
+            ],
+            vec![
+                "engram",
+                "serve",
+                "--profile",
+                "full",
+                "--connect-existing-only",
+                "--expected-daemon-port",
+                "9876",
+                "--expected-daemon-pid",
+                "42",
+            ],
+            vec![
+                "engram",
+                "serve",
+                "--project",
+                "pilot",
+                "--connect-existing-only",
+                "--expected-daemon-port",
+                "9876",
+                "--expected-daemon-pid",
+                "42",
+            ],
+            vec![
+                "engram",
+                "serve",
+                "--http",
+                "--project",
+                "pilot",
+                "--profile",
+                "full",
+                "--connect-existing-only",
+                "--expected-daemon-port",
+                "9876",
+                "--expected-daemon-pid",
+                "42",
+            ],
+            vec!["engram", "serve", "--expected-daemon-port", "9876"],
+        ];
+
+        for argv in invalid {
+            assert!(Cli::try_parse_from(argv).is_err());
+        }
+    }
+
+    #[test]
+    fn serve_connect_existing_only_validation_requires_exact_nonzero_selection() {
+        let valid = ServeConnectionOptions {
+            project: Some("pilot"),
+            profile: Some(McpToolProfileArg::Agent),
+            connect_existing_only: true,
+            expected_port: Some(9876),
+            expected_pid: Some(42),
+        };
+        validate_serve_options(false, None, None, None, false, None, valid)
+            .expect("exact selection should be valid");
+
+        for invalid in [
+            ServeConnectionOptions {
+                project: None,
+                ..valid
+            },
+            ServeConnectionOptions {
+                profile: None,
+                ..valid
+            },
+            ServeConnectionOptions {
+                expected_port: None,
+                ..valid
+            },
+            ServeConnectionOptions {
+                expected_pid: None,
+                ..valid
+            },
+            ServeConnectionOptions {
+                expected_port: Some(0),
+                ..valid
+            },
+            ServeConnectionOptions {
+                expected_pid: Some(0),
+                ..valid
+            },
+            ServeConnectionOptions {
+                project: Some("../pilot"),
+                ..valid
+            },
+            ServeConnectionOptions {
+                project: Some("pilot/partition"),
+                ..valid
+            },
+            ServeConnectionOptions {
+                project: Some("pilot\\partition"),
+                ..valid
+            },
+            ServeConnectionOptions {
+                project: Some("/tmp/pilot"),
+                ..valid
+            },
+            ServeConnectionOptions {
+                project: Some("."),
+                ..valid
+            },
+        ] {
+            assert!(validate_serve_options(false, None, None, None, false, None, invalid).is_err());
+        }
+
+        assert!(validate_serve_options(true, None, None, None, false, None, valid).is_err());
+        assert!(validate_serve_options(false, None, None, None, true, None, valid).is_err());
+    }
+
+    #[test]
+    fn serve_connect_existing_only_help_discloses_bounded_side_effects() {
+        let mut command = <Cli as clap::CommandFactory>::command();
+        let serve = command
+            .find_subcommand_mut("serve")
+            .expect("serve subcommand");
+        let help = serve.render_long_help().to_string();
+
+        assert!(help.contains("without start, repair, or control cleanup"));
+        assert!(help.contains("not a read-only operation"));
+        assert!(help.contains("commits and removes a storage canary"));
+        assert!(help.contains("proxy shutdown deletes its MCP session"));
     }
 }

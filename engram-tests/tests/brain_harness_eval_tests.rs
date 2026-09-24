@@ -450,7 +450,7 @@ fn writer() -> WriterProvenance {
         .with_surface("brain-harness-eval")
 }
 
-fn reviewed_evidence(summary: &str) -> EvidenceRef {
+fn review_assertion_evidence(summary: &str) -> EvidenceRef {
     EvidenceRef::new(EvidenceKind::ManualReview, "brain-harness-eval")
         .with_summary(summary)
         .with_excerpt("accepted by deterministic eval fixture")
@@ -1000,7 +1000,9 @@ async fn confidence_scenario_memoryitems_improve_preference_continuity_over_no_m
                 ClaimOrigin::UserStated,
                 writer(),
             )
-            .with_evidence(reviewed_evidence("User explicitly confirmed commit-every-step policy.")),
+            .with_evidence(review_assertion_evidence(
+                "User explicitly confirmed commit-every-step policy.",
+            )),
         )
         .await
         .expect("preference should be captured");
@@ -1132,7 +1134,7 @@ async fn confidence_scenario_memoryitems_reject_stale_and_exclude_wrong_scope_me
                 ClaimOrigin::UserStated,
                 writer(),
             )
-            .with_evidence(reviewed_evidence(
+            .with_evidence(review_assertion_evidence(
                 "Project instruction requires verification after edits.",
             )),
         )
@@ -1282,7 +1284,9 @@ async fn confidence_scenario_memoryitems_preserve_decision_continuity() {
                 ClaimOrigin::AgentObserved,
                 writer(),
             )
-            .with_evidence(reviewed_evidence("Architecture plan gates migration on eval confidence.")),
+            .with_evidence(review_assertion_evidence(
+                "Architecture plan gates migration on eval confidence.",
+            )),
         )
         .await
         .expect("next-step decision should be captured");
@@ -1296,7 +1300,9 @@ async fn confidence_scenario_memoryitems_preserve_decision_continuity() {
                 ClaimOrigin::AgentObserved,
                 writer(),
             )
-            .with_evidence(reviewed_evidence("Brain harness RFC says canonicality must be proven.")),
+            .with_evidence(review_assertion_evidence(
+                "Brain harness RFC says canonicality must be proven.",
+            )),
         )
         .await
         .expect("guardrail should be captured");
@@ -1435,7 +1441,7 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
                 ClaimOrigin::UserStated,
                 writer(),
             )
-            .with_evidence(reviewed_evidence(
+            .with_evidence(review_assertion_evidence(
                 "User explicitly confirmed commit-every-step policy.",
             )),
         )
@@ -1608,7 +1614,7 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
                 ClaimOrigin::UserStated,
                 writer(),
             )
-            .with_evidence(reviewed_evidence(
+            .with_evidence(review_assertion_evidence(
                 "Project instruction requires verification after edits.",
             )),
         )
@@ -1827,7 +1833,7 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
                 ClaimOrigin::AgentObserved,
                 writer(),
             )
-            .with_evidence(reviewed_evidence(
+            .with_evidence(review_assertion_evidence(
                 "Architecture plan gates migration on eval confidence.",
             )),
         )
@@ -1844,7 +1850,7 @@ async fn confidence_scenarios_compare_memoryitems_with_legacy_and_hybrid() {
                 ClaimOrigin::AgentObserved,
                 writer(),
             )
-            .with_evidence(reviewed_evidence(
+            .with_evidence(review_assertion_evidence(
                 "Brain harness RFC says canonicality must be proven.",
             )),
         )
@@ -2059,7 +2065,7 @@ async fn discriminative_continuity_benchmark_separates_memoryitems_from_static_i
                 ClaimOrigin::UserStated,
                 writer(),
             )
-            .with_evidence(reviewed_evidence(
+            .with_evidence(review_assertion_evidence(
                 "User explicitly asked for every meaningful Engram step to be committed.",
             )),
         )
@@ -2240,14 +2246,23 @@ async fn discriminative_continuity_benchmark_separates_memoryitems_from_static_i
         })
         .await
         .expect("preference orient should return a packet");
-    assert_eq!(preference_packet.hot_context_ids, vec![preference.id]);
+    assert!(preference_packet.hot_context_ids.is_empty());
+    assert!(preference_packet.hot_context_items.is_empty());
+    assert!(preference_packet
+        .preferences
+        .iter()
+        .any(|item| item.id == preference.id));
+    let preference_metadata = preference_packet
+        .memory_metadata
+        .iter()
+        .find(|metadata| metadata.memory_id == preference.id)
+        .expect("preference trust metadata should be returned");
     assert_eq!(
-        preference_packet
-            .hot_context_items
-            .first()
-            .map(|item| item.id),
-        Some(preference.id)
+        preference_metadata.review_state,
+        MemoryReviewState::ActiveUnreviewed
     );
+    assert!(preference_metadata.review_asserted);
+    assert!(!preference_metadata.reviewed);
     let preference_memory = memoryitem_trace_from_orient(
         &services,
         preference_scenario,
@@ -2376,7 +2391,7 @@ async fn unified_search_should_find_memoryitem_guidance() {
         ClaimOrigin::UserStated,
         writer(),
     )
-    .with_evidence(reviewed_evidence(
+    .with_evidence(review_assertion_evidence(
         "Architecture work accepted MemoryItems as first-class retrieval results.",
     ));
     let captured = memory_service
@@ -2414,7 +2429,7 @@ async fn orient_and_memory_search_share_memoryitem_ranking_order() {
                     ClaimOrigin::UserStated,
                     writer(),
                 )
-                .with_evidence(reviewed_evidence(
+                .with_evidence(review_assertion_evidence(
                     "Shared ranker ordering is accepted as active guidance.",
                 )),
             )
@@ -2466,8 +2481,18 @@ async fn orient_and_memory_search_share_memoryitem_ranking_order() {
     assert!(packet
         .memory_metadata
         .iter()
-        .all(|metadata| metadata.review_state == MemoryReviewState::Reviewed));
+        .all(
+            |metadata| metadata.review_state == MemoryReviewState::ActiveUnreviewed
+                && metadata.review_asserted
+                && !metadata.reviewed
+        ));
     assert!(search_results
         .iter()
-        .all(|result| result.memory_metadata.is_some()));
+        .all(
+            |result| result.memory_metadata.as_ref().is_some_and(|metadata| {
+                metadata.review_state == MemoryReviewState::ActiveUnreviewed
+                    && metadata.review_asserted
+                    && !metadata.reviewed
+            })
+        ));
 }

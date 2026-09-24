@@ -153,7 +153,10 @@ The heat from the pasta cooks the eggs into a creamy sauce.
     // Verify stats
     let stats = service.stats().await.expect("Failed to get stats");
     assert_eq!(stats.source_count, 2, "Should have 2 indexed sources");
-    assert!(stats.chunk_count >= 4, "Should have at least 4 chunks");
+    assert_eq!(
+        stats.chunk_count, 2,
+        "Short documents should each use one whole-document chunk"
+    );
     assert_eq!(stats.embedding_dimension, 384);
 
     // Search for Rust-related content

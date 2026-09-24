@@ -1,0 +1,182 @@
+{
+  "schema_version": 2,
+  "suite_id": "engineering-context-v2",
+  "scenario_file": "../engineering_context_v1/scenarios.jsonl",
+  "repetitions": 3,
+  "arms": [
+    {
+      "id": "codex_instructions_only",
+      "description": "Codex with checked-in repository instructions; native memory and Engram disabled",
+      "host": "codex",
+      "uses_engram": false
+    },
+    {
+      "id": "claude_instructions_only",
+      "description": "Claude Code with checked-in repository instructions; native memory and Engram disabled",
+      "host": "claude_code",
+      "uses_engram": false
+    },
+    {
+      "id": "codex_native_memory",
+      "description": "Codex native memory enabled; Engram disabled",
+      "host": "codex",
+      "uses_engram": false
+    },
+    {
+      "id": "claude_native_memory",
+      "description": "Claude Code auto memory enabled; Engram disabled",
+      "host": "claude_code",
+      "uses_engram": false
+    },
+    {
+      "id": "codex_native_memory_skills",
+      "description": "Codex native memory plus repository skills; Engram disabled",
+      "host": "codex",
+      "uses_engram": false
+    },
+    {
+      "id": "claude_native_memory_skills",
+      "description": "Claude Code auto memory plus repository skills; Engram disabled",
+      "host": "claude_code",
+      "uses_engram": false
+    },
+    {
+      "id": "codex_current_engram",
+      "description": "Current Engram behavior with Codex native memory disabled",
+      "host": "codex",
+      "uses_engram": true
+    },
+    {
+      "id": "claude_current_engram",
+      "description": "Current Engram behavior with Claude memory disabled",
+      "host": "claude_code",
+      "uses_engram": true
+    },
+    {
+      "id": "codex_engram_plus_native",
+      "description": "Current Engram plus Codex native memory",
+      "host": "codex",
+      "uses_engram": true
+    },
+    {
+      "id": "claude_engram_plus_native",
+      "description": "Current Engram plus Claude Code auto memory",
+      "host": "claude_code",
+      "uses_engram": true
+    },
+    {
+      "id": "codex_lean_engram",
+      "description": "Lean scoped evidence-revalidated Engram with Codex memory disabled",
+      "host": "codex",
+      "uses_engram": true
+    },
+    {
+      "id": "claude_lean_engram",
+      "description": "Lean scoped evidence-revalidated Engram with Claude memory disabled",
+      "host": "claude_code",
+      "uses_engram": true
+    }
+  ],
+  "comparisons": [
+    {
+      "id": "codex_native_vs_instructions",
+      "claim_group": "native_vs_instructions",
+      "baseline_arm": "codex_instructions_only",
+      "treatment_arm": "codex_native_memory",
+      "incremental_budgets": {
+        "latency_ms": 60000,
+        "total_tokens": 15000
+      }
+    },
+    {
+      "id": "claude_native_vs_instructions",
+      "claim_group": "native_vs_instructions",
+      "baseline_arm": "claude_instructions_only",
+      "treatment_arm": "claude_native_memory",
+      "incremental_budgets": {
+        "latency_ms": 60000,
+        "total_tokens": 5000
+      }
+    },
+    {
+      "id": "codex_native_skills_vs_native",
+      "claim_group": "native_skills_vs_native",
+      "baseline_arm": "codex_native_memory",
+      "treatment_arm": "codex_native_memory_skills",
+      "incremental_budgets": {
+        "latency_ms": 60000,
+        "total_tokens": 15000
+      }
+    },
+    {
+      "id": "claude_native_skills_vs_native",
+      "claim_group": "native_skills_vs_native",
+      "baseline_arm": "claude_native_memory",
+      "treatment_arm": "claude_native_memory_skills",
+      "incremental_budgets": {
+        "latency_ms": 60000,
+        "total_tokens": 5000
+      }
+    },
+    {
+      "id": "codex_current_engram_vs_native_skills",
+      "claim_group": "current_engram_vs_native_skills",
+      "baseline_arm": "codex_native_memory_skills",
+      "treatment_arm": "codex_current_engram",
+      "incremental_budgets": {
+        "latency_ms": 120000,
+        "total_tokens": 50000
+      }
+    },
+    {
+      "id": "claude_current_engram_vs_native_skills",
+      "claim_group": "current_engram_vs_native_skills",
+      "baseline_arm": "claude_native_memory_skills",
+      "treatment_arm": "claude_current_engram",
+      "incremental_budgets": {
+        "latency_ms": 120000,
+        "total_tokens": 15000
+      }
+    },
+    {
+      "id": "codex_combined_vs_native_skills",
+      "claim_group": "engram_plus_native_vs_native_skills",
+      "baseline_arm": "codex_native_memory_skills",
+      "treatment_arm": "codex_engram_plus_native",
+      "incremental_budgets": {
+        "latency_ms": 120000,
+        "total_tokens": 60000
+      }
+    },
+    {
+      "id": "claude_combined_vs_native_skills",
+      "claim_group": "engram_plus_native_vs_native_skills",
+      "baseline_arm": "claude_native_memory_skills",
+      "treatment_arm": "claude_engram_plus_native",
+      "incremental_budgets": {
+        "latency_ms": 120000,
+        "total_tokens": 20000
+      }
+    },
+    {
+      "id": "codex_lean_engram_vs_native_skills",
+      "claim_group": "lean_engram_vs_native_skills",
+      "baseline_arm": "codex_native_memory_skills",
+      "treatment_arm": "codex_lean_engram",
+      "incremental_budgets": {
+        "latency_ms": 60000,
+        "total_tokens": 45000
+      }
+    },
+    {
+      "id": "claude_lean_engram_vs_native_skills",
+      "claim_group": "lean_engram_vs_native_skills",
+      "baseline_arm": "claude_native_memory_skills",
+      "treatment_arm": "claude_lean_engram",
+      "incremental_budgets": {
+        "latency_ms": 60000,
+        "total_tokens": 10000
+      }
+    }
+  ]
+}

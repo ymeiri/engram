@@ -4,6 +4,7 @@
 //! Uses SurrealDB's graph capabilities for relationship queries.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::reject_serialized_secret_material;
 use crate::Db;
 use engram_core::entity::{Alias, Entity, EntityType, Observation, RelationType, Relationship};
 use engram_core::id::Id;
@@ -200,7 +201,8 @@ impl EntityRepo {
                 DEFINE INDEX IF NOT EXISTS idx_entity_name ON {TABLE_ENTITY} FIELDS name;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // Alias table for term detection
         self.db
@@ -211,7 +213,8 @@ impl EntityRepo {
                 DEFINE INDEX IF NOT EXISTS idx_alias_entity ON {TABLE_ALIAS} FIELDS entity_id;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // Observation table - uniqueness for keyed observations is handled in application logic
         // (we check for existing key and update rather than insert)
@@ -224,7 +227,7 @@ impl EntityRepo {
                 DEFINE INDEX IF NOT EXISTS idx_obs_entity_key ON {TABLE_OBSERVATION} FIELDS entity_id, key;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         // Observation archive table for history tracking
         self.db
@@ -236,7 +239,7 @@ impl EntityRepo {
                 DEFINE INDEX IF NOT EXISTS idx_obs_archive_key ON {TABLE_OBSERVATION_ARCHIVE} FIELDS key;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         // Relationship table (simple edge table - we manage in/out manually for SurrealDB v2 compat)
         self.db
@@ -248,7 +251,7 @@ impl EntityRepo {
                 DEFINE INDEX IF NOT EXISTS idx_rel_target ON {TABLE_RELATIONSHIP} FIELDS target_id;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         info!("Entity schema initialized");
         Ok(())
@@ -260,6 +263,7 @@ impl EntityRepo {
 
     /// Save an entity.
     pub async fn save_entity(&self, entity: &Entity) -> StoreResult<()> {
+        reject_serialized_secret_material("entity", entity)?;
         debug!("Saving entity: {} ({})", entity.name, entity.entity_type);
 
         self.db
@@ -295,7 +299,8 @@ impl EntityRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -308,7 +313,8 @@ impl EntityRepo {
             .db
             .query(r#"SELECT * FROM type::thing("entity", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<EntityRecord> = result.take(0)?;
 
@@ -327,7 +333,7 @@ impl EntityRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, name, entity_type, description, properties, embedding, created_at, updated_at FROM entity WHERE name = $name LIMIT 1")
             .bind(("name", name.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EntityRecordWithId> = result.take(0)?;
 
@@ -355,7 +361,7 @@ impl EntityRepo {
             None => format!("SELECT meta::id(id) as id, name, entity_type, description, properties, created_at, updated_at FROM {} ORDER BY name", TABLE_ENTITY),
         };
 
-        let mut result = self.db.query(query).await?;
+        let mut result = self.db.query(query).await?.check()?;
         let records: Vec<EntityRecordWithId> = result.take(0)?;
 
         let mut entities = Vec::new();
@@ -374,7 +380,7 @@ impl EntityRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, name, entity_type, description, properties, created_at, updated_at FROM entity WHERE string::lowercase(name) CONTAINS $query ORDER BY name")
             .bind(("query", query.to_lowercase()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EntityRecordWithId> = result.take(0)?;
 
@@ -395,25 +401,29 @@ impl EntityRepo {
         self.db
             .query(r#"DELETE entity_relationship WHERE source_id = $id OR target_id = $id"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete associated aliases
         self.db
             .query("DELETE FROM entity_alias WHERE entity_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete associated observations
         self.db
             .query("DELETE FROM entity_observation WHERE entity_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete the entity - SurrealDB v2: use type::thing with double quotes
         self.db
             .query(r#"DELETE type::thing("entity", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -424,6 +434,7 @@ impl EntityRepo {
 
     /// Create a relationship between entities.
     pub async fn create_relationship(&self, rel: &Relationship) -> StoreResult<()> {
+        reject_serialized_secret_material("entity relationship", rel)?;
         debug!(
             "Creating relationship: {} --[{}]--> {}",
             rel.source_id, rel.relation_type, rel.target_id
@@ -454,7 +465,8 @@ impl EntityRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -472,7 +484,8 @@ impl EntityRepo {
                       WHERE source_id = $id"#,
             )
             .bind(("id", entity_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<RelationshipRecord> = result.take(0)?;
         self.records_to_relationships(records)
@@ -491,7 +504,8 @@ impl EntityRepo {
                       WHERE target_id = $id"#,
             )
             .bind(("id", entity_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<RelationshipRecord> = result.take(0)?;
         self.records_to_relationships(records)
@@ -510,7 +524,8 @@ impl EntityRepo {
                       WHERE source_id = $id OR target_id = $id"#,
             )
             .bind(("id", entity_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<RelationshipRecord> = result.take(0)?;
         self.records_to_relationships(records)
@@ -539,7 +554,8 @@ impl EntityRepo {
             .bind(("source_id", source_id.to_string()))
             .bind(("target_id", target_id.to_string()))
             .bind(("relation_type", relation_type.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -550,6 +566,7 @@ impl EntityRepo {
 
     /// Add an alias for an entity.
     pub async fn add_alias(&self, alias: &Alias) -> StoreResult<()> {
+        reject_serialized_secret_material("entity alias", alias)?;
         debug!(
             "Adding alias '{}' for entity {}",
             alias.name, alias.entity_id
@@ -562,7 +579,8 @@ impl EntityRepo {
             ))
             .bind(("name", alias.name.clone()))
             .bind(("entity_id", alias.entity_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -574,7 +592,7 @@ impl EntityRepo {
         let mut result = self.db
             .query("SELECT name, entity_id FROM entity_alias WHERE string::lowercase(name) = $name LIMIT 1")
             .bind(("name", alias_name.to_lowercase()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<AliasRecord> = result.take(0)?;
 
@@ -595,7 +613,8 @@ impl EntityRepo {
             .db
             .query("SELECT name FROM entity_alias WHERE entity_id = $id")
             .bind(("id", entity_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<AliasNameRecord> = result.take(0)?;
         Ok(records.into_iter().map(|r| r.name).collect())
@@ -609,7 +628,8 @@ impl EntityRepo {
             .query("DELETE FROM entity_alias WHERE name = $name AND entity_id = $entity_id")
             .bind(("name", alias_name.to_string()))
             .bind(("entity_id", entity_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -622,6 +642,7 @@ impl EntityRepo {
     /// If the observation has a key and one already exists with that key for the entity,
     /// the existing observation is archived and updated.
     pub async fn add_observation(&self, obs: &Observation) -> StoreResult<Option<Observation>> {
+        reject_serialized_secret_material("entity observation", obs)?;
         debug!(
             "Adding/updating observation for entity {} (key: {:?})",
             obs.entity_id, obs.key
@@ -657,7 +678,8 @@ impl EntityRepo {
                             .format(&time::format_description::well_known::Rfc3339)
                             .unwrap(),
                     ))
-                    .await?;
+                    .await?
+                    .check()?;
 
                 return Ok(previous);
             }
@@ -695,7 +717,8 @@ impl EntityRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(previous)
     }
@@ -734,7 +757,8 @@ impl EntityRepo {
                 now.format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -754,7 +778,7 @@ impl EntityRepo {
             .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $entity_id AND key = $key LIMIT 1")
             .bind(("entity_id", entity_id.to_string()))
             .bind(("key", key.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
 
@@ -772,7 +796,7 @@ impl EntityRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $id ORDER BY updated_at DESC")
             .bind(("id", entity_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
 
@@ -806,7 +830,7 @@ impl EntityRepo {
                     .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $entity_id AND key = $pattern ORDER BY key, updated_at DESC")
                     .bind(("entity_id", entity_id.to_string()))
                     .bind(("pattern", pattern.to_string()))
-                    .await?
+                    .await?.check()?
             } else {
                 // Prefix match (e.g., "architecture.*" matches keys starting with "architecture.")
                 let prefix_with_dot = format!("{}.", prefix);
@@ -815,13 +839,13 @@ impl EntityRepo {
                     .bind(("entity_id", entity_id.to_string()))
                     .bind(("prefix", prefix.to_string()))
                     .bind(("prefix_dot", prefix_with_dot))
-                    .await?
+                    .await?.check()?
             }
         } else {
             self.db
                 .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $entity_id ORDER BY key, updated_at DESC")
                 .bind(("entity_id", entity_id.to_string()))
-                .await?
+                .await?.check()?
         };
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
@@ -849,7 +873,7 @@ impl EntityRepo {
         let mut result = self.db
             .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE entity_id = $entity_id AND content IS NOT NONE ORDER BY updated_at DESC")
             .bind(("entity_id", entity_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
 
@@ -929,7 +953,7 @@ impl EntityRepo {
             .query("SELECT observation_id, entity_id, key, content, source, created_at, archived_at FROM entity_observation_archive WHERE entity_id = $entity_id AND key = $key ORDER BY archived_at DESC")
             .bind(("entity_id", entity_id.to_string()))
             .bind(("key", key.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ObservationArchiveRecord> = result.take(0)?;
 
@@ -961,7 +985,8 @@ impl EntityRepo {
         self.db
             .query(r#"DELETE type::thing("entity_observation", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -999,7 +1024,7 @@ impl EntityRepo {
             .query("SELECT meta::id(id) as id, name, entity_type, description, properties, created_at, updated_at FROM entity WHERE string::lowercase(name) CONTAINS $query OR (description IS NOT NONE AND string::lowercase(description) CONTAINS $query) ORDER BY name LIMIT $limit")
             .bind(("query", query.to_lowercase()))
             .bind(("limit", limit as i64))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EntityRecordWithId> = result.take(0)?;
 
@@ -1024,7 +1049,7 @@ impl EntityRepo {
             .query("SELECT meta::id(id) as id, entity_id, key, content, source, created_at, updated_at FROM entity_observation WHERE content IS NOT NONE AND string::lowercase(content) CONTAINS $query ORDER BY updated_at DESC LIMIT $limit")
             .bind(("query", query.to_lowercase()))
             .bind(("limit", limit as i64))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
 
@@ -1048,7 +1073,7 @@ impl EntityRepo {
             .query("SELECT name, entity_id FROM entity_alias WHERE string::lowercase(name) CONTAINS $query LIMIT $limit")
             .bind(("query", query.to_lowercase()))
             .bind(("limit", limit as i64))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<AliasRecord> = result.take(0)?;
 
@@ -1081,7 +1106,7 @@ impl EntityRepo {
         // Get all entities with embeddings
         let mut result = self.db
             .query("SELECT meta::id(id) as id, name, entity_type, description, properties, embedding, created_at, updated_at FROM entity WHERE embedding IS NOT NONE")
-            .await?;
+            .await?.check()?;
 
         let records: Vec<EntityRecordWithId> = result.take(0)?;
 
@@ -1121,7 +1146,7 @@ impl EntityRepo {
         // Get all observations with embeddings
         let mut result = self.db
             .query("SELECT meta::id(id) as id, entity_id, key, content, source, embedding, created_at, updated_at FROM entity_observation WHERE embedding IS NOT NONE")
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ObservationRecordWithId> = result.take(0)?;
 
@@ -1164,7 +1189,8 @@ impl EntityRepo {
                 SELECT count() as count FROM {TABLE_OBSERVATION} GROUP ALL;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let entity_count: Option<CountResult> = result.take(0)?;
         let relationship_count: Option<CountResult> = result.take(1)?;
@@ -1305,6 +1331,78 @@ pub struct EntityStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn setup_repo() -> EntityRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = EntityRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn explicit_entity_writes_reject_secret_material_before_persistence() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-entity-secret";
+        let secret_entity = Entity::new("secret entity", EntityType::Concept).with_property(
+            "API_TOKEN=synthetic-property-key",
+            serde_json::json!("safe"),
+        );
+
+        let error = repo.save_entity(&secret_entity).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("secret material was not persisted"));
+        assert!(repo.get_entity(&secret_entity.id).await.unwrap().is_none());
+
+        let source = Entity::new("source", EntityType::Concept);
+        let target = Entity::new("target", EntityType::Concept);
+        repo.save_entity(&source).await.unwrap();
+        repo.save_entity(&target).await.unwrap();
+
+        let mut relationship = Relationship::new(source.id, target.id, RelationType::RelatedTo);
+        relationship.description = Some(canary.to_string());
+        assert!(repo.create_relationship(&relationship).await.is_err());
+        assert!(repo
+            .get_relationships_from(&source.id)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let alias = Alias::new(canary, source.id);
+        assert!(repo.add_alias(&alias).await.is_err());
+        assert!(repo.resolve_alias(canary).await.unwrap().is_none());
+
+        let observation = Observation::new(source.id, canary);
+        assert!(repo.add_observation(&observation).await.is_err());
+        assert!(repo.get_observations(&source.id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_observation_surfaces_statement_level_database_errors() {
+        let repo = setup_repo().await;
+        repo.db
+            .query(
+                "DEFINE FIELD OVERWRITE content ON TABLE entity_observation TYPE string ASSERT false",
+            )
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        let observation = Observation::new(Id::new(), "Statement failure");
+        let error = repo
+            .add_observation(&observation)
+            .await
+            .expect_err("a failed CREATE must not be acknowledged as persisted");
+
+        assert!(matches!(error, StoreError::Database(_)));
+        assert!(repo
+            .get_observations(&observation.entity_id)
+            .await
+            .unwrap()
+            .is_empty());
+    }
 
     #[test]
     fn test_entity_stats_default() {

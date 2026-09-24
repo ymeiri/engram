@@ -2,7 +2,12 @@
 
 use crate::config::{cache_dir_has_model_files, EmbedConfig, EmbeddingModel};
 use crate::error::{EmbedError, EmbedResult};
-use fastembed::{EmbeddingModel as FastEmbedModel, InitOptions, TextEmbedding};
+use fastembed::{
+    EmbeddingModel as FastEmbedModel, InitOptions, InitOptionsUserDefined, Pooling, TextEmbedding,
+    TokenizerFiles, UserDefinedEmbeddingModel,
+};
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -64,6 +69,50 @@ impl Embedder {
             model: Arc::new(model),
             config,
             dimension,
+        })
+    }
+
+    /// Create an all-MiniLM-L6-v2 embedder from an already-resolved local snapshot.
+    ///
+    /// This path performs no model discovery or download. Callers that require an attested model
+    /// should verify the snapshot bytes before invoking it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configured model is unsupported, a required file is missing, or
+    /// FastEmbed cannot load the supplied bytes.
+    pub fn from_local_snapshot(config: EmbedConfig, snapshot_dir: &Path) -> EmbedResult<Self> {
+        if !matches!(config.model, EmbeddingModel::AllMiniLmL6V2) {
+            return Err(EmbedError::InvalidInput(
+                "local snapshots currently support only all-MiniLM-L6-v2".to_string(),
+            ));
+        }
+
+        let read = |name: &str| {
+            fs::read(snapshot_dir.join(name)).map_err(|error| {
+                EmbedError::ModelLoad(format!(
+                    "could not read {} from {}: {error}",
+                    name,
+                    snapshot_dir.display()
+                ))
+            })
+        };
+        let tokenizer_files = TokenizerFiles {
+            tokenizer_file: read("tokenizer.json")?,
+            config_file: read("config.json")?,
+            special_tokens_map_file: read("special_tokens_map.json")?,
+            tokenizer_config_file: read("tokenizer_config.json")?,
+        };
+        let supplied = UserDefinedEmbeddingModel::new(read("model.onnx")?, tokenizer_files)
+            .with_pooling(Pooling::Mean);
+        let model =
+            TextEmbedding::try_new_from_user_defined(supplied, InitOptionsUserDefined::default())
+                .map_err(|error| EmbedError::ModelLoad(error.to_string()))?;
+
+        Ok(Self {
+            model: Arc::new(model),
+            config,
+            dimension: 384,
         })
     }
 

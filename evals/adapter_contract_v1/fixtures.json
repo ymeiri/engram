@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "project": "engram-adapter-contract-fixture",
+  "cwd": "/tmp/engram-adapter-contract-checkout",
+  "harnesses": [
+    {
+      "harness": "codex",
+      "adapter": "codex-memory-session-skill",
+      "required_adapter_fragments": [
+        "agent=codex",
+        "response_shape=\"lean\"",
+        "search(query=..., project=..., cwd=..., relevance_mode=\"related\")",
+        "memory(action=procedure_match",
+        "scope={relevance_mode:\"local\", cwd:...}",
+        "source-backed prerequisites",
+        "`condition_observations`",
+        "caller text cannot override",
+        "`prerequisite_sources`",
+        "Execute only returned procedures"
+      ],
+      "calls": [
+        {
+          "tool": "orient",
+          "arguments": {
+            "project": "engram-adapter-contract-fixture",
+            "cwd": "/tmp/engram-adapter-contract-checkout",
+            "prompt": "Resume work and recall the verified build procedure.",
+            "agent": "codex",
+            "response_shape": "lean",
+            "intent": "resume_session",
+            "limit": 5
+          },
+          "expected": {
+            "/response_shape": "lean",
+            "/agent": "codex",
+            "/resolution/selected_project": "engram-adapter-contract-fixture",
+            "/resolution/requires_confirmation": false
+          }
+        },
+        {
+          "tool": "search",
+          "arguments": {
+            "query": "verified build procedure",
+            "limit": 5,
+            "layers": ["memory"],
+            "project": "engram-adapter-contract-fixture",
+            "cwd": "/tmp/engram-adapter-contract-checkout",
+            "relevance_mode": "related",
+            "agent": "codex",
+            "intent": "resume_session"
+          },
+          "expected": {
+            "/count": 0,
+            "/relevance_mode": "related",
+            "/authorization_scope_enforced": true,
+            "/resolved_project": "engram-adapter-contract-fixture"
+          }
+        },
+        {
+          "tool": "memory",
+          "arguments": {
+            "action": "add",
+            "kind": "procedure",
+            "title": "Fixture source-backed procedure",
+            "content": "Run only when the tracked toolchain matches.",
+            "origin": "agent_observed",
+            "scope_type": "project",
+            "project_name": "engram-adapter-contract-fixture",
+            "writer_harness": "codex",
+            "model_provider": "openai",
+            "model": "fixture-model",
+            "procedure": {
+              "task": "run the verified source-backed build procedure",
+              "commands": ["cargo test --workspace"],
+              "prerequisites": {
+                "cargo.version": "1.80.0"
+              },
+              "prerequisite_sources": {
+                "cargo.version": {
+                  "format": "toml",
+                  "relative_path": "rust-toolchain.toml",
+                  "key_path": ["toolchain", "channel"]
+                }
+              },
+              "failure_signatures": ["unsupported compiler"],
+              "verification_command": "cargo test --workspace",
+              "verification_exit_code": 0,
+              "verification_output_contains": "test result: ok"
+            }
+          },
+          "expected": {
+            "/item/status": "needs_review",
+            "/item/procedure/prerequisites/0/source/format": "toml",
+            "/item/procedure/prerequisites/0/source/relative_path": "rust-toolchain.toml"
+          }
+        },
+        {
+          "tool": "memory",
+          "arguments": {
+            "action": "procedure_match",
+            "query": "run the verified build procedure",
+            "scope": {
+              "relevance_mode": "local",
+              "project": "engram-adapter-contract-fixture",
+              "cwd": "/tmp/engram-adapter-contract-checkout"
+            },
+            "conditions": {
+              "cargo.version": "1.80.0"
+            },
+            "limit": 5
+          },
+          "expected": {
+            "/abstained": true,
+            "/authorization_scope_enforced": true,
+            "/resolved_project": "engram-adapter-contract-fixture"
+          }
+        }
+      ]
+    },
+    {
+      "harness": "claude_code",
+      "adapter": "claude-memory-session-command",
+      "required_adapter_fragments": [
+        "agent=claude_code",
+        "response_shape=\"lean\"",
+        "search(query=..., project=..., cwd=..., relevance_mode=\"related\")",
+        "memory(action=procedure_match",
+        "scope={relevance_mode:\"local\", cwd:...}",
+        "source-backed prerequisites",
+        "`condition_observations`",
+        "caller text cannot override",
+        "`prerequisite_sources`",
+        "Execute only returned procedures"
+      ],
+      "calls": [
+        {
+          "tool": "orient",
+          "arguments": {
+            "project": "engram-adapter-contract-fixture",
+            "cwd": "/tmp/engram-adapter-contract-checkout",
+            "prompt": "Resume work and recall the verified build procedure.",
+            "agent": "claude_code",
+            "response_shape": "lean",
+            "intent": "resume_session",
+            "limit": 5
+          },
+          "expected": {
+            "/response_shape": "lean",
+            "/agent": "claude_code",
+            "/resolution/selected_project": "engram-adapter-contract-fixture",
+            "/resolution/requires_confirmation": false
+          }
+        },
+        {
+          "tool": "search",
+          "arguments": {
+            "query": "verified build procedure",
+            "limit": 5,
+            "layers": ["memory"],
+            "project": "engram-adapter-contract-fixture",
+            "cwd": "/tmp/engram-adapter-contract-checkout",
+            "relevance_mode": "related",
+            "agent": "claude_code",
+            "intent": "resume_session"
+          },
+          "expected": {
+            "/count": 0,
+            "/relevance_mode": "related",
+            "/authorization_scope_enforced": true,
+            "/resolved_project": "engram-adapter-contract-fixture"
+          }
+        },
+        {
+          "tool": "memory",
+          "arguments": {
+            "action": "add",
+            "kind": "procedure",
+            "title": "Fixture source-backed procedure",
+            "content": "Run only when the tracked toolchain matches.",
+            "origin": "agent_observed",
+            "scope_type": "project",
+            "project_name": "engram-adapter-contract-fixture",
+            "writer_harness": "claude_code",
+            "model_provider": "anthropic",
+            "model": "fixture-model",
+            "procedure": {
+              "task": "run the verified source-backed build procedure",
+              "commands": ["cargo test --workspace"],
+              "prerequisites": {
+                "cargo.version": "1.80.0"
+              },
+              "prerequisite_sources": {
+                "cargo.version": {
+                  "format": "toml",
+                  "relative_path": "rust-toolchain.toml",
+                  "key_path": ["toolchain", "channel"]
+                }
+              },
+              "failure_signatures": ["unsupported compiler"],
+              "verification_command": "cargo test --workspace",
+              "verification_exit_code": 0,
+              "verification_output_contains": "test result: ok"
+            }
+          },
+          "expected": {
+            "/item/status": "needs_review",
+            "/item/procedure/prerequisites/0/source/format": "toml",
+            "/item/procedure/prerequisites/0/source/relative_path": "rust-toolchain.toml"
+          }
+        },
+        {
+          "tool": "memory",
+          "arguments": {
+            "action": "procedure_match",
+            "query": "run the verified build procedure",
+            "scope": {
+              "relevance_mode": "local",
+              "project": "engram-adapter-contract-fixture",
+              "cwd": "/tmp/engram-adapter-contract-checkout"
+            },
+            "conditions": {
+              "cargo.version": "1.80.0"
+            },
+            "limit": 5
+          },
+          "expected": {
+            "/abstained": true,
+            "/authorization_scope_enforced": true,
+            "/resolved_project": "engram-adapter-contract-fixture"
+          }
+        }
+      ]
+    }
+  ]
+}

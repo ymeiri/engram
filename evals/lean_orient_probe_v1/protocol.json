@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "probe_id": "lean-orient-probe-v1",
+  "manifest": "../engineering_context_v1/manifest.json",
+  "scenario_ids": [
+    "repo_identity_known",
+    "repo_identity_moved_worktree",
+    "repo_identity_ambiguous",
+    "decision_current",
+    "stale_superseded_memory",
+    "no_durable_context",
+    "compaction_resume_current_plan"
+  ],
+  "repetitions": 5,
+  "targets": {
+    "latency_p50_ms": 150,
+    "latency_p95_ms": 500,
+    "packet_p50_bytes": 4096,
+    "packet_p95_bytes": 8192
+  }
+}

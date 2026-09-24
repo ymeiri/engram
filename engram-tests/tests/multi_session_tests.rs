@@ -4,7 +4,8 @@
 //! that project isolation works correctly, and that error handling is robust.
 
 use anyhow::{bail, Context, Result};
-use serde_json::json;
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,162 @@ static DAEMON_TEST_LOCK: OnceLock<Arc<TokioMutex<()>>> = OnceLock::new();
 const DAEMON_HEALTH_TIMEOUT: Duration = Duration::from_secs(120);
 const DAEMON_HEALTH_STABILITY_DELAY: Duration = Duration::from_millis(250);
 const DAEMON_LOG_TAIL_LINES: usize = 40;
+
+fn mcp_tools_sha256(tools: &[Value]) -> String {
+    let mut tools = tools.to_vec();
+    tools.sort_by(|left, right| left["name"].as_str().cmp(&right["name"].as_str()));
+    let encoded = serde_json::to_vec(&tools).expect("MCP tools should serialize");
+    format!("{:x}", Sha256::digest(encoded))
+}
+
+#[tokio::test]
+async fn test_agent_profile_contract_attests_effective_stdio_runtime() -> Result<()> {
+    let binary = engram_bin();
+    let embed_cache = test_embed_cache_dir();
+    let command_binary = binary.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        StdCommand::new(command_binary)
+            .args([
+                "contract",
+                "--profile",
+                "agent",
+                "--verify-runtime",
+                "--json",
+            ])
+            .env("ENGRAM_EMBED_CACHE_DIR", embed_cache)
+            .output()
+    })
+    .await??;
+    if !output.status.success() {
+        bail!(
+            "agent-profile runtime attestation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let report: Value = serde_json::from_slice(&output.stdout)?;
+    let runtime = report
+        .get("effective_runtime")
+        .context("runtime attestation should be present")?;
+
+    assert_eq!(report["schema_version"], 4);
+    assert_eq!(report["profile"], "agent");
+    assert_eq!(report["mcp_tool_count"], 6);
+    assert_eq!(runtime["verified"], true);
+    assert_eq!(runtime["restricted_tool_rejected"], true);
+    assert_eq!(runtime["review_authority_rejected"], true);
+    assert_eq!(runtime["correction_verification_unavailable"], true);
+    assert_eq!(runtime["mcp_tool_count"], report["mcp_tool_count"]);
+    assert_eq!(runtime["mcp_tools_sha256"], report["mcp_tools_sha256"]);
+    assert_eq!(
+        runtime["profile_instructions_sha256"],
+        report["profile_instructions_sha256"]
+    );
+    assert_eq!(
+        Path::new(report["executable_path"].as_str().unwrap()),
+        binary.canonicalize()?.as_path()
+    );
+    assert_eq!(report["executable_sha256"].as_str().unwrap().len(), 64);
+    Ok(())
+}
+
+fn parse_mcp_tool_json(response: &Value) -> Result<Value> {
+    if response
+        .pointer("/result/isError")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        bail!("MCP tool returned an error result: {response}");
+    }
+    let text = response
+        .pointer("/result/content/0/text")
+        .and_then(Value::as_str)
+        .context("MCP tool result should contain JSON text")?;
+    serde_json::from_str(text).context("MCP tool result text should be valid JSON")
+}
+
+fn resolve_schema_ref<'a>(root: &'a Value, schema: &'a Value) -> Result<&'a Value> {
+    let Some(reference) = schema.get("$ref").and_then(Value::as_str) else {
+        return Ok(schema);
+    };
+    let pointer = reference
+        .strip_prefix('#')
+        .context("fixture schemas may reference only the current tool schema")?;
+    root.pointer(pointer)
+        .with_context(|| format!("tool schema reference should resolve: {reference}"))
+}
+
+fn validate_fixture_value(root: &Value, schema: &Value, value: &Value, path: &str) -> Result<()> {
+    let schema = resolve_schema_ref(root, schema)?;
+    if let Some(branches) = schema.get("anyOf").and_then(Value::as_array) {
+        if branches
+            .iter()
+            .any(|branch| validate_fixture_value(root, branch, value, path).is_ok())
+        {
+            return Ok(());
+        }
+        bail!("{path} does not match any live schema branch");
+    }
+
+    if let Some(allowed) = schema.get("enum").and_then(Value::as_array) {
+        if !allowed.contains(value) {
+            bail!("{path} value {value} is not in the live schema enum");
+        }
+    }
+
+    if let Some(schema_type) = schema.get("type").and_then(Value::as_str) {
+        let matches = match schema_type {
+            "object" => value.is_object(),
+            "array" => value.is_array(),
+            "string" => value.is_string(),
+            "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+            "number" => value.is_number(),
+            "boolean" => value.is_boolean(),
+            "null" => value.is_null(),
+            _ => true,
+        };
+        if !matches {
+            bail!("{path} value {value} does not have live schema type {schema_type}");
+        }
+    }
+
+    if let Some(object) = value.as_object() {
+        let properties = schema.get("properties").and_then(Value::as_object);
+        for required in schema
+            .get("required")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
+            if !object.contains_key(required) {
+                bail!("{path} is missing live required argument '{required}'");
+            }
+        }
+
+        for (name, child) in object {
+            if let Some(child_schema) = properties.and_then(|items| items.get(name)) {
+                validate_fixture_value(root, child_schema, child, &format!("{path}.{name}"))?;
+                continue;
+            }
+            if let Some(additional) = schema
+                .get("additionalProperties")
+                .filter(|item| item.is_object())
+            {
+                validate_fixture_value(root, additional, child, &format!("{path}.{name}"))?;
+                continue;
+            }
+            bail!("{path} contains undeclared live argument '{name}'");
+        }
+    }
+
+    if let (Some(items), Some(values)) = (schema.get("items"), value.as_array()) {
+        for (index, child) in values.iter().enumerate() {
+            validate_fixture_value(root, items, child, &format!("{path}[{index}]"))?;
+        }
+    }
+
+    Ok(())
+}
 
 /// Get a unique port for testing.
 fn get_test_port() -> u16 {
@@ -80,7 +237,18 @@ fn resolve_engram_bin() -> PathBuf {
 
     let workspace_root = manifest_dir.parent().unwrap_or(&manifest_dir);
 
-    let debug_bin = workspace_root.join("target").join("debug").join("engram");
+    let target_root = std::env::var_os("CARGO_TARGET_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .map(|path| {
+            if path.is_absolute() {
+                path
+            } else {
+                workspace_root.join(path)
+            }
+        })
+        .unwrap_or_else(|| workspace_root.join("target"));
+    let debug_bin = target_root.join("debug").join("engram");
     let status = StdCommand::new("cargo")
         .args(["build", "-p", "engram-cli", "--bin", "engram"])
         .current_dir(workspace_root)
@@ -91,7 +259,7 @@ fn resolve_engram_bin() -> PathBuf {
         return debug_bin;
     }
 
-    let release_bin = workspace_root.join("target").join("release").join("engram");
+    let release_bin = target_root.join("release").join("engram");
     if release_bin.exists() {
         return release_bin;
     }
@@ -104,7 +272,7 @@ struct TestDaemon {
     port: u16,
     pid: u32,
     child: Child,
-    _data_dir: TempDir,
+    _data_dir: Option<TempDir>,
     stdout_path: PathBuf,
     stderr_path: PathBuf,
     _lock: OwnedMutexGuard<()>,
@@ -145,7 +313,7 @@ impl TestDaemon {
             port,
             pid,
             child,
-            _data_dir: data_dir,
+            _data_dir: Some(data_dir),
             stdout_path,
             stderr_path,
             _lock: lock,
@@ -154,6 +322,43 @@ impl TestDaemon {
         // Wait for daemon to be ready
         daemon.wait_for_health(DAEMON_HEALTH_TIMEOUT).await?;
 
+        Ok(daemon)
+    }
+
+    /// Start a daemon backed by a caller-owned persistent state root.
+    async fn start_persistent(state_root: &Path) -> Result<Self> {
+        let port = find_available_port();
+        let lock = daemon_test_lock().lock_owned().await;
+        let stdout_path = state_root.join(format!("daemon-{port}.stdout.log"));
+        let stderr_path = state_root.join(format!("daemon-{port}.stderr.log"));
+        let stdout =
+            fs::File::create(&stdout_path).context("Failed to create daemon stdout log")?;
+        let stderr =
+            fs::File::create(&stderr_path).context("Failed to create daemon stderr log")?;
+
+        let child = Command::new(engram_bin())
+            .args(["serve", "--http", "--port", &port.to_string()])
+            .env("ENGRAM_HOME", state_root)
+            .env("ENGRAM_EMBED_CACHE_DIR", test_embed_cache_dir())
+            .env("RUST_LOG", "warn")
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .kill_on_drop(true)
+            .spawn()
+            .context("Failed to spawn persistent daemon")?;
+
+        let pid = child.id().unwrap_or_default();
+        let mut daemon = Self {
+            port,
+            pid,
+            child,
+            _data_dir: None,
+            stdout_path,
+            stderr_path,
+            _lock: lock,
+        };
+        daemon.wait_for_health(DAEMON_HEALTH_TIMEOUT).await?;
         Ok(daemon)
     }
 
@@ -236,6 +441,7 @@ impl TestDaemon {
     /// Stop the daemon gracefully.
     async fn stop(mut self) -> Result<()> {
         self.child.kill().await.ok();
+        self.child.wait().await.ok();
         Ok(())
     }
 }
@@ -461,13 +667,27 @@ impl TestHttpClient {
 
     /// List all entities.
     async fn list_entities(&mut self) -> Result<serde_json::Value> {
-        self.call_tool("entity", json!({ "action": "list" })).await
+        self.call_tool(
+            "entity",
+            json!({
+                "action": "list",
+                "scope": { "relevance_mode": "global" }
+            }),
+        )
+        .await
     }
 
     /// Search entities by name.
     async fn search_entities(&mut self, query: &str) -> Result<serde_json::Value> {
-        self.call_tool("entity", json!({ "action": "search", "query": query }))
-            .await
+        self.call_tool(
+            "entity",
+            json!({
+                "action": "search",
+                "query": query,
+                "search_scope": { "relevance_mode": "global" }
+            }),
+        )
+        .await
     }
 }
 
@@ -540,6 +760,129 @@ async fn test_daemon_starts_and_responds_to_health() {
 }
 
 #[tokio::test]
+async fn test_resume_orientation_survives_real_daemon_restart() -> Result<()> {
+    let state_root = TempDir::new().context("persistent state root should be created")?;
+    let daemon = TestDaemon::start_persistent(state_root.path()).await?;
+    let mut client = TestHttpClient::new(daemon.port);
+
+    let captured = parse_mcp_tool_json(
+        &client
+            .call_tool(
+                "memory",
+                json!({
+                    "action": "capture_current_plan",
+                    "kind": "decision",
+                    "title": "Persistent daemon resume plan",
+                    "content": "Resume by validating the source-bound schema-14 route.",
+                    "project_name": "engram",
+                    "origin": "tool_result",
+                    "message": "Capture persistent daemon resume plan",
+                    "writer_harness": "codex",
+                    "model_provider": "openai",
+                    "model": "gpt-5.6-sol",
+                    "surface": "test",
+                    "evidence": [{
+                        "kind": "tool_call",
+                        "target": "persistent-daemon-resume-fixture",
+                        "summary": "Current plan captured before the daemon restart."
+                    }]
+                }),
+            )
+            .await?,
+    )?;
+    let plan_id = captured["item"]["id"]
+        .as_str()
+        .context("captured plan should have an ID")?
+        .to_string();
+    let handoff = parse_mcp_tool_json(
+        &client
+            .call_tool(
+                "handoff",
+                json!({
+                    "action": "update",
+                    "project": "engram",
+                    "content": "Schema 14 is prepared; authentication is the next boundary.",
+                    "next_actions": [
+                        "Provision only after explicit credential-copy authorization."
+                    ],
+                    "dry_run": false,
+                    "writer_harness": "codex",
+                    "model_provider": "openai",
+                    "model": "gpt-5.6-sol",
+                    "surface": "test"
+                }),
+            )
+            .await?,
+    )?;
+    let handoff_id = handoff["item"]["id"]
+        .as_str()
+        .context("captured handoff should have an ID")?
+        .to_string();
+    daemon.stop().await?;
+
+    assert!(
+        state_root.path().join("data/CURRENT").is_file(),
+        "test must cross a persistent RocksDB and daemon-process boundary"
+    );
+
+    let daemon = TestDaemon::start_persistent(state_root.path()).await?;
+    let mut resumed_client = TestHttpClient::new(daemon.port);
+    let orientation = parse_mcp_tool_json(
+        &resumed_client
+            .call_tool(
+                "orient",
+                json!({
+                    "project": "engram",
+                    "prompt": "Continue from where we left off.",
+                    "agent": "codex",
+                    "external_session_id": "post-restart-session",
+                    "intent": "resume_session",
+                    "scenario_id": "persistent_daemon_resume",
+                    "arm": "engram",
+                    "include_recent_commits": false,
+                    "limit": 5,
+                    "response_shape": "lean"
+                }),
+            )
+            .await?,
+    )?;
+
+    let top_items = orientation["brain_loop"]["top_items"]
+        .as_array()
+        .context("resume orientation should contain ranked items")?;
+    assert!(
+        top_items
+            .iter()
+            .any(|item| item["id"].as_str() == Some(handoff_id.as_str())),
+        "resume orientation: {orientation:#}"
+    );
+    assert!(
+        top_items
+            .iter()
+            .any(|item| item["id"].as_str() == Some(plan_id.as_str())),
+        "resume orientation: {orientation:#}"
+    );
+    let used_ids = orientation["used_memory_candidate_ids"]
+        .as_array()
+        .context("resume orientation should report used memory IDs")?;
+    assert!(
+        used_ids
+            .iter()
+            .any(|id| id.as_str() == Some(handoff_id.as_str())),
+        "resume orientation: {orientation:#}"
+    );
+    assert!(
+        used_ids
+            .iter()
+            .any(|id| id.as_str() == Some(plan_id.as_str())),
+        "resume orientation: {orientation:#}"
+    );
+
+    daemon.stop().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_mcp_initialize_returns_capabilities() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
     let mut client = TestHttpClient::new(daemon.port);
@@ -558,7 +901,7 @@ async fn test_mcp_initialize_returns_capabilities() {
 }
 
 #[tokio::test]
-async fn test_mcp_tools_list_lint_schema_exposes_project_filter() {
+async fn test_mcp_tools_list_lint_schema_exposes_project_filter_and_scope() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
     let mut client = TestHttpClient::new(daemon.port);
     client.initialize().await.expect("Initialize failed");
@@ -589,6 +932,11 @@ async fn test_mcp_tools_list_lint_schema_exposes_project_filter() {
         properties["project"]["description"],
         "Optional project scope to lint."
     );
+    assert_eq!(
+        properties["scope"]["description"],
+        "Authorization boundary for retrieval actions"
+    );
+    assert!(!properties.contains_key("search_scope"));
 
     daemon.stop().await.expect("Failed to stop daemon");
 }
@@ -633,7 +981,7 @@ async fn test_mcp_tools_list_obligations_schema_exposes_scope_filters() {
 }
 
 #[tokio::test]
-async fn test_mcp_tools_list_telemetry_schema_exposes_project_filter() {
+async fn test_mcp_tools_list_telemetry_schema_exposes_project_filter_and_scope() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
     let mut client = TestHttpClient::new(daemon.port);
     client.initialize().await.expect("Initialize failed");
@@ -663,12 +1011,17 @@ async fn test_mcp_tools_list_telemetry_schema_exposes_project_filter() {
         properties["project"]["description"],
         "Optional project scope for record_trace, list_traces, list_feedback, stats_by_intent, and real_session_eval."
     );
+    assert_eq!(
+        properties["scope"]["description"],
+        "Authorization boundary for retrieval actions"
+    );
+    assert!(!properties.contains_key("search_scope"));
 
     daemon.stop().await.expect("Failed to stop daemon");
 }
 
 #[tokio::test]
-async fn test_mcp_tools_list_orient_schema_exposes_context_contract() {
+async fn test_mcp_tools_list_exposes_orientation_and_retrieval_scope_contracts() {
     let daemon = TestDaemon::start().await.expect("Failed to start daemon");
     let mut client = TestHttpClient::new(daemon.port);
     client.initialize().await.expect("Initialize failed");
@@ -686,6 +1039,17 @@ async fn test_mcp_tools_list_orient_schema_exposes_context_contract() {
     let tools = response["result"]["tools"]
         .as_array()
         .expect("tools/list should return a tools array");
+    let exposed_tools_sha256 = mcp_tools_sha256(tools);
+    let health: Value = reqwest::get(format!("http://127.0.0.1:{}/health", daemon.port))
+        .await
+        .expect("health should respond")
+        .json()
+        .await
+        .expect("health should return JSON");
+    assert_eq!(
+        health["mcp_tools_sha256"], exposed_tools_sha256,
+        "health must attest the exact live tools/list contract"
+    );
     let orient = tools
         .iter()
         .find(|tool| tool["name"] == "orient")
@@ -696,16 +1060,250 @@ async fn test_mcp_tools_list_orient_schema_exposes_context_contract() {
 
     assert_eq!(
         properties["cwd"]["description"],
-        "Current working directory for repository/project resolution and scoped memory selection."
+        "Current working directory for deterministic repository/component identity and scoped memory selection. A cwd never authorizes a project by directory basename."
     );
     assert_eq!(
         properties["project"]["description"],
-        "Explicit project name for project resolution and project-scoped memory selection."
+        "Explicit project authorization for project-scoped memory selection. Omit when unknown; the response identity reports candidates or requires_confirmation without inventing scope."
     );
     assert_eq!(
         properties["response_shape"]["description"],
-        "Response shape: full (default) or lean for compact trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
+        "Response shape: full (default) or lean for compact identity/trace/cursor/Brain Loop guidance. When omitted by Claude Code agents, defaults to lean to avoid oversized hook/tool output."
     );
+
+    for tool_name in [
+        "entity",
+        "entity_observe",
+        "session",
+        "docs",
+        "tool",
+        "knowledge",
+        "coord",
+        "work_project",
+        "work_task",
+        "work_pr",
+        "work_observe",
+        "work_context",
+        "repo",
+        "memory",
+        "telemetry",
+        "handoff",
+        "harness",
+        "obligations",
+        "lint",
+        "graph",
+        "vault",
+        "digest",
+    ] {
+        let retrieval_tool = tools
+            .iter()
+            .find(|tool| tool["name"] == tool_name)
+            .unwrap_or_else(|| panic!("tools/list should expose {tool_name}"));
+        let retrieval_properties = retrieval_tool["inputSchema"]["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("{tool_name} input schema should expose properties"));
+        assert!(retrieval_properties.contains_key("scope"));
+        assert!(!retrieval_properties.contains_key("search_scope"));
+        let description = retrieval_properties["scope"]["description"]
+            .as_str()
+            .expect("scope description should be text");
+        assert!(description.starts_with("Authorization boundary for retrieval actions"));
+        if tool_name == "memory" {
+            assert!(description.contains("procedure_match always applies local scope"));
+        }
+    }
+
+    for tool_name in [
+        "knowledge_stats",
+        "entity_stats",
+        "session_stats",
+        "tool_intel_stats",
+        "coord_stats",
+        "work_stats",
+    ] {
+        let stats_tool = tools
+            .iter()
+            .find(|tool| tool["name"] == tool_name)
+            .unwrap_or_else(|| panic!("tools/list should expose {tool_name}"));
+        let stats_properties = stats_tool["inputSchema"]["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("{tool_name} input schema should expose properties"));
+        assert!(stats_properties.contains_key("scope"));
+        assert!(!stats_properties.contains_key("search_scope"));
+        assert_eq!(
+            stats_properties["scope"]["description"],
+            "Authorization boundary for retrieval actions"
+        );
+    }
+
+    daemon.stop().await.expect("Failed to stop daemon");
+}
+
+#[tokio::test]
+async fn test_generated_codex_and_claude_adapter_fixtures_execute_against_live_schema() {
+    let daemon = TestDaemon::start().await.expect("Failed to start daemon");
+    let mut client = TestHttpClient::new(daemon.port);
+    client.initialize().await.expect("Initialize failed");
+
+    let response = client
+        .send_request(json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }))
+        .await
+        .expect("tools/list should respond");
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("tools/list should return a tools array");
+
+    let fixture_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../evals/adapter_contract_v1/fixtures.json");
+    let fixture: Value = serde_json::from_str(
+        &fs::read_to_string(&fixture_path).expect("adapter contract fixture should be readable"),
+    )
+    .expect("adapter contract fixture should be valid JSON");
+    assert_eq!(fixture["schema_version"], 1);
+    let project = fixture["project"]
+        .as_str()
+        .expect("fixture should declare a project");
+
+    let created = client
+        .call_tool(
+            "work_project",
+            json!({
+                "action": "create",
+                "name": project,
+                "description": "Ephemeral native adapter contract fixture"
+            }),
+        )
+        .await
+        .expect("fixture project creation should succeed");
+    parse_mcp_tool_json(&created).expect("fixture project response should be valid");
+
+    for harness in fixture["harnesses"]
+        .as_array()
+        .expect("fixture should declare harnesses")
+    {
+        let harness_name = harness["harness"]
+            .as_str()
+            .expect("harness fixture should declare a harness");
+        let adapter_name = harness["adapter"]
+            .as_str()
+            .expect("harness fixture should declare an adapter");
+        let rendered = client
+            .call_tool(
+                "harness",
+                json!({
+                    "action": "render_adapter",
+                    "harness": harness_name,
+                    "adapter": adapter_name
+                }),
+            )
+            .await
+            .expect("live adapter rendering should succeed");
+        let rendered = parse_mcp_tool_json(&rendered)
+            .expect("live adapter rendering should return valid JSON");
+        let contents = rendered["adapters"][0]["contents"]
+            .as_str()
+            .expect("live adapter rendering should include contents");
+        for fragment in harness["required_adapter_fragments"]
+            .as_array()
+            .expect("harness fixture should declare adapter fragments")
+            .iter()
+            .filter_map(Value::as_str)
+        {
+            assert!(
+                contents.contains(fragment),
+                "{harness_name} adapter should contain contract fragment: {fragment}"
+            );
+        }
+
+        for call in harness["calls"]
+            .as_array()
+            .expect("harness fixture should declare calls")
+        {
+            let tool_name = call["tool"]
+                .as_str()
+                .expect("contract call should declare a tool");
+            assert!(
+                ["orient", "search", "memory"].contains(&tool_name),
+                "adapter contract should stay within the compact agent retrieval surface"
+            );
+            let live_tool = tools
+                .iter()
+                .find(|tool| tool["name"] == tool_name)
+                .unwrap_or_else(|| panic!("live tools/list should expose {tool_name}"));
+            let arguments = &call["arguments"];
+            validate_fixture_value(
+                &live_tool["inputSchema"],
+                &live_tool["inputSchema"],
+                arguments,
+                tool_name,
+            )
+            .unwrap_or_else(|error| {
+                panic!("{harness_name} {tool_name} fixture should match live schema: {error}")
+            });
+
+            let response = client
+                .call_tool(tool_name, arguments.clone())
+                .await
+                .unwrap_or_else(|error| {
+                    panic!("{harness_name} {tool_name} fixture should execute: {error}")
+                });
+            let result = parse_mcp_tool_json(&response).unwrap_or_else(|error| {
+                panic!("{harness_name} {tool_name} fixture should succeed: {error}")
+            });
+            for (pointer, expected) in call["expected"]
+                .as_object()
+                .expect("contract call should declare expected response values")
+            {
+                assert_eq!(
+                    result.pointer(pointer),
+                    Some(expected),
+                    "{harness_name} {tool_name} response should satisfy {pointer}"
+                );
+            }
+        }
+    }
+
+    let memory_tool = tools
+        .iter()
+        .find(|tool| tool["name"] == "memory")
+        .expect("live tools/list should expose memory");
+    let mut stale_arguments = fixture["harnesses"][0]["calls"][3]["arguments"].clone();
+    let stale_object = stale_arguments
+        .as_object_mut()
+        .expect("memory fixture arguments should be an object");
+    let scope = stale_object
+        .remove("scope")
+        .expect("memory fixture should declare scope");
+    stale_object.insert("search_scope".to_string(), scope);
+    let stale_error = validate_fixture_value(
+        &memory_tool["inputSchema"],
+        &memory_tool["inputSchema"],
+        &stale_arguments,
+        "memory",
+    )
+    .expect_err("a stale search_scope adapter call should fail the live schema contract");
+    assert!(stale_error.to_string().contains("search_scope"));
+
+    let mut missing_action = fixture["harnesses"][0]["calls"][3]["arguments"].clone();
+    missing_action
+        .as_object_mut()
+        .expect("memory fixture arguments should be an object")
+        .remove("action");
+    let missing_error = validate_fixture_value(
+        &memory_tool["inputSchema"],
+        &memory_tool["inputSchema"],
+        &missing_action,
+        "memory",
+    )
+    .expect_err("a memory adapter call without action should fail the live schema contract");
+    assert!(missing_error
+        .to_string()
+        .contains("required argument 'action'"));
 
     daemon.stop().await.expect("Failed to stop daemon");
 }

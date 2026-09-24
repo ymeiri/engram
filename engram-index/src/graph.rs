@@ -1,7 +1,9 @@
 //! Derived Memory OS graph traversal.
 
 use crate::error::IndexResult;
+use crate::search::RelatedSearchScope;
 use engram_core::graph::{MemoryEdge, MemoryGraphPath, MemoryNode, MemorySubgraph};
+use engram_core::id::Id;
 use engram_core::memory::{EvidenceKind, KnowledgeCommit, MemoryItem, MemoryScope};
 use engram_core::repository::{
     GitRepository, LocalCheckout, MonorepoComponent, ProjectRepositoryLink,
@@ -42,6 +44,21 @@ impl GraphService {
         ))
     }
 
+    /// Return project/task-authorized nodes around a starting node.
+    pub async fn around_related(
+        &self,
+        scope: &RelatedSearchScope,
+        start: &str,
+        depth: usize,
+    ) -> IndexResult<MemorySubgraph> {
+        let graph = self.related_graph(scope).await?;
+        Ok(subgraph_around(
+            graph,
+            &normalize_node_id(start),
+            depth.max(1),
+        ))
+    }
+
     /// Return a path between two nodes, if one exists.
     pub async fn path(
         &self,
@@ -50,6 +67,23 @@ impl GraphService {
         max_depth: usize,
     ) -> IndexResult<Option<MemoryGraphPath>> {
         let graph = self.full_graph().await?;
+        Ok(path_between(
+            graph,
+            &normalize_node_id(from),
+            &normalize_node_id(to),
+            max_depth.max(1),
+        ))
+    }
+
+    /// Return a path inside a project/task-authorized graph, if one exists.
+    pub async fn path_related(
+        &self,
+        scope: &RelatedSearchScope,
+        from: &str,
+        to: &str,
+        max_depth: usize,
+    ) -> IndexResult<Option<MemoryGraphPath>> {
+        let graph = self.related_graph(scope).await?;
         Ok(path_between(
             graph,
             &normalize_node_id(from),
@@ -67,9 +101,34 @@ impl GraphService {
         }
     }
 
+    /// Return a project/task-authorized graph, optionally limited around one node.
+    pub async fn subgraph_related(
+        &self,
+        scope: &RelatedSearchScope,
+        start: Option<&str>,
+        depth: usize,
+    ) -> IndexResult<MemorySubgraph> {
+        let graph = self.related_graph(scope).await?;
+        Ok(match start {
+            Some(start) => subgraph_around(graph, &normalize_node_id(start), depth.max(1)),
+            None => graph,
+        })
+    }
+
     /// Export a subgraph as Mermaid flowchart text.
     pub async fn export_mermaid(&self, start: Option<&str>, depth: usize) -> IndexResult<String> {
         let subgraph = self.subgraph(start, depth).await?;
+        Ok(to_mermaid(&subgraph))
+    }
+
+    /// Export a project/task-authorized subgraph as Mermaid flowchart text.
+    pub async fn export_mermaid_related(
+        &self,
+        scope: &RelatedSearchScope,
+        start: Option<&str>,
+        depth: usize,
+    ) -> IndexResult<String> {
+        let subgraph = self.subgraph_related(scope, start, depth).await?;
         Ok(to_mermaid(&subgraph))
     }
 
@@ -96,6 +155,147 @@ impl GraphService {
             &components,
             &project_links,
         ))
+    }
+
+    async fn related_graph(&self, scope: &RelatedSearchScope) -> IndexResult<MemorySubgraph> {
+        let mut items = self.repo.list_memory_items(None, None).await?;
+        let mut repositories = self.repository_repo.list_repositories(None).await?;
+        let mut checkouts = self.repository_repo.list_checkouts().await?;
+        let mut components = Vec::new();
+        let mut project_links = Vec::new();
+        for repository in &repositories {
+            components.extend(self.repository_repo.list_components(&repository.id).await?);
+            project_links.extend(
+                self.repository_repo
+                    .list_project_links(&repository.id)
+                    .await?,
+            );
+        }
+
+        project_links.retain(|link| project_link_matches_scope(link, scope));
+        let repository_ids = project_links
+            .iter()
+            .map(|link| link.repository_id)
+            .collect::<HashSet<_>>();
+        repositories.retain(|repository| repository_ids.contains(&repository.id));
+        checkouts.retain(|checkout| {
+            checkout
+                .repository_id
+                .is_some_and(|id| repository_ids.contains(&id))
+        });
+        components.retain(|component| component_matches_links(component, &project_links));
+
+        items.retain(|item| {
+            memory_matches_related_scope(item, scope, &repository_ids, &repositories, &checkouts)
+        });
+        let memory_ids = items.iter().map(|item| item.id).collect::<HashSet<_>>();
+        for item in &mut items {
+            item.supersedes.retain(|id| memory_ids.contains(id));
+            if item
+                .writer
+                .session_id
+                .is_some_and(|id| !scope.session_ids.contains(&id))
+            {
+                item.writer.session_id = None;
+            }
+        }
+
+        // Knowledge commits have no project/task ownership. Including a commit because one change
+        // happened to be in scope can leak its message, parent chain, or unrelated changed items.
+        Ok(build_graph(
+            &items,
+            &[],
+            &repositories,
+            &checkouts,
+            &components,
+            &project_links,
+        ))
+    }
+}
+
+fn project_link_matches_scope(link: &ProjectRepositoryLink, scope: &RelatedSearchScope) -> bool {
+    match link.project_id {
+        Some(project_id) => project_id == scope.project.id,
+        None => link.project_name.eq_ignore_ascii_case(&scope.project.name),
+    }
+}
+
+fn component_matches_links(component: &MonorepoComponent, links: &[ProjectRepositoryLink]) -> bool {
+    links.iter().any(|link| {
+        if link.repository_id != component.repository_id {
+            return false;
+        }
+        match (link.component_id, link.component_path.as_deref()) {
+            (Some(component_id), _) => component_id == component.id,
+            (None, Some(path)) => path == component.path,
+            (None, None) => true,
+        }
+    })
+}
+
+fn memory_matches_related_scope(
+    item: &MemoryItem,
+    scope: &RelatedSearchScope,
+    repository_ids: &HashSet<Id>,
+    repositories: &[GitRepository],
+    checkouts: &[LocalCheckout],
+) -> bool {
+    match &item.scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project {
+            project_id,
+            project_name,
+        } => project_matches(*project_id, project_name, scope),
+        MemoryScope::Task {
+            project_id,
+            project_name,
+            task_id,
+            task_name,
+        } => {
+            let Some(project_name) = project_name.as_deref() else {
+                return false;
+            };
+            if !project_matches(*project_id, project_name, scope) {
+                return false;
+            }
+            match &scope.task {
+                Some(task) => match task_id {
+                    Some(task_id) => *task_id == task.id,
+                    None => task_name.eq_ignore_ascii_case(&task.name),
+                },
+                None => true,
+            }
+        }
+        MemoryScope::Entity { entity_id, .. } => entity_id
+            .as_ref()
+            .is_some_and(|id| scope.entity_ids.contains(id)),
+        MemoryScope::Repository {
+            repository_id,
+            remote_url,
+            local_path,
+        } => match repository_id {
+            Some(repository_id) => repository_ids.contains(repository_id),
+            None => {
+                remote_url.as_ref().is_some_and(|remote_url| {
+                    repositories
+                        .iter()
+                        .any(|repository| repository.remote_url.as_ref() == Some(remote_url))
+                }) || local_path.as_ref().is_some_and(|local_path| {
+                    checkouts
+                        .iter()
+                        .any(|checkout| checkout.local_path == *local_path)
+                })
+            }
+        },
+        MemoryScope::Session { session_id } => scope.session_ids.contains(session_id),
+        MemoryScope::Custom { .. } => false,
+    }
+}
+
+fn project_matches(project_id: Option<Id>, project_name: &str, scope: &RelatedSearchScope) -> bool {
+    match project_id {
+        Some(project_id) => project_id == scope.project.id,
+        None => project_name.eq_ignore_ascii_case(&scope.project.name),
     }
 }
 

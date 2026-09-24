@@ -4,7 +4,9 @@
 
 use engram_core::entity::{EntityType, RelationType};
 use engram_index::EntityService;
-use engram_mcp::tools::{self, EntityObserveRequestNew, EntityRequestNew, ToolState};
+use engram_mcp::tools::{
+    self, EntityObserveRequestNew, EntityRequestNew, RetrievalScopeRequest, ToolState,
+};
 use engram_store::{connect_and_init, StoreConfig};
 
 // =============================================================================
@@ -35,6 +37,22 @@ async fn test_create_entity() {
     assert_eq!(entity.name, "web-api");
     assert_eq!(entity.entity_type, EntityType::Service);
     assert_eq!(entity.description, Some("Main REST API".to_string()));
+}
+
+#[tokio::test]
+async fn test_entity_service_rejects_secret_material_before_persistence() {
+    let service = setup_service().await;
+    let canary = "Authorization: Bearer synthetic-entity-service-secret";
+
+    let error = service
+        .create_entity("secret-entity", EntityType::Service, Some(canary))
+        .await
+        .expect_err("secret-bearing entity should be rejected");
+
+    assert!(error
+        .to_string()
+        .contains("secret material was not persisted"));
+    assert!(service.list_entities(None).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -850,6 +868,13 @@ async fn setup_tool_state() -> ToolState {
     state
 }
 
+fn global_scope() -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("global".to_string()),
+        ..RetrievalScopeRequest::default()
+    })
+}
+
 #[tokio::test]
 async fn test_mcp_entity_create() {
     let state = setup_tool_state().await;
@@ -862,6 +887,7 @@ async fn test_mcp_entity_create() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -886,6 +912,7 @@ async fn test_mcp_entity_get() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -901,6 +928,7 @@ async fn test_mcp_entity_get() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: global_scope(),
         target: None,
         relation: None,
         alias: None,
@@ -931,6 +959,7 @@ async fn test_mcp_entity_list() {
             query: None,
             type_filter: None,
             limit: None,
+            scope: None,
             target: None,
             relation: None,
             alias: None,
@@ -947,6 +976,7 @@ async fn test_mcp_entity_list() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: global_scope(),
         target: None,
         relation: None,
         alias: None,
@@ -967,6 +997,7 @@ async fn test_mcp_entity_list() {
         query: None,
         type_filter: Some("service".to_string()),
         limit: None,
+        scope: global_scope(),
         target: None,
         relation: None,
         alias: None,
@@ -993,6 +1024,7 @@ async fn test_mcp_entity_search() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1008,6 +1040,10 @@ async fn test_mcp_entity_search() {
         query: Some("auth".to_string()),
         type_filter: None,
         limit: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
         target: None,
         relation: None,
         alias: None,
@@ -1032,6 +1068,7 @@ async fn test_mcp_entity_relate() {
             query: None,
             type_filter: None,
             limit: None,
+            scope: None,
             target: None,
             relation: None,
             alias: None,
@@ -1048,6 +1085,7 @@ async fn test_mcp_entity_relate() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: Some("backend".to_string()),
         relation: Some("depends_on".to_string()),
         alias: None,
@@ -1072,6 +1110,7 @@ async fn test_mcp_entity_alias() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1087,6 +1126,7 @@ async fn test_mcp_entity_alias() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: Some("k8s".to_string()),
@@ -1104,6 +1144,7 @@ async fn test_mcp_entity_alias() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: global_scope(),
         target: None,
         relation: None,
         alias: None,
@@ -1126,6 +1167,7 @@ async fn test_mcp_entity_delete() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1141,6 +1183,7 @@ async fn test_mcp_entity_delete() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1158,6 +1201,7 @@ async fn test_mcp_entity_delete() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: global_scope(),
         target: None,
         relation: None,
         alias: None,
@@ -1179,6 +1223,7 @@ async fn test_mcp_entity_invalid_action() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1201,6 +1246,7 @@ async fn test_mcp_entity_observe_add_get() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1217,6 +1263,7 @@ async fn test_mcp_entity_observe_add_get() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: None,
     };
     let result = tools::entity_observe_new(&state, add_req).await;
     assert!(result.is_ok());
@@ -1234,6 +1281,7 @@ async fn test_mcp_entity_observe_add_get() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::entity_observe_new(&state, get_req).await;
     assert!(result.is_ok());
@@ -1254,6 +1302,7 @@ async fn test_mcp_entity_observe_update() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1270,6 +1319,7 @@ async fn test_mcp_entity_observe_update() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: None,
     };
     tools::entity_observe_new(&state, add_req).await.unwrap();
 
@@ -1283,6 +1333,7 @@ async fn test_mcp_entity_observe_update() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: None,
     };
     let result = tools::entity_observe_new(&state, update_req).await;
     assert!(result.is_ok());
@@ -1305,6 +1356,7 @@ async fn test_mcp_entity_observe_list() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1326,6 +1378,7 @@ async fn test_mcp_entity_observe_list() {
             key_pattern: None,
             query: None,
             limit: None,
+            scope: None,
         };
         tools::entity_observe_new(&state, req).await.unwrap();
     }
@@ -1340,6 +1393,7 @@ async fn test_mcp_entity_observe_list() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::entity_observe_new(&state, list_req).await;
     assert!(result.is_ok());
@@ -1356,6 +1410,7 @@ async fn test_mcp_entity_observe_list() {
         key_pattern: Some("architecture.*".to_string()),
         query: None,
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::entity_observe_new(&state, pattern_req).await;
     assert!(result.is_ok());
@@ -1376,6 +1431,7 @@ async fn test_mcp_entity_observe_search() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1391,6 +1447,7 @@ async fn test_mcp_entity_observe_search() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: None,
     };
     tools::entity_observe_new(&state, obs_req).await.unwrap();
 
@@ -1406,6 +1463,7 @@ async fn test_mcp_entity_observe_search() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: None,
     };
     tools::entity_observe_new(&state, skill_obs_req)
         .await
@@ -1421,6 +1479,10 @@ async fn test_mcp_entity_observe_search() {
         key_pattern: None,
         query: Some("OAuth".to_string()),
         limit: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
     };
     let result = tools::entity_observe_new(&state, search_req).await;
     assert!(result.is_ok());
@@ -1440,6 +1502,10 @@ async fn test_mcp_entity_observe_search() {
                 .to_string(),
         ),
         limit: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
     };
     let result = tools::entity_observe_new(&state, long_query_req).await;
     assert!(result.is_ok());
@@ -1462,6 +1528,7 @@ async fn test_mcp_entity_observe_search_matches_live_debugger_skill_loading_quer
             query: None,
             type_filter: None,
             limit: None,
+            scope: None,
             target: None,
             relation: None,
             alias: None,
@@ -1485,6 +1552,7 @@ async fn test_mcp_entity_observe_search_matches_live_debugger_skill_loading_quer
             key_pattern: None,
             query: None,
             limit: None,
+            scope: None,
         },
     )
     .await
@@ -1505,6 +1573,10 @@ async fn test_mcp_entity_observe_search_matches_live_debugger_skill_loading_quer
                     .to_string(),
             ),
             limit: None,
+            scope: Some(RetrievalScopeRequest {
+                relevance_mode: Some("global".to_string()),
+                ..RetrievalScopeRequest::default()
+            }),
         },
     )
     .await;
@@ -1529,6 +1601,7 @@ async fn test_mcp_entity_observe_history() {
         query: None,
         type_filter: None,
         limit: None,
+        scope: None,
         target: None,
         relation: None,
         alias: None,
@@ -1546,6 +1619,7 @@ async fn test_mcp_entity_observe_history() {
             key_pattern: None,
             query: None,
             limit: None,
+            scope: None,
         };
         tools::entity_observe_new(&state, req).await.unwrap();
     }
@@ -1560,6 +1634,7 @@ async fn test_mcp_entity_observe_history() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: global_scope(),
     };
     let result = tools::entity_observe_new(&state, history_req).await;
     assert!(result.is_ok());
@@ -1583,6 +1658,7 @@ async fn test_mcp_entity_observe_invalid_action() {
         key_pattern: None,
         query: None,
         limit: None,
+        scope: None,
     };
     let result = tools::entity_observe_new(&state, req).await;
     assert!(result.is_err());

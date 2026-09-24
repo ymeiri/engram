@@ -4,7 +4,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.80%2B-orange.svg)](https://www.rust-lang.org/)
 
-> Local-first persistent memory for AI coding agents via MCP. One binary. Private by default.
+> Portable, evidence-backed engineering context for AI coding agents via MCP. One binary. Private
+> by default.
 
 Your AI coding assistant forgets everything between sessions — project conventions, architectural decisions, what you were working on, which tools work best. **engram remembers.**
 
@@ -16,10 +17,11 @@ Your AI coding assistant forgets everything between sessions — project convent
 > "What auth approach does this project use?"
 > *"This project uses OAuth. You chose it over API keys on Jan 12 for delegated partner access."*
 
-engram is a local-first memory system and knowledge base purpose-built for AI coding agents. It
-connects via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) so Claude Code, Codex,
-Cursor, and other compatible agents can use semantic search, session memory, document recall, and
-tool history across sessions without embedding API calls.
+engram is a local-first engineering-context layer purpose-built for AI coding agents. It resolves
+which repository, checkout, project, and component an agent is working in, then returns scoped
+decisions and evidence-backed procedures that can travel between Claude Code, Codex, Cursor, and
+other MCP-compatible hosts. Semantic search, session history, document recall, and tool history
+remain supporting evidence rather than unscoped instructions.
 
 > **0.2.x support scope:** guided local setup supports Claude Code, Codex, and Cursor. Other
 > MCP-compatible hosts may work with the same server, but they are not part of the supported
@@ -167,7 +169,11 @@ harness adapter installer as `engram harness install`, keeps writes approval-gat
 overwrite user-owned files unless you opt into the lower-level harness command.
 
 For Claude Code, the write step also registers or updates the user-scope Claude MCP server named
-`engram` so the generated hooks can call Engram immediately after Claude Code is restarted.
+`engram`. The default Claude Code hook set is intentionally low-overhead: session start,
+compaction, and session end. During normal work, use the generated Engram Claude commands or ask
+Claude to orient explicitly instead of paying for an Engram hook on every prompt, tool call, and
+final response. Users who want runtime enforcement can opt in with
+`--enforcement graduated` or `--enforcement strict`.
 
 By default, setup writes under your home directory. Use `--root .` from a repository if you want
 project-local agent files.
@@ -182,7 +188,7 @@ Add to your Claude Code config (`~/.claude.json`):
   "mcpServers": {
     "engram": {
       "command": "/absolute/path/to/engram",
-      "args": ["serve"]
+      "args": ["serve", "--profile", "agent"]
     }
   }
 }
@@ -190,11 +196,37 @@ Add to your Claude Code config (`~/.claude.json`):
 
 For Codex and Cursor examples, see the full [MCP Setup Guide](docs/MCP_SETUP.md).
 
+After setup, this command provides a provider-free, read-only comparison of installed adapters and
+the configured Engram MCP launch shape:
+
+```bash
+engram harness status --harness codex --root . --attest-host-configuration --json
+```
+
+The report keeps resolved configuration, running-host loading, and live-runtime verification as
+separate claims and redacts environment values. Use `--harness claude-code` for Claude Code.
+
 ### 5. First orient and knowledge ingestion
 
 Restart your agent after writing setup files. In the agent, ask:
 
 > Run orient for this project.
+
+For repositories that already carry authoritative component metadata, Engram recognizes the
+nearest tracked `component.json` between the current directory and the Git root:
+
+```json
+{
+  "name": "queue-worker",
+  "kind": "service"
+}
+```
+
+Only a regular, Git-tracked file can define live component identity. The manifest is size- and
+field-bounded, and orientation returns its checkout-relative path and SHA-256 as evidence. The
+derived value is not persisted, so editing or removing the file changes the next orientation
+instead of leaving stale identity behind. Repositories without this source convention can keep
+using the private local registry through `engram repo component-add`.
 
 On first orient, if no documents are indexed yet, Engram tells the agent to ask which existing
 project docs, runbooks, notes, ADRs, or knowledge folders you want it to ingest. Preview ingestion
@@ -205,7 +237,8 @@ engram index --plan ./docs
 engram index ./docs --recursive
 ```
 
-You can also let the agent use the MCP `docs` tool to plan and index approved paths.
+The administrative `docs` MCP tool is available under `--profile full`; the bounded agent profile
+uses the explicit CLI commands above for ingestion.
 
 ### 6. Verify memory works
 
@@ -217,17 +250,96 @@ Open your agent and try:
 
 If engram is connected, your agent recalls the decision from step 1.
 
+### 7. Verify a reusable procedure
+
+When an agent discovers a repeatable command sequence, it can create a project- or
+repository-scoped `kind="procedure"` candidate with exact prerequisites, failure signatures, and
+verification expectations. Candidates remain `needs_review` and are never returned for execution.
+
+After checking a successful machine-readable receipt, activate that exact candidate explicitly:
+
+```json
+{
+  "command": "cargo test -p queue-tests",
+  "exit_code": 0,
+  "output": "test result: ok. 42 passed",
+  "conditions": { "cargo.version": "1.80.0" }
+}
+```
+
+```bash
+engram memory verify-procedure <memory-id> \
+  --receipt .engram/proofs/queue-tests.json \
+  --expires-in-days 30 \
+  --confirm
+```
+
+The receipt body is not copied into Engram. For a repository-scoped procedure whose receipt is in
+the matching checkout, Engram stores a checkout-relative proof path so it remains valid in another
+checkout of the same remote. The path and SHA-256 are checked again whenever an agent calls
+`memory(action="procedure_match", ...)`. Engram abstains if the receipt changed, the procedure
+expired, its scope is wrong, or any prerequisite is missing or different.
+
+A prerequisite may also declare a deterministic source. The first supported source is a scalar
+TOML key in a safe, regular, Git-tracked file relative to the current checkout:
+
+```json
+{
+  "prerequisites": { "cargo.version": "1.80.0" },
+  "prerequisite_sources": {
+    "cargo.version": {
+      "format": "toml",
+      "relative_path": "rust-toolchain.toml",
+      "key_path": ["toolchain", "channel"]
+    }
+  }
+}
+```
+
+At match time Engram reads that file itself from the resolved current checkout. Caller-supplied
+conditions cannot override the result. Diagnostics report only the source descriptor, file hash,
+and matched/mismatched/unavailable status; the observed scalar is not returned.
+
+### 8. Prepare the learned-memory evaluation
+
+The native-memory pilot compares host-native memory, lean Engram, and both together on Codex and
+Claude Code. It uses separate teaching and fresh moved-checkout evaluation sessions and rejects
+lanes whose native memory artifacts were not generated by the host:
+
+```bash
+cargo run -p engram-eval -- prepare-native-memory-pilot \
+  --protocol evals/native_memory_pilot_v1/protocol.json \
+  --output /path/to/new-or-empty-pilot \
+  --engram-bin /absolute/path/to/engram
+```
+
+Preparation attests binaries and writes exact commands but never invokes a provider. The generated
+plan always has `execution_approved: false`; see
+[`evals/native_memory_pilot_v1/README.md`](evals/native_memory_pilot_v1/README.md) for the lifecycle,
+credential, artifact, and spend gates.
+
+Audit the untouched or partially executed plan without calling a provider:
+
+```bash
+cargo run -p engram-eval -- audit-native-memory-pilot \
+  --plan /path/to/pilot/run-plan.json
+```
+
+Use `--require-ready` before evaluation and `--require-complete` before interpreting results.
+
 ## What To Expect
 
 - `engram init` only prepares local storage. It does not change agent settings.
 - `engram setup` shows a dry-run plan by default. Use `--write` only after reviewing the planned
   adapter and hook files.
-- `engram serve` is the MCP server command your agent runs. In default mode it starts or connects
-  to a local daemon so multiple sessions can share memory safely.
+- `engram serve --profile agent` is the bounded MCP surface recommended for Codex and Claude Code.
+  Plain `engram serve` keeps the full administrative surface for backward compatibility. Both
+  start or connect to the same authenticated local daemon so multiple sessions can share memory.
 - First `orient` gives the agent a project context packet. If the document index is empty, it asks
   the user which existing knowledge should be ingested before indexing anything.
 - Indexed documents, memory items, sessions, tool history, and work context are stored locally under
-  `~/.engram/` unless you use a project-specific or explicit data directory.
+  `~/.engram/` unless you use a project-specific or explicit data directory. Set `ENGRAM_HOME` on
+  all Engram processes for an isolated state root, including daemon metadata and project stores.
 
 ## Uninstall
 
@@ -382,14 +494,21 @@ engram-cli      CLI application
 Multiple agents can share the same knowledge base through a transparent daemon:
 
 ```bash
-engram serve                        # Auto-starts daemon, runs as stdio proxy
-engram serve --project myproject    # Project-isolated daemon and data
+engram serve --profile agent        # Bounded coding-agent surface
+engram serve --profile full         # Complete administrative surface (also the default)
+engram serve --project myproject --profile agent  # Project-isolated daemon and data
 engram daemon status                # Check daemon health
+engram daemon status --json         # Machine-readable live/spawn/current identity and drift
 ```
 
 ## MCP Tools
 
-Your agent gets these capabilities through MCP tools automatically. Here are the essentials:
+The recommended `agent` profile exposes six compact, action-restricted tools: `orient`, `memory`,
+`repo`, `search`, `harness`, and `obligations`. `harness` and `obligations` accept only the narrow
+actions needed by generated lifecycle hooks. The full profile retains every administrative,
+migration, indexing, and diagnostics tool.
+
+Here are the principal full-profile capabilities:
 
 | Tool | What it does |
 |------|-------------|

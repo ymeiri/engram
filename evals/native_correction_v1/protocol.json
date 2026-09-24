@@ -1,0 +1,56 @@
+{
+  "schema_version": 2,
+  "family": "native_correction_v1",
+  "pilot_id": "native-correction-procedure-lifecycle-20260911",
+  "nonce": "86a136f3adabe464",
+  "requires_explicit_provider_execution": true,
+  "lanes": [
+    {
+      "order": 1,
+      "host": "codex",
+      "repetition": 1,
+      "opaque_path_label": "50b98e9db7e7f789cdef226d"
+    },
+    {
+      "order": 2,
+      "host": "claude_code",
+      "repetition": 1,
+      "opaque_path_label": "0a9b766b5e09455166d7bb97"
+    }
+  ],
+  "claude": {
+    "model": "claude-haiku-4-5",
+    "proposal_max_turns": 10,
+    "proposal_budget_cents": 10,
+    "retrieval_max_turns": 6,
+    "retrieval_budget_cents": 10,
+    "aggregate_budget_cents": 20
+  },
+  "resources": {
+    "provider_calls": 4,
+    "codex_max_tokens_per_call": 50000,
+    "host_timeout_ms": 600000,
+    "max_trace_bytes": 8388608,
+    "max_stderr_bytes": 1048576,
+    "max_engram_result_bytes_per_call": 8192,
+    "max_engram_result_bytes_per_lane": 32768
+  },
+  "burden": {
+    "operator_action_definition": "one validated event in the digest-bound operator receipt",
+    "operator_actions_per_lane": 14,
+    "cleanup_action_definition": "one validated event in the digest-bound cleanup receipt",
+    "cleanup_actions_per_lane": 24,
+    "model_turn_definition": "one Codex turn.completed envelope or Claude receipt-bound num_turns value",
+    "max_model_turns_total": 18,
+    "harness_retry_definition": "provider recovered, ambiguous operator recovery, or cleanup retry used as causal evidence",
+    "required_harness_retry_count": 0,
+    "same_phase_replay_definition": "a second mutation delivery in an already dispatched correction phase",
+    "required_same_phase_replay_count": 0,
+    "provider_internal_retry_count": "unavailable",
+    "elapsed_definition": "per-lane proposal start through cleanup completion plus the sum of validated receipt durations",
+    "elapsed_unit": "milliseconds",
+    "max_active_elapsed_ms_total": 6000000,
+    "stale_reappearance_definition": "a post-boundary result projection containing superseded or forgotten memory material",
+    "required_stale_reappearance_count": 0
+  }
+}

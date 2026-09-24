@@ -75,6 +75,15 @@ impl HandoffService {
         })
     }
 
+    /// Resolve the authoritative project recorded for a session-scoped handoff boundary.
+    pub async fn session_project(&self, session_id: &Id) -> IndexResult<Option<String>> {
+        Ok(self
+            .session_repo
+            .get_session(session_id)
+            .await?
+            .and_then(|session| session.project))
+    }
+
     /// Update the rolling handoff.
     pub async fn update(
         &self,

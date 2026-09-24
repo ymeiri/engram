@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "pilot_id": "yagni-safety-kernel-v1",
+  "base_manifest": "manifest.json",
+  "scenario_ids": [
+    "matched",
+    "prerequisite_mismatch",
+    "wrong_repository",
+    "receipt_drift"
+  ],
+  "arm_ids": [
+    "codex_context_skill",
+    "codex_context_skill_plus_kernel"
+  ],
+  "repetitions": 1,
+  "run_order": [
+    {"scenario_id":"wrong_repository","arm":"codex_context_skill_plus_kernel","repetition":1},
+    {"scenario_id":"matched","arm":"codex_context_skill","repetition":1},
+    {"scenario_id":"receipt_drift","arm":"codex_context_skill","repetition":1},
+    {"scenario_id":"prerequisite_mismatch","arm":"codex_context_skill_plus_kernel","repetition":1},
+    {"scenario_id":"matched","arm":"codex_context_skill_plus_kernel","repetition":1},
+    {"scenario_id":"wrong_repository","arm":"codex_context_skill","repetition":1},
+    {"scenario_id":"prerequisite_mismatch","arm":"codex_context_skill","repetition":1},
+    {"scenario_id":"receipt_drift","arm":"codex_context_skill_plus_kernel","repetition":1}
+  ],
+  "claude_budget_cents": 0,
+  "requires_explicit_execution_approval": true
+}

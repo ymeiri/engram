@@ -1,0 +1,39 @@
+{
+  "scenario_id": "repo_identity_known",
+  "arm": "codex_lean_engram",
+  "repetition": 1,
+  "host": "codex",
+  "host_version": "replace-with-exact-version",
+  "model": "replace-with-exact-model",
+  "fixture_revision": "replace-with-fixture-git-sha",
+  "engram_attestation": {
+    "cli_version": "0.2.3",
+    "daemon_version": "0.2.3",
+    "schema_version": 1,
+    "adapter_expected_sha256": "replace-with-sha256",
+    "adapter_actual_sha256": "replace-with-same-sha256",
+    "status": "matched"
+  },
+  "repository_remote": "git@github.com:acme/atlas.git",
+  "project": "atlas",
+  "component": "queue-worker",
+  "first_action": "inspect_repository_context",
+  "returned_context_keys": [],
+  "applied_context_keys": [],
+  "evidence_targets": [
+    "fixture://atlas/main/.git/config"
+  ],
+  "observed_markers": [],
+  "task_success": true,
+  "abstained": false,
+  "repeated_failures": 0,
+  "user_corrections": 0,
+  "stale_context_keys_applied": [],
+  "evidence_claims_checked": 1,
+  "evidence_claims_correct": 1,
+  "latency_ms": 4200,
+  "input_tokens": 1900,
+  "output_tokens": 350,
+  "context_packet_bytes": 1300,
+  "notes": "Record facts from the host trace before inspecting expected values."
+}

@@ -26,10 +26,10 @@ pub use entity::{
     ObservationSearchResult,
 };
 pub use knowledge::KnowledgeRepo;
-pub use memory::MemoryRepo;
+pub use memory::{MemoryReferencePurge, MemoryRepo};
 pub use obligation::ObligationRepo;
 pub use repository::RepositoryRepo;
 pub use session::SessionRepo;
-pub use telemetry::TelemetryRepo;
+pub use telemetry::{TelemetryMemoryPurge, TelemetryRepo};
 pub use tool::{ToolIntelStats, ToolRepo};
 pub use work::{ProjectObservationSearchResult, TaskObservationSearchResult, WorkRepo, WorkStats};

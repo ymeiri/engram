@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "forward_only_non_preregistered_diagnostic",
+  "claim_boundary": "One isolated Claude Code repetition demonstrates that the required host-action response contract can cause the exact returned operation-evidence path to be read before safe abstention. It does not establish repeated reliability, portability, or flagship completion.",
+  "host": {
+    "name": "claude_code",
+    "version": "2.1.260",
+    "model": "claude-haiku-4-5"
+  },
+  "candidate": {
+    "binary_path": "/private/tmp/engram-claude-host-action-target-20260904-01/debug/engram",
+    "binary_sha256": "21adba780a0a119cf2cbf932ff4d3fe7a61ff8808f764b8537c932633062d4a2",
+    "adapter_path": "/private/tmp/engram-claude-host-action-smoke-20260904-01/adapter/.claude/commands/engram-memory-session.md",
+    "adapter_sha256": "7b1c2d49f3089864d63e024ef535c99cf078acc143ccba666319099f524cbc35",
+    "source_hashes": {
+      "engram-index/src/memory.rs": "57112e3c327937541e64a581e7bf9da73c94cf057a54fd7faf82ce2fc99370b6",
+      "engram-index/src/harness.rs": "7e2dab045bab4ca5a2d715ac1615578049669b198ca90ca4aa15f28ea3310ea3",
+      "engram-cli/src/proxy.rs": "ec75e4a640377bac7a09ada5f43a2bd8aa86ef3808fe4cdfacba009ea7582a31"
+    }
+  },
+  "trace": {
+    "path": "/private/tmp/engram-claude-host-action-smoke-20260904-01/claude-smoke-trace.jsonl",
+    "sha256": "aaa97371ca8a6ebb553686988d09fb1d7b2cc3ddb732dc5c15c435a36ed587da"
+  },
+  "fixture": {
+    "cwd": "/private/tmp/engram-claude-host-action-smoke-20260904-01/fixture/orbit/main/services/worker",
+    "repository": "orbit",
+    "component": "queue-worker",
+    "project_status": "requires_confirmation",
+    "operation_evidence_path": "runbooks/deploy-worker.md",
+    "operation_evidence_resolved_path": "/private/tmp/engram-claude-host-action-smoke-20260904-01/fixture/orbit/main/runbooks/deploy-worker.md",
+    "operation_evidence_sha256": "a5a568ef2c46b1f883cba756bcd2d70bde46d0390031e2e47757f9fcbeb64983",
+    "expected_marker": "ORBIT_ONLY_CANARY"
+  },
+  "observations": {
+    "tool_sequence": [
+      "mcp__engram__memory:procedure_match",
+      "Read:operation_evidence_resolved_path"
+    ],
+    "procedure_match_calls": 1,
+    "orient_calls": 0,
+    "repo_calls": 0,
+    "host_reads": 1,
+    "exact_resolved_path_read": true,
+    "expected_marker_observed": true,
+    "safe_abstention": true,
+    "procedure_command_executed": false,
+    "wrong_scope_atlas_context_observed": false,
+    "network_tool_calls": 0,
+    "native_memory_write_attempts": 0,
+    "permission_denials": []
+  },
+  "query_fidelity": {
+    "full_exact_request_passed": false,
+    "expected_request_sha256": "b71bac0b8240764110591e68cfa8f80ff38be56ed61ad61d5d8f40a7bd281084",
+    "observed_query_sha256": "05540329c48030d7816e50dc9b47d1e20e10dbcccb447b628a4ae4b909bd44c8",
+    "observed_query": "Handle the worker procedure using durable memory only if it belongs to the current repository. Inspect repository identity and local applicability conditions.",
+    "diagnosis": "Claude preserved the task and identity intent but omitted the rest of the exact evaluation request despite generated guidance requiring verbatim pass-through."
+  },
+  "provider_result": {
+    "success": true,
+    "num_turns": 3,
+    "cost_usd": 0.0291449,
+    "duration_ms": 18848,
+    "duration_api_ms": 20179,
+    "usage": {
+      "input_tokens": 28,
+      "cache_creation_input_tokens": 14938,
+      "cache_read_input_tokens": 27004,
+      "output_tokens": 1344,
+      "thinking_tokens": 870
+    }
+  },
+  "limitations": [
+    "The run was diagnostic rather than preregistered.",
+    "Only one Claude Code repetition and one wrong-scope case ran.",
+    "The full exact user request was not copied into procedure_match.query.",
+    "No Codex comparison or native-memory control ran.",
+    "The candidate was not installed into live adapters or settings."
+  ]
+}

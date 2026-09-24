@@ -16,7 +16,10 @@ use crate::migration::{
     MigrationInventory, MigrationInventoryOptions, MigrationReviewApply,
     MigrationReviewApplyOptions, MigrationReviewExport, MigrationReviewStatus, MigrationService,
 };
-use crate::repository::refresh_checkout_git_state;
+use crate::repository::{
+    normalize_remote_reference, refresh_checkout_git_state, resolve_matching_components,
+    RepositoryService,
+};
 use crate::vault::{
     init_memory_vault, inspect_memory_vault, read_memory_vault_page, write_memory_vault,
     MemoryVaultExport, MemoryVaultInit, MemoryVaultPage, MemoryVaultStatus,
@@ -25,19 +28,20 @@ use crate::vault::{
 use engram_core::entity::Observation;
 use engram_core::id::Id;
 use engram_core::memory::{
-    ClaimOrigin, EvidenceKind, EvidenceRef, Harness, KnowledgeCommit, MemoryChange,
-    MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind, MemoryReviewState, MemoryScope,
-    MemoryStatus, MemoryTrustMetadata, WriterProvenance,
+    ClaimOrigin, CorrectionProposal, CorrectionProposalStatus, EvidenceKind, EvidenceRef, Harness,
+    KnowledgeCommit, MemoryChange, MemoryChangeType, MemoryCursor, MemoryItem, MemoryKind,
+    MemoryReviewState, MemoryScope, MemoryStatus, MemoryTrustMetadata, ProcedureCard,
+    ProcedurePrerequisite, ProcedurePrerequisiteSource, WriterProvenance,
 };
-use engram_core::repository::{
-    MonorepoComponent, ProjectRepositoryLink, RecentGitCommit, RepositoryContext,
-};
+use engram_core::repository::{ProjectRepositoryLink, RecentGitCommit, RepositoryContext};
 use engram_core::session::{Event, EventType};
 use engram_core::telemetry::{BrainHarnessIntent, BrainHarnessOperation, BrainHarnessTrace};
 use engram_store::{Db, MemoryRepo, RepositoryRepo, SessionRepo, TelemetryRepo};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 use time::OffsetDateTime;
@@ -49,6 +53,135 @@ const ORIENT_HOT_CONTEXT_ITEM_LIMIT: usize = 3;
 const ORIENT_RECENT_GIT_COMMIT_LIMIT: usize = 5;
 const ORIENT_RECENT_GIT_COMMIT_PATH_LIMIT: usize = 8;
 const CURRENT_PLAN_TAG: &str = "current-plan";
+const MIN_PROCEDURE_TEXT_MATCH_SCORE: f32 = 0.75;
+const MAX_PROCEDURE_CANDIDATES_TO_EVALUATE: usize = 20;
+const MAX_PROCEDURE_PREREQUISITES: usize = 16;
+const MAX_CONDITION_SOURCE_BYTES: u64 = 64 * 1024;
+const MAX_OPERATION_EVIDENCE_INDEX_BYTES: usize = 64 * 1024;
+const MAX_OPERATION_EVIDENCE_CANDIDATES: usize = 128;
+const MAX_PROCEDURE_QUERY_CHARS: usize = 512;
+
+/// Machine-readable receipt produced by a successful procedure verification command.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcedureVerificationReceipt {
+    /// Exact verification command that ran.
+    pub command: String,
+    /// Observed process exit code.
+    pub exit_code: i32,
+    /// Captured output used only during verification; Engram stores its file hash, not this body.
+    pub output: String,
+    /// Exact environment conditions observed during the successful run.
+    #[serde(default)]
+    pub conditions: BTreeMap<String, String>,
+}
+
+/// Conditions and scope for retrieving an applicable procedure.
+#[derive(Debug, Clone, Default)]
+pub struct ProcedureMatchInput {
+    /// Bounded task intent or failure text used only for retrieval.
+    pub query: String,
+    /// Explicit project scope.
+    pub project: Option<String>,
+    /// Current working directory.
+    pub cwd: Option<String>,
+    /// Exact caller-observed environment conditions.
+    pub conditions: BTreeMap<String, String>,
+    /// Maximum applicable procedures to return.
+    pub limit: Option<usize>,
+}
+
+/// Applicability decision for one procedure candidate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcedureApplicability {
+    /// Memory item ID.
+    pub memory_id: Id,
+    /// Procedure title.
+    pub title: String,
+    /// Whether every scope, freshness, condition, and proof check passed.
+    pub applicable: bool,
+    /// Deterministic reasons for applying or abstaining.
+    pub reasons: Vec<String>,
+    /// Condition keys the caller must resolve from authoritative local sources before retrying.
+    pub unresolved_condition_keys: Vec<String>,
+    /// Trusted source observations made by Engram for source-backed prerequisites.
+    pub condition_observations: Vec<ProcedureConditionObservation>,
+}
+
+/// Outcome of one deterministic checkout-local prerequisite observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcedureConditionObservationStatus {
+    /// The observed scalar matched the verified prerequisite.
+    Matched,
+    /// The observed scalar differed from the verified prerequisite.
+    Mismatched,
+    /// The source could not be observed safely.
+    Unavailable,
+}
+
+/// Auditable evidence for a source-backed prerequisite without exposing either scalar value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcedureConditionObservation {
+    /// Stable condition key.
+    pub condition_key: String,
+    /// Declarative source read from the current checkout.
+    pub source: ProcedurePrerequisiteSource,
+    /// Match outcome.
+    pub status: ProcedureConditionObservationStatus,
+    /// SHA-256 of the complete current source file when it was read successfully.
+    pub source_sha256: Option<String>,
+    /// Bounded explanation that never includes the observed or expected scalar.
+    pub detail: String,
+}
+
+/// One bounded checkout-local source candidate for resolving a procedure no-result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationEvidenceCandidate {
+    /// Git-tracked path relative to the current checkout root.
+    pub path: String,
+    /// Canonical absolute path for one exact host read in the current checkout.
+    pub resolved_path: String,
+    /// SHA-256 of the complete current file without returning its contents.
+    pub source_sha256: String,
+    /// Bounded explanation of why this path was selected.
+    pub reason: String,
+    /// Whether the host must read this source before returning a final abstention.
+    pub required_before_final_abstention: bool,
+    /// Whether repository-local evidence collection remains allowed while project scope is unresolved.
+    pub allowed_when_project_requires_confirmation: bool,
+    /// Whether this evidence candidate authorizes executing a remembered procedure.
+    pub authorizes_procedure_execution: bool,
+}
+
+/// Procedure retrieval report with explicit abstention diagnostics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcedureMatchReport {
+    /// Validated bounded retrieval query.
+    pub query: String,
+    /// Compact checkout identity and separate project-authorization boundary.
+    pub identity: OrientationIdentity,
+    /// Project/repository identity resolution performed at the procedure boundary.
+    pub resolution: OrientationResolution,
+    /// Applicable, verified procedures only.
+    pub procedures: Vec<MemoryItem>,
+    /// Decisions for every query-relevant candidate considered.
+    pub diagnostics: Vec<ProcedureApplicability>,
+    /// Whether no procedure was safe to apply.
+    pub abstained: bool,
+    /// Short outcome statement.
+    pub message: String,
+    /// Deduplicated condition keys that must be observed before a safe retry.
+    pub required_condition_keys: Vec<String>,
+    /// Bounded next actions that do not reveal the verified condition values.
+    pub next_actions: Vec<String>,
+    /// Unique tracked runbook candidate for one direct read, when deterministically resolvable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested_operation_evidence: Option<OperationEvidenceCandidate>,
+    /// Root of the currently resolved checkout, when repository identity is available.
+    pub current_checkout_root: Option<String>,
+    /// Safety rule separating stored checkout provenance from the current execution location.
+    pub execution_guidance: Option<String>,
+}
 
 /// Relevance score for a memory item returned by changes_since.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +207,8 @@ pub struct MemoryChangesSinceOptions {
     pub writer_session_id: Option<Id>,
     /// Optional project used for relevance scoring.
     pub project: Option<String>,
+    /// Optional exact task used for authorization and relevance scoring.
+    pub task: Option<String>,
     /// Optional cwd used for repository relevance scoring.
     pub cwd: Option<String>,
     /// Optional prompt/query used for keyword scoring.
@@ -82,6 +217,38 @@ pub struct MemoryChangesSinceOptions {
     pub intent: Option<BrainHarnessIntent>,
     /// Optional host/application session label for telemetry correlation.
     pub external_session_id: Option<String>,
+    /// Whether returned MemoryItems must match the supplied project/task/cwd boundary.
+    pub enforce_scope: bool,
+    /// Whether knowledge commits should be withheld from the response while still advancing the
+    /// opaque cursor across them.
+    pub omit_commits: bool,
+}
+
+/// Internal deletion result for a permanently forgotten memory item.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryForgetReport {
+    /// Exact memory item requested for deletion.
+    pub id: Id,
+    /// Whether the canonical memory item existed and was deleted.
+    pub deleted: bool,
+    /// Other memory items scrubbed of links or evidence naming the forgotten item.
+    pub memory_items_updated: usize,
+    /// Knowledge commits stripped of the forgotten item's linked change and message.
+    pub commits_redacted: usize,
+    /// Retrieval traces deleted because they returned the forgotten item.
+    pub traces_deleted: usize,
+    /// Feedback records deleted because they referenced the forgotten item or a deleted trace.
+    pub feedback_deleted: usize,
+    /// Typed correction-proposal records deleted because they referenced the forgotten item.
+    pub correction_proposals_deleted: usize,
+    /// Inactive pending replacement items deleted with a forgotten obsolete item.
+    pub proposal_replacements_deleted: usize,
+    /// Surviving obsolete items atomically unlocked when a pending replacement was forgotten.
+    pub proposal_obsoletes_unlocked: usize,
+    /// Whether this call resumed cleanup from a durable post-deletion receipt.
+    pub cleanup_resumed: bool,
+    /// Whether projection counts cover the complete forget operation rather than this retry only.
+    pub projection_counts_complete: bool,
 }
 
 /// Memory changes visible after a cursor.
@@ -239,12 +406,73 @@ pub struct OrientInput {
 pub enum OrientationResolutionSource {
     /// User supplied the project explicitly.
     ExplicitProject,
+    /// Project was derived from a caller-supplied, validated task.
+    Task,
     /// Resolved from a component-scoped repository link.
     ComponentLink,
     /// Resolved from an unambiguous repository link.
     RepositoryLink,
     /// No project was selected.
     Unresolved,
+}
+
+/// Whether a project name is authorized for scoped retrieval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrientationProjectStatus {
+    /// The caller, task, or an exact topology link authorized this project.
+    Authorized,
+    /// Repository identity is known, but the project needs an explicit user decision.
+    RequiresConfirmation,
+    /// Neither an authorized project nor a material project candidate is available.
+    Unavailable,
+}
+
+/// Compact, credential-free repository identity for an orientation boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrientationRepositoryIdentity {
+    /// Engram topology record correlated with this identity.
+    pub repository_id: Id,
+    /// Canonical repository name.
+    pub name: String,
+    /// Credential-free normalized remote, when known.
+    pub normalized_remote: Option<String>,
+    /// Engram checkout record correlated with the current root, when known.
+    pub checkout_id: Option<Id>,
+    /// Absolute root of the current checkout, when known.
+    pub checkout_root: Option<String>,
+    /// Last Git HEAD recorded for the resolved checkout, when available.
+    pub head_sha: Option<String>,
+}
+
+/// Project authorization kept distinct from repository and component identity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrientationProjectIdentity {
+    /// Authorization state for project-scoped retrieval.
+    pub status: OrientationProjectStatus,
+    /// Authorized project name, if any.
+    pub name: Option<String>,
+    /// Exact source of the authorization decision.
+    pub source: OrientationResolutionSource,
+    /// Candidate names that require confirmation or explain an explicit override.
+    pub candidates: Vec<String>,
+    /// Engram topology links that support the selected project or candidates.
+    pub project_link_ids: Vec<Id>,
+    /// Bounded explanation of the authorization decision.
+    pub reason: String,
+    /// Material ambiguity, when confirmation is required.
+    pub ambiguity: Option<String>,
+}
+
+/// Deterministic identity boundary shared by orientation and procedure matching.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrientationIdentity {
+    /// Current repository and checkout identity, independent of project authorization.
+    pub repository: Option<OrientationRepositoryIdentity>,
+    /// Project-scoped retrieval authorization.
+    pub project: OrientationProjectIdentity,
+    /// Git-tracked component identities containing the current path.
+    pub components: Vec<OrientationComponentEvidence>,
 }
 
 /// Structured project/repository resolution for an orientation request.
@@ -264,12 +492,31 @@ pub struct OrientationResolution {
     pub reason: String,
     /// Repository matched from cwd, if any.
     pub repository_name: Option<String>,
+    /// Credential-free normalized repository remote matched from cwd, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_remote: Option<String>,
     /// Component names matched from cwd.
     pub component_names: Vec<String>,
+    /// Source evidence for component identities matched from cwd.
+    #[serde(default)]
+    pub component_evidence: Vec<OrientationComponentEvidence>,
     /// Project candidates considered.
     pub project_candidates: Vec<String>,
     /// Ambiguity details, if any.
     pub ambiguity: Option<String>,
+}
+
+/// Evidence explaining a component identity returned by orientation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrientationComponentEvidence {
+    /// Component name.
+    pub name: String,
+    /// Repository-relative component path.
+    pub component_path: String,
+    /// Checkout-relative authoritative source path, when live-derived.
+    pub source_path: Option<String>,
+    /// SHA-256 of the authoritative source observed for this orientation.
+    pub source_sha256: Option<String>,
 }
 
 impl OrientationResolution {
@@ -287,7 +534,11 @@ impl OrientationResolution {
             requires_confirmation: ambiguity.is_some(),
             reason: reason.into(),
             repository_name: repository_context.map(|context| context.repository.name.clone()),
+            repository_remote: repository_context
+                .and_then(|context| context.repository.remote_url.as_deref())
+                .and_then(normalize_remote_reference),
             component_names: component_names(repository_context),
+            component_evidence: component_evidence(repository_context),
             project_candidates: project_candidates(repository_context),
             ambiguity,
         }
@@ -329,6 +580,8 @@ pub struct OrientationPacket {
     pub project: Option<String>,
     /// Current working directory, when supplied.
     pub cwd: Option<String>,
+    /// Exact task selected for task-scoped retrieval, when supplied.
+    pub task: Option<String>,
     /// Agent/harness name.
     pub agent: Option<String>,
     /// Caller intent, when supplied.
@@ -339,6 +592,8 @@ pub struct OrientationPacket {
     pub prompt: Option<String>,
     /// Human-readable scope label.
     pub scope: String,
+    /// Compact checkout identity and separate project-authorization boundary.
+    pub identity: OrientationIdentity,
     /// Structured resolution explaining which project/repository context was selected.
     pub resolution: OrientationResolution,
     /// Repository topology resolved from cwd, when known.
@@ -363,6 +618,8 @@ pub struct OrientationPacket {
     pub preferences: Vec<MemoryItem>,
     /// Active limitations relevant to this scope.
     pub limitations: Vec<MemoryItem>,
+    /// Active handoffs relevant to this scope.
+    pub handoffs: Vec<MemoryItem>,
     /// Review-needed memory relevant to this scope.
     pub review_needed: Vec<MemoryItem>,
     /// Trust metadata for memory returned in the orientation packet.
@@ -378,6 +635,7 @@ pub struct OrientationPacket {
 /// Service for Memory OS persistence and query behavior.
 #[derive(Clone)]
 pub struct MemoryService {
+    db: Db,
     repo: MemoryRepo,
     telemetry_repo: TelemetryRepo,
     repository_repo: RepositoryRepo,
@@ -385,10 +643,44 @@ pub struct MemoryService {
     migration_service: MigrationService,
 }
 
+/// Agent-supplied content for a correction proposal.
+///
+/// Kind, scope, lifecycle status, origin, tags, and confidence are derived from the obsolete item
+/// by the service. A structured procedure card is accepted only when the obsolete item is itself a
+/// procedure. Caller-supplied verification state is rejected; the replacement must pass the
+/// dedicated verify-while-inactive transition before it can be applied.
+#[derive(Debug, Clone)]
+pub struct CorrectionProposalInput {
+    /// Exact active item the proposal would replace.
+    pub obsolete_id: Id,
+    /// Proposed replacement title.
+    pub title: String,
+    /// Proposed replacement content.
+    pub content: String,
+    /// Agent provenance. The service fixes the actor to `agent`.
+    pub writer: WriterProvenance,
+    /// Source evidence for the proposed replacement.
+    pub evidence: Vec<EvidenceRef>,
+    /// Structured replacement procedure when correcting procedure memory.
+    pub procedure: Option<ProcedureCard>,
+}
+
+/// Full-profile inspection view for one durable correction proposal and its exact pair.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrectionProposalInspection {
+    /// Server-minted proposal record, including canonical and applied digests.
+    pub proposal: CorrectionProposal,
+    /// Proposed replacement item.
+    pub replacement: MemoryItem,
+    /// Item the proposal would or did supersede.
+    pub obsolete: MemoryItem,
+}
+
 impl MemoryService {
     /// Create a new memory service.
     pub fn new(db: Db) -> Self {
         Self {
+            db: db.clone(),
             repo: MemoryRepo::new(db.clone()),
             telemetry_repo: TelemetryRepo::new(db.clone()),
             repository_repo: RepositoryRepo::new(db.clone()),
@@ -406,8 +698,15 @@ impl MemoryService {
         Ok(())
     }
 
+    /// Verify that the backing datastore can commit a reversible write transaction.
+    pub async fn probe_storage_writable(&self) -> IndexResult<()> {
+        engram_store::probe_writable(&self.db).await?;
+        Ok(())
+    }
+
     /// Persist a memory item after domain and capture-policy validation.
     pub async fn capture_memory(&self, item: MemoryItem) -> IndexResult<MemoryItem> {
+        Self::reject_proposal_replacement_mutation(&item, "capture")?;
         validate_memory_item(&item)?;
         let item = apply_capture_policy(item);
         self.repo.save_memory_item(&item).await?;
@@ -420,6 +719,27 @@ impl MemoryService {
         input: CurrentPlanCaptureInput,
     ) -> IndexResult<CurrentPlanCapture> {
         validate_current_plan_capture(&input)?;
+
+        if let Some(locked) = self
+            .repo
+            .list_memory_items(Some(MemoryStatus::Active), None)
+            .await?
+            .into_iter()
+            .find(|candidate| {
+                candidate.pending_correction_proposal_id.is_some()
+                    && is_current_plan_item(candidate)
+                    && current_plan_scope_key(&candidate.scope)
+                        == current_plan_scope_key(&input.scope)
+            })
+        {
+            return Err(IndexError::InvalidState(format!(
+                "cannot capture a new current plan while same-scope memory {} is locked by pending correction proposal {}; apply the proposal or forget its pending replacement first",
+                locked.id,
+                locked
+                    .pending_correction_proposal_id
+                    .expect("locked current-plan item has a proposal ID")
+            )));
+        }
 
         let mut item = MemoryItem::new(
             input.kind,
@@ -568,7 +888,9 @@ impl MemoryService {
         Ok(self.repo.get_memory_item(id).await?)
     }
 
-    /// Promote a review candidate into active memory with reviewer evidence.
+    /// Promote a review candidate into active memory with an unverified reviewer assertion.
+    ///
+    /// The assertion is retained for auditability but does not confer human-review authority.
     pub async fn promote_memory(
         &self,
         id: &Id,
@@ -576,6 +898,8 @@ impl MemoryService {
         rationale: impl Into<String>,
     ) -> IndexResult<MemoryItem> {
         let item = self.get_required_memory(id).await?;
+        self.reject_pending_correction_pair_mutation(&item, "promote")
+            .await?;
         if item.status != MemoryStatus::NeedsReview {
             return Err(IndexError::InvalidState(format!(
                 "memory item {id} is not needs_review (status: {})",
@@ -583,14 +907,17 @@ impl MemoryService {
             )));
         }
 
+        let expected = item.clone();
         let item = item
             .with_status(MemoryStatus::Active)
             .with_evidence(review_evidence(reviewer, rationale)?);
-        self.repo.save_memory_item(&item).await?;
+        self.repo
+            .save_memory_item_if_unchanged(&expected, &item)
+            .await?;
         Ok(item)
     }
 
-    /// Reject a review candidate while keeping it auditable.
+    /// Reject a review candidate while keeping its unverified reviewer assertion auditable.
     pub async fn reject_memory(
         &self,
         id: &Id,
@@ -598,6 +925,8 @@ impl MemoryService {
         rationale: impl Into<String>,
     ) -> IndexResult<MemoryItem> {
         let item = self.get_required_memory(id).await?;
+        self.reject_pending_correction_pair_mutation(&item, "reject")
+            .await?;
         if item.status != MemoryStatus::NeedsReview {
             return Err(IndexError::InvalidState(format!(
                 "memory item {id} is not needs_review (status: {})",
@@ -605,14 +934,18 @@ impl MemoryService {
             )));
         }
 
+        let expected = item.clone();
         let item = item
             .with_status(MemoryStatus::Rejected)
             .with_evidence(review_evidence(reviewer, rationale)?);
-        self.repo.save_memory_item(&item).await?;
+        self.repo
+            .save_memory_item_if_unchanged(&expected, &item)
+            .await?;
         Ok(item)
     }
 
     /// Promote a replacement memory item and mark the replaced item as superseded.
+    /// Reviewer labels on this caller-controlled path are unverified assertions.
     pub async fn supersede_memory(
         &self,
         new_id: &Id,
@@ -630,6 +963,10 @@ impl MemoryService {
         let rationale = rationale.into();
         let mut new_item = self.get_required_memory(new_id).await?;
         let mut old_item = self.get_required_memory(old_id).await?;
+        self.reject_pending_correction_pair_mutation(&new_item, "supersede")
+            .await?;
+        self.reject_pending_correction_pair_mutation(&old_item, "supersede")
+            .await?;
         if matches!(
             old_item.status,
             MemoryStatus::Archived | MemoryStatus::Rejected | MemoryStatus::Superseded
@@ -649,6 +986,8 @@ impl MemoryService {
             )));
         }
 
+        let expected_new_item = new_item.clone();
+        let expected_old_item = old_item.clone();
         if !new_item.supersedes.contains(old_id) {
             new_item = new_item.with_superseded_item(*old_id);
         }
@@ -665,9 +1004,802 @@ impl MemoryService {
                 format!("Superseded by {new_id}: {rationale}"),
             )?);
 
-        self.repo.save_memory_item(&new_item).await?;
-        self.repo.save_memory_item(&old_item).await?;
+        self.repo
+            .save_memory_correction(&expected_new_item, &expected_old_item, &new_item, &old_item)
+            .await?;
         Ok((new_item, old_item))
+    }
+
+    /// Create a digest-bound, inactive replacement proposal for one exact active item.
+    ///
+    /// The proposal is agent-authored, remains `needs_review`, and does not affect retrieval until
+    /// an operator applies the exact bound digest through `apply_correction`.
+    pub async fn propose_correction(
+        &self,
+        input: CorrectionProposalInput,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<(CorrectionProposal, MemoryItem, MemoryItem)> {
+        let project = normalized_boundary_value(project);
+        let task = normalized_boundary_value(task);
+        let cwd = normalized_boundary_value(cwd);
+        let obsolete = self.get_required_memory(&input.obsolete_id).await?;
+        Self::authorize_correction_item(&obsolete, "obsolete", project, task, cwd)?;
+        if obsolete.status != MemoryStatus::Active {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {} cannot receive a correction proposal from status {}",
+                obsolete.id, obsolete.status
+            )));
+        }
+        match (&obsolete.kind, &input.procedure) {
+            (MemoryKind::Procedure, None) => {
+                return Err(IndexError::InvalidState(
+                    "procedure correction proposals require structured replacement procedure details"
+                        .to_string(),
+                ));
+            }
+            (MemoryKind::Procedure, Some(procedure))
+                if procedure.verification.evidence_path.is_some()
+                    || procedure.verification.evidence_sha256.is_some()
+                    || procedure.verification.verified_at.is_some()
+                    || procedure.expires_at.is_some() =>
+            {
+                return Err(IndexError::InvalidState(
+                    "procedure correction proposals cannot supply verification proof or expiry; use verify_correction_procedure on the inactive replacement"
+                        .to_string(),
+                ));
+            }
+            (MemoryKind::Procedure, Some(_)) | (_, None) => {}
+            (_, Some(_)) => {
+                return Err(IndexError::InvalidState(
+                    "structured replacement procedure details require an obsolete procedure"
+                        .to_string(),
+                ));
+            }
+        }
+        if let Some(existing) = self
+            .repo
+            .list_correction_proposals_for_memory(&obsolete.id)
+            .await?
+            .into_iter()
+            .find(|proposal| {
+                proposal.status == CorrectionProposalStatus::Pending
+                    && proposal.obsolete_id == obsolete.id
+            })
+        {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {} already has pending correction proposal {}",
+                obsolete.id, existing.id
+            )));
+        }
+        if input.evidence.is_empty() {
+            return Err(IndexError::InvalidState(
+                "correction proposal requires source evidence".to_string(),
+            ));
+        }
+        if has_manual_review_evidence_refs(&input.evidence) {
+            return Err(IndexError::InvalidState(
+                "correction proposal cannot carry manual_review evidence".to_string(),
+            ));
+        }
+
+        let mut writer = input.writer;
+        writer.actor = "agent".to_string();
+        let mut replacement = MemoryItem::new(
+            obsolete.kind.clone(),
+            input.title,
+            input.content,
+            obsolete.scope.clone(),
+            ClaimOrigin::AgentInferred,
+            writer.clone(),
+        )
+        .with_status(MemoryStatus::NeedsReview)
+        .with_confidence(obsolete.confidence.value());
+        replacement.tags.clone_from(&obsolete.tags);
+        replacement.review_after = obsolete.review_after;
+        replacement.procedure = input.procedure;
+        for evidence in input.evidence {
+            replacement = replacement.with_evidence(evidence);
+        }
+        validate_memory_item(&replacement)?;
+
+        let mut proposal = CorrectionProposal::new(
+            obsolete.id,
+            replacement.id,
+            obsolete.kind.clone(),
+            obsolete.scope.clone(),
+            "pending",
+            writer,
+        );
+        replacement.correction_proposal_id = Some(proposal.id);
+        let mut locked_obsolete = obsolete.clone();
+        locked_obsolete.pending_correction_proposal_id = Some(proposal.id);
+        proposal.canonical_digest =
+            correction_proposal_digest(&proposal, &locked_obsolete, &replacement)?;
+        self.repo
+            .save_correction_proposal(&proposal, &replacement, &obsolete, &locked_obsolete)
+            .await?;
+        Ok((proposal, replacement, locked_obsolete))
+    }
+
+    /// Inspect one durable correction proposal through an exact authorization boundary.
+    pub async fn inspect_correction_proposal(
+        &self,
+        proposal_id: &Id,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<CorrectionProposalInspection> {
+        let project = normalized_boundary_value(project);
+        let task = normalized_boundary_value(task);
+        let cwd = normalized_boundary_value(cwd);
+        let proposal = self
+            .repo
+            .get_correction_proposal(proposal_id)
+            .await?
+            .ok_or_else(|| {
+                IndexError::NotFound(format!("correction proposal {proposal_id} not found"))
+            })?;
+        let replacement = self.get_required_memory(&proposal.replacement_id).await?;
+        let obsolete = self.get_required_memory(&proposal.obsolete_id).await?;
+        validate_proposal_pair(&proposal, &obsolete, &replacement)?;
+        Self::authorize_correction_item(&replacement, "replacement", project, task, cwd)?;
+        Self::authorize_correction_item(&obsolete, "obsolete", project, task, cwd)?;
+        Ok(CorrectionProposalInspection {
+            proposal,
+            replacement,
+            obsolete,
+        })
+    }
+
+    /// List durable correction proposals visible inside one exact authorization boundary.
+    pub async fn list_correction_proposals(
+        &self,
+        limit: Option<usize>,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<CorrectionProposalInspection>> {
+        let project = normalized_boundary_value(project);
+        let task = normalized_boundary_value(task);
+        let cwd = normalized_boundary_value(cwd);
+        let proposals = self.repo.list_correction_proposals(None, None).await?;
+        let mut inspections = Vec::new();
+        for proposal in proposals {
+            let replacement = self.get_required_memory(&proposal.replacement_id).await?;
+            let obsolete = self.get_required_memory(&proposal.obsolete_id).await?;
+            validate_proposal_pair(&proposal, &obsolete, &replacement)?;
+            if !Self::correction_item_matches_boundary(
+                &replacement,
+                "replacement",
+                project,
+                task,
+                cwd,
+            )? || !Self::correction_item_matches_boundary(
+                &obsolete, "obsolete", project, task, cwd,
+            )? {
+                continue;
+            }
+            inspections.push(CorrectionProposalInspection {
+                proposal,
+                replacement,
+                obsolete,
+            });
+            if inspections.len() == limit.unwrap_or(usize::MAX) {
+                break;
+            }
+        }
+        Ok(inspections)
+    }
+
+    /// Verify a pending procedure replacement while keeping it inactive.
+    ///
+    /// The caller must present the exact proposal-time P0 digest. Receipt proof is attached to the
+    /// `needs_review` replacement and all three proposal records are compare-and-swapped in one
+    /// transaction. The proposal remains pending and receives the resulting P1 digest.
+    pub async fn verify_correction_procedure(
+        &self,
+        proposal_id: &Id,
+        expected_digest: &str,
+        receipt_path: &Path,
+        expires_at: OffsetDateTime,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<(CorrectionProposal, MemoryItem, MemoryItem)> {
+        let expected_digest = expected_digest.trim();
+        if expected_digest.is_empty() {
+            return Err(IndexError::Parse(
+                "expected correction proposal P0 digest must not be empty".to_string(),
+            ));
+        }
+
+        let proposal = self
+            .repo
+            .get_correction_proposal(proposal_id)
+            .await?
+            .ok_or_else(|| {
+                IndexError::NotFound(format!("correction proposal {proposal_id} not found"))
+            })?;
+        if proposal.canonical_digest != expected_digest {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} P0 digest mismatch"
+            )));
+        }
+
+        let project = normalized_boundary_value(project);
+        let task = normalized_boundary_value(task);
+        let cwd = normalized_boundary_value(cwd);
+        let mut replacement = self.get_required_memory(&proposal.replacement_id).await?;
+        let obsolete = self.get_required_memory(&proposal.obsolete_id).await?;
+        Self::authorize_correction_item(&replacement, "replacement", project, task, cwd)?;
+        Self::authorize_correction_item(&obsolete, "obsolete", project, task, cwd)?;
+        validate_proposal_pair(&proposal, &obsolete, &replacement)?;
+
+        if proposal.status != CorrectionProposalStatus::Pending {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} cannot be verified from status {}",
+                proposal.status
+            )));
+        }
+        if proposal.memory_kind != MemoryKind::Procedure {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} is not a procedure correction"
+            )));
+        }
+        if obsolete.status != MemoryStatus::Active
+            || obsolete.pending_correction_proposal_id != Some(proposal.id)
+        {
+            return Err(IndexError::InvalidState(format!(
+                "obsolete procedure {} no longer has the active pending-proposal lock",
+                obsolete.id
+            )));
+        }
+        if replacement.status != MemoryStatus::NeedsReview
+            || replacement.origin != ClaimOrigin::AgentInferred
+            || replacement.correction_proposal_id != Some(proposal.id)
+        {
+            return Err(IndexError::InvalidState(format!(
+                "replacement procedure {} no longer has its inactive proposal state",
+                replacement.id
+            )));
+        }
+        if replacement.evidence.is_empty() || has_manual_review_evidence(&replacement) {
+            return Err(IndexError::InvalidState(format!(
+                "replacement procedure {} must retain non-review source evidence",
+                replacement.id
+            )));
+        }
+        let actual_p0 = correction_proposal_digest(&proposal, &obsolete, &replacement)?;
+        if actual_p0 != proposal.canonical_digest {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} canonical pair changed before procedure verification"
+            )));
+        }
+
+        let procedure = replacement.procedure.as_ref().ok_or_else(|| {
+            IndexError::InvalidState(format!(
+                "replacement procedure {} has no structured procedure card",
+                replacement.id
+            ))
+        })?;
+        if procedure.verification.evidence_path.is_some()
+            || procedure.verification.evidence_sha256.is_some()
+            || procedure.verification.verified_at.is_some()
+            || procedure.expires_at.is_some()
+        {
+            return Err(IndexError::InvalidState(format!(
+                "replacement procedure {} already carries verification state; verification is a one-time P0 to P1 transition",
+                replacement.id
+            )));
+        }
+
+        let receipt_bytes = fs::read(receipt_path)?;
+        let receipt: ProcedureVerificationReceipt = serde_json::from_slice(&receipt_bytes)
+            .map_err(|error| {
+                IndexError::Parse(format!(
+                    "invalid procedure verification receipt {}: {error}",
+                    receipt_path.display()
+                ))
+            })?;
+        validate_procedure_receipt(procedure, &receipt)?;
+        let evidence_path = self
+            .portable_procedure_evidence_path(&replacement.scope, receipt_path)
+            .await?;
+        let mut verification_evidence = EvidenceRef::new(EvidenceKind::File, evidence_path.clone())
+            .with_summary(
+                "Engram-verified inactive correction procedure receipt; hash and semantics are rechecked before apply and at use time.",
+            );
+        let now = verification_evidence
+            .observed_at
+            .max(replacement.updated_at);
+        verification_evidence.observed_at = now;
+        if expires_at <= now {
+            return Err(IndexError::Parse(
+                "procedure correction expiry must be in the future".to_string(),
+            ));
+        }
+
+        let expected_proposal = proposal;
+        let expected_replacement = replacement.clone();
+        let expected_obsolete = obsolete.clone();
+        {
+            let procedure = replacement.procedure.as_mut().ok_or_else(|| {
+                IndexError::InvalidState(format!(
+                    "replacement procedure {} lost its structured procedure card",
+                    replacement.id
+                ))
+            })?;
+            procedure.verification.evidence_path = Some(evidence_path.clone());
+            procedure.verification.evidence_sha256 = Some(sha256_hex(&receipt_bytes));
+            procedure.verification.verified_at = Some(now);
+            procedure.expires_at = Some(expires_at);
+        }
+        replacement.updated_at = now;
+        replacement.evidence.push(verification_evidence);
+        validate_memory_item(&replacement)?;
+
+        let p1 = correction_proposal_digest(&expected_proposal, &expected_obsolete, &replacement)?;
+        if p1 == expected_proposal.canonical_digest {
+            return Err(IndexError::InvalidState(
+                "procedure correction verification did not rotate the canonical digest".to_string(),
+            ));
+        }
+        let verified_proposal = expected_proposal.clone().with_canonical_digest(p1);
+        self.repo
+            .verify_correction_procedure(
+                &expected_proposal,
+                &expected_replacement,
+                &expected_obsolete,
+                &verified_proposal,
+                &replacement,
+                &expected_obsolete,
+            )
+            .await?;
+        Ok((verified_proposal, replacement, expected_obsolete))
+    }
+
+    /// Apply one exact pending correction proposal selected through the full operator surface.
+    ///
+    /// Operator selection is an administrative trust boundary, not proof of a human identity or
+    /// reviewer authority. The replacement therefore becomes active-but-unreviewed.
+    pub async fn apply_correction(
+        &self,
+        proposal_id: &Id,
+        expected_digest: &str,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<(CorrectionProposal, MemoryItem, MemoryItem)> {
+        let expected_digest = expected_digest.trim();
+        if expected_digest.is_empty() {
+            return Err(IndexError::Parse(
+                "expected correction proposal digest must not be empty".to_string(),
+            ));
+        }
+
+        let proposal = self
+            .repo
+            .get_correction_proposal(proposal_id)
+            .await?
+            .ok_or_else(|| {
+                IndexError::NotFound(format!("correction proposal {proposal_id} not found"))
+            })?;
+        if proposal.canonical_digest != expected_digest {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} digest mismatch"
+            )));
+        }
+
+        let project = normalized_boundary_value(project);
+        let task = normalized_boundary_value(task);
+        let cwd = normalized_boundary_value(cwd);
+        let mut replacement = self.get_required_memory(&proposal.replacement_id).await?;
+        let mut obsolete = self.get_required_memory(&proposal.obsolete_id).await?;
+        Self::authorize_correction_item(&replacement, "replacement", project, task, cwd)?;
+        Self::authorize_correction_item(&obsolete, "obsolete", project, task, cwd)?;
+        validate_proposal_pair(&proposal, &obsolete, &replacement)?;
+
+        if proposal.status == CorrectionProposalStatus::Applied {
+            if proposal.memory_kind == MemoryKind::Procedure {
+                return Err(IndexError::InvalidState(format!(
+                    "procedure correction proposal {proposal_id} was already applied; a retry is not causal activation evidence"
+                )));
+            }
+            let actual_applied_digest =
+                correction_proposal_digest(&proposal, &obsolete, &replacement)?;
+            if proposal.applied_digest.as_deref() == Some(actual_applied_digest.as_str())
+                && replacement.status == MemoryStatus::Active
+                && obsolete.status == MemoryStatus::Superseded
+                && replacement.supersedes.contains(&obsolete.id)
+                && replacement.correction_proposal_id.is_none()
+                && obsolete.pending_correction_proposal_id.is_none()
+                && !has_manual_review_evidence(&replacement)
+            {
+                return Ok((proposal, replacement, obsolete));
+            }
+            return Err(IndexError::InvalidState(format!(
+                "applied correction proposal {proposal_id} no longer has its exact applied pair"
+            )));
+        }
+        if proposal.status != CorrectionProposalStatus::Pending {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} cannot be applied from status {}",
+                proposal.status
+            )));
+        }
+        if obsolete.status != MemoryStatus::Active {
+            return Err(IndexError::InvalidState(format!(
+                "obsolete memory item {} must still be active (status: {})",
+                obsolete.id, obsolete.status
+            )));
+        }
+        if replacement.status != MemoryStatus::NeedsReview {
+            return Err(IndexError::InvalidState(format!(
+                "proposed replacement memory item {} must still need review (status: {})",
+                replacement.id, replacement.status
+            )));
+        }
+        if replacement.origin != ClaimOrigin::AgentInferred {
+            return Err(IndexError::InvalidState(format!(
+                "proposed replacement memory item {} has an invalid origin",
+                replacement.id
+            )));
+        }
+        if replacement.correction_proposal_id != Some(proposal.id) {
+            return Err(IndexError::InvalidState(format!(
+                "proposed replacement memory item {} lost its server-minted proposal link",
+                replacement.id
+            )));
+        }
+        if obsolete.pending_correction_proposal_id != Some(proposal.id) {
+            return Err(IndexError::InvalidState(format!(
+                "obsolete memory item {} lost its server-minted proposal lock",
+                obsolete.id
+            )));
+        }
+        if replacement.evidence.is_empty() || has_manual_review_evidence(&replacement) {
+            return Err(IndexError::InvalidState(format!(
+                "proposed replacement memory item {} must retain non-review source evidence",
+                replacement.id
+            )));
+        }
+        let actual_digest = correction_proposal_digest(&proposal, &obsolete, &replacement)?;
+        if actual_digest != proposal.canonical_digest {
+            return Err(IndexError::InvalidState(format!(
+                "correction proposal {proposal_id} canonical pair changed after proposal creation"
+            )));
+        }
+        if proposal.memory_kind == MemoryKind::Procedure {
+            let procedure = replacement.procedure.as_ref().ok_or_else(|| {
+                IndexError::InvalidState(format!(
+                    "replacement procedure {} has no structured procedure card",
+                    replacement.id
+                ))
+            })?;
+            let now = OffsetDateTime::now_utc();
+            let expires_at = procedure.expires_at.ok_or_else(|| {
+                IndexError::InvalidState(format!(
+                    "replacement procedure {} has no verification expiry",
+                    replacement.id
+                ))
+            })?;
+            if expires_at <= now || !procedure.is_verified_at(now) {
+                return Err(IndexError::InvalidState(format!(
+                    "replacement procedure {} does not have complete unexpired verification proof",
+                    replacement.id
+                )));
+            }
+            let evidence_path =
+                procedure
+                    .verification
+                    .evidence_path
+                    .as_deref()
+                    .ok_or_else(|| {
+                        IndexError::InvalidState(format!(
+                            "replacement procedure {} has no verification receipt path",
+                            replacement.id
+                        ))
+                    })?;
+            let expected_hash = procedure
+                .verification
+                .evidence_sha256
+                .as_deref()
+                .ok_or_else(|| {
+                    IndexError::InvalidState(format!(
+                        "replacement procedure {} has no verification receipt hash",
+                        replacement.id
+                    ))
+                })?;
+            if !replacement.evidence.iter().any(|evidence| {
+                evidence.kind == EvidenceKind::File && evidence.target == evidence_path
+            }) {
+                return Err(IndexError::InvalidState(format!(
+                    "replacement procedure {} is missing its verification receipt evidence reference",
+                    replacement.id
+                )));
+            }
+            let repository_context = self.resolve_repository_context(cwd).await?;
+            let checkout_root = repository_context
+                .as_ref()
+                .and_then(|context| context.checkout.as_ref())
+                .map(|checkout| PathBuf::from(&checkout.local_path));
+            if !Path::new(evidence_path).is_absolute() && checkout_root.is_none() {
+                return Err(IndexError::InvalidState(format!(
+                    "replacement procedure {} has a checkout-relative receipt but no current checkout could be resolved",
+                    replacement.id
+                )));
+            }
+            let receipt_path =
+                resolve_procedure_evidence_path(evidence_path, checkout_root.as_deref());
+            let receipt_bytes = fs::read(&receipt_path)?;
+            if sha256_hex(&receipt_bytes) != expected_hash {
+                return Err(IndexError::InvalidState(format!(
+                    "replacement procedure {} verification receipt hash changed at {}",
+                    replacement.id,
+                    receipt_path.display()
+                )));
+            }
+            let receipt: ProcedureVerificationReceipt = serde_json::from_slice(&receipt_bytes)
+                .map_err(|error| {
+                    IndexError::Parse(format!(
+                        "invalid procedure verification receipt {}: {error}",
+                        receipt_path.display()
+                    ))
+                })?;
+            validate_procedure_receipt(procedure, &receipt)?;
+        }
+
+        let expected_proposal = proposal;
+        let expected_replacement = replacement.clone();
+        let expected_obsolete = obsolete.clone();
+        let applied_evidence = EvidenceRef::new(
+            EvidenceKind::ToolCall,
+            format!("memory.apply_correction:{}", expected_proposal.id),
+        )
+        .with_summary(format!(
+            "Operator-selected correction proposal {} applied replacement {} over {}",
+            expected_proposal.id, replacement.id, obsolete.id
+        ));
+        replacement = replacement
+            .with_status(MemoryStatus::Active)
+            .with_superseded_item(obsolete.id)
+            .with_evidence(applied_evidence.clone());
+        replacement.correction_proposal_id = None;
+        obsolete = obsolete
+            .with_status(MemoryStatus::Superseded)
+            .with_evidence(applied_evidence);
+        obsolete.pending_correction_proposal_id = None;
+        let mut proposal = expected_proposal.clone().with_applied();
+        let applied_digest = correction_proposal_digest(&proposal, &obsolete, &replacement)?;
+        proposal = proposal.with_applied_digest(applied_digest);
+        self.repo
+            .apply_correction_proposal(
+                &expected_proposal,
+                &expected_replacement,
+                &expected_obsolete,
+                &proposal,
+                &replacement,
+                &obsolete,
+            )
+            .await?;
+        Ok((proposal, replacement, obsolete))
+    }
+
+    /// Link an already-active user correction to the exact active item it replaces.
+    ///
+    /// This path deliberately adds no manual-review evidence and confers no reviewer authority.
+    pub async fn correct_memory(
+        &self,
+        obsolete_id: &Id,
+        replacement_id: &Id,
+        reason: impl Into<String>,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<(MemoryItem, MemoryItem)> {
+        if obsolete_id == replacement_id {
+            return Err(IndexError::InvalidState(
+                "memory item cannot correct itself".to_string(),
+            ));
+        }
+
+        let reason = reason.into();
+        if reason.trim().is_empty() {
+            return Err(IndexError::Parse(
+                "correction reason must not be empty".to_string(),
+            ));
+        }
+
+        let project = project.map(str::trim).filter(|value| !value.is_empty());
+        let task = task.map(str::trim).filter(|value| !value.is_empty());
+        let cwd = cwd.map(str::trim).filter(|value| !value.is_empty());
+        let mut replacement = self.get_required_memory(replacement_id).await?;
+        let mut obsolete = self.get_required_memory(obsolete_id).await?;
+        self.reject_pending_correction_pair_mutation(&replacement, "correct")
+            .await?;
+        self.reject_pending_correction_pair_mutation(&obsolete, "correct")
+            .await?;
+        Self::authorize_correction_item(&replacement, "replacement", project, task, cwd)?;
+        Self::authorize_correction_item(&obsolete, "obsolete", project, task, cwd)?;
+        if obsolete.status == MemoryStatus::Superseded
+            && replacement.status == MemoryStatus::Active
+            && replacement.supersedes.contains(obsolete_id)
+        {
+            return Ok((replacement, obsolete));
+        }
+        if obsolete.status != MemoryStatus::Active {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {obsolete_id} cannot be corrected from status {}",
+                obsolete.status
+            )));
+        }
+        if replacement.status != MemoryStatus::Active {
+            return Err(IndexError::InvalidState(format!(
+                "replacement memory item {replacement_id} must already be active (status: {})",
+                replacement.status
+            )));
+        }
+        if replacement.origin != ClaimOrigin::UserCorrected {
+            return Err(IndexError::InvalidState(format!(
+                "replacement memory item {replacement_id} must have origin user_corrected"
+            )));
+        }
+        if replacement.kind != obsolete.kind || replacement.scope != obsolete.scope {
+            return Err(IndexError::InvalidState(
+                "correction requires replacement and obsolete memory to have identical kind and scope"
+                    .to_string(),
+            ));
+        }
+        if replacement.evidence.is_empty() {
+            return Err(IndexError::InvalidState(format!(
+                "replacement memory item {replacement_id} must have source evidence"
+            )));
+        }
+        if has_manual_review_evidence(&replacement) {
+            return Err(IndexError::InvalidState(
+                "agent correction cannot carry manual_review evidence".to_string(),
+            ));
+        }
+
+        let expected_replacement = replacement.clone();
+        let expected_obsolete = obsolete.clone();
+        let correction = EvidenceRef::new(EvidenceKind::ToolCall, "memory.correct").with_summary(
+            format!("Exact-ID correction linked {replacement_id} over {obsolete_id}: {reason}"),
+        );
+        replacement = replacement
+            .with_superseded_item(*obsolete_id)
+            .with_evidence(correction.clone());
+        obsolete = obsolete
+            .with_status(MemoryStatus::Superseded)
+            .with_evidence(correction);
+        self.repo
+            .save_memory_correction(
+                &expected_replacement,
+                &expected_obsolete,
+                &replacement,
+                &obsolete,
+            )
+            .await?;
+        Ok((replacement, obsolete))
+    }
+
+    fn authorize_correction_item(
+        item: &MemoryItem,
+        label: &str,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<()> {
+        let authorized = Self::correction_item_matches_boundary(item, label, project, task, cwd)?;
+        if !authorized {
+            return Err(IndexError::InvalidState(format!(
+                "{label} memory item '{}' is outside the resolved correction authorization boundary",
+                item.id
+            )));
+        }
+        Ok(())
+    }
+
+    fn correction_item_matches_boundary(
+        item: &MemoryItem,
+        label: &str,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<bool> {
+        let authorized = match &item.scope {
+            MemoryScope::Global | MemoryScope::User => true,
+            MemoryScope::Project {
+                project_id,
+                project_name,
+            } => project.is_some_and(|selector| {
+                project_name.eq_ignore_ascii_case(selector)
+                    || project_id.is_some_and(|id| selector == id.to_string())
+            }),
+            MemoryScope::Task {
+                project_id,
+                project_name,
+                task_id,
+                task_name,
+            } => {
+                let task_matches = task.is_some_and(|selector| {
+                    task_name.eq_ignore_ascii_case(selector)
+                        || task_id.is_some_and(|id| selector == id.to_string())
+                });
+                let project_matches = match (project_id, project_name.as_deref()) {
+                    (None, None) => true,
+                    (stored_id, stored_name) => project.is_some_and(|selector| {
+                        stored_name.is_some_and(|name| name.eq_ignore_ascii_case(selector))
+                            || stored_id.is_some_and(|id| selector == id.to_string())
+                    }),
+                };
+                task_matches && project_matches
+            }
+            MemoryScope::Repository { local_path, .. } => {
+                match (
+                    cwd,
+                    local_path
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty()),
+                ) {
+                    (Some(cwd), Some(local_path))
+                        if Path::new(cwd).is_absolute() && Path::new(local_path).is_absolute() =>
+                    {
+                        path_starts_with(
+                            &canonical_or_original(Path::new(cwd)),
+                            &canonical_or_original(Path::new(local_path)),
+                        )
+                    }
+                    _ => false,
+                }
+            }
+            MemoryScope::Entity { .. }
+            | MemoryScope::Session { .. }
+            | MemoryScope::Custom { .. } => {
+                return Err(IndexError::InvalidState(format!(
+                    "{label} memory item '{}' uses a scope without a trusted correction selector",
+                    item.id
+                )));
+            }
+        };
+        Ok(authorized)
+    }
+
+    fn reject_proposal_replacement_mutation(item: &MemoryItem, action: &str) -> IndexResult<()> {
+        if let Some(proposal_id) = item
+            .correction_proposal_id
+            .or(item.pending_correction_proposal_id)
+        {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {} is immutable while bound to correction proposal {}; use apply_correction on the proposal instead of {action}",
+                item.id, proposal_id
+            )));
+        }
+        Ok(())
+    }
+
+    async fn reject_pending_correction_pair_mutation(
+        &self,
+        item: &MemoryItem,
+        action: &str,
+    ) -> IndexResult<()> {
+        Self::reject_proposal_replacement_mutation(item, action)?;
+        if let Some(proposal) = self
+            .repo
+            .list_correction_proposals_for_memory(&item.id)
+            .await?
+            .into_iter()
+            .find(|proposal| proposal.status == CorrectionProposalStatus::Pending)
+        {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {} is immutable while referenced by pending correction proposal {}; apply or forget the proposal pair before {action}",
+                item.id, proposal.id
+            )));
+        }
+        Ok(())
     }
 
     /// Archive a memory item with metadata.
@@ -678,9 +1810,346 @@ impl MemoryService {
         archived_by: Option<String>,
     ) -> IndexResult<MemoryItem> {
         let item = self.get_required_memory(id).await?;
+        self.reject_pending_correction_pair_mutation(&item, "archive")
+            .await?;
+        let expected = item.clone();
         let item = item.with_archive(reason, archived_by);
-        self.repo.save_memory_item(&item).await?;
+        self.repo
+            .save_memory_item_if_unchanged(&expected, &item)
+            .await?;
         Ok(item)
+    }
+
+    /// Permanently remove a memory item and its linked internal projections.
+    ///
+    /// Generated vault exports and external copies are outside the canonical store and must be
+    /// recompiled or deleted separately by their owner.
+    pub async fn forget_memory(&self, id: &Id) -> IndexResult<MemoryForgetReport> {
+        let pending_receipt = self.repo.get_pending_memory_forget_receipt(id).await?;
+        let cleanup_resumed = pending_receipt.is_some();
+        let mut transitioning_pair_ids = HashSet::new();
+        if let Some(receipt) = &pending_receipt {
+            transitioning_pair_ids.extend(receipt.pending_replacement_ids.iter().copied());
+            transitioning_pair_ids.extend(receipt.unlocked_obsolete_ids.iter().copied());
+        } else {
+            for proposal in self.repo.list_correction_proposals_for_memory(id).await? {
+                if proposal.status == CorrectionProposalStatus::Pending {
+                    transitioning_pair_ids.insert(proposal.obsolete_id);
+                    transitioning_pair_ids.insert(proposal.replacement_id);
+                }
+            }
+        }
+        let id_text = id.to_string();
+        if let Some(blocking) = self
+            .repo
+            .list_memory_items(None, None)
+            .await?
+            .into_iter()
+            .find(|item| {
+                item.id != *id
+                    && !transitioning_pair_ids.contains(&item.id)
+                    && (item.correction_proposal_id.is_some()
+                        || item.pending_correction_proposal_id.is_some())
+                    && memory_item_references_text(item, &id_text)
+            })
+        {
+            let proposal_id = blocking
+                .correction_proposal_id
+                .or(blocking.pending_correction_proposal_id)
+                .expect("proposal-bound item has a proposal ID");
+            return Err(IndexError::InvalidState(format!(
+                "cannot forget memory {id} because proposal-bound memory {} references it; apply correction proposal {proposal_id} or forget its pending replacement first",
+                blocking.id
+            )));
+        }
+        let correction_purge = match pending_receipt {
+            Some(receipt) => receipt,
+            None => {
+                self.repo
+                    .delete_memory_with_correction_projections(id)
+                    .await?
+            }
+        };
+
+        let mut memory_items_updated = 0;
+        let mut commits_redacted = 0;
+        let mut traces_deleted = 0;
+        let mut feedback_deleted = 0;
+        let target = correction_purge.deleted.then_some(id);
+        for deleted_id in correction_purge
+            .pending_replacement_ids
+            .iter()
+            .chain(target)
+        {
+            let telemetry = self
+                .telemetry_repo
+                .purge_memory_references(deleted_id)
+                .await?;
+            let references = self.repo.purge_memory_item_references(deleted_id).await?;
+            memory_items_updated += references.memory_items_updated;
+            commits_redacted += references.commits_redacted;
+            traces_deleted += telemetry.traces_deleted;
+            feedback_deleted += telemetry.feedback_deleted;
+        }
+        if correction_purge.deleted {
+            self.repo.complete_memory_forget_receipt(id).await?;
+        }
+
+        Ok(MemoryForgetReport {
+            id: *id,
+            deleted: correction_purge.deleted,
+            memory_items_updated: memory_items_updated
+                + correction_purge.unlocked_obsolete_ids.len(),
+            commits_redacted,
+            traces_deleted,
+            feedback_deleted,
+            correction_proposals_deleted: correction_purge.proposal_ids.len(),
+            proposal_replacements_deleted: correction_purge.pending_replacement_ids.len(),
+            proposal_obsoletes_unlocked: correction_purge.unlocked_obsolete_ids.len(),
+            cleanup_resumed,
+            projection_counts_complete: !cleanup_resumed,
+        })
+    }
+
+    /// Verify a procedure candidate against an immutable, machine-readable success receipt.
+    ///
+    /// The receipt body is checked but not copied into memory. Engram stores its path and SHA-256
+    /// and revalidates both at retrieval time.
+    pub async fn verify_procedure(
+        &self,
+        id: &Id,
+        receipt_path: &Path,
+        expires_at: Option<OffsetDateTime>,
+    ) -> IndexResult<MemoryItem> {
+        let mut item = self.get_required_memory(id).await?;
+        self.reject_pending_correction_pair_mutation(&item, "verify_procedure")
+            .await?;
+        if item.kind != MemoryKind::Procedure {
+            return Err(IndexError::InvalidState(format!(
+                "memory item {id} is not a procedure"
+            )));
+        }
+        if item.status != MemoryStatus::NeedsReview {
+            return Err(IndexError::InvalidState(format!(
+                "procedure {id} must be needs_review before verification (status: {})",
+                item.status
+            )));
+        }
+
+        let receipt_bytes = fs::read(receipt_path)?;
+        let receipt: ProcedureVerificationReceipt = serde_json::from_slice(&receipt_bytes)
+            .map_err(|error| {
+                IndexError::Parse(format!(
+                    "invalid procedure verification receipt {}: {error}",
+                    receipt_path.display()
+                ))
+            })?;
+        let now = OffsetDateTime::now_utc();
+        if expires_at.is_some_and(|expires_at| expires_at <= now) {
+            return Err(IndexError::Parse(
+                "procedure expiry must be in the future".to_string(),
+            ));
+        }
+        let evidence_path = self
+            .portable_procedure_evidence_path(&item.scope, receipt_path)
+            .await?;
+
+        let expected = item.clone();
+        {
+            let procedure = item.procedure.as_mut().ok_or_else(|| {
+                IndexError::InvalidState(format!(
+                    "procedure memory {id} has no structured procedure card"
+                ))
+            })?;
+            validate_procedure_receipt(procedure, &receipt)?;
+            procedure.verification.evidence_path = Some(evidence_path.clone());
+            procedure.verification.evidence_sha256 = Some(sha256_hex(&receipt_bytes));
+            procedure.verification.verified_at = Some(now);
+            procedure.expires_at = expires_at;
+        }
+        item.status = MemoryStatus::Active;
+        item.updated_at = now;
+        item.evidence.push(
+            EvidenceRef::new(EvidenceKind::File, evidence_path).with_summary(
+                "Engram-verified procedure success receipt; hash rechecked at use time.",
+            ),
+        );
+        validate_memory_item(&item)?;
+        self.repo
+            .save_memory_item_if_unchanged(&expected, &item)
+            .await?;
+        Ok(item)
+    }
+
+    /// Return only procedures whose scope, prerequisites, freshness, and proof still match.
+    pub async fn match_procedures(
+        &self,
+        input: ProcedureMatchInput,
+    ) -> IndexResult<ProcedureMatchReport> {
+        if input.query.trim().is_empty() {
+            return Err(IndexError::Parse(
+                "procedure query must not be empty".to_string(),
+            ));
+        }
+        let query_chars = input.query.chars().count();
+        if query_chars > MAX_PROCEDURE_QUERY_CHARS {
+            return Err(IndexError::Parse(format!(
+                "procedure query must be a task-focused retrieval phrase of at most {MAX_PROCEDURE_QUERY_CHARS} characters; received {query_chars}"
+            )));
+        }
+        let repository_context = self
+            .resolve_repository_context(input.cwd.as_deref())
+            .await?;
+        let checkout_root = repository_context
+            .as_ref()
+            .and_then(|context| context.checkout.as_ref())
+            .map(|checkout| PathBuf::from(&checkout.local_path));
+        let current_checkout_root = checkout_root
+            .as_ref()
+            .map(|root| root.display().to_string());
+        let execution_guidance = current_checkout_root.as_ref().map(|root| {
+            format!(
+                "Execute repository-scoped procedure commands from current_checkout_root `{root}`. Stored procedure scope.local_path and evidence paths are provenance only; never use them as execution targets."
+            )
+        });
+        let orientation = resolve_orientation_project(
+            input.project.as_deref(),
+            input.cwd.as_deref(),
+            repository_context.as_ref(),
+        );
+        let identity = orientation_identity(&orientation, repository_context.as_ref());
+        let unlinked_repository_boundary = input.project.is_none()
+            && repository_context.is_some()
+            && orientation.project_candidates.is_empty();
+        if (orientation.requires_confirmation || orientation.ambiguity.is_some())
+            && !unlinked_repository_boundary
+        {
+            let detail = orientation
+                .ambiguity
+                .as_deref()
+                .unwrap_or(orientation.reason.as_str())
+                .to_string();
+            return Ok(ProcedureMatchReport {
+                query: input.query,
+                identity,
+                resolution: orientation,
+                procedures: Vec::new(),
+                diagnostics: Vec::new(),
+                abstained: true,
+                message: format!(
+                    "Procedure match abstained because repository/project scope is ambiguous: {detail}"
+                ),
+                required_condition_keys: Vec::new(),
+                next_actions: vec![
+                    "Confirm the canonical project or register the repository/project link before retrying."
+                        .to_string(),
+                ],
+                suggested_operation_evidence: None,
+                current_checkout_root,
+                execution_guidance,
+            });
+        }
+        let selected_project = orientation.selected_project.as_deref();
+        let ranked = rank_memory_items(
+            self.list_active_memory(None)
+                .await?
+                .into_iter()
+                .filter(|item| item.kind == MemoryKind::Procedure)
+                .filter(|item| {
+                    procedure_scope_matches(
+                        &item.scope,
+                        selected_project,
+                        input.cwd.as_deref(),
+                        repository_context.as_ref(),
+                    )
+                })
+                .collect(),
+            MemoryRankContext::search(None, None, Some(&input.query)),
+        )
+        .into_iter()
+        .filter(|ranked| ranked.components.text >= MIN_PROCEDURE_TEXT_MATCH_SCORE)
+        .take(MAX_PROCEDURE_CANDIDATES_TO_EVALUATE)
+        .collect::<Vec<_>>();
+
+        let now = OffsetDateTime::now_utc();
+        let mut procedures = Vec::new();
+        let mut diagnostics = Vec::new();
+        let mut required_condition_keys = BTreeSet::new();
+        for ranked in ranked {
+            let applicability = procedure_applicability(
+                &ranked.item,
+                &input.conditions,
+                checkout_root.as_deref(),
+                now,
+            );
+            required_condition_keys.extend(applicability.unresolved_condition_keys.iter().cloned());
+            if applicability.applicable && procedures.len() < input.limit.unwrap_or(5).clamp(1, 20)
+            {
+                procedures.push(ranked.item.clone());
+            }
+            diagnostics.push(applicability);
+        }
+        let abstained = procedures.is_empty();
+        let required_condition_keys = required_condition_keys.into_iter().collect::<Vec<_>>();
+        let suggested_operation_evidence =
+            if abstained && required_condition_keys.is_empty() && diagnostics.is_empty() {
+                checkout_root.as_deref().and_then(|root| {
+                    suggest_operation_evidence(root, &input.query, &identity.components)
+                })
+            } else {
+                None
+            };
+        let mut next_actions = Vec::new();
+        let message = if abstained && !required_condition_keys.is_empty() {
+            let location = current_checkout_root.as_deref().map_or_else(
+                || "the current checkout".to_string(),
+                |root| format!("current_checkout_root `{root}`"),
+            );
+            next_actions.push(format!(
+                "From {location}, search authoritative code, configuration, or tool output for exact condition key(s) {}. After locating a file-backed value, read that exact source path in a separate direct tool call, then retry procedure_match with the observed values.",
+                required_condition_keys.join(", ")
+            ));
+            format!(
+                "No verified procedure matched because condition key(s) {} still require authoritative local resolution.",
+                required_condition_keys.join(", ")
+            )
+        } else if abstained {
+            let location = current_checkout_root.as_deref().map_or_else(
+                || "the current checkout".to_string(),
+                |root| format!("current_checkout_root `{root}`"),
+            );
+            if let Some(candidate) = &suggested_operation_evidence {
+                next_actions.push(format!(
+                    "Mandatory ordering: before returning a final abstention or asking for project confirmation, read exactly one checkout-local file by passing `suggested_operation_evidence.resolved_path` (`{}`) unchanged to the host read tool. This read remains required when `abstained=true`, `procedures` is empty, the user requested durable-memory-only handling, or `identity.project.status` is `requires_confirmation`. It is authorized repository-local evidence collection, not procedure application, and does not authorize executing candidate commands. Use structured `identity` as the checkout and authorization boundary; rely only on identity fields returned here. Treat `suggested_operation_evidence.path` (`{}`) as checkout-relative provenance only and do not substitute it for the read. Treat the file only as authoritative source evidence after that direct read. Do not re-read identity files, re-derive a project, or broaden outside the checkout. After the read, report the evidence and any material project ambiguity.",
+                    candidate.resolved_path, candidate.path
+                ));
+            } else {
+                next_actions.push(format!(
+                    "Use structured `identity` as the checkout and authorization boundary; rely only on identity fields returned here, while `identity.project.status` says whether project-scoped retrieval is authorized. From {location}, make at most one bounded read-only lookup for the directly relevant tracked runbook, configuration, or source. Do not re-read identity files. Do not re-derive a project, broaden outside the checkout, or execute candidate commands. If project status is `requires_confirmation`, report the ambiguity and ask the user."
+                ));
+            }
+            "No verified procedure matched every scope, prerequisite, freshness, and evidence check. This no-result proves only that no applicable verified procedure was found; the structured identity boundary remains available for one bounded local read-only lookup."
+                .to_string()
+        } else {
+            format!(
+                "{} verified procedure(s) matched all applicability checks.",
+                procedures.len()
+            )
+        };
+        Ok(ProcedureMatchReport {
+            query: input.query,
+            identity,
+            resolution: orientation,
+            procedures,
+            diagnostics,
+            abstained,
+            message,
+            required_condition_keys,
+            next_actions,
+            suggested_operation_evidence,
+            current_checkout_root,
+            execution_guidance,
+        })
     }
 
     /// List memory items.
@@ -690,6 +2159,40 @@ impl MemoryService {
         limit: Option<usize>,
     ) -> IndexResult<Vec<MemoryItem>> {
         Ok(self.repo.list_memory_items(status, limit).await?)
+    }
+
+    /// Whether a MemoryItem is applicable to one project/task/cwd authorization boundary.
+    #[must_use]
+    pub fn item_matches_boundary(
+        item: &MemoryItem,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> bool {
+        crate::memory_ranker::memory_scope_matches(
+            item,
+            MemoryRankContext::scoped_search(project, None, task, None, cwd, None),
+        )
+    }
+
+    /// List MemoryItems after applying an authorization boundary and before applying the limit.
+    pub async fn list_memory_for_boundary(
+        &self,
+        status: Option<MemoryStatus>,
+        limit: Option<usize>,
+        project: Option<&str>,
+        task: Option<&str>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<MemoryItem>> {
+        let mut items = self.list_memory(status, None).await?;
+        if status == Some(MemoryStatus::NeedsReview) {
+            items.retain(|item| item.correction_proposal_id.is_none());
+        }
+        items.retain(|item| Self::item_matches_boundary(item, project, task, cwd));
+        if let Some(limit) = limit {
+            items.truncate(limit);
+        }
+        Ok(items)
     }
 
     /// List items eligible for normal retrieval.
@@ -702,10 +2205,15 @@ impl MemoryService {
         &self,
         limit: Option<usize>,
     ) -> IndexResult<Vec<MemoryItem>> {
-        Ok(self
+        let mut items = self
             .repo
-            .list_memory_items_needing_review(OffsetDateTime::now_utc(), limit)
-            .await?)
+            .list_memory_items_needing_review(OffsetDateTime::now_utc(), None)
+            .await?;
+        items.retain(|item| item.correction_proposal_id.is_none());
+        if let Some(limit) = limit {
+            items.truncate(limit);
+        }
+        Ok(items)
     }
 
     async fn memory_promoted_from_observation(
@@ -734,6 +2242,7 @@ impl MemoryService {
             .into_iter()
             .filter(|candidate| {
                 candidate.id != item.id
+                    && candidate.pending_correction_proposal_id.is_none()
                     && is_current_plan_item(candidate)
                     && current_plan_scope_key(&candidate.scope)
                         == current_plan_scope_key(&item.scope)
@@ -766,6 +2275,7 @@ impl MemoryService {
         self.repo.save_memory_item(&item).await?;
 
         for previous_item in previous {
+            let expected = previous_item.clone();
             let superseded = previous_item
                 .with_status(MemoryStatus::Superseded)
                 .with_evidence(
@@ -778,7 +2288,9 @@ impl MemoryService {
                         item.id
                     )),
                 );
-            self.repo.save_memory_item(&superseded).await?;
+            self.repo
+                .save_memory_item_if_unchanged(&expected, &superseded)
+                .await?;
         }
 
         Ok((item, superseded_ids))
@@ -1071,6 +2583,16 @@ impl MemoryService {
             .into_iter()
             .filter(|item| matches_changes_since_filters(item, &options))
             .collect::<Vec<_>>();
+        if options.enforce_scope {
+            items.retain(|item| {
+                Self::item_matches_boundary(
+                    item,
+                    options.project.as_deref(),
+                    options.task.as_deref(),
+                    options.cwd.as_deref(),
+                )
+            });
+        }
         let scores = score_changes_since_items(&items, &options);
         items.sort_by(|left, right| {
             change_relevance_score(&scores, right.id)
@@ -1082,20 +2604,28 @@ impl MemoryService {
             items.truncate(limit);
         }
         let item_relevance = score_changes_since_items(&items, &options);
-        let commits = self
+        let observed_commits = self
             .repo
             .list_knowledge_commits_after(cursor.timestamp, limit)
             .await?;
+        let commits = if options.omit_commits {
+            Vec::new()
+        } else {
+            observed_commits.clone()
+        };
 
         let mut next_timestamp = cursor.timestamp;
         for item in &items {
             next_timestamp = next_timestamp.max(item.updated_at);
         }
-        for commit in &commits {
+        for commit in &observed_commits {
             next_timestamp = next_timestamp.max(commit.created_at);
         }
 
-        let next_commit_id = commits.last().map(|commit| commit.id).or(cursor.commit_id);
+        let next_commit_id = observed_commits
+            .last()
+            .map(|commit| commit.id)
+            .or(cursor.commit_id);
 
         info!(
             "Memory changes_since returned {} items and {} commits",
@@ -1144,22 +2674,66 @@ impl MemoryService {
 
     /// Build the first-version orientation context packet.
     pub async fn orient(&self, input: OrientInput) -> IndexResult<OrientationPacket> {
+        self.orient_with_task(input, None, None).await
+    }
+
+    /// Build an orientation packet narrowed to one caller-validated task.
+    pub async fn orient_for_task(
+        &self,
+        input: OrientInput,
+        task: String,
+        task_project: String,
+    ) -> IndexResult<OrientationPacket> {
+        self.orient_with_task(input, Some(task), Some(task_project))
+            .await
+    }
+
+    async fn orient_with_task(
+        &self,
+        input: OrientInput,
+        task: Option<String>,
+        task_project: Option<String>,
+    ) -> IndexResult<OrientationPacket> {
         let started = Instant::now();
         let limit = input.limit.unwrap_or(20);
-        let cursor = self.current_cursor().await?;
-        let active = self.list_active_memory(None).await?;
-        let review = self.list_memory_needing_review(Some(limit)).await?;
         let mut repository_context = self
             .resolve_repository_context(input.cwd.as_deref())
             .await?;
         if input.include_recent_commits {
             attach_recent_git_commits(&mut repository_context)?;
         }
-        let resolution = resolve_orientation_project(
-            input.project.as_deref(),
-            input.cwd.as_deref(),
-            repository_context.as_ref(),
-        );
+        let resolution = match (input.project.as_deref(), task_project.as_deref()) {
+            (None, Some(task_project)) => resolve_orientation_task_project(
+                task.as_deref().unwrap_or("unknown task"),
+                task_project,
+                repository_context.as_ref(),
+            ),
+            _ => resolve_orientation_project(
+                input.project.as_deref(),
+                input.cwd.as_deref(),
+                repository_context.as_ref(),
+            ),
+        };
+        if resolution.source == OrientationResolutionSource::Task
+            && resolution.requires_confirmation
+        {
+            return Err(IndexError::InvalidState(
+                resolution
+                    .ambiguity
+                    .clone()
+                    .unwrap_or_else(|| resolution.reason.clone()),
+            ));
+        }
+        let identity = orientation_identity(&resolution, repository_context.as_ref());
+        let cursor = self.current_cursor().await?;
+        let active = self.list_active_memory(None).await?;
+        let review = self
+            .list_memory_needing_review(None)
+            .await?
+            .into_iter()
+            .filter(|item| item.correction_proposal_id.is_none())
+            .take(limit)
+            .collect();
         let effective_project = resolution.selected_project.as_deref();
         let recent_commits = if input.include_recent_commits {
             self.list_commits_relevant_to_scope(
@@ -1172,32 +2746,44 @@ impl MemoryService {
             Vec::new()
         };
 
-        let relevant_active = filter_relevant(
-            active,
+        let repository_id = repository_context
+            .as_ref()
+            .map(|context| &context.repository.id);
+        let repository_remote = repository_context
+            .as_ref()
+            .and_then(|context| context.repository.remote_url.as_deref());
+        let rank_context = MemoryRankContext::orientation(
             effective_project,
             input.cwd.as_deref(),
             input.prompt.as_deref(),
-        );
+        )
+        .with_task(task.as_deref())
+        .with_repository(repository_id, repository_remote)
+        .requiring_text_match(orientation_requires_text_match(
+            input.intent.as_ref(),
+            input.prompt.as_deref(),
+        ));
+        let relevant_active = filter_relevant(active, rank_context);
         let has_task_boundary =
-            has_orientation_task_boundary(effective_project, input.cwd.as_deref());
+            has_orientation_task_boundary(effective_project, task.as_deref(), input.cwd.as_deref());
         let relevant_active = prioritize_current_plan_for_orientation(
             relevant_active,
             input.intent.as_ref(),
             input.prompt.as_deref(),
             has_task_boundary,
         );
-        let mut relevant_review = filter_relevant(
-            review,
-            effective_project,
-            input.cwd.as_deref(),
-            input.prompt.as_deref(),
-        );
+        let mut relevant_review = filter_relevant(review, rank_context);
         relevant_review.truncate(limit);
 
         let active_decisions = take_kind(&relevant_active, MemoryKind::Decision, limit);
         let active_rules = take_kind(&relevant_active, MemoryKind::Rule, limit);
         let preferences = take_kind(&relevant_active, MemoryKind::Preference, limit);
         let limitations = take_kind(&relevant_active, MemoryKind::Limitation, limit);
+        let handoffs = if matches!(input.intent, Some(BrainHarnessIntent::ResumeSession)) {
+            take_kind(&relevant_active, MemoryKind::Handoff, limit)
+        } else {
+            Vec::new()
+        };
 
         let mut ambiguities = Vec::new();
         if let Some(ambiguity) = &resolution.ambiguity {
@@ -1220,20 +2806,40 @@ impl MemoryService {
                 "Review needs_review memory before treating it as active context.".to_string(),
             );
         }
+        if repository_context.is_some() && input.cwd.is_some() {
+            recommended_actions.push(
+                "Before executing or exploring any actionable repository task, call \
+                 repository-local procedure_match once with a bounded task-focused query copied \
+                 from the user's operation request and the current cwd. Preserve concrete \
+                 operation terms and identifiers verbatim; omit unrelated instructions and \
+                 secret values. This applies even without remembered or learned wording and when \
+                 the request says to use durable procedure memory. memory(action=list) is not a \
+                 substitute."
+                    .to_string(),
+            );
+        }
         if resolution.requires_confirmation {
             recommended_actions.push(
                 "Ask the user to confirm the intended project before using project-scoped memory."
                     .to_string(),
             );
+            if repository_context.is_some() && input.cwd.is_some() {
+                recommended_actions.push(
+                    "Project ambiguity blocks only project/task-scoped memory; it does not block \
+                     the mandatory repository-local procedure_match for an actionable task."
+                        .to_string(),
+                );
+            }
         }
 
-        let scope = scope_label(effective_project, input.cwd.as_deref());
+        let scope = scope_label(effective_project, task.as_deref(), input.cwd.as_deref());
         let context_pack_parts = ContextPackParts {
             scope: &scope,
             cursor: &cursor,
             resolution: &resolution,
             repository_context: repository_context.as_ref(),
             project: effective_project,
+            task: task.as_deref(),
             cwd: input.cwd.as_deref(),
             query: input.prompt.as_deref(),
             intent: input.intent.as_ref(),
@@ -1241,6 +2847,7 @@ impl MemoryService {
             rules: &active_rules,
             preferences: &preferences,
             limitations: &limitations,
+            handoffs: &handoffs,
             review_needed: &relevant_review,
             commits: &recent_commits,
             ambiguities: &ambiguities,
@@ -1252,6 +2859,7 @@ impl MemoryService {
             scope: &scope,
             resolution: &resolution,
             project: effective_project,
+            task: task.as_deref(),
             cwd: input.cwd.as_deref(),
             query: input.prompt.as_deref(),
             intent: input.intent.as_ref(),
@@ -1260,6 +2868,7 @@ impl MemoryService {
             rules: &active_rules,
             preferences: &preferences,
             limitations: &limitations,
+            handoffs: &handoffs,
             review_needed: &relevant_review,
             ambiguities: &ambiguities,
         });
@@ -1271,6 +2880,7 @@ impl MemoryService {
             &active_rules,
             &preferences,
             &limitations,
+            &handoffs,
             &relevant_review,
         ]);
         let memory_metadata = orientation_memory_metadata(&[
@@ -1278,6 +2888,7 @@ impl MemoryService {
             &active_rules,
             &preferences,
             &limitations,
+            &handoffs,
             &relevant_review,
         ]);
         let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
@@ -1301,11 +2912,13 @@ impl MemoryService {
         Ok(OrientationPacket {
             project: input.project,
             cwd: input.cwd,
+            task,
             agent: input.agent,
             intent: input.intent,
             trace_id: Some(trace.id),
             prompt: input.prompt,
             scope,
+            identity,
             resolution,
             repository_context,
             memory_cursor: cursor,
@@ -1318,6 +2931,7 @@ impl MemoryService {
             active_rules,
             preferences,
             limitations,
+            handoffs,
             review_needed: relevant_review,
             memory_metadata,
             recent_knowledge_commits: recent_commits,
@@ -1350,7 +2964,12 @@ impl MemoryService {
             });
 
         let Some(mut checkout) = checkout else {
-            return Ok(None);
+            let service = RepositoryService::new(self.db.clone());
+            return match service.detect_repository(&cwd_path).await {
+                Ok(_) => service.resolve_cwd(&cwd_path).await,
+                Err(IndexError::NotFound(_) | IndexError::InvalidState(_)) => Ok(None),
+                Err(error) => Err(error),
+            };
         };
         if refresh_checkout_git_state(&mut checkout)? {
             self.repository_repo.save_checkout(&checkout).await?;
@@ -1364,7 +2983,8 @@ impl MemoryService {
 
         let components = self.repository_repo.list_components(&repository.id).await?;
         let checkout_path = canonical_or_original(Path::new(&checkout.local_path));
-        let matching_components = matching_components(&cwd_path, &checkout_path, components);
+        let matching_components =
+            resolve_matching_components(&repository.id, &cwd_path, &checkout_path, components)?;
         let linked_projects = self
             .repository_repo
             .list_project_links(&repository.id)
@@ -1377,6 +2997,41 @@ impl MemoryService {
             matching_components,
             linked_projects,
         }))
+    }
+
+    async fn portable_procedure_evidence_path(
+        &self,
+        scope: &MemoryScope,
+        receipt_path: &Path,
+    ) -> IndexResult<String> {
+        let canonical_receipt = receipt_path.canonicalize()?;
+        let absolute_path = canonical_receipt.display().to_string();
+        if !matches!(scope, MemoryScope::Repository { .. }) {
+            return Ok(absolute_path);
+        }
+
+        let Some(parent) = canonical_receipt.parent() else {
+            return Ok(absolute_path);
+        };
+        let parent = parent.to_string_lossy();
+        let Some(context) = self.resolve_repository_context(Some(&parent)).await? else {
+            return Ok(absolute_path);
+        };
+        if !repository_scope_stable_identity_matches(scope, &context) {
+            return Ok(absolute_path);
+        }
+        let Some(checkout) = context.checkout.as_ref() else {
+            return Ok(absolute_path);
+        };
+        let checkout_root = canonical_or_original(Path::new(&checkout.local_path));
+        let Ok(relative_path) = canonical_receipt.strip_prefix(checkout_root) else {
+            return Ok(absolute_path);
+        };
+        if relative_path.as_os_str().is_empty() {
+            return Ok(absolute_path);
+        }
+
+        Ok(relative_path.display().to_string())
     }
 
     async fn repository_vault_snapshots(&self) -> IndexResult<Vec<RepositoryVaultSnapshot>> {
@@ -1408,16 +3063,23 @@ impl MemoryService {
     }
 }
 
-fn filter_relevant(
-    items: Vec<MemoryItem>,
-    project: Option<&str>,
-    cwd: Option<&str>,
-    query: Option<&str>,
-) -> Vec<MemoryItem> {
-    rank_memory_items(items, MemoryRankContext::orientation(project, cwd, query))
+fn filter_relevant(items: Vec<MemoryItem>, context: MemoryRankContext<'_>) -> Vec<MemoryItem> {
+    rank_memory_items(items, context)
         .into_iter()
         .map(|ranked| ranked.item)
         .collect()
+}
+
+fn orientation_requires_text_match(
+    intent: Option<&BrainHarnessIntent>,
+    query: Option<&str>,
+) -> bool {
+    query.is_some_and(|query| !query.trim().is_empty())
+        && intent.is_some()
+        && !matches!(
+            intent,
+            Some(BrainHarnessIntent::ResumeSession | BrainHarnessIntent::PrepareHandoff)
+        )
 }
 
 fn prioritize_current_plan_for_orientation(
@@ -1458,8 +3120,13 @@ fn should_prioritize_current_plan_for_plan_work(
     }
 }
 
-fn has_orientation_task_boundary(project: Option<&str>, cwd: Option<&str>) -> bool {
+fn has_orientation_task_boundary(
+    project: Option<&str>,
+    task: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     project.is_some_and(|project| !project.trim().is_empty())
+        || task.is_some_and(|task| !task.trim().is_empty())
         || cwd.is_some_and(|cwd| !cwd.trim().is_empty())
 }
 
@@ -1593,7 +3260,11 @@ fn resolve_orientation_project(
             requires_confirmation: false,
             reason: "Project was supplied explicitly by the caller.".to_string(),
             repository_name: repository_context.map(|context| context.repository.name.clone()),
+            repository_remote: repository_context
+                .and_then(|context| context.repository.remote_url.as_deref())
+                .and_then(normalize_remote_reference),
             component_names: component_names(repository_context),
+            component_evidence: component_evidence(repository_context),
             project_candidates: candidates,
             ambiguity,
         };
@@ -1645,6 +3316,7 @@ fn resolve_orientation_project(
             OrientationResolutionSource::ComponentLink => 0.9,
             OrientationResolutionSource::RepositoryLink => 0.75,
             OrientationResolutionSource::ExplicitProject
+            | OrientationResolutionSource::Task
             | OrientationResolutionSource::Unresolved => 0.0,
         };
         let reason = match source {
@@ -1657,6 +3329,7 @@ fn resolve_orientation_project(
                 context.repository.name, selected_project
             ),
             OrientationResolutionSource::ExplicitProject
+            | OrientationResolutionSource::Task
             | OrientationResolutionSource::Unresolved => String::new(),
         };
         return OrientationResolution {
@@ -1667,7 +3340,13 @@ fn resolve_orientation_project(
             requires_confirmation: false,
             reason,
             repository_name: Some(context.repository.name.clone()),
+            repository_remote: context
+                .repository
+                .remote_url
+                .as_deref()
+                .and_then(normalize_remote_reference),
             component_names: component_names(Some(context)),
+            component_evidence: component_evidence(Some(context)),
             project_candidates: candidates,
             ambiguity: None,
         };
@@ -1686,6 +3365,45 @@ fn resolve_orientation_project(
             candidates.join(", ")
         )),
     )
+}
+
+fn resolve_orientation_task_project(
+    task: &str,
+    task_project: &str,
+    repository_context: Option<&RepositoryContext>,
+) -> OrientationResolution {
+    let candidates = project_candidates(repository_context);
+    let mismatch = repository_context.is_some()
+        && !candidates.is_empty()
+        && !candidates
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(task_project));
+    let ambiguity = mismatch.then(|| {
+        format!(
+            "Task '{task}' belongs to project '{task_project}', but cwd matched repository '{}' candidate(s): {}.",
+            repository_context
+                .expect("repository context exists when task project mismatches")
+                .repository
+                .name,
+            candidates.join(", ")
+        )
+    });
+    OrientationResolution {
+        explicit_project: None,
+        selected_project: Some(task_project.to_string()),
+        source: OrientationResolutionSource::Task,
+        confidence: 1.0,
+        requires_confirmation: mismatch,
+        reason: format!("Project '{task_project}' was derived from caller-supplied task '{task}'."),
+        repository_name: repository_context.map(|context| context.repository.name.clone()),
+        repository_remote: repository_context
+            .and_then(|context| context.repository.remote_url.as_deref())
+            .and_then(normalize_remote_reference),
+        component_names: component_names(repository_context),
+        component_evidence: component_evidence(repository_context),
+        project_candidates: candidates,
+        ambiguity,
+    }
 }
 
 fn candidate_links_for_context(context: &RepositoryContext) -> Vec<&ProjectRepositoryLink> {
@@ -1745,6 +3463,97 @@ fn component_names(repository_context: Option<&RepositoryContext>) -> Vec<String
         .unwrap_or_default()
 }
 
+fn component_evidence(
+    repository_context: Option<&RepositoryContext>,
+) -> Vec<OrientationComponentEvidence> {
+    repository_context
+        .map(|context| {
+            context
+                .matching_components
+                .iter()
+                .map(|component| OrientationComponentEvidence {
+                    name: component.name.clone(),
+                    component_path: component.path.clone(),
+                    source_path: component.source_path.clone(),
+                    source_sha256: component.source_sha256.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn orientation_identity(
+    resolution: &OrientationResolution,
+    repository_context: Option<&RepositoryContext>,
+) -> OrientationIdentity {
+    let repository = repository_context.map(|context| OrientationRepositoryIdentity {
+        repository_id: context.repository.id,
+        name: context.repository.name.clone(),
+        normalized_remote: context
+            .repository
+            .remote_url
+            .as_deref()
+            .and_then(normalize_remote_reference),
+        checkout_id: context.checkout.as_ref().map(|checkout| checkout.id),
+        checkout_root: context
+            .checkout
+            .as_ref()
+            .map(|checkout| checkout.local_path.clone()),
+        head_sha: context
+            .checkout
+            .as_ref()
+            .and_then(|checkout| checkout.head_sha.clone()),
+    });
+    let status = if resolution.selected_project.is_some() && !resolution.requires_confirmation {
+        OrientationProjectStatus::Authorized
+    } else if repository_context.is_some() || !resolution.project_candidates.is_empty() {
+        OrientationProjectStatus::RequiresConfirmation
+    } else {
+        OrientationProjectStatus::Unavailable
+    };
+    let mut project_link_ids = match (resolution.source, repository_context) {
+        (
+            OrientationResolutionSource::ComponentLink
+            | OrientationResolutionSource::RepositoryLink,
+            Some(context),
+        ) => {
+            let selected = resolution.selected_project.as_deref();
+            candidate_links_for_context(context)
+                .into_iter()
+                .filter(|link| {
+                    selected
+                        .map(|project| link.project_name.eq_ignore_ascii_case(project))
+                        .unwrap_or(true)
+                })
+                .map(|link| link.id)
+                .collect()
+        }
+        (OrientationResolutionSource::Unresolved, Some(context)) => {
+            candidate_links_for_context(context)
+                .into_iter()
+                .map(|link| link.id)
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    project_link_ids.sort_by_key(std::string::ToString::to_string);
+    project_link_ids.dedup();
+
+    OrientationIdentity {
+        repository,
+        project: OrientationProjectIdentity {
+            status,
+            name: resolution.selected_project.clone(),
+            source: resolution.source,
+            candidates: resolution.project_candidates.clone(),
+            project_link_ids,
+            reason: resolution.reason.clone(),
+            ambiguity: resolution.ambiguity.clone(),
+        },
+        components: resolution.component_evidence.clone(),
+    }
+}
+
 #[cfg(test)]
 fn is_relevant(item: &MemoryItem, project: Option<&str>, cwd: Option<&str>) -> bool {
     crate::memory_ranker::memory_scope_matches(
@@ -1785,7 +3594,8 @@ fn score_changes_since_items(
         options.project.as_deref(),
         options.cwd.as_deref(),
         options.query.as_deref(),
-    );
+    )
+    .with_task(options.task.as_deref());
     items
         .iter()
         .map(|item| {
@@ -1867,7 +3677,13 @@ fn take_kind(items: &[MemoryItem], kind: MemoryKind, limit: usize) -> Vec<Memory
         .collect()
 }
 
-fn scope_label(project: Option<&str>, cwd: Option<&str>) -> String {
+fn scope_label(project: Option<&str>, task: Option<&str>, cwd: Option<&str>) -> String {
+    if let Some(task) = task {
+        return match project {
+            Some(project) => format!("task:{project}/{task}"),
+            None => format!("task:{task}"),
+        };
+    }
     if let Some(project) = project {
         return project.to_string();
     }
@@ -1883,6 +3699,7 @@ struct ContextPackParts<'a> {
     resolution: &'a OrientationResolution,
     repository_context: Option<&'a RepositoryContext>,
     project: Option<&'a str>,
+    task: Option<&'a str>,
     cwd: Option<&'a str>,
     query: Option<&'a str>,
     intent: Option<&'a BrainHarnessIntent>,
@@ -1890,6 +3707,7 @@ struct ContextPackParts<'a> {
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
     limitations: &'a [MemoryItem],
+    handoffs: &'a [MemoryItem],
     review_needed: &'a [MemoryItem],
     commits: &'a [KnowledgeCommit],
     ambiguities: &'a [String],
@@ -1900,6 +3718,7 @@ struct BrainLoopParts<'a> {
     scope: &'a str,
     resolution: &'a OrientationResolution,
     project: Option<&'a str>,
+    task: Option<&'a str>,
     cwd: Option<&'a str>,
     query: Option<&'a str>,
     intent: Option<&'a BrainHarnessIntent>,
@@ -1908,6 +3727,7 @@ struct BrainLoopParts<'a> {
     rules: &'a [MemoryItem],
     preferences: &'a [MemoryItem],
     limitations: &'a [MemoryItem],
+    handoffs: &'a [MemoryItem],
     review_needed: &'a [MemoryItem],
     ambiguities: &'a [String],
 }
@@ -1959,9 +3779,15 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
             score: 0.0,
         },
         BrainLoopGroup {
+            items: parts.handoffs,
+            reason: "Active handoff matched the resume scope.",
+            original_index: 4,
+            score: 0.0,
+        },
+        BrainLoopGroup {
             items: parts.review_needed,
             reason: "Review-needed memory matched the orientation scope.",
-            original_index: 4,
+            original_index: 5,
             score: 0.0,
         },
     ];
@@ -1971,8 +3797,11 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
     let follow_user_preference =
         matches!(parts.intent, Some(BrainHarnessIntent::FollowUserPreference))
             && !parts.preferences.is_empty();
+    let resume_handoff = matches!(parts.intent, Some(BrainHarnessIntent::ResumeSession))
+        && !parts.handoffs.is_empty();
     if parts.query.is_some_and(|query| !query.trim().is_empty()) {
-        let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
+        let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query)
+            .with_task(parts.task);
         for group in &mut groups {
             group.score = group
                 .items
@@ -1989,9 +3818,13 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
     if follow_user_preference {
         groups[1].score = f32::INFINITY;
     }
+    if resume_handoff {
+        groups[4].score = f32::INFINITY;
+    }
     if parts.query.is_some_and(|query| !query.trim().is_empty())
         || continuity_current_plan
         || follow_user_preference
+        || resume_handoff
     {
         groups.sort_by(|left, right| {
             right
@@ -2001,7 +3834,7 @@ fn brain_loop_top_items(parts: &BrainLoopParts<'_>) -> Vec<BrainLoopItem> {
                 .then_with(|| left.original_index.cmp(&right.original_index))
         });
     }
-    let mut offsets = [0usize; 5];
+    let mut offsets = [0usize; 6];
 
     loop {
         let mut added = false;
@@ -2074,6 +3907,7 @@ fn brain_loop_compiled_context(
     if let Some(project) = &resolution.selected_project {
         let source = match resolution.source {
             OrientationResolutionSource::ExplicitProject => "explicit project",
+            OrientationResolutionSource::Task => "explicit task",
             OrientationResolutionSource::ComponentLink => "component link",
             OrientationResolutionSource::RepositoryLink => "repository link",
             OrientationResolutionSource::Unresolved => "unresolved scope",
@@ -2137,12 +3971,16 @@ fn build_context_pack(parts: &ContextPackParts<'_>, used_memory_candidate_ids: &
         ));
     }
     append_resolution_section(&mut lines, parts.resolution);
+    if let Some(task) = parts.task {
+        lines.push(format!("- Selected task: {task}"));
+    }
     append_repository_section(&mut lines, parts.repository_context);
     append_hot_context_section(&mut lines, parts);
     append_memory_section(&mut lines, "Active Decisions", parts.decisions);
     append_memory_section(&mut lines, "Active Rules", parts.rules);
     append_memory_section(&mut lines, "Preferences", parts.preferences);
     append_memory_section(&mut lines, "Limitations", parts.limitations);
+    append_memory_section(&mut lines, "Handoffs", parts.handoffs);
     append_memory_section(&mut lines, "Needs Review", parts.review_needed);
 
     lines.push(String::new());
@@ -2214,7 +4052,8 @@ fn intent_matched_reviewed_preferences<'a>(parts: &ContextPackParts<'a>) -> Vec<
     }
 
     let has_query = parts.query.is_some_and(|query| !query.trim().is_empty());
-    let context = MemoryRankContext::orientation(parts.project, parts.cwd, parts.query);
+    let context =
+        MemoryRankContext::orientation(parts.project, parts.cwd, parts.query).with_task(parts.task);
     parts
         .preferences
         .iter()
@@ -2436,23 +4275,683 @@ fn path_starts_with(path: &Path, prefix: &Path) -> bool {
 }
 
 fn canonical_or_original(path: &Path) -> std::path::PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    path.canonicalize().unwrap_or_else(|_| {
+        let mut normalized = PathBuf::new();
+        for component in path.components() {
+            match component {
+                Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+                Component::RootDir => normalized.push(Path::new("/")),
+                Component::CurDir => {}
+                Component::ParentDir => {
+                    normalized.pop();
+                }
+                Component::Normal(value) => normalized.push(value),
+            }
+        }
+        normalized
+    })
 }
 
-fn matching_components(
-    cwd: &Path,
+fn validate_procedure_receipt(
+    procedure: &ProcedureCard,
+    receipt: &ProcedureVerificationReceipt,
+) -> IndexResult<()> {
+    if receipt.command.trim() != procedure.verification.command.trim() {
+        return Err(IndexError::InvalidState(
+            "verification receipt command does not match the procedure card".to_string(),
+        ));
+    }
+    if receipt.exit_code != procedure.verification.expected_exit_code {
+        return Err(IndexError::InvalidState(format!(
+            "verification receipt exit code {} does not match expected {}",
+            receipt.exit_code, procedure.verification.expected_exit_code
+        )));
+    }
+    if !receipt
+        .output
+        .contains(&procedure.verification.expected_output_contains)
+    {
+        return Err(IndexError::InvalidState(
+            "verification receipt output does not contain the expected success marker".to_string(),
+        ));
+    }
+    for prerequisite in &procedure.prerequisites {
+        let observed = receipt.conditions.get(&prerequisite.key).ok_or_else(|| {
+            IndexError::InvalidState(format!(
+                "verification receipt is missing prerequisite condition {}",
+                prerequisite.key
+            ))
+        })?;
+        if normalize_condition(observed) != normalize_condition(&prerequisite.expected) {
+            return Err(IndexError::InvalidState(format!(
+                "verification receipt condition {} does not match the procedure prerequisite",
+                prerequisite.key
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn observe_procedure_prerequisite(
+    prerequisite: &ProcedurePrerequisite,
+    source: &ProcedurePrerequisiteSource,
+    checkout_root: Option<&Path>,
+) -> ProcedureConditionObservation {
+    let unavailable =
+        |detail: String, source_sha256: Option<String>| ProcedureConditionObservation {
+            condition_key: prerequisite.key.clone(),
+            source: source.clone(),
+            status: ProcedureConditionObservationStatus::Unavailable,
+            source_sha256,
+            detail,
+        };
+    let Some(checkout_root) = checkout_root else {
+        return unavailable("no current checkout root was resolved".to_string(), None);
+    };
+    let (relative_path, key_path) = match source {
+        ProcedurePrerequisiteSource::Toml {
+            relative_path,
+            key_path,
+        } => (relative_path.as_str(), key_path.as_slice()),
+    };
+    let bytes = match read_tracked_condition_source(checkout_root, relative_path) {
+        Ok(bytes) => bytes,
+        Err(detail) => return unavailable(detail, None),
+    };
+    let source_sha256 = Some(sha256_hex(&bytes));
+    let contents = match std::str::from_utf8(&bytes) {
+        Ok(contents) => contents,
+        Err(_) => {
+            return unavailable(
+                "trusted source is not UTF-8 text".to_string(),
+                source_sha256,
+            )
+        }
+    };
+    let document = match toml::from_str::<toml::Value>(contents) {
+        Ok(document) => document,
+        Err(_) => {
+            return unavailable(
+                "trusted source is not valid TOML".to_string(),
+                source_sha256,
+            )
+        }
+    };
+    let mut selected = &document;
+    for key in key_path {
+        let Some(next) = selected.get(key) else {
+            return unavailable(
+                "configured TOML key path is absent".to_string(),
+                source_sha256,
+            );
+        };
+        selected = next;
+    }
+    let observed = match selected {
+        toml::Value::String(value) => value.clone(),
+        toml::Value::Integer(value) => value.to_string(),
+        toml::Value::Float(value) => value.to_string(),
+        toml::Value::Boolean(value) => value.to_string(),
+        toml::Value::Datetime(value) => value.to_string(),
+        toml::Value::Array(_) | toml::Value::Table(_) => {
+            return unavailable(
+                "configured TOML key path does not select a scalar".to_string(),
+                source_sha256,
+            )
+        }
+    };
+    let status = if normalize_condition(&observed) == normalize_condition(&prerequisite.expected) {
+        ProcedureConditionObservationStatus::Matched
+    } else {
+        ProcedureConditionObservationStatus::Mismatched
+    };
+    ProcedureConditionObservation {
+        condition_key: prerequisite.key.clone(),
+        source: source.clone(),
+        status,
+        source_sha256,
+        detail: match status {
+            ProcedureConditionObservationStatus::Matched => {
+                "trusted current-checkout source matched the verified prerequisite".to_string()
+            }
+            ProcedureConditionObservationStatus::Mismatched => {
+                "trusted current-checkout source did not match the verified prerequisite"
+                    .to_string()
+            }
+            ProcedureConditionObservationStatus::Unavailable => unreachable!(),
+        },
+    }
+}
+
+fn read_tracked_condition_source(
     checkout_root: &Path,
-    components: Vec<MonorepoComponent>,
-) -> Vec<MonorepoComponent> {
-    let relative = cwd.strip_prefix(checkout_root).unwrap_or(cwd);
-    let mut matches: Vec<_> = components
+    relative_path: &str,
+) -> Result<Vec<u8>, String> {
+    let relative = Path::new(relative_path);
+    if !is_safe_checkout_relative_path(relative) {
+        return Err("configured source path is not a safe checkout-relative path".to_string());
+    }
+    let checkout_root = checkout_root
+        .canonicalize()
+        .map_err(|_| "current checkout root is unavailable".to_string())?;
+    let mut source = checkout_root.clone();
+    for component in relative.components() {
+        let Component::Normal(part) = component else {
+            return Err("configured source path is not a safe checkout-relative path".to_string());
+        };
+        source.push(part);
+        let metadata = fs::symlink_metadata(&source)
+            .map_err(|_| "configured source file is unavailable".to_string())?;
+        if metadata.file_type().is_symlink() {
+            return Err("configured source path contains a symlink".to_string());
+        }
+    }
+    let source = source
+        .canonicalize()
+        .map_err(|_| "configured source file is unavailable".to_string())?;
+    if !source.starts_with(&checkout_root) {
+        return Err("configured source path escapes the current checkout".to_string());
+    }
+    let metadata =
+        fs::metadata(&source).map_err(|_| "configured source file is unavailable".to_string())?;
+    if !metadata.is_file() {
+        return Err("configured source path is not a regular file".to_string());
+    }
+    if metadata.len() > MAX_CONDITION_SOURCE_BYTES {
+        return Err(format!(
+            "configured source file exceeds the {}-byte limit",
+            MAX_CONDITION_SOURCE_BYTES
+        ));
+    }
+    let tracked = Command::new("git")
+        .arg("-C")
+        .arg(&checkout_root)
+        .args(["--literal-pathspecs", "ls-files", "--error-unmatch", "--"])
+        .arg(relative)
+        .output()
+        .map_err(|_| "Git tracking state could not be inspected".to_string())?;
+    if !tracked.status.success() {
+        return Err("configured source file is not Git-tracked".to_string());
+    }
+    let bytes = fs::read(&source)
+        .map_err(|_| "configured source file could not be read safely".to_string())?;
+    if bytes.len() as u64 > MAX_CONDITION_SOURCE_BYTES {
+        return Err(format!(
+            "configured source file exceeds the {}-byte limit",
+            MAX_CONDITION_SOURCE_BYTES
+        ));
+    }
+    Ok(bytes)
+}
+
+fn suggest_operation_evidence(
+    checkout_root: &Path,
+    query: &str,
+    components: &[OrientationComponentEvidence],
+) -> Option<OperationEvidenceCandidate> {
+    let checkout_root = checkout_root.canonicalize().ok()?;
+    let query_terms = operation_query_terms(query);
+    if query_terms.is_empty() {
+        return None;
+    }
+
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&checkout_root)
+        .args([
+            "ls-files",
+            "-z",
+            "--",
+            ":(icase,glob)**/runbook*/**/*.md",
+            ":(icase,glob)**/*runbook*.md",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() || output.stdout.len() > MAX_OPERATION_EVIDENCE_INDEX_BYTES {
+        return None;
+    }
+
+    let component_sources = components
+        .iter()
+        .filter_map(|component| component.source_path.as_deref())
+        .collect::<HashSet<_>>();
+    let mut candidates = Vec::new();
+    for raw_path in output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+    {
+        if candidates.len() >= MAX_OPERATION_EVIDENCE_CANDIDATES {
+            return None;
+        }
+        let path = std::str::from_utf8(raw_path).ok()?;
+        if component_sources.contains(path) || !is_safe_checkout_relative_path(Path::new(path)) {
+            continue;
+        }
+        let path_terms = ascii_terms(path);
+        let filename_terms = Path::new(path)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .map(ascii_terms)
+            .unwrap_or_default();
+        let matched_terms = query_terms
+            .iter()
+            .filter(|term| path_terms.contains(term.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        if matched_terms.is_empty() {
+            continue;
+        }
+        let filename_matches = matched_terms
+            .iter()
+            .filter(|term| filename_terms.contains(term.as_str()))
+            .count();
+        let Ok(bytes) = read_tracked_condition_source(&checkout_root, path) else {
+            continue;
+        };
+        let Ok(resolved_path) = checkout_root.join(path).canonicalize() else {
+            continue;
+        };
+        if !resolved_path.starts_with(&checkout_root) {
+            continue;
+        }
+        candidates.push((
+            matched_terms.len(),
+            filename_matches,
+            OperationEvidenceCandidate {
+                path: path.to_string(),
+                resolved_path: resolved_path.display().to_string(),
+                source_sha256: sha256_hex(&bytes),
+                reason: format!(
+                    "highest-ranked Git-tracked runbook path with a unique query-term score: {}",
+                    matched_terms.join(", ")
+                ),
+                required_before_final_abstention: true,
+                allowed_when_project_requires_confirmation: true,
+                authorizes_procedure_execution: false,
+            },
+        ));
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| right.1.cmp(&left.1))
+            .then_with(|| left.2.path.cmp(&right.2.path))
+    });
+    let best = candidates.first()?;
+    if candidates
+        .get(1)
+        .is_some_and(|next| (next.0, next.1) == (best.0, best.1))
+    {
+        return None;
+    }
+    Some(best.2.clone())
+}
+
+fn operation_query_terms(query: &str) -> Vec<String> {
+    let mut terms = ascii_terms(query)
         .into_iter()
-        .filter(|component| {
-            component.path == "." || relative.starts_with(Path::new(&component.path))
+        .filter(|term| term.len() >= 4)
+        .filter(|term| !is_generic_operation_term(term))
+        .collect::<Vec<_>>();
+    terms.sort();
+    terms.dedup();
+    terms
+}
+
+fn ascii_terms(value: &str) -> HashSet<String> {
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect()
+}
+
+fn is_generic_operation_term(term: &str) -> bool {
+    matches!(
+        term,
+        "applicable"
+            | "available"
+            | "belongs"
+            | "checkout"
+            | "context"
+            | "current"
+            | "durable"
+            | "evaluation"
+            | "fresh"
+            | "handle"
+            | "identity"
+            | "inspect"
+            | "local"
+            | "memory"
+            | "only"
+            | "procedure"
+            | "repository"
+            | "session"
+            | "using"
+    )
+}
+
+fn is_safe_checkout_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && !path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+fn procedure_applicability(
+    item: &MemoryItem,
+    conditions: &BTreeMap<String, String>,
+    checkout_root: Option<&Path>,
+    now: OffsetDateTime,
+) -> ProcedureApplicability {
+    let mut reasons = Vec::new();
+    let mut unresolved_condition_keys = Vec::new();
+    let mut condition_observations = Vec::new();
+    let Some(procedure) = &item.procedure else {
+        return ProcedureApplicability {
+            memory_id: item.id,
+            title: item.title.clone(),
+            applicable: false,
+            reasons: vec!["Structured procedure details are missing.".to_string()],
+            unresolved_condition_keys,
+            condition_observations,
+        };
+    };
+
+    if item.status != MemoryStatus::Active {
+        reasons.push(format!(
+            "Procedure status is {} instead of active.",
+            item.status
+        ));
+    }
+    if !procedure.is_verified_at(now) {
+        if procedure
+            .expires_at
+            .is_some_and(|expires_at| expires_at <= now)
+        {
+            reasons.push("Procedure verification has expired.".to_string());
+        } else {
+            reasons.push("Procedure does not have complete verification metadata.".to_string());
+        }
+    }
+    for prerequisite in &procedure.prerequisites {
+        if let Some(source) = &prerequisite.source {
+            let observation = observe_procedure_prerequisite(prerequisite, source, checkout_root);
+            match observation.status {
+                ProcedureConditionObservationStatus::Matched => {}
+                ProcedureConditionObservationStatus::Mismatched => reasons.push(format!(
+                    "Condition '{}' from its trusted current-checkout source does not match the verified value.",
+                    prerequisite.key
+                )),
+                ProcedureConditionObservationStatus::Unavailable => reasons.push(format!(
+                    "Condition '{}' could not be resolved from its trusted current-checkout source: {}",
+                    prerequisite.key, observation.detail
+                )),
+            }
+            condition_observations.push(observation);
+            continue;
+        }
+        match conditions.get(&prerequisite.key) {
+            None => {
+                reasons.push(format!(
+                    "Required condition '{}' was not supplied; abstaining instead of guessing.",
+                    prerequisite.key
+                ));
+                unresolved_condition_keys.push(prerequisite.key.clone());
+            }
+            Some(observed)
+                if normalize_condition(observed) != normalize_condition(&prerequisite.expected) =>
+            {
+                reasons.push(format!(
+                    "Condition '{}' does not match the verified value.",
+                    prerequisite.key
+                ));
+                unresolved_condition_keys.push(prerequisite.key.clone());
+            }
+            Some(_) => {}
+        }
+    }
+
+    match (
+        procedure.verification.evidence_path.as_deref(),
+        procedure.verification.evidence_sha256.as_deref(),
+    ) {
+        (Some(path), Some(expected_hash)) => {
+            let path = resolve_procedure_evidence_path(path, checkout_root);
+            match fs::read(&path) {
+                Ok(bytes) if sha256_hex(&bytes) == expected_hash => {}
+                Ok(_) => reasons.push(format!(
+                    "Verification receipt hash changed at {}.",
+                    path.display()
+                )),
+                Err(_) => reasons.push(format!(
+                    "Verification receipt is unavailable at {}.",
+                    path.display()
+                )),
+            }
+        }
+        _ => reasons.push("Verification receipt path or hash is missing.".to_string()),
+    }
+
+    let applicable = reasons.is_empty();
+    if applicable {
+        reasons.push(
+            "Scope, prerequisites, freshness, and verification receipt hash all match.".to_string(),
+        );
+    }
+    ProcedureApplicability {
+        memory_id: item.id,
+        title: item.title.clone(),
+        applicable,
+        reasons,
+        unresolved_condition_keys,
+        condition_observations,
+    }
+}
+
+fn procedure_scope_matches(
+    scope: &MemoryScope,
+    project: Option<&str>,
+    cwd: Option<&str>,
+    repository_context: Option<&RepositoryContext>,
+) -> bool {
+    match scope {
+        MemoryScope::Global | MemoryScope::User => true,
+        MemoryScope::Project { project_name, .. } => {
+            project.is_some_and(|project| project_name.eq_ignore_ascii_case(project))
+        }
+        MemoryScope::Repository { local_path, .. } => {
+            let stable_identity_match = repository_context
+                .is_some_and(|context| repository_scope_stable_identity_matches(scope, context));
+            let checkout_path_match =
+                cwd.zip(local_path.as_deref())
+                    .is_some_and(|(cwd, local_path)| {
+                        canonical_or_original(Path::new(cwd))
+                            .starts_with(canonical_or_original(Path::new(local_path)))
+                    });
+            stable_identity_match || checkout_path_match
+        }
+        MemoryScope::Task { .. }
+        | MemoryScope::Entity { .. }
+        | MemoryScope::Session { .. }
+        | MemoryScope::Custom { .. } => false,
+    }
+}
+
+fn repository_scope_stable_identity_matches(
+    scope: &MemoryScope,
+    context: &RepositoryContext,
+) -> bool {
+    let MemoryScope::Repository {
+        repository_id,
+        remote_url,
+        ..
+    } = scope
+    else {
+        return false;
+    };
+
+    repository_id.is_some_and(|id| id == context.repository.id)
+        || match (
+            remote_url.as_deref().and_then(normalize_remote_reference),
+            context
+                .repository
+                .remote_url
+                .as_deref()
+                .and_then(normalize_remote_reference),
+        ) {
+            (Some(expected), Some(actual)) => expected == actual,
+            _ => false,
+        }
+}
+
+fn resolve_procedure_evidence_path(path: &str, checkout_root: Option<&Path>) -> PathBuf {
+    let path = PathBuf::from(path);
+    if path.is_absolute() {
+        path
+    } else if let Some(root) = checkout_root {
+        root.join(path)
+    } else {
+        path
+    }
+}
+
+fn normalize_condition(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn normalized_boundary_value(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn validate_proposal_pair(
+    proposal: &CorrectionProposal,
+    obsolete: &MemoryItem,
+    replacement: &MemoryItem,
+) -> IndexResult<()> {
+    if proposal.obsolete_id != obsolete.id || proposal.replacement_id != replacement.id {
+        return Err(IndexError::InvalidState(format!(
+            "correction proposal {} no longer names its exact memory pair",
+            proposal.id
+        )));
+    }
+    if proposal.memory_kind != obsolete.kind
+        || proposal.memory_kind != replacement.kind
+        || proposal.scope != obsolete.scope
+        || proposal.scope != replacement.scope
+    {
+        return Err(IndexError::InvalidState(format!(
+            "correction proposal {} no longer has its exact kind and scope",
+            proposal.id
+        )));
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct CorrectionDigestItem<'a> {
+    id: &'a Id,
+    kind: &'a MemoryKind,
+    title: &'a str,
+    content: &'a str,
+    scope: &'a MemoryScope,
+    origin: &'a ClaimOrigin,
+    writer: &'a WriterProvenance,
+    evidence: &'a [EvidenceRef],
+    confidence: f32,
+    status: MemoryStatus,
+    supersedes: &'a [Id],
+    tags: &'a [String],
+    review_after: Option<OffsetDateTime>,
+    archive: &'a Option<engram_core::memory::ArchiveMetadata>,
+    procedure: &'a Option<ProcedureCard>,
+    correction_proposal_id: Option<Id>,
+    pending_correction_proposal_id: Option<Id>,
+}
+
+impl<'a> From<&'a MemoryItem> for CorrectionDigestItem<'a> {
+    fn from(item: &'a MemoryItem) -> Self {
+        Self {
+            id: &item.id,
+            kind: &item.kind,
+            title: &item.title,
+            content: &item.content,
+            scope: &item.scope,
+            origin: &item.origin,
+            writer: &item.writer,
+            evidence: &item.evidence,
+            confidence: item.confidence.value(),
+            status: item.status,
+            supersedes: &item.supersedes,
+            tags: &item.tags,
+            review_after: item.review_after,
+            archive: &item.archive,
+            procedure: &item.procedure,
+            correction_proposal_id: item.correction_proposal_id,
+            pending_correction_proposal_id: item.pending_correction_proposal_id,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CorrectionDigestPayload<'a> {
+    schema_version: u32,
+    proposal_id: &'a Id,
+    obsolete_id: &'a Id,
+    replacement_id: &'a Id,
+    memory_kind: &'a MemoryKind,
+    scope: &'a MemoryScope,
+    obsolete: CorrectionDigestItem<'a>,
+    replacement: CorrectionDigestItem<'a>,
+}
+
+fn correction_proposal_digest(
+    proposal: &CorrectionProposal,
+    obsolete: &MemoryItem,
+    replacement: &MemoryItem,
+) -> IndexResult<String> {
+    if proposal.digest_schema_version != 1 {
+        return Err(IndexError::InvalidState(format!(
+            "correction proposal {} uses unsupported digest schema version {}",
+            proposal.id, proposal.digest_schema_version
+        )));
+    }
+    let payload = CorrectionDigestPayload {
+        schema_version: proposal.digest_schema_version,
+        proposal_id: &proposal.id,
+        obsolete_id: &proposal.obsolete_id,
+        replacement_id: &proposal.replacement_id,
+        memory_kind: &proposal.memory_kind,
+        scope: &proposal.scope,
+        obsolete: obsolete.into(),
+        replacement: replacement.into(),
+    };
+    let bytes = serde_json::to_vec(&payload).map_err(|error| {
+        IndexError::Parse(format!("cannot digest correction proposal: {error}"))
+    })?;
+    Ok(sha256_hex(&bytes))
+}
+
+fn memory_item_references_text(item: &MemoryItem, id_text: &str) -> bool {
+    item.supersedes.iter().any(|id| id.to_string() == id_text)
+        || item.evidence.iter().any(|evidence| {
+            evidence.target.contains(id_text)
+                || evidence
+                    .summary
+                    .as_deref()
+                    .is_some_and(|summary| summary.contains(id_text))
+                || evidence
+                    .excerpt
+                    .as_deref()
+                    .is_some_and(|excerpt| excerpt.contains(id_text))
         })
-        .collect();
-    matches.sort_by_key(|component| std::cmp::Reverse(component.path.len()));
-    matches
 }
 
 fn validate_memory_item(item: &MemoryItem) -> IndexResult<()> {
@@ -2465,6 +4964,85 @@ fn validate_memory_item(item: &MemoryItem) -> IndexResult<()> {
         return Err(IndexError::Parse(
             "memory item content must not be empty".to_string(),
         ));
+    }
+    match (&item.kind, &item.procedure) {
+        (MemoryKind::Procedure, Some(procedure)) => {
+            if procedure.task.trim().is_empty() {
+                return Err(IndexError::Parse(
+                    "procedure task must not be empty".to_string(),
+                ));
+            }
+            if procedure.commands.is_empty()
+                || procedure
+                    .commands
+                    .iter()
+                    .any(|command| command.trim().is_empty())
+            {
+                return Err(IndexError::Parse(
+                    "procedure requires at least one non-empty command".to_string(),
+                ));
+            }
+            if procedure.verification.command.trim().is_empty()
+                || procedure
+                    .verification
+                    .expected_output_contains
+                    .trim()
+                    .is_empty()
+            {
+                return Err(IndexError::Parse(
+                    "procedure verification command and expected output marker are required"
+                        .to_string(),
+                ));
+            }
+            if procedure.prerequisites.len() > MAX_PROCEDURE_PREREQUISITES {
+                return Err(IndexError::Parse(format!(
+                    "procedure supports at most {MAX_PROCEDURE_PREREQUISITES} prerequisites"
+                )));
+            }
+            let mut prerequisite_keys = BTreeSet::new();
+            for prerequisite in &procedure.prerequisites {
+                if prerequisite.key.trim().is_empty() || prerequisite.expected.trim().is_empty() {
+                    return Err(IndexError::Parse(
+                        "procedure prerequisites require non-empty keys and expected values"
+                            .to_string(),
+                    ));
+                }
+                if !prerequisite_keys.insert(prerequisite.key.to_ascii_lowercase()) {
+                    return Err(IndexError::Parse(
+                        "procedure prerequisite keys must be unique".to_string(),
+                    ));
+                }
+                if let Some(ProcedurePrerequisiteSource::Toml {
+                    relative_path,
+                    key_path,
+                }) = &prerequisite.source
+                {
+                    if !is_safe_checkout_relative_path(Path::new(relative_path)) {
+                        return Err(IndexError::Parse(
+                            "procedure prerequisite source requires a safe checkout-relative path"
+                                .to_string(),
+                        ));
+                    }
+                    if key_path.is_empty() || key_path.iter().any(|key| key.trim().is_empty()) {
+                        return Err(IndexError::Parse(
+                            "procedure prerequisite TOML source requires a non-empty key path"
+                                .to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+        (MemoryKind::Procedure, None) => {
+            return Err(IndexError::Parse(
+                "procedure memory requires structured procedure details".to_string(),
+            ));
+        }
+        (_, Some(_)) => {
+            return Err(IndexError::Parse(
+                "structured procedure details require memory kind procedure".to_string(),
+            ));
+        }
+        (_, None) => {}
     }
     Ok(())
 }
@@ -2494,6 +5072,15 @@ fn validate_current_plan_capture(input: &CurrentPlanCaptureInput) -> IndexResult
 fn apply_capture_policy(item: MemoryItem) -> MemoryItem {
     if item.status != MemoryStatus::Active {
         return item;
+    }
+
+    if item.kind == MemoryKind::Procedure
+        && !item
+            .procedure
+            .as_ref()
+            .is_some_and(|procedure| procedure.is_verified_at(OffsetDateTime::now_utc()))
+    {
+        return item.with_status(MemoryStatus::NeedsReview);
     }
 
     if origin_requires_review(&item.origin) && !has_manual_review_evidence(&item) {
@@ -2535,7 +5122,7 @@ fn review_evidence(
 fn durable_guidance_requires_evidence(kind: &MemoryKind) -> bool {
     matches!(
         kind,
-        MemoryKind::Decision | MemoryKind::Rule | MemoryKind::Limitation
+        MemoryKind::Decision | MemoryKind::Rule | MemoryKind::Limitation | MemoryKind::Procedure
     )
 }
 
@@ -2591,13 +5178,15 @@ mod tests {
     use engram_core::entity::Observation;
     use engram_core::memory::{
         ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryChangeType, MemoryKind,
-        MemoryReviewState, MemoryScope, MemoryStatus, ModelIdentity,
+        MemoryReviewState, MemoryScope, MemoryStatus, ModelIdentity, ProcedureCard,
+        ProcedurePrerequisite, ProcedureVerification,
     };
     use engram_core::repository::{
         GitRepository, LocalCheckout, MonorepoComponent, ProjectRepositoryLink,
         ProjectRepositoryRole,
     };
     use engram_core::search::SearchLayer;
+    use engram_core::telemetry::AgentFeedback;
     use engram_core::work::{Project, ProjectObservation};
     use engram_store::{RepositoryRepo, WorkRepo};
     use std::fs;
@@ -2661,6 +5250,129 @@ mod tests {
             writer(),
         )
         .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test"))
+    }
+
+    async fn correction_pair(
+        service: &MemoryService,
+        scope: MemoryScope,
+        label: &str,
+    ) -> (MemoryItem, MemoryItem) {
+        let obsolete = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    format!("Obsolete {label}"),
+                    format!("Use the obsolete {label} guidance."),
+                    scope.clone(),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::File,
+                    format!("docs/{label}-obsolete.md"),
+                )),
+            )
+            .await
+            .unwrap();
+        let replacement = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    format!("Replacement {label}"),
+                    format!("Use the replacement {label} guidance."),
+                    scope,
+                    ClaimOrigin::UserCorrected,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::File,
+                    format!("docs/{label}-replacement.md"),
+                )),
+            )
+            .await
+            .unwrap();
+        (obsolete, replacement)
+    }
+
+    fn correction_proposal_input(obsolete_id: Id, label: &str) -> CorrectionProposalInput {
+        CorrectionProposalInput {
+            obsolete_id,
+            title: format!("Proposed {label}"),
+            content: format!("Use the proposed {label} guidance."),
+            writer: writer(),
+            evidence: vec![EvidenceRef::new(
+                EvidenceKind::File,
+                format!("docs/{label}-proposal.md"),
+            )],
+            procedure: None,
+        }
+    }
+
+    fn procedure_card(task: &str, command: &str, marker: &str) -> ProcedureCard {
+        ProcedureCard::new(
+            task,
+            vec![command.to_string()],
+            ProcedureVerification::new(command, 0, marker),
+        )
+    }
+
+    async fn active_procedure(
+        service: &MemoryService,
+        receipt_path: &Path,
+        title: &str,
+        task: &str,
+        command: &str,
+        marker: &str,
+    ) -> MemoryItem {
+        let receipt = ProcedureVerificationReceipt {
+            command: command.to_string(),
+            exit_code: 0,
+            output: format!("verification: {marker}"),
+            conditions: BTreeMap::new(),
+        };
+        let receipt_bytes = serde_json::to_vec_pretty(&receipt).unwrap();
+        fs::write(receipt_path, &receipt_bytes).unwrap();
+        let mut card = procedure_card(task, command, marker);
+        card.verification.evidence_path = Some(receipt_path.display().to_string());
+        card.verification.evidence_sha256 = Some(sha256_hex(&receipt_bytes));
+        card.verification.verified_at = Some(OffsetDateTime::now_utc());
+        card.expires_at = Some(OffsetDateTime::now_utc() + time::Duration::days(30));
+        service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Procedure,
+                    title,
+                    format!("Verified procedure for {task}."),
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_procedure(card)
+                .with_evidence(EvidenceRef::new(
+                    EvidenceKind::File,
+                    receipt_path.display().to_string(),
+                )),
+            )
+            .await
+            .unwrap()
+    }
+
+    fn procedure_correction_input(obsolete_id: Id) -> CorrectionProposalInput {
+        CorrectionProposalInput {
+            obsolete_id,
+            title: "Corrected safe check procedure".to_string(),
+            content: "Run the corrected safe check procedure.".to_string(),
+            writer: writer(),
+            evidence: vec![EvidenceRef::new(
+                EvidenceKind::File,
+                "docs/corrected-safe-check.md",
+            )],
+            procedure: Some(procedure_card(
+                "run corrected safe check",
+                "cargo test -p engram-index corrected_safe_check",
+                "CORRECTED_SAFE_CHECK_OK",
+            )),
+        }
     }
 
     fn current_plan_input(project: &str, title: &str, content: &str) -> CurrentPlanCaptureInput {
@@ -2781,7 +5493,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn promote_observation_to_memory_creates_reviewed_active_item() {
+    async fn promote_observation_creates_active_item_with_review_assertion() {
         let service = setup_service().await;
         let observation = Observation::new(
             Id::new(),
@@ -2824,6 +5536,10 @@ mod tests {
             .evidence
             .iter()
             .any(|evidence| evidence.kind == EvidenceKind::ManualReview));
+        let trust = item.trust_metadata();
+        assert!(trust.review_asserted);
+        assert!(!trust.reviewed);
+        assert_eq!(trust.review_state, MemoryReviewState::ActiveUnreviewed);
 
         let err = service
             .promote_observation_to_memory(
@@ -2997,6 +5713,45 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(active_engram_current_plans.len(), 1);
         assert_eq!(active_engram_current_plans[0].id, new.id);
+    }
+
+    #[tokio::test]
+    async fn capture_current_plan_rejects_locked_same_scope_before_writing() {
+        let service = setup_service().await;
+        let old = service
+            .capture_current_plan(current_plan_input(
+                "engram",
+                "Locked current plan",
+                "Keep this plan active while its correction is pending.",
+            ))
+            .await
+            .unwrap()
+            .item;
+        let (proposal, _, _) = service
+            .propose_correction(
+                correction_proposal_input(old.id, "locked-current-plan"),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let error = service
+            .capture_current_plan(current_plan_input(
+                "engram",
+                "Must not be persisted",
+                "A failed capture must not leave a second active plan.",
+            ))
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(&proposal.id.to_string()));
+        let all = service.list_memory(None, None).await.unwrap();
+        assert!(!all.iter().any(|item| item.title == "Must not be persisted"));
+        assert_eq!(
+            service.get_memory(&old.id).await.unwrap().unwrap().status,
+            MemoryStatus::Active
+        );
     }
 
     #[tokio::test]
@@ -3270,7 +6025,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn promote_memory_activates_review_candidate_with_review_evidence() {
+    async fn promote_memory_activates_candidate_with_review_assertion() {
         let service = setup_service().await;
         let candidate = service
             .capture_memory(MemoryItem::new(
@@ -3302,6 +6057,10 @@ mod tests {
                 .summary
                 .as_deref()
                 .is_some_and(|summary| summary.contains("accepted"))));
+        let trust = promoted.trust_metadata();
+        assert!(trust.review_asserted);
+        assert!(!trust.reviewed);
+        assert_eq!(trust.review_state, MemoryReviewState::ActiveUnreviewed);
         assert_eq!(service.list_active_memory(None).await.unwrap().len(), 1);
         assert!(service
             .list_memory_needing_review(None)
@@ -3494,6 +6253,1088 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn correct_memory_requires_active_evidenced_same_scope_user_correction() {
+        let service = setup_service().await;
+        let obsolete = service
+            .capture_memory(memory_item("Correction target"))
+            .await
+            .unwrap();
+        let replacement = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "User correction",
+                    "Use the corrected workflow.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserCorrected,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::File, "docs/correction.md")),
+            )
+            .await
+            .unwrap();
+
+        let error = service
+            .correct_memory(
+                &obsolete.id,
+                &replacement.id,
+                "Wrong project.",
+                Some("atlas"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+        assert_eq!(
+            service
+                .get_memory(&obsolete.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active
+        );
+        assert!(service
+            .get_memory(&replacement.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .supersedes
+            .is_empty());
+
+        let (corrected, superseded) = service
+            .correct_memory(
+                &obsolete.id,
+                &replacement.id,
+                "The current user corrected the workflow.",
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(corrected.supersedes.contains(&obsolete.id));
+        assert_eq!(superseded.status, MemoryStatus::Superseded);
+        assert!(!corrected
+            .evidence
+            .iter()
+            .any(|evidence| evidence.kind == EvidenceKind::ManualReview));
+        assert_eq!(
+            corrected.trust_metadata().review_state,
+            MemoryReviewState::ActiveUnreviewed
+        );
+
+        let (repeated, _) = service
+            .correct_memory(
+                &obsolete.id,
+                &replacement.id,
+                "Exact retry.",
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(repeated.evidence.len(), corrected.evidence.len());
+
+        let error = service
+            .correct_memory(
+                &obsolete.id,
+                &replacement.id,
+                "Wrong-scope idempotent retry.",
+                Some("atlas"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+        assert_eq!(
+            service
+                .get_memory(&replacement.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .evidence
+                .len(),
+            corrected.evidence.len()
+        );
+
+        let other_obsolete = service
+            .capture_memory(memory_item("Other correction target"))
+            .await
+            .unwrap();
+        let wrong_origin = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Agent replacement",
+                    "An agent-observed item cannot claim to be a user correction.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::AgentObserved,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::File, "docs/agent.md")),
+            )
+            .await
+            .unwrap();
+        let error = service
+            .correct_memory(
+                &other_obsolete.id,
+                &wrong_origin.id,
+                "Wrong origin.",
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("origin user_corrected"));
+
+        let wrong_scope = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Decision,
+                    "Wrong-scope correction",
+                    "This correction belongs to another project.",
+                    MemoryScope::project("atlas"),
+                    ClaimOrigin::UserCorrected,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::File, "docs/atlas.md")),
+            )
+            .await
+            .unwrap();
+        let error = service
+            .correct_memory(
+                &other_obsolete.id,
+                &wrong_scope.id,
+                "Wrong scope.",
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+
+        let wrong_kind = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Wrong-kind correction",
+                    "A different memory kind cannot replace the decision.",
+                    MemoryScope::project("engram"),
+                    ClaimOrigin::UserCorrected,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::File, "docs/rule.md")),
+            )
+            .await
+            .unwrap();
+        let error = service
+            .correct_memory(
+                &other_obsolete.id,
+                &wrong_kind.id,
+                "Wrong kind.",
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("identical kind and scope"));
+    }
+
+    #[tokio::test]
+    async fn correct_memory_enforces_exact_supported_authorization_boundaries() {
+        let service = setup_service().await;
+
+        let (project_obsolete, project_replacement) =
+            correction_pair(&service, MemoryScope::project("engram"), "project").await;
+        let error = service
+            .correct_memory(
+                &project_obsolete.id,
+                &project_replacement.id,
+                "Blank project boundary.",
+                Some("   "),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+        assert_eq!(
+            service
+                .get_memory(&project_obsolete.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active
+        );
+
+        let task_scope = MemoryScope::Task {
+            project_id: None,
+            project_name: Some("engram".to_string()),
+            task_id: None,
+            task_name: "ENG-123".to_string(),
+        };
+        let (task_obsolete, task_replacement) = correction_pair(&service, task_scope, "task").await;
+        for (project, task) in [(Some("engram"), None), (Some("engram"), Some("ENG-456"))] {
+            let error = service
+                .correct_memory(
+                    &task_obsolete.id,
+                    &task_replacement.id,
+                    "Wrong task boundary.",
+                    project,
+                    task,
+                    None,
+                )
+                .await
+                .unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("outside the resolved correction authorization boundary"));
+        }
+        service
+            .correct_memory(
+                &task_obsolete.id,
+                &task_replacement.id,
+                "Exact task boundary.",
+                Some("engram"),
+                Some("ENG-123"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let repository_root = tempdir().unwrap();
+        let repository_child = repository_root.path().join("crates/worker");
+        fs::create_dir_all(&repository_child).unwrap();
+        let unrelated = tempdir().unwrap();
+        let repository_scope = MemoryScope::repository(
+            Some("https://github.com/acme/engram".to_string()),
+            Some(repository_root.path().display().to_string()),
+        );
+        let (repository_obsolete, repository_replacement) =
+            correction_pair(&service, repository_scope, "repository").await;
+        let error = service
+            .correct_memory(
+                &repository_obsolete.id,
+                &repository_replacement.id,
+                "Unrelated checkout.",
+                None,
+                None,
+                Some(&unrelated.path().display().to_string()),
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+        service
+            .correct_memory(
+                &repository_obsolete.id,
+                &repository_replacement.id,
+                "Matching descendant checkout.",
+                None,
+                None,
+                Some(&repository_child.display().to_string()),
+            )
+            .await
+            .unwrap();
+
+        for (scope, label) in [(MemoryScope::Global, "global"), (MemoryScope::User, "user")] {
+            let (obsolete, replacement) = correction_pair(&service, scope, label).await;
+            service
+                .correct_memory(
+                    &obsolete.id,
+                    &replacement.id,
+                    "Account-level correction.",
+                    None,
+                    None,
+                    None,
+                )
+                .await
+                .unwrap();
+        }
+
+        for (scope, label) in [
+            (MemoryScope::entity("engram"), "entity"),
+            (
+                MemoryScope::Session {
+                    session_id: Id::new(),
+                },
+                "session",
+            ),
+            (
+                MemoryScope::Custom {
+                    name: "private-scope".to_string(),
+                },
+                "custom",
+            ),
+        ] {
+            let (obsolete, replacement) = correction_pair(&service, scope, label).await;
+            let error = service
+                .correct_memory(
+                    &obsolete.id,
+                    &replacement.id,
+                    "Unsupported selector.",
+                    Some("engram"),
+                    Some("ENG-123"),
+                    Some(repository_root.path().to_str().unwrap()),
+                )
+                .await
+                .unwrap_err();
+            assert!(error
+                .to_string()
+                .contains("scope without a trusted correction selector"));
+        }
+    }
+
+    #[tokio::test]
+    async fn correction_proposal_is_inactive_digest_bound_and_idempotently_applied() {
+        let service = setup_service().await;
+        let obsolete = service
+            .capture_memory(memory_item("Proposal target"))
+            .await
+            .unwrap();
+
+        let error = service
+            .propose_correction(
+                correction_proposal_input(obsolete.id, "decision"),
+                Some("atlas"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+
+        let (proposal, replacement, unchanged_obsolete) = service
+            .propose_correction(
+                correction_proposal_input(obsolete.id, "decision"),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(proposal.status, CorrectionProposalStatus::Pending);
+        assert_eq!(proposal.obsolete_id, obsolete.id);
+        assert_eq!(proposal.replacement_id, replacement.id);
+        assert_eq!(proposal.canonical_digest.len(), 64);
+        assert_eq!(replacement.kind, obsolete.kind);
+        assert_eq!(replacement.scope, obsolete.scope);
+        assert_eq!(replacement.origin, ClaimOrigin::AgentInferred);
+        assert_eq!(replacement.status, MemoryStatus::NeedsReview);
+        assert_eq!(unchanged_obsolete.status, MemoryStatus::Active);
+        assert_eq!(
+            replacement.trust_metadata().review_state,
+            MemoryReviewState::NeedsReview
+        );
+        let active = service.list_active_memory(None).await.unwrap();
+        assert!(active.iter().any(|item| item.id == obsolete.id));
+        assert!(!active.iter().any(|item| item.id == replacement.id));
+        let error = service
+            .archive_memory(
+                &replacement.id,
+                "Must not archive one half of a pending pair.",
+                Some("operator".to_string()),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("immutable while bound"));
+
+        let error = service
+            .apply_correction(&proposal.id, &"0".repeat(64), Some("engram"), None, None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("digest mismatch"));
+
+        let tampered_replacement = replacement.clone().with_status(MemoryStatus::Active);
+        let tampered_json = serde_json::to_value(&tampered_replacement).unwrap();
+        let tampered_digest = sha256_hex(&serde_json::to_vec(&tampered_replacement).unwrap());
+        service
+            .db
+            .query(
+                r#"UPDATE type::thing("memory_item", $id)
+                    SET item = $item, status_key = "active", snapshot_digest = $digest"#,
+            )
+            .bind(("id", replacement.id.to_string()))
+            .bind(("item", tampered_json))
+            .bind(("digest", tampered_digest))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        let error = service
+            .apply_correction(
+                &proposal.id,
+                &proposal.canonical_digest,
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("must still need review"));
+        let replacement_json = serde_json::to_value(&replacement).unwrap();
+        let replacement_digest = sha256_hex(&serde_json::to_vec(&replacement).unwrap());
+        service
+            .db
+            .query(
+                r#"UPDATE type::thing("memory_item", $id)
+                    SET item = $item, status_key = "needs_review", snapshot_digest = $digest"#,
+            )
+            .bind(("id", replacement.id.to_string()))
+            .bind(("item", replacement_json))
+            .bind(("digest", replacement_digest))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        let mut changed_replacement = replacement.clone();
+        changed_replacement.evidence.push(EvidenceRef::new(
+            EvidenceKind::File,
+            "docs/unreviewed-mutation.md",
+        ));
+        let changed_json = serde_json::to_value(&changed_replacement).unwrap();
+        let changed_digest = sha256_hex(&serde_json::to_vec(&changed_replacement).unwrap());
+        service
+            .db
+            .query(
+                r#"UPDATE type::thing("memory_item", $id)
+                    SET item = $item, snapshot_digest = $digest"#,
+            )
+            .bind(("id", replacement.id.to_string()))
+            .bind(("item", changed_json))
+            .bind(("digest", changed_digest))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        let error = service
+            .apply_correction(
+                &proposal.id,
+                &proposal.canonical_digest,
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("canonical pair changed"));
+        let replacement_json = serde_json::to_value(&replacement).unwrap();
+        let replacement_digest = sha256_hex(&serde_json::to_vec(&replacement).unwrap());
+        service
+            .db
+            .query(
+                r#"UPDATE type::thing("memory_item", $id)
+                    SET item = $item, snapshot_digest = $digest"#,
+            )
+            .bind(("id", replacement.id.to_string()))
+            .bind(("item", replacement_json))
+            .bind(("digest", replacement_digest))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        let error = service
+            .apply_correction(
+                &proposal.id,
+                &proposal.canonical_digest,
+                Some("atlas"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+
+        let (applied, active_replacement, superseded) = service
+            .apply_correction(
+                &proposal.id,
+                &proposal.canonical_digest,
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(applied.status, CorrectionProposalStatus::Applied);
+        assert_eq!(active_replacement.status, MemoryStatus::Active);
+        assert_eq!(superseded.status, MemoryStatus::Superseded);
+        assert!(active_replacement.supersedes.contains(&obsolete.id));
+        assert_eq!(
+            active_replacement.trust_metadata().review_state,
+            MemoryReviewState::ActiveUnreviewed
+        );
+        assert!(active_replacement
+            .evidence
+            .iter()
+            .all(|evidence| evidence.kind != EvidenceKind::ManualReview));
+
+        let evidence_count = active_replacement.evidence.len();
+        let (_, retried, _) = service
+            .apply_correction(
+                &proposal.id,
+                &proposal.canonical_digest,
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(retried.evidence.len(), evidence_count);
+        let error = service
+            .apply_correction(
+                &proposal.id,
+                &proposal.canonical_digest,
+                Some("atlas"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+    }
+
+    #[tokio::test]
+    async fn correction_proposal_enforces_exact_supported_scope_selectors() {
+        let service = setup_service().await;
+        let task_obsolete = service
+            .capture_memory(memory_item("Task proposal target").with_status(MemoryStatus::Active))
+            .await
+            .unwrap();
+        let mut task_obsolete = task_obsolete;
+        task_obsolete.scope = MemoryScope::Task {
+            project_id: None,
+            project_name: Some("engram".to_string()),
+            task_id: None,
+            task_name: "ENG-123".to_string(),
+        };
+        service.repo.save_memory_item(&task_obsolete).await.unwrap();
+        assert!(service
+            .propose_correction(
+                correction_proposal_input(task_obsolete.id, "task"),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .is_err());
+        service
+            .propose_correction(
+                correction_proposal_input(task_obsolete.id, "task"),
+                Some("engram"),
+                Some("ENG-123"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let root = tempdir().unwrap();
+        let child = root.path().join("crates/worker");
+        fs::create_dir_all(&child).unwrap();
+        let unrelated = tempdir().unwrap();
+        let repository_obsolete = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::RepositoryFact,
+                    "Repository proposal target",
+                    "Repository-scoped obsolete guidance.",
+                    MemoryScope::repository(None, Some(root.path().display().to_string())),
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        assert!(service
+            .propose_correction(
+                correction_proposal_input(repository_obsolete.id, "repository"),
+                None,
+                None,
+                unrelated.path().to_str(),
+            )
+            .await
+            .is_err());
+        service
+            .propose_correction(
+                correction_proposal_input(repository_obsolete.id, "repository"),
+                None,
+                None,
+                child.to_str(),
+            )
+            .await
+            .unwrap();
+
+        let global_obsolete = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Rule,
+                    "Global proposal target",
+                    "Global obsolete guidance.",
+                    MemoryScope::Global,
+                    ClaimOrigin::UserStated,
+                    writer(),
+                )
+                .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test")),
+            )
+            .await
+            .unwrap();
+        service
+            .propose_correction(
+                correction_proposal_input(global_obsolete.id, "global"),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let entity_obsolete = service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Decision,
+                "Entity proposal target",
+                "Entity obsolete guidance.",
+                MemoryScope::entity("engram"),
+                ClaimOrigin::UserStated,
+                writer(),
+            ))
+            .await
+            .unwrap();
+        let error = service
+            .propose_correction(
+                correction_proposal_input(entity_obsolete.id, "entity"),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("scope without a trusted correction selector"));
+    }
+
+    #[tokio::test]
+    async fn procedure_correction_is_verified_inactive_digest_rotated_and_freshly_retrieved() {
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let obsolete = active_procedure(
+            &service,
+            &dir.path().join("obsolete-receipt.json"),
+            "Obsolete safe check procedure",
+            "run obsolete safe check",
+            "cargo test -p engram-index obsolete_safe_check",
+            "OBSOLETE_SAFE_CHECK_OK",
+        )
+        .await;
+        let receipt_path = dir.path().join("replacement-receipt.json");
+        let receipt = ProcedureVerificationReceipt {
+            command: "cargo test -p engram-index corrected_safe_check".to_string(),
+            exit_code: 0,
+            output: "test result: CORRECTED_SAFE_CHECK_OK".to_string(),
+            conditions: BTreeMap::new(),
+        };
+        let receipt_bytes = serde_json::to_vec_pretty(&receipt).unwrap();
+        fs::write(&receipt_path, &receipt_bytes).unwrap();
+
+        let error = service
+            .propose_correction(
+                correction_proposal_input(obsolete.id, "procedure-without-card"),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("require structured replacement procedure"));
+        let mut forged = procedure_correction_input(obsolete.id);
+        forged.procedure.as_mut().unwrap().expires_at =
+            Some(OffsetDateTime::now_utc() + time::Duration::days(1));
+        let error = service
+            .propose_correction(forged, Some("engram"), None, None)
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("cannot supply verification proof"));
+
+        let (proposal, replacement, locked_obsolete) = service
+            .propose_correction(
+                procedure_correction_input(obsolete.id),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let p0 = proposal.canonical_digest.clone();
+        assert_eq!(proposal.status, CorrectionProposalStatus::Pending);
+        assert_eq!(replacement.status, MemoryStatus::NeedsReview);
+        assert_eq!(replacement.origin, ClaimOrigin::AgentInferred);
+        assert_eq!(locked_obsolete.status, MemoryStatus::Active);
+        assert!(!replacement
+            .procedure
+            .as_ref()
+            .unwrap()
+            .is_verified_at(OffsetDateTime::now_utc()));
+        let active = service.list_active_memory(None).await.unwrap();
+        assert!(active.iter().any(|item| item.id == obsolete.id));
+        assert!(!active.iter().any(|item| item.id == replacement.id));
+
+        let error = service
+            .verify_procedure(
+                &replacement.id,
+                &receipt_path,
+                Some(OffsetDateTime::now_utc() + time::Duration::days(30)),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("immutable while bound"));
+
+        let error = service
+            .apply_correction(&proposal.id, &p0, Some("engram"), None, None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("verification expiry"));
+        let error = service
+            .verify_correction_procedure(
+                &proposal.id,
+                &"0".repeat(64),
+                &receipt_path,
+                OffsetDateTime::now_utc() + time::Duration::days(30),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("P0 digest mismatch"));
+        let error = service
+            .verify_correction_procedure(
+                &proposal.id,
+                &p0,
+                &receipt_path,
+                OffsetDateTime::now_utc() + time::Duration::days(30),
+                Some("atlas"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("outside the resolved correction authorization boundary"));
+        let wrong_receipt = ProcedureVerificationReceipt {
+            command: "cargo test -p engram-index wrong_check".to_string(),
+            exit_code: 0,
+            output: "CORRECTED_SAFE_CHECK_OK".to_string(),
+            conditions: BTreeMap::new(),
+        };
+        fs::write(
+            &receipt_path,
+            serde_json::to_vec_pretty(&wrong_receipt).unwrap(),
+        )
+        .unwrap();
+        let error = service
+            .verify_correction_procedure(
+                &proposal.id,
+                &p0,
+                &receipt_path,
+                OffsetDateTime::now_utc() + time::Duration::days(30),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("command does not match"));
+        let still_p0 = service
+            .inspect_correction_proposal(&proposal.id, Some("engram"), None, None)
+            .await
+            .unwrap();
+        assert_eq!(still_p0.proposal.canonical_digest, p0);
+        assert!(still_p0
+            .replacement
+            .procedure
+            .as_ref()
+            .unwrap()
+            .verification
+            .evidence_sha256
+            .is_none());
+        fs::write(&receipt_path, &receipt_bytes).unwrap();
+
+        let proposed_evidence = replacement.evidence.clone();
+        let (verified_proposal, verified_replacement, still_active_obsolete) = service
+            .verify_correction_procedure(
+                &proposal.id,
+                &p0,
+                &receipt_path,
+                OffsetDateTime::now_utc() + time::Duration::days(30),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let p1 = verified_proposal.canonical_digest.clone();
+        assert_ne!(p0, p1);
+        assert_eq!(verified_proposal.status, CorrectionProposalStatus::Pending);
+        assert_eq!(verified_replacement.status, MemoryStatus::NeedsReview);
+        assert_eq!(still_active_obsolete.status, MemoryStatus::Active);
+        assert!(verified_replacement.updated_at >= replacement.updated_at);
+        assert!(verified_replacement
+            .evidence
+            .starts_with(&proposed_evidence));
+        let verification_evidence = verified_replacement
+            .evidence
+            .last()
+            .expect("verification adds exact receipt evidence");
+        assert_eq!(verification_evidence.kind, EvidenceKind::File);
+        assert_eq!(
+            verification_evidence.observed_at,
+            verified_replacement.updated_at
+        );
+        assert_eq!(
+            verified_replacement
+                .procedure
+                .as_ref()
+                .unwrap()
+                .verification
+                .verified_at,
+            Some(verification_evidence.observed_at)
+        );
+        assert!(verified_replacement
+            .evidence
+            .iter()
+            .all(|evidence| evidence.observed_at <= verified_replacement.updated_at));
+        assert!(verified_replacement
+            .procedure
+            .as_ref()
+            .unwrap()
+            .is_verified_at(OffsetDateTime::now_utc()));
+        let active = service.list_active_memory(None).await.unwrap();
+        assert!(active.iter().any(|item| item.id == obsolete.id));
+        assert!(!active.iter().any(|item| item.id == replacement.id));
+
+        let error = service
+            .verify_correction_procedure(
+                &proposal.id,
+                &p0,
+                &receipt_path,
+                OffsetDateTime::now_utc() + time::Duration::days(30),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("P0 digest mismatch"));
+        let error = service
+            .apply_correction(&proposal.id, &p0, Some("engram"), None, None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("digest mismatch"));
+
+        fs::write(&receipt_path, b"{\"tampered\":true}").unwrap();
+        let error = service
+            .apply_correction(&proposal.id, &p1, Some("engram"), None, None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("receipt hash changed"));
+        fs::write(&receipt_path, &receipt_bytes).unwrap();
+
+        let (applied, active_replacement, superseded) = service
+            .apply_correction(&proposal.id, &p1, Some("engram"), None, None)
+            .await
+            .unwrap();
+        assert_eq!(applied.status, CorrectionProposalStatus::Applied);
+        assert_eq!(active_replacement.status, MemoryStatus::Active);
+        assert_eq!(superseded.status, MemoryStatus::Superseded);
+        assert!(active_replacement.supersedes.contains(&obsolete.id));
+        assert_eq!(
+            active_replacement.trust_metadata().review_state,
+            MemoryReviewState::ActiveUnreviewed
+        );
+        assert!(active_replacement
+            .evidence
+            .iter()
+            .all(|evidence| evidence.kind != EvidenceKind::ManualReview));
+
+        let error = service
+            .apply_correction(&proposal.id, &p1, Some("engram"), None, None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("retry is not causal"));
+
+        let matched = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run corrected safe check".to_string(),
+                project: Some("engram".to_string()),
+                cwd: None,
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(!matched.abstained);
+        assert_eq!(matched.procedures.len(), 1);
+        assert_eq!(matched.procedures[0].id, active_replacement.id);
+
+        service
+            .archive_memory(
+                &active_replacement.id,
+                "Correction no longer applies.",
+                Some("operator".to_string()),
+            )
+            .await
+            .unwrap();
+        let after_archive = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run corrected safe check".to_string(),
+                project: Some("engram".to_string()),
+                cwd: None,
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(after_archive.abstained);
+
+        assert!(
+            service
+                .forget_memory(&active_replacement.id)
+                .await
+                .unwrap()
+                .deleted
+        );
+        assert!(service.forget_memory(&obsolete.id).await.unwrap().deleted);
+        let restarted = MemoryService::new(service.db.clone());
+        restarted.init_schema().await.unwrap();
+        assert_eq!(restarted.list_memory(None, None).await.unwrap().len(), 0);
+        assert!(restarted
+            .repo
+            .get_correction_proposal(&proposal.id)
+            .await
+            .unwrap()
+            .is_none());
+        let after_forget = restarted
+            .match_procedures(ProcedureMatchInput {
+                query: "run corrected safe check".to_string(),
+                project: Some("engram".to_string()),
+                cwd: None,
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(after_forget.abstained);
+        assert!(after_forget.procedures.is_empty());
+    }
+
+    #[tokio::test]
+    async fn expired_procedure_correction_proof_cannot_be_applied() {
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let obsolete = active_procedure(
+            &service,
+            &dir.path().join("obsolete-expiry-receipt.json"),
+            "Obsolete expiring procedure",
+            "run obsolete safe check",
+            "cargo test -p engram-index obsolete_safe_check",
+            "OBSOLETE_SAFE_CHECK_OK",
+        )
+        .await;
+        let receipt_path = dir.path().join("replacement-expiry-receipt.json");
+        let receipt = ProcedureVerificationReceipt {
+            command: "cargo test -p engram-index corrected_safe_check".to_string(),
+            exit_code: 0,
+            output: "CORRECTED_SAFE_CHECK_OK".to_string(),
+            conditions: BTreeMap::new(),
+        };
+        fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt).unwrap()).unwrap();
+        let (proposal, replacement, _) = service
+            .propose_correction(
+                procedure_correction_input(obsolete.id),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let (verified, _, _) = service
+            .verify_correction_procedure(
+                &proposal.id,
+                &proposal.canonical_digest,
+                &receipt_path,
+                OffsetDateTime::now_utc() + time::Duration::seconds(1),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
+        let error = service
+            .apply_correction(
+                &proposal.id,
+                &verified.canonical_digest,
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("complete unexpired verification proof"));
+        assert_eq!(
+            service
+                .get_memory(&replacement.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::NeedsReview
+        );
+        assert_eq!(
+            service
+                .get_memory(&obsolete.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            MemoryStatus::Active
+        );
+    }
+
+    #[tokio::test]
     async fn archive_memory_retires_item_from_active_retrieval() {
         let service = setup_service().await;
         let item = service
@@ -3525,7 +7366,1010 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_viability_surfaces_reviewed_memory_in_orient_and_search() {
+    async fn forget_memory_removes_item_instead_of_archiving_it() {
+        let service = setup_service().await;
+        let item = service
+            .capture_memory(memory_item("Forget permanently"))
+            .await
+            .unwrap();
+
+        assert!(service.forget_memory(&item.id).await.unwrap().deleted);
+        assert!(service.get_memory(&item.id).await.unwrap().is_none());
+        assert!(service.list_memory(None, None).await.unwrap().is_empty());
+        assert!(!service.forget_memory(&item.id).await.unwrap().deleted);
+    }
+
+    #[tokio::test]
+    async fn forget_memory_purges_internal_projections_and_references() {
+        let service = setup_service().await;
+        let canary = "FORGET_CANARY_7f4a2e";
+        let forgotten = service.capture_memory(memory_item(canary)).await.unwrap();
+        let replacement = service
+            .capture_memory(memory_item("Replacement decision").with_superseded_item(forgotten.id))
+            .await
+            .unwrap();
+        let commit = service
+            .save_commit(
+                KnowledgeCommit::new(writer(), format!("Commit {canary}")).with_change(
+                    MemoryChange::new(
+                        MemoryChangeType::Added,
+                        canary,
+                        format!("Persisted {canary}"),
+                    )
+                    .with_item(forgotten.id),
+                ),
+            )
+            .await
+            .unwrap();
+        let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_returned_memory_ids(vec![forgotten.id])
+            .with_returned_result_ids(vec![forgotten.id.to_string()]);
+        service.telemetry_repo.save_trace(&trace).await.unwrap();
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.used_memory_ids = vec![forgotten.id];
+        feedback.note = Some(format!("Used {canary}"));
+        service
+            .telemetry_repo
+            .save_feedback(&feedback)
+            .await
+            .unwrap();
+
+        let report = service.forget_memory(&forgotten.id).await.unwrap();
+        assert!(report.deleted);
+        assert_eq!(report.memory_items_updated, 1);
+        assert_eq!(report.commits_redacted, 1);
+        assert_eq!(report.traces_deleted, 1);
+        assert_eq!(report.feedback_deleted, 1);
+
+        assert!(service.get_memory(&forgotten.id).await.unwrap().is_none());
+        let replacement = service.get_memory(&replacement.id).await.unwrap().unwrap();
+        assert!(!replacement.supersedes.contains(&forgotten.id));
+        let commit = service.get_commit(&commit.id).await.unwrap().unwrap();
+        assert!(!serde_json::to_string(&commit).unwrap().contains(canary));
+        assert!(commit
+            .changes
+            .iter()
+            .all(|change| change.item_id != Some(forgotten.id)));
+        assert!(service
+            .telemetry_repo
+            .get_trace(&trace.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(service
+            .telemetry_repo
+            .get_feedback(&feedback.id)
+            .await
+            .unwrap()
+            .is_none());
+        let graph = crate::graph::GraphService::new(service.db.clone())
+            .subgraph(None, 1)
+            .await
+            .unwrap();
+        let graph_json = serde_json::to_string(&graph).unwrap();
+        assert!(!graph_json.contains(canary));
+        assert!(!graph_json.contains(&forgotten.id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn forget_memory_refuses_to_rewrite_a_pending_correction_pair() {
+        let service = setup_service().await;
+        let referenced = service
+            .capture_memory(memory_item("Referenced by pending proposal"))
+            .await
+            .unwrap();
+        let obsolete = service
+            .capture_memory(memory_item("Pending proposal target"))
+            .await
+            .unwrap();
+        let mut input = correction_proposal_input(obsolete.id, "locked-reference");
+        input.evidence = vec![EvidenceRef::new(
+            EvidenceKind::File,
+            format!("memory:{}", referenced.id),
+        )];
+        let (proposal, replacement, _) = service
+            .propose_correction(input, Some("engram"), None, None)
+            .await
+            .unwrap();
+
+        let error = service.forget_memory(&referenced.id).await.unwrap_err();
+        assert!(error.to_string().contains(&proposal.id.to_string()));
+        assert!(service.get_memory(&referenced.id).await.unwrap().is_some());
+        assert!(service.get_memory(&replacement.id).await.unwrap().is_some());
+
+        let cleared = service.forget_memory(&replacement.id).await.unwrap();
+        assert!(cleared.deleted);
+        assert_eq!(cleared.correction_proposals_deleted, 1);
+        assert_eq!(cleared.proposal_obsoletes_unlocked, 1);
+        let unlocked = service.get_memory(&obsolete.id).await.unwrap().unwrap();
+        assert_eq!(unlocked.status, MemoryStatus::Active);
+        assert!(unlocked.pending_correction_proposal_id.is_none());
+
+        assert!(service.forget_memory(&referenced.id).await.unwrap().deleted);
+    }
+
+    #[tokio::test]
+    async fn forgetting_pending_obsolete_removes_proposal_and_replacement() {
+        let service = setup_service().await;
+        let obsolete = service
+            .capture_memory(memory_item("Forget pending obsolete"))
+            .await
+            .unwrap();
+        let (proposal, replacement, _) = service
+            .propose_correction(
+                correction_proposal_input(obsolete.id, "forget-obsolete"),
+                Some("engram"),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let report = service.forget_memory(&obsolete.id).await.unwrap();
+        assert!(report.deleted);
+        assert_eq!(report.correction_proposals_deleted, 1);
+        assert_eq!(report.proposal_replacements_deleted, 1);
+        assert!(service.get_memory(&obsolete.id).await.unwrap().is_none());
+        assert!(service.get_memory(&replacement.id).await.unwrap().is_none());
+        assert!(service
+            .repo
+            .get_correction_proposal(&proposal.id)
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn forget_receipt_retries_projection_cleanup_after_service_restart() {
+        let service = setup_service().await;
+        let forgotten = service
+            .capture_memory(memory_item("Forget with retry receipt"))
+            .await
+            .unwrap();
+        let referencing = service
+            .capture_memory(
+                memory_item("Projection cleanup retry").with_superseded_item(forgotten.id),
+            )
+            .await
+            .unwrap();
+        service
+            .db
+            .query(
+                r#"UPDATE type::thing("memory_item", $id)
+                    SET item.content = "PASSWORD=synthetic-retry-canary""#,
+            )
+            .bind(("id", referencing.id.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+
+        let error = service.forget_memory(&forgotten.id).await.unwrap_err();
+        assert!(error.to_string().contains("persistence policy"));
+        assert!(service.get_memory(&forgotten.id).await.unwrap().is_none());
+        assert!(service
+            .repo
+            .get_pending_memory_forget_receipt(&forgotten.id)
+            .await
+            .unwrap()
+            .is_some());
+
+        let repaired_json = serde_json::to_value(&referencing).unwrap();
+        let repaired_digest = sha256_hex(&serde_json::to_vec(&referencing).unwrap());
+        service
+            .db
+            .query(
+                r#"UPDATE type::thing("memory_item", $id)
+                    SET item = $item, snapshot_digest = $digest"#,
+            )
+            .bind(("id", referencing.id.to_string()))
+            .bind(("item", repaired_json))
+            .bind(("digest", repaired_digest))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        let restarted = MemoryService::new(service.db.clone());
+        restarted.init_schema().await.unwrap();
+        let report = restarted.forget_memory(&forgotten.id).await.unwrap();
+        assert!(report.deleted);
+        assert!(report.cleanup_resumed);
+        assert!(!report.projection_counts_complete);
+        assert!(restarted
+            .repo
+            .get_pending_memory_forget_receipt(&forgotten.id)
+            .await
+            .unwrap()
+            .is_none());
+        let mut receipt_rows = restarted
+            .db
+            .query(
+                r#"SELECT meta::id(id) AS id
+                    FROM type::thing("memory_forget_receipt", $id)"#,
+            )
+            .bind(("id", forgotten.id.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        let receipt_rows: Vec<serde_json::Value> = receipt_rows.take(0).unwrap();
+        assert!(receipt_rows.is_empty());
+        let referencing = restarted
+            .get_memory(&referencing.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!referencing.supersedes.contains(&forgotten.id));
+        assert!(
+            !restarted
+                .forget_memory(&forgotten.id)
+                .await
+                .unwrap()
+                .deleted
+        );
+    }
+
+    #[tokio::test]
+    async fn verified_procedure_requires_matching_conditions_and_unchanged_receipt() {
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let receipt_path = dir.path().join("integration-success.json");
+        let receipt = ProcedureVerificationReceipt {
+            command: "cargo test -p queue-worker --test integration".to_string(),
+            exit_code: 0,
+            output: "integration result: PASS".to_string(),
+            conditions: BTreeMap::from([("cargo.version".to_string(), "1.80.0".to_string())]),
+        };
+        fs::write(&receipt_path, serde_json::to_vec_pretty(&receipt).unwrap()).unwrap();
+
+        let card = ProcedureCard::new(
+            "run queue worker integration tests",
+            vec!["cargo test -p queue-worker --test integration".to_string()],
+            ProcedureVerification::new(
+                "cargo test -p queue-worker --test integration",
+                0,
+                "result: PASS",
+            ),
+        )
+        .with_prerequisite(ProcedurePrerequisite::new("cargo.version", "1.80.0"))
+        .with_failure_signature("unknown option --integration");
+        let candidate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Procedure,
+                    "Queue worker integration test",
+                    "Use the verified queue worker integration-test procedure.",
+                    MemoryScope::project("atlas"),
+                    ClaimOrigin::AgentObserved,
+                    writer(),
+                )
+                .with_procedure(card)
+                .with_status(MemoryStatus::Active),
+            )
+            .await
+            .unwrap();
+        assert_eq!(candidate.status, MemoryStatus::NeedsReview);
+
+        let verified = service
+            .verify_procedure(
+                &candidate.id,
+                &receipt_path,
+                Some(OffsetDateTime::now_utc() + time::Duration::days(30)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(verified.status, MemoryStatus::Active);
+        assert!(verified
+            .procedure
+            .as_ref()
+            .unwrap()
+            .is_verified_at(OffsetDateTime::now_utc()));
+
+        let deploy_receipt_path = dir.path().join("deploy-success.json");
+        let deploy_receipt = ProcedureVerificationReceipt {
+            command: "./bin/deploy-worker atlas queue-worker".to_string(),
+            exit_code: 0,
+            output: "ATLAS_WORKER_READY".to_string(),
+            conditions: BTreeMap::new(),
+        };
+        fs::write(
+            &deploy_receipt_path,
+            serde_json::to_vec_pretty(&deploy_receipt).unwrap(),
+        )
+        .unwrap();
+        let deploy = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Procedure,
+                    "Deploy queue worker",
+                    "Use the verified queue worker deploy procedure.",
+                    MemoryScope::project("atlas"),
+                    ClaimOrigin::AgentObserved,
+                    writer(),
+                )
+                .with_procedure(ProcedureCard::new(
+                    "deploy queue worker",
+                    vec!["./bin/deploy-worker atlas queue-worker".to_string()],
+                    ProcedureVerification::new(
+                        "./bin/deploy-worker atlas queue-worker",
+                        0,
+                        "ATLAS_WORKER_READY",
+                    ),
+                )),
+            )
+            .await
+            .unwrap();
+        service
+            .verify_procedure(
+                &deploy.id,
+                &deploy_receipt_path,
+                Some(OffsetDateTime::now_utc() + time::Duration::days(30)),
+            )
+            .await
+            .unwrap();
+
+        let matched = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run queue worker integration tests".to_string(),
+                project: Some("atlas".to_string()),
+                cwd: None,
+                conditions: BTreeMap::from([("cargo.version".to_string(), "1.80.0".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(!matched.abstained);
+        assert_eq!(matched.procedures.len(), 1);
+        assert_eq!(matched.procedures[0].id, candidate.id);
+        assert!(matched.diagnostics[0].applicable);
+
+        let unscoped = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run queue worker integration tests".to_string(),
+                project: None,
+                cwd: None,
+                conditions: BTreeMap::from([("cargo.version".to_string(), "1.80.0".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(unscoped.abstained);
+        assert!(unscoped.procedures.is_empty());
+
+        let wrong_project = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run queue worker integration tests".to_string(),
+                project: Some("other-project".to_string()),
+                cwd: None,
+                conditions: BTreeMap::from([("cargo.version".to_string(), "1.80.0".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(wrong_project.abstained);
+        assert!(wrong_project.procedures.is_empty());
+
+        let missing_condition = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run queue worker integration tests".to_string(),
+                project: Some("atlas".to_string()),
+                cwd: None,
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(missing_condition.abstained);
+        assert_eq!(
+            missing_condition.required_condition_keys,
+            vec!["cargo.version"]
+        );
+        assert_eq!(
+            missing_condition.diagnostics[0].unresolved_condition_keys,
+            vec!["cargo.version"]
+        );
+        assert_eq!(missing_condition.next_actions.len(), 1);
+        assert!(missing_condition.next_actions[0].contains("the current checkout"));
+        assert!(missing_condition.next_actions[0].contains("separate direct tool call"));
+        assert!(missing_condition.current_checkout_root.is_none());
+        assert!(!missing_condition.next_actions[0].contains("1.80.0"));
+
+        let mismatch = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run queue worker integration tests".to_string(),
+                project: Some("atlas".to_string()),
+                cwd: None,
+                conditions: BTreeMap::from([("cargo.version".to_string(), "1.79.0".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(mismatch.abstained);
+        assert!(mismatch.diagnostics[0]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("does not match")));
+
+        fs::write(&receipt_path, b"tampered").unwrap();
+        let tampered = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run queue worker integration tests".to_string(),
+                project: Some("atlas".to_string()),
+                cwd: None,
+                conditions: BTreeMap::from([("cargo.version".to_string(), "1.80.0".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(tampered.abstained);
+        assert!(tampered.diagnostics[0]
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("hash changed")));
+    }
+
+    #[tokio::test]
+    async fn source_backed_prerequisite_uses_the_current_moved_checkout() {
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let original = dir.path().join("original/atlas");
+        let moved = dir.path().join("moved/atlas");
+        let receipt = ProcedureVerificationReceipt {
+            command: "./bin/context-probe --channel cobalt".to_string(),
+            exit_code: 0,
+            output: "ATLAS_CONTEXT_PROBE_OK".to_string(),
+            conditions: BTreeMap::from([("tool.version".to_string(), "3".to_string())]),
+        };
+        let receipt_bytes = serde_json::to_vec_pretty(&receipt).unwrap();
+        for (checkout, version) in [(&original, "3"), (&moved, "2")] {
+            fs::create_dir_all(checkout).unwrap();
+            assert!(Command::new("git")
+                .args(["init", "--quiet"])
+                .current_dir(checkout)
+                .status()
+                .unwrap()
+                .success());
+            assert!(Command::new("git")
+                .args([
+                    "remote",
+                    "add",
+                    "origin",
+                    "git@github.com:engram-tests/atlas.git",
+                ])
+                .current_dir(checkout)
+                .status()
+                .unwrap()
+                .success());
+            fs::write(
+                checkout.join("toolchain.toml"),
+                format!("version = \"{version}\"\n"),
+            )
+            .unwrap();
+            fs::write(checkout.join("procedure-success.json"), &receipt_bytes).unwrap();
+            assert!(Command::new("git")
+                .args(["add", "--", "toolchain.toml"])
+                .current_dir(checkout)
+                .status()
+                .unwrap()
+                .success());
+        }
+
+        let repositories = RepositoryService::new(service.db.clone());
+        repositories.init_schema().await.unwrap();
+        let original_detection = repositories.detect_repository(&original).await.unwrap();
+        let candidate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Procedure,
+                    "procedure-atlas-context-probe-v1",
+                    "Run the verified Atlas context probe.",
+                    MemoryScope::Repository {
+                        repository_id: Some(original_detection.context.repository.id),
+                        remote_url: Some("https://github.com/engram-tests/atlas".to_string()),
+                        local_path: Some(original.display().to_string()),
+                    },
+                    ClaimOrigin::AgentObserved,
+                    writer(),
+                )
+                .with_procedure(
+                    ProcedureCard::new(
+                        "run the Atlas context probe",
+                        vec!["./bin/context-probe --channel cobalt".to_string()],
+                        ProcedureVerification::new(
+                            "./bin/context-probe --channel cobalt",
+                            0,
+                            "ATLAS_CONTEXT_PROBE_OK",
+                        ),
+                    )
+                    .with_prerequisite(
+                        ProcedurePrerequisite::new("tool.version", "3").with_source(
+                            ProcedurePrerequisiteSource::Toml {
+                                relative_path: "toolchain.toml".to_string(),
+                                key_path: vec!["version".to_string()],
+                            },
+                        ),
+                    ),
+                ),
+            )
+            .await
+            .unwrap();
+        service
+            .verify_procedure(
+                &candidate.id,
+                &original.join("procedure-success.json"),
+                Some(OffsetDateTime::now_utc() + time::Duration::days(30)),
+            )
+            .await
+            .unwrap();
+
+        let no_candidate = service
+            .match_procedures(ProcedureMatchInput {
+                query: "activate ORBIT_ONLY_CANARY for the queue worker".to_string(),
+                project: None,
+                cwd: Some(moved.display().to_string()),
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(no_candidate.abstained);
+        assert!(no_candidate.procedures.is_empty());
+        assert!(no_candidate.diagnostics.is_empty());
+        assert!(no_candidate.required_condition_keys.is_empty());
+        assert_eq!(no_candidate.next_actions.len(), 1);
+        assert!(no_candidate.next_actions[0].contains("current_checkout_root"));
+        assert!(no_candidate.next_actions[0].contains("structured `identity`"));
+        assert!(no_candidate.next_actions[0].len() < 700);
+        assert!(no_candidate
+            .message
+            .contains("structured identity boundary"));
+        let repository_identity = no_candidate.identity.repository.as_ref().unwrap();
+        assert_eq!(repository_identity.name, "atlas");
+        assert_eq!(
+            repository_identity.normalized_remote.as_deref(),
+            Some("github.com/engram-tests/atlas")
+        );
+        assert_eq!(
+            repository_identity.checkout_root.as_deref(),
+            Some(fs::canonicalize(&moved).unwrap().to_str().unwrap())
+        );
+        assert_eq!(
+            no_candidate.identity.project.status,
+            OrientationProjectStatus::RequiresConfirmation
+        );
+        assert!(no_candidate.identity.project.name.is_none());
+
+        let mismatch = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run the Atlas context probe".to_string(),
+                project: None,
+                cwd: Some(moved.display().to_string()),
+                conditions: BTreeMap::from([("tool.version".to_string(), "3".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(mismatch.abstained);
+        assert!(mismatch.required_condition_keys.is_empty());
+        assert!(mismatch.suggested_operation_evidence.is_none());
+        assert_eq!(mismatch.next_actions.len(), 1);
+        assert!(mismatch.next_actions[0].contains("current_checkout_root"));
+        assert!(mismatch.next_actions[0].contains("`identity.project.status`"));
+        assert!(mismatch.next_actions[0].contains("at most one bounded read-only lookup"));
+        assert!(mismatch.next_actions[0].contains("Do not re-derive a project"));
+        assert!(mismatch.next_actions[0].contains("broaden outside the checkout"));
+        assert!(mismatch.next_actions[0].contains("execute candidate commands"));
+        assert!(mismatch.next_actions[0].contains("`requires_confirmation`"));
+        assert!(mismatch.next_actions[0].len() < 700);
+        assert!(mismatch.message.contains("structured identity boundary"));
+        assert_eq!(
+            mismatch.diagnostics[0].condition_observations[0].status,
+            ProcedureConditionObservationStatus::Mismatched
+        );
+        assert!(mismatch.diagnostics[0].condition_observations[0]
+            .source_sha256
+            .is_some());
+        assert!(!serde_json::to_string(&mismatch)
+            .unwrap()
+            .contains("\"expected\""));
+
+        fs::write(moved.join("toolchain.toml"), "channel = \"cobalt\"\n").unwrap();
+        let unavailable = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run the Atlas context probe".to_string(),
+                project: None,
+                cwd: Some(moved.display().to_string()),
+                conditions: BTreeMap::from([("tool.version".to_string(), "3".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(unavailable.abstained);
+        assert_eq!(
+            unavailable.diagnostics[0].condition_observations[0].status,
+            ProcedureConditionObservationStatus::Unavailable
+        );
+        assert!(unavailable.diagnostics[0].condition_observations[0]
+            .detail
+            .contains("key path is absent"));
+        assert!(unavailable.diagnostics[0].condition_observations[0]
+            .source_sha256
+            .is_some());
+
+        fs::write(moved.join("toolchain.toml"), "version = \"3\"\n").unwrap();
+        let matched = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run the Atlas context probe".to_string(),
+                project: None,
+                cwd: Some(moved.display().to_string()),
+                conditions: BTreeMap::from([("tool.version".to_string(), "2".to_string())]),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(!matched.abstained, "{}", matched.message);
+        assert_eq!(matched.procedures[0].id, candidate.id);
+        assert_eq!(
+            matched.diagnostics[0].condition_observations[0].status,
+            ProcedureConditionObservationStatus::Matched
+        );
+        assert_eq!(
+            matched.current_checkout_root.as_deref(),
+            Some(moved.canonicalize().unwrap().to_string_lossy().as_ref())
+        );
+    }
+
+    #[tokio::test]
+    async fn procedure_no_result_routes_to_one_unique_tracked_runbook_without_returning_body() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let checkout = dir.path().join("orbit");
+        let component_dir = checkout.join("services/worker");
+        let runbooks_dir = checkout.join("runbooks");
+        fs::create_dir_all(&component_dir).unwrap();
+        fs::create_dir_all(&runbooks_dir).unwrap();
+        run_git(&checkout, &["init"]);
+        run_git(
+            &checkout,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/engram-tests/orbit.git",
+            ],
+        );
+        fs::write(
+            component_dir.join("component.json"),
+            r#"{"name":"queue-worker","kind":"service"}"#,
+        )
+        .unwrap();
+        let runbook_body = "# Deploy the Orbit worker\n\nORBIT_ONLY_CANARY\n";
+        fs::write(runbooks_dir.join("deploy-worker.md"), runbook_body).unwrap();
+        fs::write(runbooks_dir.join("deploy-api.md"), "# Deploy the API\n").unwrap();
+        fs::write(component_dir.join("README.md"), "# Orbit worker\n").unwrap();
+        commit_all(&checkout, "add operation evidence");
+        fs::write(
+            runbooks_dir.join("worker-local-only.md"),
+            "# Untracked local notes\n",
+        )
+        .unwrap();
+
+        let repositories = RepositoryService::new(service.db.clone());
+        repositories.init_schema().await.unwrap();
+        repositories
+            .detect_repository(&component_dir)
+            .await
+            .unwrap();
+        let report = service
+            .match_procedures(ProcedureMatchInput {
+                query: "Handle the worker procedure using durable memory only if it belongs to the current repository."
+                    .to_string(),
+                project: None,
+                cwd: Some(component_dir.display().to_string()),
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+
+        assert!(report.abstained);
+        assert!(report.procedures.is_empty());
+        assert_eq!(report.identity.components[0].name, "queue-worker");
+        assert_eq!(
+            report.identity.project.status,
+            OrientationProjectStatus::RequiresConfirmation
+        );
+        let candidate = report.suggested_operation_evidence.as_ref().unwrap();
+        assert_eq!(candidate.path, "runbooks/deploy-worker.md");
+        assert_eq!(
+            candidate.resolved_path,
+            checkout
+                .join("runbooks/deploy-worker.md")
+                .canonicalize()
+                .unwrap()
+                .display()
+                .to_string()
+        );
+        assert_eq!(candidate.source_sha256, sha256_hex(runbook_body.as_bytes()));
+        assert!(candidate.reason.contains("worker"));
+        assert!(candidate.required_before_final_abstention);
+        assert!(candidate.allowed_when_project_requires_confirmation);
+        assert!(!candidate.authorizes_procedure_execution);
+        assert!(report.next_actions[0].contains("suggested_operation_evidence.resolved_path"));
+        assert!(report.next_actions[0].contains("Mandatory ordering"));
+        assert!(report.next_actions[0].contains("durable-memory-only"));
+        assert!(report.next_actions[0].contains("not procedure application"));
+        assert!(report.next_actions[0].contains("provenance only"));
+        assert!(report.next_actions[0].contains("runbooks/deploy-worker.md"));
+        let packet = serde_json::to_vec(&report).unwrap();
+        assert!(
+            packet.len() <= 8_192,
+            "procedure-match packet exceeded the pilot per-call budget: {} bytes",
+            packet.len()
+        );
+        assert!(!std::str::from_utf8(&packet)
+            .unwrap()
+            .contains("ORBIT_ONLY_CANARY"));
+    }
+
+    #[test]
+    fn operation_evidence_abstains_when_tracked_runbook_ranking_is_tied() {
+        if !git_available() {
+            return;
+        }
+        let checkout = tempdir().unwrap();
+        let runbooks_dir = checkout.path().join("runbooks");
+        fs::create_dir_all(&runbooks_dir).unwrap();
+        run_git(checkout.path(), &["init"]);
+        fs::write(runbooks_dir.join("deploy-worker.md"), "# Deploy worker\n").unwrap();
+        fs::write(
+            runbooks_dir.join("rollback-worker.md"),
+            "# Rollback worker\n",
+        )
+        .unwrap();
+        commit_all(checkout.path(), "add ambiguous runbooks");
+
+        assert!(
+            suggest_operation_evidence(checkout.path(), "Handle the worker procedure.", &[],)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn tracked_condition_source_rejects_unsafe_files() {
+        let root = tempdir().unwrap();
+        assert!(Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success());
+        fs::write(root.path().join("tracked.toml"), "version = \"3\"\n").unwrap();
+        fs::write(root.path().join("untracked.toml"), "version = \"3\"\n").unwrap();
+        fs::write(
+            root.path().join("oversized.toml"),
+            vec![b'x'; MAX_CONDITION_SOURCE_BYTES as usize + 1],
+        )
+        .unwrap();
+        assert!(Command::new("git")
+            .args(["add", "--", "tracked.toml", "oversized.toml"])
+            .current_dir(root.path())
+            .status()
+            .unwrap()
+            .success());
+
+        assert!(read_tracked_condition_source(root.path(), "tracked.toml").is_ok());
+        assert!(
+            read_tracked_condition_source(root.path(), "../tracked.toml")
+                .unwrap_err()
+                .contains("safe checkout-relative")
+        );
+        assert!(read_tracked_condition_source(root.path(), "untracked.toml")
+            .unwrap_err()
+            .contains("not Git-tracked"));
+        assert!(read_tracked_condition_source(root.path(), "oversized.toml")
+            .unwrap_err()
+            .contains("exceeds"));
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("tracked.toml", root.path().join("linked.toml")).unwrap();
+            assert!(read_tracked_condition_source(root.path(), "linked.toml")
+                .unwrap_err()
+                .contains("symlink"));
+        }
+    }
+
+    #[tokio::test]
+    async fn repository_procedure_matches_moved_checkout_by_stable_remote_identity() {
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let original = dir.path().join("original/engram-procedure-test");
+        let moved = dir.path().join("moved/engram-procedure-test");
+        for checkout in [&original, &moved] {
+            fs::create_dir_all(checkout).unwrap();
+            assert!(Command::new("git")
+                .args(["init", "--quiet"])
+                .current_dir(checkout)
+                .status()
+                .unwrap()
+                .success());
+            assert!(Command::new("git")
+                .args([
+                    "remote",
+                    "add",
+                    "origin",
+                    "git@github.com:engram-tests/portable-procedure.git",
+                ])
+                .current_dir(checkout)
+                .status()
+                .unwrap()
+                .success());
+        }
+
+        let repositories = RepositoryService::new(service.db.clone());
+        repositories.init_schema().await.unwrap();
+        let original_detection = repositories.detect_repository(&original).await.unwrap();
+        let repository_repo = RepositoryRepo::new(service.db.clone());
+        repository_repo.init_schema().await.unwrap();
+        let receipt_path = original.join("procedure-success.json");
+        let receipt = ProcedureVerificationReceipt {
+            command: "cargo test -p portable-tests".to_string(),
+            exit_code: 0,
+            output: "portable result: PASS".to_string(),
+            conditions: BTreeMap::new(),
+        };
+        let receipt_bytes = serde_json::to_vec_pretty(&receipt).unwrap();
+        fs::write(&receipt_path, &receipt_bytes).unwrap();
+        fs::write(moved.join("procedure-success.json"), &receipt_bytes).unwrap();
+
+        let candidate = service
+            .capture_memory(
+                MemoryItem::new(
+                    MemoryKind::Procedure,
+                    "Portable repository test procedure",
+                    "Run the portable repository test command.",
+                    MemoryScope::Repository {
+                        repository_id: Some(original_detection.context.repository.id),
+                        remote_url: Some(
+                            "https://github.com/engram-tests/portable-procedure".to_string(),
+                        ),
+                        local_path: Some(original.display().to_string()),
+                    },
+                    ClaimOrigin::AgentObserved,
+                    writer(),
+                )
+                .with_procedure(ProcedureCard::new(
+                    "run portable repository tests",
+                    vec!["cargo test -p portable-tests".to_string()],
+                    ProcedureVerification::new("cargo test -p portable-tests", 0, "result: PASS"),
+                )),
+            )
+            .await
+            .unwrap();
+        let verified = service
+            .verify_procedure(
+                &candidate.id,
+                &receipt_path,
+                Some(OffsetDateTime::now_utc() + time::Duration::days(30)),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            verified
+                .procedure
+                .as_ref()
+                .unwrap()
+                .verification
+                .evidence_path
+                .as_deref(),
+            Some("procedure-success.json")
+        );
+        assert_eq!(
+            verified.evidence.last().unwrap().target,
+            "procedure-success.json"
+        );
+
+        fs::write(&receipt_path, b"tampered in the original checkout").unwrap();
+
+        let matched = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run portable repository tests".to_string(),
+                project: None,
+                cwd: Some(moved.display().to_string()),
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+
+        assert!(!matched.abstained, "{}", matched.message);
+        assert_eq!(matched.procedures[0].id, candidate.id);
+        assert_eq!(
+            matched.current_checkout_root.as_deref(),
+            Some(moved.canonicalize().unwrap().to_string_lossy().as_ref())
+        );
+        assert!(matched
+            .execution_guidance
+            .as_deref()
+            .is_some_and(|guidance| guidance.contains("provenance only")));
+        assert_ne!(
+            matched.current_checkout_root.as_deref(),
+            Some(original.canonicalize().unwrap().to_string_lossy().as_ref())
+        );
+        let moved_context = repositories.resolve_cwd(&moved).await.unwrap().unwrap();
+        assert_eq!(
+            moved_context.repository.id,
+            original_detection.context.repository.id
+        );
+        assert!(moved_context.linked_projects.is_empty());
+
+        repository_repo
+            .save_project_link(&ProjectRepositoryLink::new(
+                "portable-project",
+                original_detection.context.repository.id,
+                ProjectRepositoryRole::Primary,
+            ))
+            .await
+            .unwrap();
+
+        let conflicting_project = service
+            .match_procedures(ProcedureMatchInput {
+                query: "run portable repository tests".to_string(),
+                project: Some("other-project".to_string()),
+                cwd: Some(moved.display().to_string()),
+                conditions: BTreeMap::new(),
+                limit: Some(5),
+            })
+            .await
+            .unwrap();
+        assert!(conflicting_project.abstained);
+        assert!(conflicting_project.procedures.is_empty());
+        assert!(conflicting_project.message.contains("ambiguous"));
+    }
+
+    #[tokio::test]
+    async fn capture_rejects_high_confidence_secret_material() {
+        let service = setup_service().await;
+        let item = MemoryItem::new(
+            MemoryKind::ProjectFact,
+            "Leaked credential",
+            "Use token ghp_1234567890abcdefghijklmnop for the API.",
+            MemoryScope::project("engram"),
+            ClaimOrigin::AgentObserved,
+            writer(),
+        );
+
+        let error = service.capture_memory(item).await.unwrap_err();
+        assert!(error.to_string().contains("likely GitHub token"));
+        assert!(service.list_memory(None, None).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn procedure_match_rejects_an_unbounded_query_before_retrieval() {
+        let service = setup_service().await;
+        let error = service
+            .match_procedures(ProcedureMatchInput {
+                query: "x".repeat(MAX_PROCEDURE_QUERY_CHARS + 1),
+                project: None,
+                cwd: None,
+                conditions: BTreeMap::new(),
+                limit: None,
+            })
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("task-focused retrieval phrase"));
+        assert!(error
+            .to_string()
+            .contains(&MAX_PROCEDURE_QUERY_CHARS.to_string()));
+    }
+
+    #[tokio::test]
+    async fn migration_review_assertion_stays_unverified_in_orient_and_search() {
         let (memory_service, search_service, work_repo) =
             setup_migration_viability_services().await;
         let project = Project::new("engram");
@@ -3597,7 +8441,9 @@ mod tests {
             .any(|evidence| evidence.kind == EvidenceKind::ManualReview
                 && evidence.target == accepted_path));
         let metadata = migrated.trust_metadata();
-        assert_eq!(metadata.review_state, MemoryReviewState::Reviewed);
+        assert_eq!(metadata.review_state, MemoryReviewState::ActiveUnreviewed);
+        assert!(metadata.review_asserted);
+        assert!(!metadata.reviewed);
         assert_eq!(metadata.evidence_count, 2);
 
         let packet = memory_service
@@ -3618,7 +8464,9 @@ mod tests {
             .memory_metadata
             .iter()
             .any(|metadata| metadata.memory_id == migrated.id
-                && metadata.review_state == MemoryReviewState::Reviewed));
+                && metadata.review_state == MemoryReviewState::ActiveUnreviewed
+                && metadata.review_asserted
+                && !metadata.reviewed));
         assert!(packet.context_pack.contains("Memory OS orientation"));
 
         let search_results = search_service
@@ -3643,7 +8491,7 @@ mod tests {
                 .memory_metadata
                 .as_ref()
                 .map(|metadata| metadata.review_state),
-            Some(MemoryReviewState::Reviewed)
+            Some(MemoryReviewState::ActiveUnreviewed)
         );
 
         let second_apply = memory_service
@@ -4405,7 +9253,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn orient_brain_loop_prioritizes_preference_for_follow_preference_intent() {
+    async fn orient_does_not_hot_boost_unverified_preference_review_assertion() {
         let service = setup_service().await;
         let preference = service
             .capture_memory(
@@ -4457,11 +9305,8 @@ mod tests {
             packet.brain_loop.top_items.first().map(|item| item.id),
             Some(preference.id)
         );
-        assert_eq!(packet.hot_context_ids, vec![preference.id]);
-        assert_eq!(
-            packet.hot_context_items.first().map(|item| item.id),
-            Some(preference.id)
-        );
+        assert!(packet.hot_context_ids.is_empty());
+        assert!(packet.hot_context_items.is_empty());
     }
 
     #[tokio::test]
@@ -4771,6 +9616,12 @@ mod tests {
         let packet = service.orient(OrientInput::default()).await.unwrap();
 
         assert_eq!(packet.scope, "global");
+        assert!(packet.identity.repository.is_none());
+        assert_eq!(
+            packet.identity.project.status,
+            OrientationProjectStatus::Unavailable
+        );
+        assert!(packet.identity.project.name.is_none());
         assert!(packet.resolution.selected_project.is_none());
         assert!(packet.resolution.requires_confirmation);
         assert!(packet
@@ -4807,6 +9658,11 @@ mod tests {
             .orient(OrientInput {
                 cwd: Some(dir.path().display().to_string()),
                 project: None,
+                prompt: Some(
+                    "Handle the context probe using durable procedure memory only when it is \
+                     applicable to the current checkout."
+                        .to_string(),
+                ),
                 include_recent_commits: false,
                 limit: Some(10),
                 ..OrientInput::default()
@@ -4823,7 +9679,144 @@ mod tests {
             OrientationResolutionSource::RepositoryLink
         );
         assert!(!packet.resolution.requires_confirmation);
+        assert_eq!(
+            packet.identity.project.status,
+            OrientationProjectStatus::Authorized
+        );
+        assert_eq!(
+            packet.identity.project.name.as_deref(),
+            Some("Debug with AI")
+        );
+        assert_eq!(packet.identity.project.project_link_ids.len(), 1);
+        assert_eq!(
+            packet
+                .identity
+                .repository
+                .as_ref()
+                .and_then(|repository| repository.checkout_root.as_deref()),
+            Some(dir.path().to_str().unwrap())
+        );
         assert_eq!(packet.active_decisions[0].title, "Use repo candidate");
+    }
+
+    #[tokio::test]
+    async fn orient_matches_repository_memory_by_resolved_repository_id() {
+        let (service, repo) = setup_service_with_repository_repo().await;
+        let dir = tempdir().unwrap();
+        let repository =
+            GitRepository::new("atlas").with_remote_url("git@github.com:acme/atlas.git");
+        repo.save_repository(&repository).await.unwrap();
+        repo.save_checkout(
+            &LocalCheckout::new(dir.path().display().to_string()).with_repository(repository.id),
+        )
+        .await
+        .unwrap();
+        repo.save_project_link(&ProjectRepositoryLink::new(
+            "atlas",
+            repository.id,
+            ProjectRepositoryRole::Primary,
+        ))
+        .await
+        .unwrap();
+
+        let decision = MemoryItem::new(
+            MemoryKind::Decision,
+            "Use reqwest for Atlas HTTP",
+            "New HTTP client code uses reqwest with shared timeout middleware.",
+            MemoryScope::Repository {
+                repository_id: Some(repository.id),
+                remote_url: Some("https://github.com/acme/atlas".to_string()),
+                local_path: None,
+            },
+            ClaimOrigin::UserStated,
+            writer(),
+        )
+        .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "unit-test"));
+        let decision = service.capture_memory(decision).await.unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                cwd: Some(dir.path().display().to_string()),
+                prompt: Some("Which HTTP client should new code use?".to_string()),
+                intent: Some(BrainHarnessIntent::AnswerQuestion),
+                include_recent_commits: false,
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet.active_decisions.first().map(|item| item.id),
+            Some(decision.id)
+        );
+    }
+
+    #[tokio::test]
+    async fn orient_prompt_intent_excludes_zero_text_scope_matches() {
+        let service = setup_service().await;
+        service
+            .capture_memory(memory_item("Queue backend decision"))
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some(
+                    "What is the approved approach for quantum-resistant image thumbnails?"
+                        .to_string(),
+                ),
+                intent: Some(BrainHarnessIntent::AnswerQuestion),
+                include_recent_commits: false,
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(packet.active_decisions.is_empty());
+        assert!(packet.brain_loop.top_items.is_empty());
+        assert!(packet.used_memory_candidate_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn orient_resume_session_surfaces_active_handoff_first() {
+        let service = setup_service().await;
+        service
+            .capture_memory(memory_item("Unrelated architecture decision"))
+            .await
+            .unwrap();
+        let handoff = service
+            .capture_memory(MemoryItem::new(
+                MemoryKind::Handoff,
+                "Queue worker handoff",
+                "Next action: update the JetStream consumer and run the integration test.",
+                MemoryScope::project("engram"),
+                ClaimOrigin::AgentObserved,
+                writer(),
+            ))
+            .await
+            .unwrap();
+
+        let packet = service
+            .orient(OrientInput {
+                project: Some("engram".to_string()),
+                prompt: Some("Continue from where we left off.".to_string()),
+                intent: Some(BrainHarnessIntent::ResumeSession),
+                include_recent_commits: false,
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(
+            packet.handoffs.first().map(|item| item.id),
+            Some(handoff.id)
+        );
+        assert_eq!(
+            packet.brain_loop.top_items.first().map(|item| item.id),
+            Some(handoff.id)
+        );
+        assert!(packet.used_memory_candidate_ids.contains(&handoff.id));
     }
 
     #[tokio::test]
@@ -4963,7 +9956,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn orient_does_not_use_project_memory_when_repo_candidates_are_ambiguous() {
+    async fn orient_ambiguous_projects_blocks_project_memory_but_allows_local_procedure_route() {
         let (service, repo) = setup_service_with_repository_repo().await;
         let dir = tempdir().unwrap();
         let repository = GitRepository::new("shared-repo");
@@ -5006,6 +9999,17 @@ mod tests {
             .ambiguities
             .iter()
             .any(|item| item.contains("multiple project candidates")));
+        assert!(packet.recommended_actions.iter().any(|item| {
+            item.contains("Before executing or exploring any actionable repository task")
+                && item.contains("bounded task-focused query")
+                && item.contains("Preserve concrete operation terms and identifiers verbatim")
+                && item.contains("durable procedure memory")
+                && item.contains("memory(action=list) is not a substitute")
+        }));
+        assert!(packet.recommended_actions.iter().any(|item| {
+            item.contains("Project ambiguity blocks only project/task-scoped memory")
+                && item.contains("mandatory repository-local procedure_match")
+        }));
     }
 
     #[tokio::test]
@@ -5080,6 +10084,89 @@ mod tests {
         assert_eq!(packet.resolution.component_names, vec!["api"]);
         assert_eq!(packet.active_decisions.len(), 1);
         assert_eq!(packet.active_decisions[0].title, "API decision");
+    }
+
+    #[tokio::test]
+    async fn orient_returns_tracked_component_identity_with_source_evidence() {
+        if !git_available() {
+            return;
+        }
+        let service = setup_service().await;
+        let dir = tempdir().unwrap();
+        let component_dir = dir.path().join("services/worker");
+        std::fs::create_dir_all(&component_dir).unwrap();
+        run_git(dir.path(), &["init"]);
+        run_git(
+            dir.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/acme/atlas.git",
+            ],
+        );
+        std::fs::write(
+            component_dir.join("component.json"),
+            r#"{"name":"queue-worker","kind":"service"}"#,
+        )
+        .unwrap();
+        commit_all(dir.path(), "add component identity");
+
+        let packet = service
+            .orient(OrientInput {
+                cwd: Some(component_dir.display().to_string()),
+                project: None,
+                include_recent_commits: false,
+                limit: Some(10),
+                ..OrientInput::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(packet.resolution.selected_project.is_none());
+        assert!(packet.resolution.requires_confirmation);
+        assert_eq!(
+            packet.identity.project.status,
+            OrientationProjectStatus::RequiresConfirmation
+        );
+        assert!(packet.identity.project.name.is_none());
+        let repository = packet.identity.repository.as_ref().unwrap();
+        assert_eq!(repository.name, "atlas");
+        assert_eq!(
+            repository.normalized_remote.as_deref(),
+            Some("github.com/acme/atlas")
+        );
+        assert_eq!(
+            repository.checkout_root.as_deref(),
+            Some(fs::canonicalize(dir.path()).unwrap().to_str().unwrap())
+        );
+        assert_eq!(
+            packet.resolution.repository_remote.as_deref(),
+            Some("github.com/acme/atlas")
+        );
+        assert_eq!(packet.resolution.component_names, vec!["queue-worker"]);
+        assert_eq!(packet.resolution.component_evidence.len(), 1);
+        let evidence = &packet.resolution.component_evidence[0];
+        assert_eq!(evidence.name, "queue-worker");
+        assert_eq!(evidence.component_path, "services/worker");
+        assert_eq!(
+            evidence.source_path.as_deref(),
+            Some("services/worker/component.json")
+        );
+        assert_eq!(evidence.source_sha256.as_deref().map(str::len), Some(64));
+        assert_eq!(packet.identity.components.len(), 1);
+        assert_eq!(
+            packet.identity.components[0].source_path,
+            evidence.source_path
+        );
+        assert_eq!(
+            packet.identity.components[0].source_sha256,
+            evidence.source_sha256
+        );
+        assert!(packet
+            .ambiguities
+            .iter()
+            .any(|item| item.contains("no linked project candidates")));
     }
 
     #[tokio::test]

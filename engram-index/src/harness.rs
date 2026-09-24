@@ -7,9 +7,10 @@
 use crate::error::{IndexError, IndexResult};
 use engram_core::harness::{
     HarnessAdapterCheck, HarnessAdapterKind, HarnessAdapterSpec, HarnessAdapterStatus,
-    HarnessEnforcementProfile, HarnessInstallFile, HarnessInstallReport, HarnessKind,
-    HarnessLifecycleReport, HarnessLifecycleTrigger, HarnessMcpToolReport, HarnessPolicy,
-    HarnessRenderedAdapter, HarnessSettingsCheck, HarnessStatusReport,
+    HarnessEnforcementProfile, HarnessHostCheck, HarnessInstallFile, HarnessInstallReport,
+    HarnessKind, HarnessLifecycleReport, HarnessLifecycleTrigger, HarnessMcpServerCheck,
+    HarnessMcpToolReport, HarnessPolicy, HarnessRenderedAdapter, HarnessSettingsCheck,
+    HarnessStatusReport,
 };
 use engram_core::memory::{
     ClaimOrigin, EvidenceKind, EvidenceRef, Harness, MemoryItem, MemoryKind, MemoryScope,
@@ -21,26 +22,35 @@ use engram_core::obligation::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 const MARKER_MD: &str = "<!-- engram:harness-adapter:v1 -->";
 const MARKER_SH: &str = "# engram:harness-adapter:v1";
 const CLAUDE_HOOK_COMMAND: &str = concat!(
-    "project_hook=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"; ",
+    "start_dir=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; ",
+    "project_root=\"$(git -C \"$start_dir\" rev-parse --show-toplevel 2>/dev/null || true)\"; ",
+    "if [ -z \"$project_root\" ]; then project_root=\"$start_dir\"; fi; ",
+    "project_hook=\"${project_root:+$project_root/.claude/hooks/engram-session-start.sh}\"; ",
     "home_hook=\"${HOME:-}/.claude/hooks/engram-session-start.sh\"; ",
-    "if [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
+    "if [ -n \"$project_hook\" ] && [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
     "if [ -n \"${HOME:-}\" ] && [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; ",
-    "printf '%s\\n' 'Engram SessionStart hook skipped: hook file was not found under CLAUDE_PROJECT_DIR or HOME.' >&2; ",
+    "printf '%s\\n' 'Engram SessionStart hook skipped: generated hook script was not found at the repository root or under HOME.' >&2; ",
     "exit 0"
 );
 const CLAUDE_SESSION_END_HOOK_COMMAND: &str = concat!(
-    "project_hook=\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"; ",
+    "start_dir=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; ",
+    "project_root=\"$(git -C \"$start_dir\" rev-parse --show-toplevel 2>/dev/null || true)\"; ",
+    "if [ -z \"$project_root\" ]; then project_root=\"$start_dir\"; fi; ",
+    "project_hook=\"${project_root:+$project_root/.claude/hooks/engram-session-end.sh}\"; ",
     "home_hook=\"${HOME:-}/.claude/hooks/engram-session-end.sh\"; ",
-    "if [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
+    "if [ -n \"$project_hook\" ] && [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
     "if [ -n \"${HOME:-}\" ] && [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; ",
-    "printf '%s\\n' 'Engram SessionEnd hook skipped: hook file was not found under CLAUDE_PROJECT_DIR or HOME.' >&2; ",
+    "printf '%s\\n' 'Engram SessionEnd hook skipped: generated hook script was not found at the repository root or under HOME.' >&2; ",
     "exit 0"
 );
 const CLAUDE_LEGACY_HOOK_COMMAND: &str =
@@ -51,6 +61,21 @@ const CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING: &str = concat!(
     "Claude Code static readiness confirms generated adapter files and settings entries; ",
     "it does not prove live effective hook visibility. Verify effective hook configuration with ",
     "Claude Code /hooks before claiming native Claude hook behavior."
+);
+const CODEX_EFFECTIVE_ADAPTER_VERIFICATION_WARNING: &str = concat!(
+    "Codex static readiness confirms generated skill and hook files on disk; it does not prove ",
+    "the project is trusted, the hook hash is accepted, or that an already-running Codex task ",
+    "loaded those files. ",
+    "Start a fresh Codex task and inspect /hooks before claiming effective adapter behavior."
+);
+const CODEX_HOOK_COMMAND: &str = concat!(
+    "project_root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; ",
+    "project_hook=\"${project_root:+$project_root/.codex/hooks/engram-session-start.sh}\"; ",
+    "home_hook=\"${CODEX_HOME:-${HOME:-}/.codex}/hooks/engram-session-start.sh\"; ",
+    "if [ -n \"$project_hook\" ] && [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; ",
+    "if [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; ",
+    "printf '%s\\n' 'Engram Codex SessionStart hook skipped: generated hook script was not found at the repository root or under CODEX_HOME.' >&2; ",
+    "exit 0"
 );
 
 /// Options for harness adapter installation.
@@ -141,6 +166,8 @@ pub struct HarnessHookEvent {
     pub tool_error: Option<String>,
     /// Tool input command, when available.
     pub tool_input_command: Option<String>,
+    /// Engram tool action, when available.
+    pub tool_input_action: Option<String>,
     /// File path touched by a tool, when available.
     pub file_path: Option<String>,
     /// Last assistant message for stop hooks.
@@ -338,6 +365,13 @@ impl HarnessService {
             if ready {
                 warnings.push(CLAUDE_EFFECTIVE_HOOK_VERIFICATION_WARNING.to_string());
             }
+        } else if harness == HarnessKind::Codex && ready {
+            warnings.push(CODEX_EFFECTIVE_ADAPTER_VERIFICATION_WARNING.to_string());
+        }
+
+        let host = check_harness_host(harness);
+        if host.checked && host.executable_path.is_none() {
+            warnings.push(host.message.clone());
         }
 
         Ok(HarnessStatusReport {
@@ -348,10 +382,40 @@ impl HarnessService {
             adapters,
             missing_mcp_tools,
             mcp_tools,
+            mcp_server: unchecked_mcp_server(),
             settings,
+            host,
             warnings,
             ready,
         })
+    }
+
+    /// Add an explicit, read-only host MCP configuration attestation to a status report.
+    ///
+    /// Codex is queried through its native JSON configuration resolver. Claude Code does not
+    /// provide a non-connecting query, so its known config sources are inspected statically and
+    /// the weaker evidence boundary is preserved in the result.
+    pub fn attest_host_configuration(
+        &self,
+        report: &mut HarnessStatusReport,
+        cwd: Option<&Path>,
+    ) -> IndexResult<()> {
+        let cwd = match cwd {
+            Some(cwd) => cwd.to_path_buf(),
+            None => std::env::current_dir()?,
+        };
+        let check = match report.harness {
+            HarnessKind::Codex => codex_mcp_server_check(&report.host),
+            HarnessKind::ClaudeCode => claude_mcp_server_check(&cwd)?,
+            _ => unsupported_mcp_server_check(report.harness),
+        };
+
+        if check.checked && !check.agent_profile_launch_configured {
+            report.ready = false;
+            report.warnings.push(check.message.clone());
+        }
+        report.mcp_server = check;
+        Ok(())
     }
 
     /// Doctor currently extends status with soft lifecycle warnings.
@@ -608,10 +672,7 @@ impl HarnessService {
             .as_deref()
             .map(|policy| policy.eq_ignore_ascii_case("durable"))
             .unwrap_or(false);
-        let project = event
-            .project
-            .clone()
-            .or_else(|| project_from_cwd(event.cwd.as_deref()));
+        let project = event.project.clone();
         let writer = hook_writer(&event);
         let enforce_runtime = event.harness == HarnessKind::ClaudeCode
             && event.enforcement_profile != HarnessEnforcementProfile::Soft;
@@ -684,11 +745,15 @@ impl HarnessService {
             "pretooluse" => {}
             "posttooluse" => {
                 if let Some(service) = services.obligations {
-                    if enforce_runtime && is_orient_tool(&event) {
+                    if enforce_runtime && is_orientation_boundary_tool(&event) {
                         match resolve_orientation_obligations(
                             service,
                             project.as_deref(),
                             event.cwd.as_deref(),
+                            event
+                                .tool_name
+                                .as_deref()
+                                .unwrap_or("engram_orientation_boundary"),
                         )
                         .await
                         {
@@ -765,9 +830,9 @@ impl HarnessService {
             }
             "precompact" => {
                 if write_durable {
-                    if let Some(service) = services.handoff {
+                    if let (Some(service), Some(project)) = (services.handoff, project.clone()) {
                         let content = format!(
-                            "# Claude Code Pre-Compact Handoff\n\nSession: {}\nCWD: {}\nTrigger: {}\nTranscript: {}\n\n## Next Actions\n- Resume by calling orient, handoff(action=get), and memory(action=changes_since).\n",
+                            "# Claude Code Pre-Compact Handoff\n\nSession: {}\nCWD: {}\nTrigger: {}\nTranscript: {}\n\n## Next Actions\n- Resume by calling orient and using scoped search only if its compact context is insufficient.\n",
                             event.session_id.as_deref().unwrap_or("unknown"),
                             event.cwd.as_deref().unwrap_or("unknown"),
                             event.trigger.as_deref().unwrap_or("unknown"),
@@ -775,13 +840,11 @@ impl HarnessService {
                         );
                         match service
                             .update(
-                                project.clone(),
+                                Some(project),
                                 None,
                                 content,
-                                vec![
-                                    "Resume by calling orient and inspecting the rolling handoff."
-                                        .to_string(),
-                                ],
+                                vec!["Resume by calling orient and inspecting scoped context."
+                                    .to_string()],
                                 writer.clone(),
                                 false,
                             )
@@ -790,27 +853,32 @@ impl HarnessService {
                             Ok(update) => handoff_written = update.written,
                             Err(error) => warnings.push(format!("handoff update failed: {error}")),
                         }
+                    } else if services.handoff.is_some() {
+                        warnings.push(
+                            "handoff update skipped: no canonical project was supplied or resolved"
+                                .to_string(),
+                        );
                     }
                 }
             }
             "postcompact" => {
                 if write_durable {
-                    if let (Some(service), Some(summary)) =
-                        (services.handoff, event.compact_summary.clone())
-                    {
+                    if let (Some(service), Some(summary), Some(project)) = (
+                        services.handoff,
+                        event.compact_summary.clone(),
+                        project.clone(),
+                    ) {
                         let content = format!(
-                            "# Claude Code Post-Compact Summary\n\n{}\n\n## Next Actions\n- Continue with orient, handoff(action=get), and memory(action=changes_since).\n",
+                            "# Claude Code Post-Compact Summary\n\n{}\n\n## Next Actions\n- Continue with orient and use scoped search only if its compact context is insufficient.\n",
                             summary.trim()
                         );
                         match service
                             .update(
-                                project.clone(),
+                                Some(project),
                                 None,
                                 content,
-                                vec![
-                                    "Continue with orient and recent memory changes after compaction."
-                                        .to_string(),
-                                ],
+                                vec!["Continue with orient and scoped context after compaction."
+                                    .to_string()],
                                 writer.clone(),
                                 false,
                             )
@@ -819,6 +887,14 @@ impl HarnessService {
                             Ok(update) => handoff_written = update.written,
                             Err(error) => warnings.push(format!("handoff update failed: {error}")),
                         }
+                    } else if services.handoff.is_some()
+                        && event.compact_summary.is_some()
+                        && project.is_none()
+                    {
+                        warnings.push(
+                            "handoff update skipped: no canonical project was supplied or resolved"
+                                .to_string(),
+                        );
                     }
                 }
             }
@@ -846,7 +922,7 @@ impl HarnessService {
                 }
             }
             "sessionend" if write_durable => {
-                if let Some(service) = services.handoff {
+                if let (Some(service), Some(project)) = (services.handoff, project.clone()) {
                     let content = format!(
                         "# Claude Code Session-End Handoff\n\nSession: {}\nCWD: {}\nReason: {}\nTranscript: {}\n\n## Next Actions\n- On resume, call orient and inspect this handoff before acting.\n",
                         event.session_id.as_deref().unwrap_or("unknown"),
@@ -856,7 +932,7 @@ impl HarnessService {
                     );
                     match service
                         .update(
-                            project.clone(),
+                            Some(project),
                             None,
                             content,
                             vec!["On resume, call orient and inspect this handoff.".to_string()],
@@ -868,6 +944,11 @@ impl HarnessService {
                         Ok(update) => handoff_written = update.written,
                         Err(error) => warnings.push(format!("handoff update failed: {error}")),
                     }
+                } else if services.handoff.is_some() {
+                    warnings.push(
+                        "handoff update skipped: no canonical project was supplied or resolved"
+                            .to_string(),
+                    );
                 }
             }
             _ => {}
@@ -926,27 +1007,38 @@ impl HarnessService {
 }
 
 fn lifecycle_report(policy: &HarnessPolicy) -> HarnessLifecycleReport {
-    let message = match policy.enforcement_profile {
-        HarnessEnforcementProfile::Soft => {
-            "Lifecycle compliance is advisory; agents should follow the listed triggers."
-                .to_string()
+    let runtime_enforced = policy.harness == HarnessKind::ClaudeCode
+        && policy.enforcement_profile != HarnessEnforcementProfile::Soft;
+    let message = match (policy.harness, policy.enforcement_profile) {
+        (HarnessKind::ClaudeCode, HarnessEnforcementProfile::Soft) => {
+            "Lifecycle compliance is advisory and low-overhead: Claude Code installs session, compaction, and session-end hooks; in-session Engram use is driven by generated commands and agent instructions."
         }
-        HarnessEnforcementProfile::Graduated => {
-            "Lifecycle compliance uses graduated enforcement: task-start orientation and final obligations are enforced at high-value boundaries where the host supports hooks."
-                .to_string()
+        (HarnessKind::Codex, HarnessEnforcementProfile::Soft) => {
+            "Lifecycle compliance is advisory and low-overhead: Codex installs a deterministic SessionStart context hook plus generated skills; the hook does not block host actions."
         }
-        HarnessEnforcementProfile::Strict => {
-            "Lifecycle compliance is strict: hooks keep blocking until required obligations are resolved or explicitly skipped."
-                .to_string()
+        (_, HarnessEnforcementProfile::Soft) => {
+            "Lifecycle compliance is advisory and low-overhead; Engram use is driven by generated commands, skills, and agent instructions."
+        }
+        (HarnessKind::ClaudeCode, HarnessEnforcementProfile::Graduated) => {
+            "Lifecycle compliance uses graduated enforcement: task-start orientation and final obligations are enforced at high-value Claude Code hook boundaries."
+        }
+        (_, HarnessEnforcementProfile::Graduated) => {
+            "The graduated lifecycle is mandatory agent guidance, but this host adapter does not provide runtime blocking."
+        }
+        (HarnessKind::ClaudeCode, HarnessEnforcementProfile::Strict) => {
+            "Lifecycle compliance is strict: Claude Code hooks keep blocking until required obligations are resolved or explicitly skipped."
+        }
+        (_, HarnessEnforcementProfile::Strict) => {
+            "The strict lifecycle is mandatory agent guidance, but this host adapter does not provide runtime blocking."
         }
     };
 
     HarnessLifecycleReport {
         enforcement_profile: policy.enforcement_profile,
         soft_contract: policy.enforcement_profile.is_soft(),
-        enforced: !policy.enforcement_profile.is_soft(),
+        enforced: runtime_enforced,
         advisory_triggers: policy.lifecycle_triggers.clone(),
-        message,
+        message: message.to_string(),
     }
 }
 
@@ -969,15 +1061,6 @@ fn normalized_event_name(event: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .collect::<String>()
         .to_lowercase()
-}
-
-fn project_from_cwd(cwd: Option<&str>) -> Option<String> {
-    cwd.and_then(|cwd| {
-        Path::new(cwd)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(str::to_string)
-    })
 }
 
 fn hook_writer(event: &HarnessHookEvent) -> WriterProvenance {
@@ -1007,7 +1090,6 @@ fn hook_scope(event: &HarnessHookEvent) -> MemoryScope {
     event
         .project
         .clone()
-        .or_else(|| project_from_cwd(event.cwd.as_deref()))
         .map(MemoryScope::project)
         .unwrap_or_else(|| {
             event
@@ -1047,7 +1129,7 @@ async fn ensure_orientation_obligation(
     let mut obligation = AgentObligation::new(
         AgentObligationKind::EngramOrientation,
         "Run Engram orientation before non-Engram tool use",
-        "Claude Code must call mcp__engram__orient with response_shape=\"lean\" before using non-Engram tools for this task.",
+        "Claude Code must complete either lean orient or local memory(action=procedure_match) before using non-Engram tools for this task.",
         obligation_scope(project, event.cwd.as_deref()),
         AgentObligationTrigger::new("user_prompt", "substantive task prompt submitted")
             .with_target("mcp__engram__orient"),
@@ -1075,18 +1157,19 @@ async fn resolve_orientation_obligations(
     service: &crate::obligation::ObligationService,
     project: Option<&str>,
     cwd: Option<&str>,
+    boundary_tool: &str,
 ) -> IndexResult<usize> {
     let open = service.list_open_for_context(project, cwd).await?;
     let mut count = 0;
     for obligation in open.into_iter().filter(is_orientation_obligation) {
         let resolution = AgentObligationResolution::new(
             AgentObligationResolutionKind::EngramOriented,
-            "mcp__engram__orient completed for this task.",
+            format!("{boundary_tool} completed the Engram identity boundary for this task."),
             "engram-harness",
         )
         .with_evidence(
-            EvidenceRef::new(EvidenceKind::ToolCall, "mcp__engram__orient")
-                .with_summary("Claude Code PostToolUse hook observed Engram orient"),
+            EvidenceRef::new(EvidenceKind::ToolCall, boundary_tool)
+                .with_summary("Claude Code PostToolUse hook observed an Engram identity boundary"),
         );
         service.resolve(obligation.id, resolution).await?;
         count += 1;
@@ -1110,11 +1193,15 @@ fn is_orientation_obligation(obligation: &AgentObligation) -> bool {
     obligation.kind == AgentObligationKind::EngramOrientation
 }
 
-fn is_orient_tool(event: &HarnessHookEvent) -> bool {
-    event
-        .tool_name
-        .as_deref()
-        .is_some_and(|tool| tool.eq_ignore_ascii_case("mcp__engram__orient"))
+fn is_orientation_boundary_tool(event: &HarnessHookEvent) -> bool {
+    match event.tool_name.as_deref() {
+        Some(tool) if tool.eq_ignore_ascii_case("mcp__engram__orient") => true,
+        Some(tool) if tool.eq_ignore_ascii_case("mcp__engram__memory") => event
+            .tool_input_action
+            .as_deref()
+            .is_some_and(|action| action.eq_ignore_ascii_case("procedure_match")),
+        _ => false,
+    }
 }
 
 fn is_engram_tool(event: &HarnessHookEvent) -> bool {
@@ -1147,7 +1234,7 @@ fn claude_runtime_enforcement_response(
             })?;
             let tool = event.tool_name.as_deref().unwrap_or("unknown tool");
             let reason = format!(
-                "Engram {} enforcement denied `{tool}` because task-start orientation is still open (obligation {}). Call `mcp__engram__orient` with `agent=\"claude_code\"`, current `project`, `cwd`, prompt, and `response_shape=\"lean\"`, then retry the tool.",
+                "Engram {} enforcement denied `{tool}` because task-start orientation is still open (obligation {}). For actionable repository work, call `mcp__engram__memory` with `action=\"procedure_match\"`, a bounded task-focused query copied from the user's operation request, and current cwd; otherwise call `mcp__engram__orient` with `agent=\"claude_code\"`, current project/cwd/prompt, and `response_shape=\"lean\"`. Then retry the tool.",
                 event.enforcement_profile,
                 orientation.id
             );
@@ -1179,27 +1266,43 @@ fn claude_runtime_enforcement_response(
 }
 
 fn stop_block_reason(event: &HarnessHookEvent, open_obligations: &[AgentObligation]) -> String {
-    let project_arg = event
-        .project
-        .clone()
-        .or_else(|| project_from_cwd(event.cwd.as_deref()))
-        .map(|project| format!(", project=\"{project}\""))
-        .unwrap_or_default();
-    let cwd_arg = event
-        .cwd
-        .as_ref()
-        .map(|cwd| format!(", cwd=\"{cwd}\""))
-        .unwrap_or_default();
+    let doctor_args = if let Some(project) = event.project.as_deref() {
+        let mut scope = vec![
+            "relevance_mode:\"related\"".to_string(),
+            format!(
+                "project:{}",
+                serde_json::to_string(project).expect("project string should serialize")
+            ),
+        ];
+        if let Some(cwd) = event.cwd.as_deref() {
+            scope.push(format!(
+                "cwd:{}",
+                serde_json::to_string(cwd).expect("cwd string should serialize")
+            ));
+        }
+        format!("scope={{{}}}", scope.join(", "))
+    } else {
+        let cwd_filter = event
+            .cwd
+            .as_deref()
+            .map(|cwd| {
+                format!(
+                    ", cwd={}",
+                    serde_json::to_string(cwd).expect("cwd string should serialize")
+                )
+            })
+            .unwrap_or_default();
+        format!("scope={{relevance_mode:\"global\"}}{cwd_filter}")
+    };
     let first = &open_obligations[0];
     format!(
-        "Engram {} enforcement blocked the final response because {} open obligation(s) remain. First open obligation: {} ({}, id={}). Run `obligations(action=doctor{}{})`, then either `obligations(action=resolve, id=\"{}\", resolution_kind=\"{}\", summary=\"...\", actor=\"agent\")` or `obligations(action=skip, id=\"{}\", reason=\"...\", actor=\"agent\")`. Then answer again.",
+        "Engram {} enforcement blocked the final response because {} open obligation(s) remain. First open obligation: {} ({}, id={}). Run `obligations(action=doctor, {})`, then either `obligations(action=resolve, id=\"{}\", resolution=\"{}\", summary=\"...\", actor=\"agent\")` or `obligations(action=skip, id=\"{}\", reason=\"...\", actor=\"agent\")`. Then answer again.",
         event.enforcement_profile,
         open_obligations.len(),
         first.title,
         first.kind,
         first.id,
-        project_arg,
-        cwd_arg,
+        doctor_args,
         first.id,
         first
             .required_resolution
@@ -1377,7 +1480,7 @@ fn hook_additional_context(
         "stop" => lines.push(
             match event.enforcement_profile {
                 HarnessEnforcementProfile::Soft => {
-                    "Engram already ran final document-obligation detection for changed durable docs. Before final response, check memory(action=changes_since) and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations without blocking the user, rerun obligations(action=detect, project=..., cwd=...) if more files change, and when outcome is assessable call telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for the relevant trace_id."
+                    "Engram already ran final document-obligation detection for changed durable docs. Resolve or explicitly skip open obligations without blocking the user, and rerun obligations(action=detect, project=..., cwd=...) if more files change."
                         .to_string()
                 }
                 HarnessEnforcementProfile::Graduated => {
@@ -1391,11 +1494,11 @@ fn hook_additional_context(
             },
         ),
         "precompact" | "postcompact" => lines.push(
-            "Before relying on compacted context, use handoff(action=get) and memory(action=changes_since)."
+            "Before relying on compacted context, call orient again and use scoped search only if its compact context is insufficient."
                 .to_string(),
         ),
         "sessionend" => lines.push(
-            "The session ended; the next session should resume from orient and the rolling handoff."
+            "The session ended; the next session should resume by calling orient."
                 .to_string(),
         ),
         _ => {}
@@ -1471,13 +1574,10 @@ fn required_mcp_tools() -> Vec<String> {
     [
         "orient",
         "memory",
+        "repo",
+        "search",
         "harness",
-        "lint",
-        "graph",
-        "handoff",
         "obligations",
-        "telemetry",
-        "vault",
     ]
     .into_iter()
     .map(str::to_string)
@@ -1568,6 +1668,22 @@ fn claude_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<Harnes
 
 fn codex_adapters(enforcement_profile: HarnessEnforcementProfile) -> Vec<HarnessAdapterSpec> {
     vec![
+        adapter(
+            "codex-session-start-hook",
+            HarnessAdapterKind::CodexHook,
+            ".codex/hooks/engram-session-start.sh",
+            "Codex SessionStart hook that injects deterministic, advisory Engram startup context.",
+            true,
+            codex_session_start_hook(enforcement_profile),
+        ),
+        adapter(
+            "codex-hooks-config",
+            HarnessAdapterKind::PolicyDocument,
+            ".codex/hooks.json",
+            "Codex lifecycle hook configuration for deterministic Engram startup context.",
+            true,
+            codex_hooks_config(),
+        ),
         adapter(
             "codex-memory-session-skill",
             HarnessAdapterKind::CodexSkill,
@@ -1692,27 +1808,33 @@ fn adapter(
 
 fn check_adapter(root: &Path, adapter: &HarnessAdapterSpec) -> IndexResult<HarnessAdapterCheck> {
     let path = root.join(&adapter.relative_path);
-    let (status, message) = match fs::read_to_string(&path) {
+    let expected_sha256 = sha256_bytes(adapter.contents.as_bytes());
+    let (status, actual_sha256, message) = match fs::read_to_string(&path) {
         Ok(existing) => {
+            let actual_sha256 = Some(sha256_bytes(existing.as_bytes()));
             if existing == adapter.contents {
                 (
                     HarnessAdapterStatus::Installed,
+                    actual_sha256,
                     "generated adapter is installed".to_string(),
                 )
             } else if has_marker(&existing) {
                 (
                     HarnessAdapterStatus::Drifted,
+                    actual_sha256,
                     "generated adapter has drifted from current policy".to_string(),
                 )
             } else {
                 (
                     HarnessAdapterStatus::UserOwned,
+                    actual_sha256,
                     "file exists without Engram generated marker".to_string(),
                 )
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => (
             HarnessAdapterStatus::Missing,
+            None,
             "adapter is missing".to_string(),
         ),
         Err(error) => return Err(error.into()),
@@ -1724,8 +1846,435 @@ fn check_adapter(root: &Path, adapter: &HarnessAdapterSpec) -> IndexResult<Harne
         path: path.display().to_string(),
         status,
         required: adapter.required,
+        expected_sha256,
+        actual_sha256,
         message,
     })
+}
+
+fn unchecked_mcp_server() -> HarnessMcpServerCheck {
+    HarnessMcpServerCheck {
+        checked: false,
+        evidence_kind: None,
+        source: None,
+        server_found: false,
+        enabled: None,
+        transport: None,
+        command: None,
+        args: Vec::new(),
+        env_keys: Vec::new(),
+        executable_path: None,
+        executable_sha256: None,
+        agent_profile_launch_configured: false,
+        resolved_configuration_verified: false,
+        running_host_loaded_verified: false,
+        live_runtime_verified: false,
+        message: "Host MCP configuration was not attested; request explicit host configuration attestation to inspect it read-only.".to_string(),
+    }
+}
+
+fn unsupported_mcp_server_check(harness: HarnessKind) -> HarnessMcpServerCheck {
+    HarnessMcpServerCheck {
+        checked: true,
+        message: format!(
+            "No first-class read-only MCP configuration attestation is defined for {harness}."
+        ),
+        ..unchecked_mcp_server()
+    }
+}
+
+fn codex_mcp_server_check(host: &HarnessHostCheck) -> HarnessMcpServerCheck {
+    let Some(codex) = host.executable_path.as_deref() else {
+        return HarnessMcpServerCheck {
+            checked: true,
+            evidence_kind: Some("host_cli_resolved".to_string()),
+            message: "Codex MCP configuration could not be resolved because the Codex executable was not found.".to_string(),
+            ..unchecked_mcp_server()
+        };
+    };
+
+    let output = match Command::new(codex)
+        .args(["mcp", "get", "engram", "--json"])
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) => {
+            return HarnessMcpServerCheck {
+                checked: true,
+                evidence_kind: Some("host_cli_resolved".to_string()),
+                message: format!("Codex MCP configuration query failed: {error}"),
+                ..unchecked_mcp_server()
+            };
+        }
+    };
+    if !output.status.success() {
+        return HarnessMcpServerCheck {
+            checked: true,
+            evidence_kind: Some("host_cli_resolved".to_string()),
+            message:
+                "Codex's native configuration resolver did not return an Engram MCP server entry."
+                    .to_string(),
+            ..unchecked_mcp_server()
+        };
+    }
+    let value: Value = match serde_json::from_slice(&output.stdout) {
+        Ok(value) => value,
+        Err(error) => {
+            return HarnessMcpServerCheck {
+                checked: true,
+                evidence_kind: Some("host_cli_resolved".to_string()),
+                message: format!("Codex returned invalid MCP configuration JSON: {error}"),
+                ..unchecked_mcp_server()
+            };
+        }
+    };
+    let transport = value.get("transport").unwrap_or(&Value::Null);
+    let enabled = value.get("enabled").and_then(Value::as_bool);
+    build_mcp_server_check(
+        "host_cli_resolved",
+        None,
+        transport,
+        enabled,
+        true,
+        "Codex's native configuration resolver",
+    )
+}
+
+fn claude_mcp_server_check(cwd: &Path) -> IndexResult<HarnessMcpServerCheck> {
+    let Some(home) = dirs::home_dir() else {
+        return Ok(HarnessMcpServerCheck {
+            checked: true,
+            evidence_kind: Some("static_config".to_string()),
+            message: "Claude MCP configuration could not be inspected because the home directory could not be resolved.".to_string(),
+            ..unchecked_mcp_server()
+        });
+    };
+    let user_path = home.join(".claude.json");
+    let user_config = read_optional_json(&user_path)?;
+    let canonical_cwd = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let cwd_key = canonical_cwd.display().to_string();
+    let project_path = canonical_cwd.join(".mcp.json");
+    let project_config = read_optional_json(&project_path)?;
+
+    let candidates = claude_mcp_candidates(
+        user_config.as_ref(),
+        project_config.as_ref(),
+        &cwd_key,
+        &user_path,
+        &project_path,
+    );
+
+    let Some((source, server)) = candidates.first() else {
+        return Ok(HarnessMcpServerCheck {
+            checked: true,
+            evidence_kind: Some("static_config".to_string()),
+            message: format!(
+                "No Engram MCP server was found in Claude's user or project configuration for {}.",
+                canonical_cwd.display()
+            ),
+            ..unchecked_mcp_server()
+        });
+    };
+    let source = source.clone();
+    let mut check = build_mcp_server_check(
+        "static_config",
+        Some(source),
+        server,
+        None,
+        false,
+        "Claude's statically selected highest-precedence known config entry",
+    );
+    if candidates.len() > 1 {
+        check.message.push_str(&format!(
+            " {} lower-precedence Engram entry or entries were also found; Claude was not launched to resolve approval or runtime precedence.",
+            candidates.len() - 1
+        ));
+    }
+    Ok(check)
+}
+
+fn claude_mcp_candidates(
+    user_config: Option<&Value>,
+    project_config: Option<&Value>,
+    cwd_key: &str,
+    user_path: &Path,
+    project_path: &Path,
+) -> Vec<(String, Value)> {
+    let mut candidates = Vec::new();
+    if let Some(server) = user_config
+        .and_then(|config| config.get("projects"))
+        .and_then(|projects| projects.get(cwd_key))
+        .and_then(|project| project.pointer("/mcpServers/engram"))
+    {
+        candidates.push((
+            format!(
+                "{}#/projects/{}/mcpServers/engram",
+                user_path.display(),
+                json_pointer_escape(cwd_key)
+            ),
+            server.clone(),
+        ));
+    }
+    if let Some(server) = project_config.and_then(|config| config.pointer("/mcpServers/engram")) {
+        candidates.push((
+            format!("{}#/mcpServers/engram", project_path.display()),
+            server.clone(),
+        ));
+    }
+    if let Some(server) = user_config.and_then(|config| config.pointer("/mcpServers/engram")) {
+        candidates.push((
+            format!("{}#/mcpServers/engram", user_path.display()),
+            server.clone(),
+        ));
+    }
+    candidates
+}
+
+fn read_optional_json(path: &Path) -> IndexResult<Option<Value>> {
+    match fs::read(path) {
+        Ok(contents) => serde_json::from_slice(&contents)
+            .map(Some)
+            .map_err(|error| {
+                IndexError::Parse(format!(
+                    "failed to parse host configuration at {}: {error}",
+                    path.display()
+                ))
+            }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn json_pointer_escape(value: &str) -> String {
+    value.replace('~', "~0").replace('/', "~1")
+}
+
+fn build_mcp_server_check(
+    evidence_kind: &str,
+    source: Option<String>,
+    server: &Value,
+    enabled: Option<bool>,
+    resolved_configuration_verified: bool,
+    evidence_label: &str,
+) -> HarnessMcpServerCheck {
+    let transport = server
+        .get("type")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let command = server
+        .get("command")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let raw_args = server
+        .get("args")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let args = redact_sensitive_args(&raw_args);
+    let mut env_keys = BTreeSet::new();
+    if let Some(env) = server.get("env").and_then(Value::as_object) {
+        env_keys.extend(env.keys().cloned());
+    }
+    if let Some(keys) = server.get("env_vars").and_then(Value::as_array) {
+        env_keys.extend(keys.iter().filter_map(Value::as_str).map(str::to_string));
+    }
+    let (executable_path, executable_sha256) = command
+        .as_deref()
+        .and_then(resolve_configured_executable)
+        .map(|path| {
+            let hash = sha256_file(&path).ok();
+            (Some(path.display().to_string()), hash)
+        })
+        .unwrap_or((None, None));
+    let agent_profile_launch_configured = enabled.unwrap_or(true)
+        && transport.as_deref().unwrap_or("stdio") == "stdio"
+        && command.is_some()
+        && executable_path.is_some()
+        && has_agent_profile_serve_args(&raw_args);
+    let message = if agent_profile_launch_configured {
+        format!(
+            "{evidence_label} reports a resolvable stdio command with `serve --profile agent`; this does not prove a running host loaded it or that the MCP runtime is live."
+        )
+    } else {
+        format!(
+            "{evidence_label} does not report a resolvable enabled stdio command with `serve --profile agent`."
+        )
+    };
+
+    HarnessMcpServerCheck {
+        checked: true,
+        evidence_kind: Some(evidence_kind.to_string()),
+        source,
+        server_found: true,
+        enabled,
+        transport,
+        command,
+        args,
+        env_keys: env_keys.into_iter().collect(),
+        executable_path,
+        executable_sha256,
+        agent_profile_launch_configured,
+        resolved_configuration_verified,
+        running_host_loaded_verified: false,
+        live_runtime_verified: false,
+        message,
+    }
+}
+
+fn redact_sensitive_args(args: &[String]) -> Vec<String> {
+    let mut redact_next = false;
+    args.iter()
+        .map(|arg| {
+            if redact_next {
+                redact_next = false;
+                return "<redacted>".to_string();
+            }
+            if let Some((name, _)) = arg.split_once('=') {
+                if is_sensitive_arg_name(name) {
+                    return format!("{name}=<redacted>");
+                }
+            }
+            if is_sensitive_arg_name(arg) {
+                redact_next = true;
+            }
+            arg.clone()
+        })
+        .collect()
+}
+
+fn is_sensitive_arg_name(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    [
+        "secret",
+        "token",
+        "password",
+        "credential",
+        "api-key",
+        "api_key",
+        "authorization",
+    ]
+    .iter()
+    .any(|needle| value.contains(needle))
+}
+
+fn resolve_configured_executable(command: &str) -> Option<PathBuf> {
+    let path = Path::new(command);
+    let resolved = if path.components().count() > 1 {
+        path.to_path_buf()
+    } else {
+        resolve_executable_on_path(command)?
+    };
+    resolved
+        .is_file()
+        .then(|| fs::canonicalize(&resolved).unwrap_or(resolved))
+}
+
+fn has_agent_profile_serve_args(args: &[String]) -> bool {
+    if args.first().map(String::as_str) != Some("serve")
+        || args
+            .iter()
+            .any(|arg| matches!(arg.as_str(), "--http" | "--memory"))
+    {
+        return false;
+    }
+    args.windows(2)
+        .any(|pair| pair[0] == "--profile" && pair[1] == "agent")
+        || args.iter().any(|arg| arg == "--profile=agent")
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn check_harness_host(harness: HarnessKind) -> HarnessHostCheck {
+    let executable_name = match harness {
+        HarnessKind::ClaudeCode => Some("claude"),
+        HarnessKind::Codex => Some("codex"),
+        _ => None,
+    };
+    let Some(executable_name) = executable_name else {
+        return HarnessHostCheck {
+            checked: false,
+            executable_path: None,
+            executable_sha256: None,
+            version: None,
+            effective_configuration_verified: false,
+            message: "No first-class host executable probe is defined for this harness."
+                .to_string(),
+        };
+    };
+    let Some(path) = resolve_executable_on_path(executable_name) else {
+        return HarnessHostCheck {
+            checked: true,
+            executable_path: None,
+            executable_sha256: None,
+            version: None,
+            effective_configuration_verified: false,
+            message: format!("Host executable '{executable_name}' was not found on PATH."),
+        };
+    };
+
+    let canonical_path = fs::canonicalize(&path).unwrap_or(path);
+    let executable_sha256 = sha256_file(&canonical_path).ok();
+    let version = Command::new(&canonical_path)
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|output| {
+            let output = if output.stdout.is_empty() {
+                output.stderr
+            } else {
+                output.stdout
+            };
+            String::from_utf8(output)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        });
+
+    HarnessHostCheck {
+        checked: true,
+        executable_path: Some(canonical_path.display().to_string()),
+        executable_sha256,
+        version,
+        effective_configuration_verified: false,
+        message: "Host executable identity is attested, but effective configuration in an already-running host is not verified by static checks.".to_string(),
+    }
+}
+
+fn resolve_executable_on_path(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    for directory in std::env::split_paths(&path) {
+        let candidate = directory.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        #[cfg(windows)]
+        {
+            let candidate = directory.join(format!("{name}.exe"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+fn sha256_file(path: &Path) -> IndexResult<String> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn has_marker(contents: &str) -> bool {
@@ -1869,7 +2418,7 @@ fn claude_settings_status(
         });
     }
 
-    for (event, matcher) in claude_required_hook_events() {
+    for (event, matcher) in claude_required_hook_events(enforcement_profile) {
         let name = match matcher {
             Some(matcher) => format!("{event}:{matcher}"),
             None => event.to_string(),
@@ -2088,8 +2637,9 @@ fn warn_for_settings_target(
             )?;
             if let Some(settings) = local.settings {
                 let permissions = claude_engram_permissions(&settings);
-                let has_hooks =
-                    claude_required_hook_events().into_iter().any(|(event, matcher)| {
+                let has_hooks = claude_required_hook_events(enforcement_profile)
+                    .into_iter()
+                    .any(|(event, matcher)| {
                         claude_settings_has_hook(&settings, event, matcher, enforcement_profile)
                     });
                 if !permissions.is_empty() || has_hooks {
@@ -2147,11 +2697,26 @@ fn merge_claude_hooks(
         settings["hooks"] = json!({});
     }
     let mut changed = false;
+    changed |= remove_claude_generated_mcp_hooks(settings, enforcement_profile);
     changed |= remove_claude_hook_handler(
         settings,
         "SessionEnd",
         None,
         &claude_mcp_hook_handler("SessionEnd", enforcement_profile),
+    );
+    changed |= remove_stale_claude_dispatch_hook_handlers(
+        settings,
+        "SessionStart",
+        Some("startup|resume|compact"),
+        "engram-session-start.sh",
+        CLAUDE_HOOK_COMMAND,
+    );
+    changed |= remove_stale_claude_dispatch_hook_handlers(
+        settings,
+        "SessionEnd",
+        None,
+        "engram-session-end.sh",
+        CLAUDE_SESSION_END_HOOK_COMMAND,
     );
     changed |= remove_claude_hook_handler(
         settings,
@@ -2183,7 +2748,7 @@ fn merge_claude_hooks(
             "timeout": 10
         }),
     );
-    for (event, matcher) in claude_mcp_hook_events() {
+    for (event, matcher) in claude_mcp_hook_events(enforcement_profile) {
         changed |= ensure_claude_hook(
             settings,
             event,
@@ -2201,6 +2766,39 @@ fn merge_claude_hooks(
             "timeout": 15
         }),
     );
+    changed
+}
+
+fn remove_claude_generated_mcp_hooks(
+    settings: &mut Value,
+    enforcement_profile: HarnessEnforcementProfile,
+) -> bool {
+    let mut changed = false;
+    let desired_events = claude_mcp_hook_events(enforcement_profile);
+    let mut known_events = Vec::new();
+    for profile in [
+        HarnessEnforcementProfile::Soft,
+        HarnessEnforcementProfile::Graduated,
+        HarnessEnforcementProfile::Strict,
+    ] {
+        for (event, matcher) in claude_mcp_hook_events(profile) {
+            if !known_events.contains(&(event, matcher)) {
+                known_events.push((event, matcher));
+            }
+        }
+    }
+    changed |= remove_claude_generated_mcp_hook_handlers(settings, "SessionEnd", None, None);
+    for (event, matcher) in known_events {
+        let desired_handler = desired_events
+            .contains(&(event, matcher))
+            .then(|| claude_mcp_hook_handler(event, enforcement_profile));
+        changed |= remove_claude_generated_mcp_hook_handlers(
+            settings,
+            event,
+            matcher,
+            desired_handler.as_ref(),
+        );
+    }
     changed
 }
 
@@ -2260,10 +2858,10 @@ fn remove_claude_hook_handler(
     matcher: Option<&str>,
     handler: &Value,
 ) -> bool {
-    let Some(groups) = settings
-        .pointer_mut(&format!("/hooks/{event}"))
-        .and_then(Value::as_array_mut)
-    else {
+    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return false;
+    };
+    let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) else {
         return false;
     };
 
@@ -2290,7 +2888,126 @@ fn remove_claude_hook_handler(
             .map(|hooks| !hooks.is_empty())
             .unwrap_or(true)
     });
-    changed || groups.len() != before
+    changed |= groups.len() != before;
+    if groups.is_empty() {
+        hooks.remove(event);
+        changed = true;
+    }
+    changed
+}
+
+fn remove_stale_claude_dispatch_hook_handlers(
+    settings: &mut Value,
+    event: &str,
+    matcher: Option<&str>,
+    hook_file: &str,
+    keep_command: &str,
+) -> bool {
+    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return false;
+    };
+    let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) else {
+        return false;
+    };
+
+    let mut changed = false;
+    for group in groups.iter_mut() {
+        let matcher_matches = match matcher {
+            Some(expected) => group.get("matcher").and_then(Value::as_str) == Some(expected),
+            None => group.get("matcher").is_none(),
+        };
+        if !matcher_matches {
+            continue;
+        }
+        if let Some(group_hooks) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+            let before = group_hooks.len();
+            group_hooks.retain(|handler| {
+                let Some(command) = handler.get("command").and_then(Value::as_str) else {
+                    return true;
+                };
+                command == keep_command
+                    || handler.get("type").and_then(Value::as_str) != Some("command")
+                    || !command.contains(hook_file)
+                    || !command.contains("project_hook=")
+                    || !command.contains("home_hook=")
+                    || !command.contains("Engram ")
+            });
+            changed |= group_hooks.len() != before;
+        }
+    }
+    let before = groups.len();
+    groups.retain(|group| {
+        group
+            .get("hooks")
+            .and_then(Value::as_array)
+            .map(|hooks| !hooks.is_empty())
+            .unwrap_or(true)
+    });
+    changed |= groups.len() != before;
+    if groups.is_empty() {
+        hooks.remove(event);
+        changed = true;
+    }
+    changed
+}
+
+fn remove_claude_generated_mcp_hook_handlers(
+    settings: &mut Value,
+    event: &str,
+    matcher: Option<&str>,
+    keep_handler: Option<&Value>,
+) -> bool {
+    let Some(hooks) = settings.get_mut("hooks").and_then(Value::as_object_mut) else {
+        return false;
+    };
+    let Some(groups) = hooks.get_mut(event).and_then(Value::as_array_mut) else {
+        return false;
+    };
+
+    let mut changed = false;
+    for group in groups.iter_mut() {
+        let matcher_matches = match matcher {
+            Some(expected) => group.get("matcher").and_then(Value::as_str) == Some(expected),
+            None => group.get("matcher").is_none(),
+        };
+        if !matcher_matches {
+            continue;
+        }
+        if let Some(group_hooks) = group.get_mut("hooks").and_then(Value::as_array_mut) {
+            let before = group_hooks.len();
+            group_hooks.retain(|existing| {
+                !is_claude_generated_mcp_hook_handler(existing, event)
+                    || keep_handler == Some(existing)
+            });
+            changed |= group_hooks.len() != before;
+        }
+    }
+    let before = groups.len();
+    groups.retain(|group| {
+        group
+            .get("hooks")
+            .and_then(Value::as_array)
+            .map(|hooks| !hooks.is_empty())
+            .unwrap_or(true)
+    });
+    changed |= groups.len() != before;
+    if groups.is_empty() {
+        hooks.remove(event);
+        changed = true;
+    }
+    changed
+}
+
+fn is_claude_generated_mcp_hook_handler(handler: &Value, event: &str) -> bool {
+    handler.get("type").and_then(Value::as_str) == Some("mcp_tool")
+        && handler.get("server").and_then(Value::as_str) == Some("engram")
+        && handler.get("tool").and_then(Value::as_str) == Some("harness")
+        && handler.pointer("/input/action").and_then(Value::as_str) == Some("hook_event")
+        && handler.pointer("/input/harness").and_then(Value::as_str) == Some("claude_code")
+        && handler
+            .pointer("/input/hook_event_name")
+            .and_then(Value::as_str)
+            == Some(event)
 }
 
 fn claude_settings_has_hook(
@@ -2343,35 +3060,43 @@ fn claude_required_permissions() -> &'static [&'static str] {
         "mcp__engram__orient",
         "mcp__engram__memory",
         "mcp__engram__harness",
-        "mcp__engram__lint",
-        "mcp__engram__graph",
-        "mcp__engram__handoff",
         "mcp__engram__obligations",
-        "mcp__engram__telemetry",
-        "mcp__engram__vault",
-        "mcp__engram__digest",
         "mcp__engram__repo",
+        "mcp__engram__search",
     ]
 }
 
-fn claude_required_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
+fn claude_required_hook_events(
+    enforcement_profile: HarnessEnforcementProfile,
+) -> Vec<(&'static str, Option<&'static str>)> {
     let mut events = vec![("SessionStart", Some("startup|resume|compact"))];
-    events.extend(claude_mcp_hook_events());
+    events.extend(claude_mcp_hook_events(enforcement_profile));
     events.push(("SessionEnd", None));
     events
 }
 
-fn claude_mcp_hook_events() -> Vec<(&'static str, Option<&'static str>)> {
-    vec![
+fn claude_mcp_hook_events(
+    enforcement_profile: HarnessEnforcementProfile,
+) -> Vec<(&'static str, Option<&'static str>)> {
+    let mut events = vec![
+        ("PreCompact", Some("manual|auto")),
+        ("PostCompact", Some("manual|auto")),
+    ];
+    if enforcement_profile == HarnessEnforcementProfile::Soft {
+        return events;
+    }
+    events.extend([
         ("UserPromptSubmit", None),
         ("PreToolUse", Some("*")),
-        ("PostToolUse", Some("mcp__engram__orient")),
+        (
+            "PostToolUse",
+            Some("mcp__engram__orient|mcp__engram__memory"),
+        ),
         ("PostToolUse", Some("Write|Edit|MultiEdit")),
         ("PostToolUseFailure", Some("*")),
         ("Stop", None),
-        ("PreCompact", Some("manual|auto")),
-        ("PostCompact", Some("manual|auto")),
-    ]
+    ]);
+    events
 }
 
 fn claude_mcp_hook_handler(event: &str, enforcement_profile: HarnessEnforcementProfile) -> Value {
@@ -2392,6 +3117,7 @@ fn claude_mcp_hook_handler(event: &str, enforcement_profile: HarnessEnforcementP
             "tool_name": "${tool_name}",
             "tool_error": "${error}",
             "tool_input_command": "${tool_input.command}",
+            "tool_input_action": "${tool_input.action}",
             "file_path": "${tool_input.file_path}",
             "last_assistant_message": "${last_assistant_message}",
             "compact_summary": "${compact_summary}",
@@ -2416,7 +3142,10 @@ fn resolve_root(root: Option<&Path>) -> IndexResult<PathBuf> {
 }
 
 fn set_executable_if_hook(path: &Path, kind: HarnessAdapterKind) -> IndexResult<()> {
-    if kind != HarnessAdapterKind::ClaudeHook {
+    if !matches!(
+        kind,
+        HarnessAdapterKind::ClaudeHook | HarnessAdapterKind::CodexHook
+    ) {
         return Ok(());
     }
 
@@ -2455,6 +3184,94 @@ fn harness_contract_sentence(
 }
 
 const CONCRETE_MEMORY_TRIGGERS: &str = "Treat JIRA keys, PRs/issues, known entities/services, project-state claims, final responses, and durable discoveries as concrete Engram triggers.";
+const RELATED_RETRIEVAL_SCOPE_EXAMPLE: &str =
+    r#"scope={relevance_mode:"related", project:..., cwd:...}"#;
+const LOCAL_PROCEDURE_SCOPE_EXAMPLE: &str = r#"scope={relevance_mode:"local", cwd:...}"#;
+const TASK_SCOPE_GUIDANCE: &str = concat!(
+    "Pass `task=<exact task name or tracker key>` to `orient` when task identity is known; ",
+    "task names require an explicit project. If task identity or its project relationship cannot ",
+    "be resolved, ask instead of applying task-scoped memory."
+);
+const VERIFIED_PROCEDURE_GUIDANCE: &str = concat!(
+    "Every actionable repository task has a mandatory procedure route, even when the user does ",
+    "not say earlier, previous, remembered, or learned. Requests to handle, run, debug, test, ",
+    "build, deploy, modify, or determine how to perform a repository-local operation, and requests ",
+    "to use durable procedure memory, are actionable. ",
+    "Use local procedure matching itself as the task-start identity boundary for actionable ",
+    "repository work. Before checking native memory or exploring commands, call ",
+    "`memory(action=procedure_match, query=<a bounded task-focused excerpt from the current user request>, ",
+    "scope={relevance_mode:\"local\", cwd:...}, conditions={...})`. The `query` is required and ",
+    "must be at most 512 characters. Preserve concrete operation nouns, identifiers, and failure ",
+    "text verbatim; omit unrelated meta/output instructions and secret values. The query is ",
+    "retrieval text, not an authorization channel. ",
+    "Pass the host's exact current `cwd`; do not call `orient` first solely to obtain it, and do not ",
+    "replace it with the repository checkout root. The match response returns the structured ",
+    "repository/project/component identity and authorization boundary. If lean `orient` already ran ",
+    "for another reason, pass that same original cwd. ",
+    "`memory(action=list)` is never a substitute for procedure matching. ",
+    "Project ambiguity blocks project/task-scoped memory only; it does not block this ",
+    "repository-local procedure match. Pass only exact conditions already observed for prerequisites ",
+    "that have no declarative source. Procedure matching is force-local at the API boundary; never ",
+    "request related or global procedure matching. Local procedure matching authorizes ",
+    "global/user and directly ",
+    "applicable repository memory without inventing a work project; supply a canonical project ",
+    "only for project/task guidance. ",
+    "For source-backed prerequisites, Engram reads the configured Git-tracked file from the ",
+    "resolved current checkout and returns value-redacted `condition_observations`; caller text ",
+    "cannot override those observations. Execute only returned procedures. If Engram abstains ",
+    "because evidence, scope, freshness, or unsourced prerequisites do not match, use ",
+    "`required_condition_keys` and `next_actions` to search ",
+    "from the returned `current_checkout_root` through authoritative local repository ",
+    "configuration or tool output for the exact keys. After locating a file-backed value, read ",
+    "that exact source path in a separate direct tool call from `current_checkout_root`, then ",
+    "retry with exact observed values. Do not guess; do not apply the rejected procedure. ",
+    "An empty `procedures` list proves only that Engram found no applicable verified procedure. ",
+    "Use the returned structured `identity` as the checkout and authorization boundary: ",
+    "rely only on non-null identity fields returned by the same call, while ",
+    "`identity.project.status` states whether project-scoped retrieval is authorized. If ",
+    "`suggested_operation_evidence` is present, treat it as a required host-action protocol, not ",
+    "an optional suggestion. When `required_before_final_abstention=true`, the next tool call must ",
+    "read its absolute `resolved_path`, which Engram canonicalized under ",
+    "`identity.repository.checkout_root`, unchanged exactly once. Do this before interpreting ",
+    "`abstained`, before asking for project confirmation, and before final output, including when ",
+    "the user requested durable-memory-only handling. ",
+    "`allowed_when_project_requires_confirmation=true` means this repository-local evidence read ",
+    "remains authorized despite unresolved project scope. ",
+    "`authorizes_procedure_execution=false` means the read never permits executing a remembered ",
+    "procedure. Treat its checkout-relative `path` as provenance only and do not substitute a ",
+    "relative path. Treat it only as source evidence after that direct read. Otherwise, ",
+    "before final abstention on an actionable repository task, make at most one ",
+    "bounded read-only lookup for the directly relevant tracked runbook, configuration, or source. ",
+    "Do not re-read identity files. Do not re-derive a project from the repository name or directory ",
+    "basename, broaden outside the checkout, or execute candidate commands. If project status is ",
+    "`requires_confirmation`, report the material ambiguity and ask the user. ",
+    "Abstain from executing a remembered procedure, but report the exact local evidence and next ",
+    "action. ",
+    "Execute ",
+    "repository-scoped commands from the returned `current_checkout_root`; stored procedure ",
+    "`scope.local_path` and evidence paths are provenance only and must never redirect execution ",
+    "to an older checkout. A successful attempt may be stored as ",
+    "a procedure candidate, ",
+    "but do not claim it is verified until its machine-readable execution receipt is verified."
+);
+const SCOPED_SEARCH_GUIDANCE: &str = concat!(
+    "Use `search(query=..., project=..., cwd=..., relevance_mode=\"related\")` only when ",
+    "orientation is insufficient. Do not broaden retrieval unless the user explicitly requests it."
+);
+const DURABLE_CAPTURE_GUIDANCE: &str = concat!(
+    "After a user-confirmed decision or a non-obvious source-grounded discovery, use ",
+    "`memory(action=add)` with the narrowest project/repository/task scope, writer provenance, ",
+    "and file, tool, commit, or URL evidence. Every add requires `kind`, `title`, `content`, ",
+    "`origin`, `scope_type`, `writer_harness`, `model_provider`, and `model`; also pass the ",
+    "scope selector required by `scope_type` (repository scope needs `remote_url` or ",
+    "`local_path`). A retrieval `scope` object does not replace these write-scope fields. For ",
+    "`kind=procedure`, also pass the structured `procedure` card with task, commands, ",
+    "prerequisites, failure signatures, verification command, expected exit code, and output ",
+    "marker. When a prerequisite has a stable scalar in a Git-tracked TOML file, map its exact ",
+    "key through `prerequisite_sources` so Engram can re-read it from future checkouts. Store a ",
+    "compact handoff memory only when future sessions need a concrete next ",
+    "action. Never store credentials, tokens, private keys, or other secrets."
+);
 
 fn claude_memory_session_command(enforcement_profile: HarnessEnforcementProfile) -> String {
     let contract = harness_contract_sentence(enforcement_profile, true);
@@ -2465,27 +3282,18 @@ fn claude_memory_session_command(enforcement_profile: HarnessEnforcementProfile)
 Use this command when a Claude Code session needs persistent project memory.
 
 Lifecycle contract ({enforcement_profile}):
-- At task/session start, call `orient` with the project, cwd, prompt, harness, and
-  `response_shape="lean"`.
+- At task/session start, use the procedure route below as the identity boundary for actionable
+  repository work. For other tasks, call `orient` with current cwd, prompt, `agent=claude_code`,
+  and `response_shape="lean"`; supply project only when its canonical identity is known.
+- {TASK_SCOPE_GUIDANCE}
+- {VERIFIED_PROCEDURE_GUIDANCE}
+- For requests other than repository-local procedure matching, if project/repository resolution is
+  ambiguous, stop and ask the user instead of applying project/task-scoped memory.
 - {CONCRETE_MEMORY_TRIGGERS}
-- Keep the returned `trace_id` from `orient` or `search`; before final response, call
-  `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
-  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
-  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
-  memory influenced behavior.
-- Before major decisions, call `memory(action=changes_since)` with the orientation cursor.
-- After non-obvious discoveries, record source-grounded memory or a session event.
-- When the current method, plan, or next action should survive resume, use
-  `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- Before final response, call `changes_since`; if relevant updates appeared, account for them.
-- Before final response, call `obligations(action=detect, project=..., cwd=...)` and
-  `obligations(action=doctor, project=..., cwd=...)`; resolve open obligations or report
-  explicit skip reasons.
-- Before context compaction, context transition, or any expected loss of conversation state,
-  update `handoff` and record/commit compact durable memory for future sessions.
-- At session end, compile a handoff and create a knowledge commit candidate.
+- {SCOPED_SEARCH_GUIDANCE}
+- {DURABLE_CAPTURE_GUIDANCE}
+- Use `memory(action=archive)` for obsolete history. Use `memory(action=forget)` only for an exact
+  item ID after explicit confirmation because deletion is irreversible.
 - In commit workflows, consult memory for relevant preferences, rules, and limitations first.
 
 {contract}
@@ -2498,23 +3306,30 @@ fn claude_resume_session_command() -> String {
         r#"{MARKER_MD}
 # Resume Engram Session
 
-1. Call `orient` with the explicit project, current cwd, `agent=claude_code`, and
-   `response_shape="lean"`.
-2. Read the returned context pack, ambiguities, and memory cursor.
-3. Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
-   outcome, gap, and attribution fields before final response when memory quality can be judged.
-   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
-   returned memory considered but not used. Include `stale_memory_ids` and
-   `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
-4. If a rolling handoff exists, inspect `handoff(action=get)`.
-5. Check `memory(action=changes_since)` during the session before major decisions.
-6. Check `obligations(action=detect)` for document, tool-failure, source-reading, and design
-   obligations; close or explicitly skip open items before final response.
-7. Store only source-grounded decisions, rules, limitations, and non-obvious discoveries.
-   Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
-   guidance that should surface on the next resume.
-8. If this is a resume after compaction, first inspect `handoff(action=get)` and recent
-   `memory(action=changes_since)` before continuing.
+1. Call `orient` with current cwd, `agent=claude_code`, and `response_shape="lean"`; supply
+   project only when its canonical identity is known.
+   {TASK_SCOPE_GUIDANCE}
+2. Read the selected scope, compact context, ambiguities, and candidate IDs. Ask the user before
+   project/task-scoped memory if that scope cannot be resolved safely; project ambiguity alone does
+   not block the repository-local procedure route in step 4.
+3. Use scoped `search` only when the compact orientation lacks required evidence.
+4. For every actionable repository task, even when the project is unresolved and even when the
+   user does not say remembered/learned, call
+   `memory(action=procedure_match, query=<a bounded task-focused excerpt from the current user request>,
+   {LOCAL_PROCEDURE_SCOPE_EXAMPLE}, conditions=...)`. The query is required and must be at most
+   512 characters. Preserve concrete operation nouns, identifiers, and failure text verbatim;
+   omit unrelated meta/output instructions and secret values. The query is retrieval text, not an
+   authorization channel. Project ambiguity
+   blocks project/task memory only, not repository-local procedure matching. `memory(action=list)`
+   is not a substitute. Copy the exact cwd returned by `orient`; do not replace it with the
+   checkout root. Execute only a returned verified match. On no-result, read exactly one
+   absolute `suggested_operation_evidence.resolved_path` unchanged when present. When
+   `required_before_final_abstention=true`, perform that read before interpreting `abstained`,
+   asking for project confirmation, or returning final output. The read is repository-local
+   evidence collection, not procedure execution. Otherwise keep the bounded local fallback. Do
+   not substitute the checkout-relative `path` for the host read.
+5. Store only compact, evidenced durable memory that a future session genuinely needs. Never
+   store secrets.
 "#
     )
 }
@@ -2525,14 +3340,11 @@ fn claude_end_session_command() -> String {
 # End Engram Session
 
 Before ending:
-- Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect, project=..., cwd=...)` and
-  `obligations(action=doctor, project=..., cwd=...)`.
-- Resolve open obligations or state explicit skip reasons in the handoff.
-- Update or compile `handoff` with completed work, open decisions, next actions, and risks.
-- If durable memory changed, prepare a `memory(action=commit)` candidate.
-- Use this same flow before context compaction or any context transition.
-- Leave migration and digest promotions review-gated; do not auto-promote orphan data.
+- Store a project- or repository-scoped `kind=handoff` memory only if another session needs a
+  concrete next action, unresolved decision, or material risk.
+- Store source-grounded decisions and discoveries separately with writer provenance and evidence.
+- Do not copy the transcript, routine progress, command output, or secrets into memory.
+- Archive obsolete memory; permanently forget only an exact item after explicit confirmation.
 "#
     )
 }
@@ -2553,22 +3365,21 @@ if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
   CWD="${{CLAUDE_PROJECT_DIR:-}}"
 fi
 
-PROJECT_NAME=""
-if [ -n "$CWD" ] && [ "$CWD" != "null" ]; then
-  PROJECT_NAME=$(basename "$CWD")
-fi
-
-CONTEXT="<engram_session_activation source=\"$SOURCE\" project=\"$PROJECT_NAME\" session_id=\"$SESSION_ID\">
+CONTEXT_BODY=$(cat <<'ENGRAM_CONTEXT'
 Engram is the durable Memory OS for this Claude Code session.
-Before making claims or edits, call the Engram MCP orient tool with project, cwd, prompt, agent=claude_code, and response_shape=lean.
+For actionable repository work, use the local procedure_match route below as the task-start identity boundary before any shell, filesystem, native-memory, repository-inspection, or non-Engram MCP action. For other tasks, call the Engram MCP orient tool with the activation cwd, prompt, agent=claude_code, and response_shape=lean. The activation cwd is already supplied; do not run `pwd` first. Supply project only when its canonical identity is known; never infer it from the directory basename.
+{TASK_SCOPE_GUIDANCE}
 {CONCRETE_MEMORY_TRIGGERS}
-Keep the returned memory cursor and use memory(action=changes_since) before major decisions and before final response.
-Keep returned trace_id values from orient/search and submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids before final response when those outcomes or attribution judgments can be made.
-Use used_memory_ids for returned memory that shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned memory influenced behavior.
-Use obligations(action=detect) for source/design reading, durable document disposition, failed tool recovery, verification, handoff, and commit preference checks.
-When the current method, plan, or next action should survive resume, use memory(action=capture_current_plan) with compact content and file/tool/manual-review evidence.
-Before context compaction or session end, update handoff and commit compact durable memory when useful.
-{contract} Resolve obligations or state explicit skip reasons; do not fabricate missing memory.
+{VERIFIED_PROCEDURE_GUIDANCE}
+For requests other than repository-local procedure matching, ask when project/task scope is
+ambiguous. Use scoped search only when orientation is insufficient.
+{DURABLE_CAPTURE_GUIDANCE}
+{contract} Do not fabricate missing memory or turn routine session history into durable context.
+ENGRAM_CONTEXT
+)
+
+CONTEXT="<engram_session_activation source=\"$SOURCE\" cwd=\"$CWD\" session_id=\"$SESSION_ID\">
+$CONTEXT_BODY
 </engram_session_activation>"
 
 CONTEXT_JSON=$(printf '%s' "$CONTEXT" | jq -Rs .)
@@ -2586,13 +3397,13 @@ EOF
 fn claude_stop_nudge_hook(enforcement_profile: HarnessEnforcementProfile) -> String {
     let final_message = match enforcement_profile {
         HarnessEnforcementProfile::Soft => {
-            "Engram final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); submit telemetry(action=submit_feedback) with task_success, preference_adhered, repeated_context_questions, bad_memory_used, missing_context, used_memory_ids, rejected_memory_ids, stale_memory_ids, and wrong_scope_memory_ids for relevant trace_id values when those outcomes or attribution judgments can be made; resolve or explicitly skip open obligations, update handoff if context would be lost, then answer."
+            "Engram final-response check is advisory: if this hook surfaced open obligations, resolve them or record an explicit skip reason. Store only compact, evidenced durable memory that a future session genuinely needs, then answer."
         }
         HarnessEnforcementProfile::Graduated => {
-            "Engram graduated final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations. Claude MCP Stop enforcement blocks once when open obligations remain."
+            "Engram graduated final-response check: call obligations(action=doctor, scope={relevance_mode:\"related\", project:..., cwd:...}), then resolve or explicitly skip open obligations. Claude MCP Stop enforcement blocks once when open obligations remain."
         }
         HarnessEnforcementProfile::Strict => {
-            "Engram strict final-response check: call memory(action=changes_since), obligations(action=detect, project=..., cwd=...), and obligations(action=doctor, project=..., cwd=...); resolve or explicitly skip open obligations. Claude MCP Stop enforcement keeps blocking while obligations remain."
+            "Engram strict final-response check: call obligations(action=doctor, scope={relevance_mode:\"related\", project:..., cwd:...}), then resolve or explicitly skip open obligations. Claude MCP Stop enforcement keeps blocking while obligations remain."
         }
     };
     format!(
@@ -2711,56 +3522,47 @@ printf '%s\n' "$HOOK_JSON"
 }
 
 fn claude_settings_snippet(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let mut hooks = serde_json::Map::new();
+    hooks.insert(
+        "SessionStart".to_string(),
+        json!([{
+            "matcher": "startup|resume|compact",
+            "hooks": [{
+                "type": "command",
+                "command": CLAUDE_HOOK_COMMAND,
+                "timeout": 10
+            }]
+        }]),
+    );
+    for (event, matcher) in claude_mcp_hook_events(enforcement_profile) {
+        let entry = hooks.entry(event.to_string()).or_insert_with(|| json!([]));
+        let mut group = json!({
+            "hooks": [claude_mcp_hook_handler(event, enforcement_profile)]
+        });
+        if let Some(matcher) = matcher {
+            group["matcher"] = Value::String(matcher.to_string());
+        }
+        entry
+            .as_array_mut()
+            .expect("generated hook group must be an array")
+            .push(group);
+    }
+    hooks.insert(
+        "SessionEnd".to_string(),
+        json!([{
+            "hooks": [{
+                "type": "command",
+                "command": CLAUDE_SESSION_END_HOOK_COMMAND,
+                "timeout": 15
+            }]
+        }]),
+    );
+
     serde_json::to_string_pretty(&json!({
         "permissions": {
             "allow": claude_required_permissions()
         },
-        "hooks": {
-            "SessionStart": [{
-                "matcher": "startup|resume|compact",
-                "hooks": [{
-                    "type": "command",
-                    "command": CLAUDE_HOOK_COMMAND,
-                    "timeout": 10
-                }]
-            }],
-            "UserPromptSubmit": [{
-                "hooks": [claude_mcp_hook_handler("UserPromptSubmit", enforcement_profile)]
-            }],
-            "PreToolUse": [{
-                "matcher": "*",
-                "hooks": [claude_mcp_hook_handler("PreToolUse", enforcement_profile)]
-            }],
-            "PostToolUse": [{
-                "matcher": "mcp__engram__orient",
-                "hooks": [claude_mcp_hook_handler("PostToolUse", enforcement_profile)]
-            }, {
-                "matcher": "Write|Edit|MultiEdit",
-                "hooks": [claude_mcp_hook_handler("PostToolUse", enforcement_profile)]
-            }],
-            "PostToolUseFailure": [{
-                "matcher": "*",
-                "hooks": [claude_mcp_hook_handler("PostToolUseFailure", enforcement_profile)]
-            }],
-            "Stop": [{
-                "hooks": [claude_mcp_hook_handler("Stop", enforcement_profile)]
-            }],
-            "PreCompact": [{
-                "matcher": "manual|auto",
-                "hooks": [claude_mcp_hook_handler("PreCompact", enforcement_profile)]
-            }],
-            "PostCompact": [{
-                "matcher": "manual|auto",
-                "hooks": [claude_mcp_hook_handler("PostCompact", enforcement_profile)]
-            }],
-            "SessionEnd": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": CLAUDE_SESSION_END_HOOK_COMMAND,
-                    "timeout": 15
-                }]
-            }]
-        }
+        "hooks": hooks
     }))
     .expect("Claude settings snippet should serialize")
 }
@@ -2768,72 +3570,110 @@ fn claude_settings_snippet(enforcement_profile: HarnessEnforcementProfile) -> St
 fn codex_memory_session_skill(enforcement_profile: HarnessEnforcementProfile) -> String {
     let contract = harness_contract_sentence(enforcement_profile, false);
     format!(
-        r#"{MARKER_MD}
+        r#"---
+name: engram-memory-session
+description: Use whenever Codex is asked to recall or run an earlier, previous, remembered, or learned procedure, or needs scoped persistent engineering context, durable decisions, or session handoffs from Engram.
+---
+{MARKER_MD}
 # Engram Memory Session
 
 Use when Codex is working in a repo or project with persistent Engram memory.
 
 Workflow ({enforcement_profile}):
-- Start by calling `orient` with project, cwd, prompt, `agent=codex`, and
-  `response_shape="lean"`.
+- For actionable repository work, use the procedure route below as the task-start identity
+  boundary. For other tasks, start by calling `orient` with current cwd, prompt, `agent=codex`, and
+  `response_shape="lean"`; supply project only when its canonical identity is known.
+- {TASK_SCOPE_GUIDANCE}
+- If project/repository resolution is ambiguous, stop and ask the user instead of applying memory.
 - {CONCRETE_MEMORY_TRIGGERS}
-- Treat the returned memory cursor as the baseline for this turn.
-- Keep the returned `trace_id` from `orient` or `search`; before final response, call
-  `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
-  `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
-  `rejected_memory_ids`, plus `stale_memory_ids` and `wrong_scope_memory_ids` when those
-  outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
-  shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
-  memory influenced behavior.
-- Before a major decision or final response, call `memory(action=changes_since)`.
-- Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
-- When the current method, plan, or next action should survive resume, use
-  `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
-- When you create or update a durable project document, call
-  `obligations(action=detect, write=true, project=..., cwd=...)` so the document disposition is
-  persisted instead of only observed. Resolve each document obligation by indexing it with
-  `docs(action=index)`, registering it with `knowledge(action=register)`, recording compact memory
-  with `memory(action=capture_current_plan)`, linking it in `handoff`, or explicitly skipping it
-  with a reason.
-- Before final response, run `obligations(action=detect, write=true, project=..., cwd=...)` and
-  `obligations(action=doctor, project=..., cwd=...)`; resolve or explicitly skip open
-  obligations. If a document changes again after resolution, rerun detection so a fresh content
-  state gets its own disposition.
-- Before Codex context compaction or any expected context loss, update `handoff` and record or
-  commit compact durable memory so the next Codex session can resume without the transcript.
+- {VERIFIED_PROCEDURE_GUIDANCE}
+- {SCOPED_SEARCH_GUIDANCE}
+- {DURABLE_CAPTURE_GUIDANCE}
+- Use `memory(action=archive)` for obsolete history. Use `memory(action=forget)` only for an exact
+  item ID after explicit confirmation because deletion is irreversible.
 - For commit messages, check memory for user/project commit preferences first.
-- If handoff or durable memory changes are needed, use `handoff` and `memory(action=commit)`.
 
 {contract}
 "#
     )
 }
 
+fn codex_session_start_hook(enforcement_profile: HarnessEnforcementProfile) -> String {
+    let contract = harness_contract_sentence(enforcement_profile, false);
+    format!(
+        r#"#!/usr/bin/env bash
+{MARKER_SH}
+set -u
+
+while IFS= read -r _engram_hook_input; do :; done
+
+printf '%s\n' \
+  'Engram startup context (advisory):' \
+  '- For non-actionable work, call Engram MCP orient before repository shell exploration with the current cwd and prompt, agent=codex, response_shape=lean; supply project only when its canonical identity is known.' \
+  '- Every actionable repository task uses one bounded local procedure match as its task-start identity boundary, even without remembered/learned wording. Call memory(action=procedure_match, query=<a task-focused excerpt of at most 512 characters copied from the current user request>, {LOCAL_PROCEDURE_SCOPE_EXAMPLE}, conditions=<only exact already-observed unsourced prerequisites>). Preserve concrete operation nouns, identifiers, and failure text verbatim; omit unrelated meta/output instructions and secret values. The query is retrieval text, not an authorization channel. memory(action=list) is not a substitute, and do not call orient first solely to obtain cwd.' \
+  '- Pass the host exact current cwd to procedure_match; do not replace it with the repository checkout root. The match response supplies structured repository, project, and component identity.' \
+  '- Source-backed prerequisites are read deterministically by Engram from Git-tracked files in current_checkout_root and reported as value-redacted condition_observations; caller text cannot override them.' \
+  '- Execute only a returned verified procedure. If rejected for unsourced prerequisites, do not apply it: use required_condition_keys and next_actions, search authoritative repository files from the returned current_checkout_root, read each located value, then retry with exact observed values.' \
+  '- An empty procedures list proves only that no applicable verified procedure matched. Use only non-null fields in the returned structured identity. Treat suggested_operation_evidence as a required host-action protocol, not an optional suggestion. When required_before_final_abstention=true, the next tool call must read its absolute resolved_path unchanged exactly once, before interpreting abstained, asking for project confirmation, or returning final output, including for durable-memory-only requests. allowed_when_project_requires_confirmation=true authorizes only that repository-local evidence read; authorizes_procedure_execution=false forbids executing a remembered procedure. Treat the checkout-relative path as provenance only. Otherwise make at most one bounded read-only operation lookup. Do not re-read identity files. Do not re-derive a project or broaden outside the checkout.' \
+  '- Execute repository-scoped commands from current_checkout_root. Stored procedure scope.local_path and evidence paths are provenance only and must never redirect execution to an older checkout.' \
+  '- Never silently apply another project or repository guidance. Stop and ask when repository/project resolution remains materially ambiguous.' \
+  '- {contract}'
+"#
+    )
+}
+
+fn codex_hooks_config() -> String {
+    serde_json::to_string_pretty(&json!({
+        "description": format!(
+            "{MARKER_SH}\nDeterministic, advisory Engram orientation and verified-procedure startup context."
+        ),
+        "hooks": {
+            "SessionStart": [{
+                "matcher": "startup|resume|clear",
+                "hooks": [{
+                    "type": "command",
+                    "command": CODEX_HOOK_COMMAND,
+                    "timeout": 10,
+                    "statusMessage": "Loading Engram startup context",
+                    "additionalContextLimit": 3000
+                }]
+            }]
+        }
+    }))
+    .expect("Codex hooks config should serialize")
+}
+
 fn codex_resume_session_skill() -> String {
     format!(
-        r#"{MARKER_MD}
+        r#"---
+name: engram-resume-session
+description: Use when Codex resumes or continues repository work using Engram orientation, current plans, and handoffs.
+---
+{MARKER_MD}
 # Engram Resume Session
 
 Use when the user asks to continue, resume, or load prior Engram context.
 
 Steps:
 - Call `orient` with `response_shape="lean"` before reading broad files.
+- {TASK_SCOPE_GUIDANCE}
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
-- Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
-  outcome, gap, and attribution fields before final response when memory quality can be judged.
-  Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
-  returned memory considered but not used. Include `stale_memory_ids` and
-  `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
-- Use `handoff(action=get)` when available.
-- Poll `memory(action=changes_since)` before major decisions and final response.
-- Poll `obligations(action=detect, write=true, project=..., cwd=...)` before final response so
-  changed durable documents become persisted obligations, then close them by indexing,
-  registering, recording compact memory, handoff-linking, or explicitly skipping with a reason.
-- Store compact, evidenced memory if the session discovered something future agents need.
-- Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
-  guidance that should surface on the next resume.
-- If resuming after compaction, read `handoff(action=get)` and recent
-  `memory(action=changes_since)` before continuing.
+- Use scoped `search` only when the compact orientation lacks required evidence.
+- For every actionable repository task, call `memory(action=procedure_match, query=<a task-focused
+  excerpt of at most 512 characters copied from the current user request>,
+  {LOCAL_PROCEDURE_SCOPE_EXAMPLE}, conditions=...)`; preserve concrete operation nouns,
+  identifiers, and failure text verbatim, while omitting unrelated meta/output instructions and
+  secret values. The query is retrieval text, not an authorization channel.
+  `memory(action=list)` is not a substitute. Copy the exact cwd returned by `orient`; use exact observed conditions and execute
+  only a returned verified match. On no-result, read exactly one
+  absolute `suggested_operation_evidence.resolved_path` unchanged when present. If
+  `required_before_final_abstention=true`, do that before interpreting `abstained`, asking for
+  project confirmation, or returning final output; this evidence read does not authorize procedure
+  execution. Treat the checkout-relative `path` as provenance only and otherwise keep the bounded
+  local fallback.
+- Store only compact, evidenced durable memory that a future session genuinely needs. A handoff is
+  a project- or repository-scoped `kind=handoff` memory with concrete next actions, not a transcript.
+- Never store secrets. Archive obsolete memory; permanently forget only after exact confirmation.
 "#
     )
 }
@@ -2850,8 +3690,9 @@ You are Gemini CLI working in a repository or project with persistent Engram mem
 This command is invoked as `/engram:memory-session`.
 
 Follow this {enforcement_profile} lifecycle contract:
-- Start by calling the Engram MCP `orient` tool with project, cwd, prompt,
-  `agent=gemini_cli`, and `response_shape="lean"`.
+- Start by calling the Engram MCP `orient` tool with current cwd, prompt, `agent=gemini_cli`, and
+  `response_shape="lean"`; supply project only when its canonical identity is known.
+- {TASK_SCOPE_GUIDANCE}
 - {CONCRETE_MEMORY_TRIGGERS}
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
@@ -2861,13 +3702,15 @@ Follow this {enforcement_profile} lifecycle contract:
   outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
   shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
   memory influenced behavior.
-- Before a major decision or final response, call `memory(action=changes_since)`.
+- Before a major decision or final response, call `memory(action=changes_since,
+  commit_id=<memory_cursor.commit_id>, timestamp=<memory_cursor.timestamp>,
+  {RELATED_RETRIEVAL_SCOPE_EXAMPLE})`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Use `obligations(action=detect, project=..., cwd=...)` when documents change, tools fail,
   or source/design reading is needed; before final response, run
-  `obligations(action=doctor, project=..., cwd=...)` and resolve or explicitly skip open
+  `obligations(action=doctor, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` and resolve or explicitly skip open
   obligations.
 - Before context compaction or any expected context loss, update `handoff` and record or commit
   compact durable memory for the next session.
@@ -2898,15 +3741,18 @@ Steps:
   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
   returned memory considered but not used. Include `stale_memory_ids` and
   `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
-- Use `handoff(action=get)` when available.
-- Poll `memory(action=changes_since)` before major decisions and final response.
+- Use `handoff(action=get, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` when available.
+- Poll `memory(action=changes_since, commit_id=<memory_cursor.commit_id>,
+  timestamp=<memory_cursor.timestamp>, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` before major decisions
+  and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
 - Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
   guidance that should surface on the next resume.
-- If resuming after compaction, read `handoff(action=get)` and recent
-  `memory(action=changes_since)` before continuing.
+- If resuming after compaction, read `handoff(action=get, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` and
+  recent `memory(action=changes_since, commit_id=<memory_cursor.commit_id>,
+  timestamp=<memory_cursor.timestamp>, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` before continuing.
 """
 "#
     )
@@ -2923,9 +3769,10 @@ You are Gemini CLI closing out work with persistent Engram memory.
 This command is invoked as `/engram:end-session`.
 
 Before ending:
-- Call `memory(action=changes_since)` from the latest cursor.
+- Call `memory(action=changes_since, commit_id=<memory_cursor.commit_id>,
+  timestamp=<memory_cursor.timestamp>, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` from the latest cursor.
 - Call `obligations(action=detect, project=..., cwd=...)` and
-  `obligations(action=doctor, project=..., cwd=...)`.
+  `obligations(action=doctor, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -2944,11 +3791,13 @@ fn gemini_global_context(enforcement_profile: HarnessEnforcementProfile) -> Stri
 
 Gemini CLI should treat Engram as persistent project memory when Engram MCP tools are available.
 
-- Start work by calling `orient` with the current project, cwd, prompt,
-  `agent=gemini_cli`, and `response_shape="lean"`.
+- Start work by calling `orient` with current cwd, prompt, `agent=gemini_cli`, and
+  `response_shape="lean"`; supply project only when its canonical identity is known.
 - {CONCRETE_MEMORY_TRIGGERS}
-- Keep the returned memory cursor and call `memory(action=changes_since)` before major
-  decisions, before final response, and during long sessions.
+- Keep the returned memory cursor and call `memory(action=changes_since,
+  commit_id=<memory_cursor.commit_id>, timestamp=<memory_cursor.timestamp>,
+  {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` before major decisions, before final response, and during
+  long sessions.
 - Keep returned `trace_id` values from `orient` or `search` and call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
@@ -2990,8 +3839,9 @@ description: Use when Cursor Agent is working in a repo or project with persiste
 Use this skill when Cursor Agent is working in a repository or project with persistent Engram memory.
 
 Workflow ({enforcement_profile}):
-- Start by calling the Engram MCP `orient` tool with project, cwd, prompt, `agent=cursor`, and
-  `response_shape="lean"`.
+- Start by calling the Engram MCP `orient` tool with current cwd, prompt, `agent=cursor`, and
+  `response_shape="lean"`; supply project only when its canonical identity is known.
+- {TASK_SCOPE_GUIDANCE}
 - {CONCRETE_MEMORY_TRIGGERS}
 - Treat the returned memory cursor as the baseline for this turn.
 - Keep the returned `trace_id` from `orient` or `search`; before final response, call
@@ -3001,13 +3851,15 @@ Workflow ({enforcement_profile}):
   outcomes or attribution judgments can be made. Use `used_memory_ids` for returned memory that
   shaped the answer, implementation, safety decision, or plan; leave it empty only when no returned
   memory influenced behavior.
-- Before a major decision or final response, call `memory(action=changes_since)`.
+- Before a major decision or final response, call `memory(action=changes_since,
+  commit_id=<memory_cursor.commit_id>, timestamp=<memory_cursor.timestamp>,
+  {RELATED_RETRIEVAL_SCOPE_EXAMPLE})`.
 - Record source-grounded discoveries, decisions, rules, preferences, limitations, and handoffs.
 - When the current method, plan, or next action should survive resume, use
   `memory(action=capture_current_plan)` with compact content and file/tool/manual-review evidence.
 - Use `obligations(action=detect, project=..., cwd=...)` when documents change, tools fail,
   or source/design reading is needed; before final response, run
-  `obligations(action=doctor, project=..., cwd=...)` and resolve or explicitly skip open
+  `obligations(action=doctor, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` and resolve or explicitly skip open
   obligations.
 - Before context compaction or any expected context loss, update `handoff` and record or commit
   compact durable memory for the next session.
@@ -3033,21 +3885,25 @@ Use this skill when the user asks Cursor Agent to continue, resume, or load prio
 
 Steps:
 - Call the Engram MCP `orient` tool with `response_shape="lean"` before reading broad files.
+- {TASK_SCOPE_GUIDANCE}
 - Inspect project/repository resolution and ask only if ambiguity cannot be resolved.
 - Keep returned `trace_id` values from `orient` or `search`; submit telemetry feedback with
   outcome, gap, and attribution fields before final response when memory quality can be judged.
   Include `used_memory_ids` for returned memory that shaped behavior and `rejected_memory_ids` for
   returned memory considered but not used. Include `stale_memory_ids` and
   `wrong_scope_memory_ids` for rejected memory specifically judged stale or out of scope.
-- Use `handoff(action=get)` when available.
-- Poll `memory(action=changes_since)` before major decisions and final response.
+- Use `handoff(action=get, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` when available.
+- Poll `memory(action=changes_since, commit_id=<memory_cursor.commit_id>,
+  timestamp=<memory_cursor.timestamp>, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` before major decisions
+  and final response.
 - Poll `obligations(action=detect)` and close or explicitly skip open obligations before final
   response.
 - Store compact, evidenced memory if the session discovered something future agents need.
 - Use `memory(action=capture_current_plan)` for compact current method, plan, or next-action
   guidance that should surface on the next resume.
-- If resuming after compaction, read `handoff(action=get)` and recent
-  `memory(action=changes_since)` before continuing.
+- If resuming after compaction, read `handoff(action=get, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` and
+  recent `memory(action=changes_since, commit_id=<memory_cursor.commit_id>,
+  timestamp=<memory_cursor.timestamp>, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` before continuing.
 - Use writer provenance with `writer_harness=cursor` for durable memory writes.
 "#
     )
@@ -3065,9 +3921,10 @@ description: Use when Cursor Agent is closing out work, preparing a handoff, or 
 Use this skill when Cursor Agent is closing out a task or preparing a handoff.
 
 Before ending:
-- Call `memory(action=changes_since)` from the latest cursor.
+- Call `memory(action=changes_since, commit_id=<memory_cursor.commit_id>,
+  timestamp=<memory_cursor.timestamp>, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` from the latest cursor.
 - Call `obligations(action=detect, project=..., cwd=...)` and
-  `obligations(action=doctor, project=..., cwd=...)`.
+  `obligations(action=doctor, {RELATED_RETRIEVAL_SCOPE_EXAMPLE})`.
 - Resolve open obligations or state explicit skip reasons in the handoff.
 - Update or compile `handoff` with completed work, open decisions, next actions, and risks.
 - If durable memory changed, prepare a `memory(action=commit)` candidate.
@@ -3084,11 +3941,15 @@ fn agents_snippet(enforcement_profile: HarnessEnforcementProfile) -> String {
         r#"{MARKER_MD}
 # Engram Memory OS Harness
 
-- Start work by calling `orient` with the current project, cwd, prompt, harness name, and
-  `response_shape="lean"`.
+- Start work by calling `orient` with current cwd, prompt, harness name, and
+  `response_shape="lean"`; supply project only when its canonical identity is known.
+- {TASK_SCOPE_GUIDANCE}
 - {CONCRETE_MEMORY_TRIGGERS}
-- Keep the returned memory cursor and call `memory(action=changes_since)` before major
-  decisions, before final response, and during long sessions.
+- {VERIFIED_PROCEDURE_GUIDANCE}
+- Keep the returned memory cursor and call `memory(action=changes_since,
+  commit_id=<memory_cursor.commit_id>, timestamp=<memory_cursor.timestamp>,
+  {RELATED_RETRIEVAL_SCOPE_EXAMPLE})` before major decisions, before final response, and during
+  long sessions.
 - Keep returned `trace_id` values from `orient` or `search` and call
   `telemetry(action=submit_feedback)` with `task_success`, `preference_adhered`,
   `repeated_context_questions`, `bad_memory_used`, `missing_context`, `used_memory_ids`, and
@@ -3123,8 +3984,11 @@ Required MCP tools: orient, memory, harness, lint, graph, handoff, obligations, 
 
 Lifecycle ({enforcement_profile}):
 - task/session start: call `orient` with `response_shape="lean"`
+- {TASK_SCOPE_GUIDANCE}
 - {CONCRETE_MEMORY_TRIGGERS}
-- before major decisions: call `memory(action=changes_since)`
+- before major decisions: call `memory(action=changes_since,
+  commit_id=<memory_cursor.commit_id>, timestamp=<memory_cursor.timestamp>,
+  {RELATED_RETRIEVAL_SCOPE_EXAMPLE})`
 - after non-obvious discoveries: record memory/session event
 - after current method/plan/next-action changes: use `memory(action=capture_current_plan)` with
   compact content and evidence
@@ -3148,6 +4012,127 @@ Lifecycle ({enforcement_profile}):
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mcp_server_check_redacts_environment_values_and_attests_agent_profile_shape() {
+        let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("engram");
+        fs::write(&executable, b"fixture executable").unwrap();
+        let server = json!({
+            "type": "stdio",
+            "command": executable,
+            "args": [
+                "serve", "--project", "demo", "--profile", "agent",
+                "--api-token", "super-secret-value"
+            ],
+            "env": {
+                "ENGRAM_TOKEN": "must-never-appear",
+                "ENGRAM_HOME": "/private/path"
+            }
+        });
+
+        let check = build_mcp_server_check(
+            "static_config",
+            Some("fixture.json#/mcpServers/engram".to_string()),
+            &server,
+            None,
+            false,
+            "fixture",
+        );
+
+        assert!(check.agent_profile_launch_configured);
+        assert_eq!(check.env_keys, vec!["ENGRAM_HOME", "ENGRAM_TOKEN"]);
+        assert_eq!(check.args.last().map(String::as_str), Some("<redacted>"));
+        assert!(check.executable_sha256.is_some());
+        assert!(!check.resolved_configuration_verified);
+        assert!(!check.running_host_loaded_verified);
+        assert!(!check.live_runtime_verified);
+        let serialized = serde_json::to_string(&check).unwrap();
+        assert!(!serialized.contains("must-never-appear"));
+        assert!(!serialized.contains("/private/path"));
+        assert!(!serialized.contains("super-secret-value"));
+    }
+
+    #[test]
+    fn mcp_server_check_rejects_full_or_non_stdio_launch_shape() {
+        let root = tempfile::tempdir().unwrap();
+        let executable = root.path().join("engram");
+        fs::write(&executable, b"fixture executable").unwrap();
+
+        for server in [
+            json!({
+                "type": "stdio",
+                "command": executable,
+                "args": ["serve"]
+            }),
+            json!({
+                "type": "stdio",
+                "command": executable,
+                "args": ["serve", "--profile", "full"]
+            }),
+            json!({
+                "type": "stdio",
+                "command": executable,
+                "args": ["serve", "--profile", "agent", "--http"]
+            }),
+            json!({
+                "type": "http",
+                "command": executable,
+                "args": ["serve", "--profile", "agent"]
+            }),
+        ] {
+            let check = build_mcp_server_check(
+                "host_cli_resolved",
+                None,
+                &server,
+                Some(true),
+                true,
+                "fixture",
+            );
+            assert!(!check.agent_profile_launch_configured, "{server}");
+        }
+    }
+
+    #[test]
+    fn claude_static_config_prefers_local_then_project_then_user() {
+        let cwd = "/workspace/demo";
+        let user_path = Path::new("/home/test/.claude.json");
+        let project_path = Path::new("/workspace/demo/.mcp.json");
+        let user = json!({
+            "mcpServers": {"engram": {"command": "user-engram"}},
+            "projects": {
+                (cwd): {"mcpServers": {"engram": {"command": "local-engram"}}}
+            }
+        });
+        let project = json!({
+            "mcpServers": {"engram": {"command": "project-engram"}}
+        });
+
+        let candidates =
+            claude_mcp_candidates(Some(&user), Some(&project), cwd, user_path, project_path);
+
+        assert_eq!(candidates.len(), 3);
+        assert_eq!(candidates[0].1["command"], "local-engram");
+        assert_eq!(candidates[1].1["command"], "project-engram");
+        assert_eq!(candidates[2].1["command"], "user-engram");
+        assert!(candidates[0].0.contains("#/projects/~1workspace~1demo/"));
+    }
+
+    fn assert_retrieval_calls_declare_scope(contents: &str, marker: &str, scope: &str) {
+        let mut remaining = contents;
+        while let Some(start) = remaining.find(marker) {
+            let call = &remaining[start..];
+            let end = call
+                .find(')')
+                .unwrap_or_else(|| panic!("unterminated generated call starting with {marker}"));
+            assert!(
+                call[..=end].contains(scope),
+                "generated call lacks required scope: {}",
+                &call[..=end]
+            );
+            remaining = &call[end + 1..];
+        }
+    }
 
     #[test]
     fn status_reports_missing_required_codex_adapters() {
@@ -3208,7 +4193,7 @@ mod tests {
     }
 
     #[test]
-    fn doctor_names_graduated_lifecycle_triggers_when_ready() {
+    fn doctor_names_soft_lifecycle_triggers_when_ready() {
         let root = tempfile::tempdir().unwrap();
         let service = HarnessService::new();
         service
@@ -3222,10 +4207,10 @@ mod tests {
         assert!(report.ready);
         assert_eq!(
             report.lifecycle.enforcement_profile,
-            HarnessEnforcementProfile::Graduated
+            HarnessEnforcementProfile::Soft
         );
-        assert!(!report.lifecycle.soft_contract);
-        assert!(report.lifecycle.enforced);
+        assert!(report.lifecycle.soft_contract);
+        assert!(!report.lifecycle.enforced);
         assert_eq!(
             report.lifecycle.advisory_triggers,
             vec![
@@ -3242,8 +4227,8 @@ mod tests {
         let lifecycle_warning = report
             .warnings
             .iter()
-            .find(|warning| warning.contains("enforcement_profile=graduated"))
-            .expect("ready doctor should name graduated lifecycle profile");
+            .find(|warning| warning.contains("enforcement_profile=soft"))
+            .expect("ready doctor should name soft lifecycle profile");
         assert!(lifecycle_warning.contains("task_start_orient"));
         assert!(lifecycle_warning.contains("before_final_obligations"));
         assert!(lifecycle_warning.contains("session_end_handoff"));
@@ -3302,27 +4287,24 @@ mod tests {
         assert!(unchecked.mcp_tools.missing_tools.is_empty());
         assert!(unchecked.missing_mcp_tools.is_empty());
 
-        let observed_without_telemetry = vec![
+        let observed_without_search = vec![
             "orient".to_string(),
             "memory".to_string(),
             "harness".to_string(),
-            "lint".to_string(),
-            "graph".to_string(),
-            "handoff".to_string(),
+            "repo".to_string(),
             "obligations".to_string(),
-            "vault".to_string(),
         ];
         let checked = service
             .status(
                 HarnessKind::Codex,
                 Some(root.path()),
-                &observed_without_telemetry,
+                &observed_without_search,
             )
             .unwrap();
         assert!(!checked.ready);
         assert!(checked.mcp_tools.checked);
-        assert_eq!(checked.mcp_tools.missing_tools, vec!["telemetry"]);
-        assert_eq!(checked.missing_mcp_tools, vec!["telemetry"]);
+        assert_eq!(checked.mcp_tools.missing_tools, vec!["search"]);
+        assert_eq!(checked.missing_mcp_tools, vec!["search"]);
     }
 
     #[test]
@@ -3341,7 +4323,31 @@ mod tests {
         let contents = fs::read_to_string(skill).unwrap();
         assert!(contents.contains(MARKER_MD));
         assert!(contents.contains("orient"));
-        assert!(contents.contains("changes_since"));
+        assert!(contents.contains("memory(action=procedure_match"));
+
+        let hook = root.path().join(".codex/hooks/engram-session-start.sh");
+        assert!(hook.exists());
+        let hook_contents = fs::read_to_string(&hook).unwrap();
+        assert!(hook_contents.contains(MARKER_SH));
+        assert!(hook_contents.contains("current_checkout_root"));
+
+        let config: Value = serde_json::from_str(
+            &fs::read_to_string(root.path().join(".codex/hooks.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            config.pointer("/hooks/SessionStart/0/matcher"),
+            Some(&Value::String("startup|resume|clear".to_string()))
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(hook).unwrap().permissions().mode() & 0o111,
+                0o111
+            );
+        }
     }
 
     #[test]
@@ -3503,43 +4509,297 @@ mod tests {
     }
 
     #[test]
-    fn policy_requires_telemetry_tool_for_feedback() {
-        let policy = HarnessService::new().policy(HarnessKind::Codex);
-        assert!(policy.required_mcp_tools.contains(&"telemetry".to_string()));
+    fn render_codex_session_start_hook_is_root_aware_and_provenance_safe() {
+        let service = HarnessService::new();
+        let hooks = service.render_adapters(HarnessKind::Codex, Some("codex-session-start-hook"));
+        assert_eq!(hooks.len(), 1);
+        for expected in [
+            "call Engram MCP orient",
+            "memory(action=procedure_match",
+            "required_condition_keys",
+            "current_checkout_root",
+            "provenance only",
+            "Never silently apply another project or repository guidance",
+        ] {
+            assert!(hooks[0].contents.contains(expected), "missing `{expected}`");
+        }
+
+        let configs = service.render_adapters(HarnessKind::Codex, Some("codex-hooks-config"));
+        assert_eq!(configs.len(), 1);
+        let config: Value = serde_json::from_str(&configs[0].contents).unwrap();
+        assert_eq!(
+            config
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["description", "hooks"])
+        );
+        assert!(config["description"].as_str().unwrap().contains(MARKER_SH));
+        assert_eq!(
+            config.pointer("/hooks/SessionStart/0/hooks/0/type"),
+            Some(&Value::String("command".to_string()))
+        );
+        assert_eq!(
+            config.pointer("/hooks/SessionStart/0/hooks/0/additionalContextLimit"),
+            Some(&json!(3000))
+        );
     }
 
     #[test]
-    fn render_adapter_mentions_feedback_trace_id() {
+    fn codex_and_claude_adapters_enforce_verified_procedure_abstention() {
+        let service = HarnessService::new();
+        for (harness, adapter) in [
+            (HarnessKind::Codex, "codex-memory-session-skill"),
+            (HarnessKind::ClaudeCode, "claude-memory-session-command"),
+        ] {
+            let adapters = service.render_adapters(harness, Some(adapter));
+            assert_eq!(adapters.len(), 1);
+            let contents = &adapters[0].contents;
+            assert!(contents.contains("memory(action=procedure_match"));
+            assert!(contents.contains("Execute only returned procedures"));
+            assert!(contents.contains("separate direct tool call"));
+            assert!(contents.contains("do not apply the rejected procedure"));
+            assert!(contents.contains("execution receipt is verified"));
+            assert!(contents.contains("An empty `procedures` list proves only"));
+            assert!(contents.contains("structured `identity`"));
+            assert!(contents.contains("`identity.project.status`"));
+            assert!(contents.contains("`suggested_operation_evidence`"));
+            assert!(contents.contains("required host-action protocol"));
+            assert!(contents.contains("`required_before_final_abstention=true`"));
+            assert!(contents.contains("`allowed_when_project_requires_confirmation=true`"));
+            assert!(contents.contains("`authorizes_procedure_execution=false`"));
+            assert!(contents.contains("durable-memory-only"));
+            assert!(contents.contains("absolute `resolved_path`"));
+            assert!(contents.contains("checkout-relative `path` as provenance only"));
+            assert!(contents.contains("do not substitute a relative path"));
+            assert!(contents.contains("Pass the host's exact current `cwd`"));
+            assert!(contents.contains("do not call `orient` first solely to obtain it"));
+            assert!(contents.contains("at most one bounded read-only lookup"));
+            assert!(contents.contains("`identity.repository.checkout_root`"));
+            assert!(contents.contains("Do not re-read identity files"));
+            assert!(contents.contains("Do not re-derive a project"));
+            assert!(contents.contains("broaden outside the checkout"));
+            assert!(contents.contains("execute candidate commands"));
+            assert!(contents.contains("`requires_confirmation`"));
+        }
+        assert!(VERIFIED_PROCEDURE_GUIDANCE.len() < 5_000);
+    }
+
+    #[test]
+    fn claude_adapters_prioritize_repository_local_procedure_matching() {
+        let service = HarnessService::new();
+        for adapter in ["claude-memory-session-command", "claude-session-start-hook"] {
+            let adapters = service.render_adapters(HarnessKind::ClaudeCode, Some(adapter));
+            assert_eq!(adapters.len(), 1);
+            let contents = &adapters[0].contents;
+            let procedure_route = contents
+                .find("Every actionable repository task has a mandatory procedure route")
+                .expect("Claude adapter should contain the mandatory procedure route");
+            let project_stop = contents
+                .find("For requests other than repository-local procedure matching")
+                .expect("Claude adapter should qualify the project ambiguity stop");
+
+            assert!(procedure_route < project_stop);
+            assert!(contents.contains(
+                "Use local procedure matching itself as the task-start identity boundary"
+            ));
+            assert!(contents.contains("do not call `orient` first solely to obtain it"));
+            assert!(contents.contains("The `query` is required"));
+            assert!(contents.contains("bounded task-focused excerpt"));
+            assert!(contents.contains("must be at most 512 characters"));
+            assert!(contents.contains("not an authorization channel"));
+            assert!(contents.contains("`memory(action=list)` is never a substitute"));
+            assert!(contents.contains("requests to use durable procedure memory, are actionable"));
+            assert!(contents.contains("Project ambiguity blocks project/task-scoped memory only"));
+        }
+
+        let resume = service.render_adapters(
+            HarnessKind::ClaudeCode,
+            Some("claude-resume-session-command"),
+        );
+        assert_eq!(resume.len(), 1);
+        assert!(resume[0].contents.contains("project ambiguity alone does"));
+        assert!(resume[0]
+            .contents
+            .contains("not block the repository-local procedure route"));
+        assert!(resume[0]
+            .contents
+            .contains("query=<a bounded task-focused excerpt from the current user request>"));
+        assert!(resume[0].contents.contains("The query is required"));
+        assert!(resume[0].contents.contains("`memory(action=list)`"));
+        assert!(resume[0].contents.contains("is not a substitute"));
+    }
+
+    #[test]
+    fn primary_harness_adapters_require_exact_task_orientation_when_known() {
+        let service = HarnessService::new();
+        for (harness, adapter) in [
+            (HarnessKind::Codex, "codex-memory-session-skill"),
+            (HarnessKind::ClaudeCode, "claude-memory-session-command"),
+            (HarnessKind::Cursor, "cursor-memory-session-skill"),
+        ] {
+            let adapters = service.render_adapters(harness, Some(adapter));
+            assert_eq!(adapters.len(), 1);
+            let contents = &adapters[0].contents;
+            assert!(contents.contains("task=<exact task name or tracker key>"));
+            assert!(contents.contains("ask instead of applying task-scoped memory"));
+        }
+    }
+
+    #[test]
+    fn generated_retrieval_calls_declare_authorized_scope() {
+        let service = HarnessService::new();
+        for harness in [
+            HarnessKind::ClaudeCode,
+            HarnessKind::Codex,
+            HarnessKind::GeminiCli,
+            HarnessKind::Cursor,
+            HarnessKind::Generic,
+        ] {
+            for adapter in service.render_adapters_with_enforcement(
+                harness,
+                None,
+                HarnessEnforcementProfile::Graduated,
+            ) {
+                assert_retrieval_calls_declare_scope(
+                    &adapter.contents,
+                    "memory(action=procedure_match",
+                    LOCAL_PROCEDURE_SCOPE_EXAMPLE,
+                );
+                for marker in [
+                    "memory(action=changes_since",
+                    "handoff(action=get",
+                    "obligations(action=doctor",
+                ] {
+                    assert_retrieval_calls_declare_scope(
+                        &adapter.contents,
+                        marker,
+                        RELATED_RETRIEVAL_SCOPE_EXAMPLE,
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn claude_session_start_uses_cwd_without_fabricating_project_identity() {
+        let hook = claude_session_start_hook(HarnessEnforcementProfile::Soft);
+
+        assert!(hook.contains(r#"cwd=\"$CWD\""#));
+        assert!(hook.contains("do not run `pwd` first"));
+        assert!(hook.contains("Supply project only when its canonical identity is known"));
+        assert!(hook.contains("<<'ENGRAM_CONTEXT'"));
+        assert!(!hook.contains("PROJECT_NAME"));
+        assert!(!hook.contains("basename \"$CWD\""));
+    }
+
+    #[test]
+    fn claude_session_start_executes_with_literal_markdown_guidance() {
+        use std::io::Write as _;
+        use std::process::Stdio;
+
+        let root = tempfile::tempdir().unwrap();
+        let hook_path = root.path().join("engram-session-start.sh");
+        fs::write(
+            &hook_path,
+            claude_session_start_hook(HarnessEnforcementProfile::Soft),
+        )
+        .unwrap();
+
+        let mut child = Command::new("bash")
+            .arg(&hook_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .as_mut()
+            .unwrap()
+            .write_all(br#"{"cwd":"/tmp/atlas","source":"startup","session_id":"s1"}"#)
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let context = response["systemMessage"].as_str().unwrap();
+        assert!(context.contains("`task=<exact task name or tracker key>`"));
+        assert!(context.contains("`memory(action=procedure_match"));
+        assert!(context.contains("source=\"startup\" cwd=\"/tmp/atlas\""));
+    }
+
+    #[test]
+    fn codex_skills_have_required_yaml_frontmatter() {
+        let service = HarnessService::new();
+        for (adapter, expected_name) in [
+            ("codex-memory-session-skill", "engram-memory-session"),
+            ("codex-resume-session-skill", "engram-resume-session"),
+        ] {
+            let rendered = service.render_adapters(HarnessKind::Codex, Some(adapter));
+            assert_eq!(rendered.len(), 1);
+            let contents = &rendered[0].contents;
+            assert!(contents.starts_with("---\n"));
+            assert!(contents.contains(&format!("\nname: {expected_name}\n")));
+            assert!(contents.contains("\ndescription: "));
+            assert!(contents.contains(&format!("\n---\n{MARKER_MD}\n# Engram")));
+        }
+    }
+
+    #[test]
+    fn policy_requires_compact_agent_profile_tools() {
+        let policy = HarnessService::new().policy(HarnessKind::Codex);
+        assert_eq!(
+            policy.required_mcp_tools,
+            [
+                "orient",
+                "memory",
+                "repo",
+                "search",
+                "harness",
+                "obligations"
+            ]
+        );
+    }
+
+    #[test]
+    fn render_codex_adapter_uses_only_agent_profile_workflow() {
         let adapters = HarnessService::new()
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
         assert_eq!(adapters.len(), 1);
-        assert!(adapters[0].contents.contains("trace_id"));
-        assert!(adapters[0]
-            .contents
-            .contains("telemetry(action=submit_feedback)"));
-        assert!(adapters[0].contents.contains("task_success"));
-        assert!(adapters[0].contents.contains("missing_context"));
-        assert!(adapters[0].contents.contains("used_memory_ids"));
-        assert!(adapters[0].contents.contains("rejected_memory_ids"));
-        assert!(adapters[0].contents.contains("stale_memory_ids"));
-        assert!(adapters[0].contents.contains("wrong_scope_memory_ids"));
+        let contents = &adapters[0].contents;
+        assert!(contents.contains("`orient`"));
+        assert!(contents.contains("search(query=..."));
+        assert!(contents.contains("memory(action=add)"));
+        assert!(!contents.contains("telemetry(action="));
+        assert!(!contents.contains("obligations(action="));
+        assert!(!contents.contains("memory(action=changes_since)"));
     }
 
     #[test]
-    fn render_codex_adapter_spells_out_document_lifecycle_disposition() {
+    fn render_codex_adapter_spells_out_safe_durable_capture() {
         let adapters = HarnessService::new()
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
         assert_eq!(adapters.len(), 1);
         let contents = &adapters[0].contents;
 
-        assert!(contents.contains("obligations(action=detect, write=true"));
-        assert!(contents.contains("obligations(action=doctor, project=..., cwd=...)"));
-        assert!(contents.contains("docs(action=index)"));
-        assert!(contents.contains("knowledge(action=register)"));
-        assert!(contents.contains("memory(action=capture_current_plan)"));
-        assert!(contents.contains("explicitly skipping it"));
-        assert!(contents.contains("fresh content"));
-        assert!(contents.contains("state gets its own disposition"));
+        assert!(contents.contains("memory(action=add)"));
+        assert!(contents.contains("narrowest project/repository/task scope"));
+        assert!(contents.contains("writer provenance"));
+        assert!(contents.contains("Every add requires"));
+        assert!(contents.contains("`scope_type`"));
+        assert!(contents.contains("`remote_url` or `local_path`"));
+        assert!(contents.contains("A retrieval `scope` object does not replace"));
+        assert!(contents.contains("`kind=procedure`"));
+        assert!(contents.contains("evidence"));
+        assert!(contents.contains("Never store credentials"));
     }
 
     #[test]
@@ -3548,12 +4808,11 @@ mod tests {
             .render_policy(HarnessKind::Codex)
             .unwrap();
         assert!(policy.contains("before_context_compaction_save"));
-        assert!(policy.contains("\"telemetry\""));
+        assert!(policy.contains("\"search\""));
 
         let adapters = HarnessService::new()
             .render_adapters(HarnessKind::Codex, Some("codex-memory-session-skill"));
         assert_eq!(adapters.len(), 1);
-        assert!(adapters[0].contents.contains("context compaction"));
         assert!(adapters[0].contents.contains("handoff"));
     }
 
@@ -3588,16 +4847,37 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir_all(root.path().join(".claude")).unwrap();
         let stale_session_end_handler =
-            claude_mcp_hook_handler("SessionEnd", HarnessEnforcementProfile::default());
+            claude_mcp_hook_handler("SessionEnd", HarnessEnforcementProfile::Graduated);
+        let mut stale_user_prompt_handler =
+            claude_mcp_hook_handler("UserPromptSubmit", HarnessEnforcementProfile::Graduated);
+        let stale_pre_tool_handler =
+            claude_mcp_hook_handler("PreToolUse", HarnessEnforcementProfile::Graduated);
+        let stale_tool_failure_handler =
+            claude_mcp_hook_handler("PostToolUseFailure", HarnessEnforcementProfile::Graduated);
+        let mut stale_pre_compact_handler =
+            claude_mcp_hook_handler("PreCompact", HarnessEnforcementProfile::Graduated);
+        stale_user_prompt_handler
+            .pointer_mut("/input")
+            .and_then(Value::as_object_mut)
+            .unwrap()
+            .remove("enforcement");
+        stale_pre_compact_handler
+            .pointer_mut("/input")
+            .and_then(Value::as_object_mut)
+            .unwrap()
+            .remove("enforcement");
         fs::write(
             root.path().join(".claude/settings.json"),
             serde_json::to_string(&serde_json::json!({
                 "hooks": {
                     "UserPromptSubmit": [{
-                        "hooks": [{
-                            "type": "command",
-                            "command": "existing"
-                        }]
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "existing"
+                            },
+                            stale_user_prompt_handler
+                        ]
                     }],
                     "SessionStart": [{
                         "matcher": "startup|resume|compact",
@@ -3615,6 +4895,24 @@ mod tests {
                                 "command": CLAUDE_LEGACY_SESSION_END_HOOK_COMMAND,
                                 "timeout": 15
                             }
+                        ]
+                    }],
+                    "PreToolUse": [{
+                        "matcher": "*",
+                        "hooks": [
+                            stale_pre_tool_handler
+                        ]
+                    }],
+                    "PostToolUseFailure": [{
+                        "matcher": "*",
+                        "hooks": [
+                            stale_tool_failure_handler
+                        ]
+                    }],
+                    "PreCompact": [{
+                        "matcher": "manual|auto",
+                        "hooks": [
+                            stale_pre_compact_handler
                         ]
                     }]
                 },
@@ -3646,12 +4944,33 @@ mod tests {
             .any(|file| file.name == "claude-settings-merge"));
         let settings = fs::read_to_string(root.path().join(".claude/settings.json")).unwrap();
         assert!(settings.contains("mcp__engram__orient"));
-        assert!(settings.contains("mcp__engram__telemetry"));
-        assert!(settings.contains("\"PreToolUse\""));
-        assert!(settings.contains("\"mcp__engram__orient\""));
-        assert!(settings.contains("\"PostToolUseFailure\""));
+        assert!(settings.contains("mcp__engram__search"));
+        assert!(settings.contains("mcp__engram__harness"));
+        assert!(!settings.contains("mcp__engram__telemetry"));
+        assert!(!settings.contains("\"PreToolUse\""));
+        assert!(!settings.contains("\"PostToolUseFailure\""));
+        assert!(settings.contains("\"PreCompact\""));
+        assert!(settings.contains("\"PostCompact\""));
         assert!(settings.contains("existing"));
         let settings_json: Value = serde_json::from_str(&settings).unwrap();
+        let user_prompt_hooks = settings_json
+            .pointer("/hooks/UserPromptSubmit/0/hooks")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert!(!user_prompt_hooks
+            .iter()
+            .any(|hook| hook.get("type").and_then(Value::as_str) == Some("mcp_tool")));
+        let pre_compact_hooks = settings_json
+            .pointer("/hooks/PreCompact/0/hooks")
+            .and_then(Value::as_array)
+            .unwrap();
+        assert_eq!(pre_compact_hooks.len(), 1);
+        assert_eq!(
+            pre_compact_hooks[0]
+                .pointer("/input/enforcement")
+                .and_then(Value::as_str),
+            Some("soft")
+        );
         let session_start_hooks = settings_json
             .pointer("/hooks/SessionStart")
             .and_then(Value::as_array)
@@ -3722,6 +5041,35 @@ mod tests {
     }
 
     #[test]
+    fn claude_default_install_is_idempotent_after_migration() {
+        let root = tempfile::tempdir().unwrap();
+        let service = HarnessService::new();
+        let options = HarnessInstallOptions {
+            write: true,
+            adopt_user_owned: false,
+            settings_target: HarnessSettingsTarget::default(),
+            enforcement_profile: HarnessEnforcementProfile::default(),
+        };
+
+        service
+            .install_with_options(HarnessKind::ClaudeCode, Some(root.path()), options)
+            .unwrap();
+        let second = service
+            .install_with_options(HarnessKind::ClaudeCode, Some(root.path()), options)
+            .unwrap();
+
+        assert!(!second
+            .written
+            .iter()
+            .any(|file| file.name == "claude-settings-merge"));
+        assert!(second
+            .skipped
+            .iter()
+            .any(|file| file.name == "claude-settings-merge"
+                && file.message.contains("already includes")));
+    }
+
+    #[test]
     fn claude_ready_status_warns_effective_hooks_need_live_hooks_proof() {
         let root = tempfile::tempdir().unwrap();
         let service = HarnessService::new();
@@ -3759,19 +5107,116 @@ mod tests {
         let start_command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
+        assert!(start_command.contains("git -C \"$start_dir\" rev-parse --show-toplevel"));
         assert!(start_command
-            .contains("${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh"));
+            .contains("${project_root:+$project_root/.claude/hooks/engram-session-start.sh}"));
         assert!(start_command.contains("${HOME:-}/.claude/hooks/engram-session-start.sh"));
         assert!(start_command.contains("/usr/bin/env bash"));
 
         let end_command = settings["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert!(
-            end_command.contains("${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh")
-        );
+        assert!(end_command.contains("git -C \"$start_dir\" rev-parse --show-toplevel"));
+        assert!(end_command
+            .contains("${project_root:+$project_root/.claude/hooks/engram-session-end.sh}"));
         assert!(end_command.contains("${HOME:-}/.claude/hooks/engram-session-end.sh"));
         assert!(end_command.contains("/usr/bin/env bash"));
+    }
+
+    #[test]
+    fn claude_settings_merge_replaces_stale_generated_dispatch_commands() {
+        let stale_start = concat!(
+            "project_hook=\"old/.claude/hooks/engram-session-start.sh\"; ",
+            "home_hook=\"old/.claude/hooks/engram-session-start.sh\"; ",
+            "printf 'Engram SessionStart hook skipped'"
+        );
+        let stale_end = concat!(
+            "project_hook=\"old/.claude/hooks/engram-session-end.sh\"; ",
+            "home_hook=\"old/.claude/hooks/engram-session-end.sh\"; ",
+            "printf 'Engram SessionEnd hook skipped'"
+        );
+        let mut settings = json!({
+            "hooks": {
+                "SessionStart": [{
+                    "matcher": "startup|resume|compact",
+                    "hooks": [{"type": "command", "command": stale_start, "timeout": 10}]
+                }],
+                "SessionEnd": [{
+                    "hooks": [{"type": "command", "command": stale_end, "timeout": 15}]
+                }]
+            }
+        });
+
+        assert!(merge_claude_hooks(
+            &mut settings,
+            HarnessEnforcementProfile::Soft
+        ));
+        let rendered = serde_json::to_string(&settings).unwrap();
+        assert!(!rendered.contains(stale_start));
+        assert!(!rendered.contains(stale_end));
+        let start_handlers = settings["hooks"]["SessionStart"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|group| group["hooks"].as_array().unwrap());
+        assert_eq!(
+            start_handlers
+                .filter(|handler| handler["command"].as_str() == Some(CLAUDE_HOOK_COMMAND))
+                .count(),
+            1
+        );
+        let end_handlers = settings["hooks"]["SessionEnd"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|group| group["hooks"].as_array().unwrap());
+        assert_eq!(
+            end_handlers
+                .filter(|handler| {
+                    handler["command"].as_str() == Some(CLAUDE_SESSION_END_HOOK_COMMAND)
+                })
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn claude_default_settings_omit_high_frequency_runtime_hooks() {
+        let settings: Value = serde_json::from_str(&claude_settings_snippet(
+            HarnessEnforcementProfile::default(),
+        ))
+        .unwrap();
+
+        assert!(settings.pointer("/hooks/SessionStart").is_some());
+        assert!(settings.pointer("/hooks/PreCompact").is_some());
+        assert!(settings.pointer("/hooks/PostCompact").is_some());
+        assert!(settings.pointer("/hooks/SessionEnd").is_some());
+        assert!(settings.pointer("/hooks/UserPromptSubmit").is_none());
+        assert!(settings.pointer("/hooks/PreToolUse").is_none());
+        assert!(settings.pointer("/hooks/PostToolUse").is_none());
+        assert!(settings.pointer("/hooks/PostToolUseFailure").is_none());
+        assert!(settings.pointer("/hooks/Stop").is_none());
+    }
+
+    #[test]
+    fn claude_graduated_settings_include_runtime_enforcement_hooks() {
+        let settings: Value = serde_json::from_str(&claude_settings_snippet(
+            HarnessEnforcementProfile::Graduated,
+        ))
+        .unwrap();
+
+        assert!(settings.pointer("/hooks/UserPromptSubmit").is_some());
+        assert!(settings.pointer("/hooks/PreToolUse").is_some());
+        assert!(settings.pointer("/hooks/PostToolUse").is_some());
+        assert!(settings.pointer("/hooks/PostToolUseFailure").is_some());
+        assert!(settings.pointer("/hooks/Stop").is_some());
+        assert_eq!(
+            settings["hooks"]["PreToolUse"][0]["hooks"][0]["input"]["enforcement"],
+            "graduated"
+        );
+        let rendered = serde_json::to_string(&settings).unwrap();
+        assert!(rendered.contains("mcp__engram__orient|mcp__engram__memory"));
+        assert!(rendered.contains("${tool_input.action}"));
     }
 
     #[test]
@@ -3929,7 +5374,7 @@ mod tests {
         );
         assert!(fs::read_to_string(&stale_command_path)
             .unwrap()
-            .contains("obligations(action=detect, project=..., cwd=...)"));
+            .contains("memory(action=add)"));
     }
 
     #[test]
@@ -4072,6 +5517,7 @@ mod tests {
                     transcript_path: Some("/tmp/transcript.jsonl".to_string()),
                     reason: Some("shutdown".to_string()),
                     write_policy: Some("durable".to_string()),
+                    project: Some("engram".to_string()),
                     ..HarnessHookEvent::default()
                 },
                 HarnessHookServices {
@@ -4090,6 +5536,39 @@ mod tests {
             .expect("explicit durable SessionEnd should write");
         assert!(item.content.contains("Claude Code Session-End Handoff"));
         assert!(item.content.contains("claude-session-1"));
+    }
+
+    #[tokio::test]
+    async fn hook_event_session_end_abstains_without_canonical_project() {
+        let config = engram_store::StoreConfig::memory();
+        let db = engram_store::connect_and_init(&config).await.unwrap();
+        let handoff = crate::handoff::HandoffService::new(db);
+        handoff.init_schema().await.unwrap();
+
+        let outcome = HarnessService::new()
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    hook_event_name: "SessionEnd".to_string(),
+                    cwd: Some("/tmp/unregistered-worktree".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                HarnessHookServices {
+                    memory: None,
+                    obligations: None,
+                    handoff: Some(&handoff),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(!outcome.handoff_written);
+        assert!(outcome
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no canonical project")));
+        assert!(handoff.get(None, None).await.unwrap().item.is_none());
     }
 
     #[tokio::test]
@@ -4137,6 +5616,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "UserPromptSubmit".to_string(),
                     prompt: Some("Implement the design and commit it".to_string()),
                     cwd: Some("/tmp/engram".to_string()),
@@ -4161,6 +5641,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "Stop".to_string(),
                     cwd: Some("/tmp/engram".to_string()),
                     write_policy: Some("durable".to_string()),
@@ -4178,15 +5659,19 @@ mod tests {
         assert!(stop_outcome.blocked);
         assert_eq!(stop_outcome.response["decision"], "block");
         assert!(stop_outcome.response.get("hookSpecificOutput").is_none());
-        assert!(stop_outcome.response["reason"]
-            .as_str()
-            .unwrap()
-            .contains("obligations(action=doctor"));
+        let stop_reason = stop_outcome.response["reason"].as_str().unwrap();
+        assert!(stop_reason.contains("obligations(action=doctor"));
+        assert!(stop_reason.contains("scope={relevance_mode:\"global\"}"));
+        assert!(stop_reason.contains("cwd=\"/tmp/engram\""));
+        assert!(stop_reason.contains("resolution=\""));
+        assert!(!stop_reason.contains("resolution_kind="));
+        assert!(!stop_reason.contains("project=\"engram\""));
 
         let active_stop = service
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "Stop".to_string(),
                     cwd: Some("/tmp/engram".to_string()),
                     write_policy: Some("durable".to_string()),
@@ -4296,8 +5781,26 @@ mod tests {
             .contains("without blocking the user"));
     }
 
+    #[test]
+    fn procedure_match_is_an_orientation_boundary_but_other_memory_actions_are_not() {
+        assert!(is_orientation_boundary_tool(&HarnessHookEvent {
+            tool_name: Some("mcp__engram__orient".to_string()),
+            ..HarnessHookEvent::default()
+        }));
+        assert!(is_orientation_boundary_tool(&HarnessHookEvent {
+            tool_name: Some("mcp__engram__memory".to_string()),
+            tool_input_action: Some("procedure_match".to_string()),
+            ..HarnessHookEvent::default()
+        }));
+        assert!(!is_orientation_boundary_tool(&HarnessHookEvent {
+            tool_name: Some("mcp__engram__memory".to_string()),
+            tool_input_action: Some("list".to_string()),
+            ..HarnessHookEvent::default()
+        }));
+    }
+
     #[tokio::test]
-    async fn pre_tool_use_blocks_until_orient_resolves_orientation_obligation() {
+    async fn pre_tool_use_blocks_until_an_identity_boundary_resolves_orientation_obligation() {
         let config = engram_store::StoreConfig::memory();
         let db = engram_store::connect_and_init(&config).await.unwrap();
         let obligations = crate::obligation::ObligationService::new(db);
@@ -4313,6 +5816,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "UserPromptSubmit".to_string(),
                     prompt: Some("Inspect the repository and explain the GA status".to_string()),
                     cwd: Some("/tmp/engram".to_string()),
@@ -4329,6 +5833,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "PreToolUse".to_string(),
                     cwd: Some("/tmp/engram".to_string()),
                     tool_name: Some("Bash".to_string()),
@@ -4354,6 +5859,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "PreToolUse".to_string(),
                     cwd: Some("/tmp/engram".to_string()),
                     tool_name: Some("mcp__engram__orient".to_string()),
@@ -4370,6 +5876,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "PostToolUse".to_string(),
                     cwd: Some("/tmp/engram".to_string()),
                     tool_name: Some("mcp__engram__orient".to_string()),
@@ -4384,6 +5891,7 @@ mod tests {
             .handle_hook_event(
                 HarnessHookEvent {
                     harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
                     hook_event_name: "PreToolUse".to_string(),
                     cwd: Some("/tmp/engram".to_string()),
                     tool_name: Some("Bash".to_string()),
@@ -4395,6 +5903,84 @@ mod tests {
             .unwrap();
         assert!(!allowed.blocked);
         assert_eq!(allowed.response["continue"], true);
+
+        service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
+                    hook_event_name: "UserPromptSubmit".to_string(),
+                    prompt: Some("Handle the worker deployment procedure".to_string()),
+                    cwd: Some("/tmp/engram".to_string()),
+                    write_policy: Some("durable".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+
+        service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
+                    hook_event_name: "PostToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("mcp__engram__memory".to_string()),
+                    tool_input_action: Some("list".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        let still_denied = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
+                    hook_event_name: "PreToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("Bash".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        assert!(still_denied.blocked);
+
+        service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
+                    hook_event_name: "PostToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("mcp__engram__memory".to_string()),
+                    tool_input_action: Some("procedure_match".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        let procedure_allowed = service
+            .handle_hook_event(
+                HarnessHookEvent {
+                    harness: HarnessKind::ClaudeCode,
+                    enforcement_profile: HarnessEnforcementProfile::Graduated,
+                    hook_event_name: "PreToolUse".to_string(),
+                    cwd: Some("/tmp/engram".to_string()),
+                    tool_name: Some("Bash".to_string()),
+                    ..HarnessHookEvent::default()
+                },
+                services(),
+            )
+            .await
+            .unwrap();
+        assert!(!procedure_allowed.blocked);
     }
 
     #[tokio::test]

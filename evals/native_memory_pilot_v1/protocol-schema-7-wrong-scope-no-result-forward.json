@@ -1,0 +1,107 @@
+{
+  "schema_version": 7,
+  "pilot_id": "native-memory-pilot-v1-wrong-scope-no-result-forward",
+  "cases": [
+    {
+      "id": "learned_procedure_wrong_repository_scope",
+      "teaching_cwd": "fixture://atlas/main/services/worker",
+      "evaluation_cwd": "fixture://orbit/main/services/worker",
+      "evaluation_prompt": "Handle the worker procedure using durable memory only if it belongs to the current repository.",
+      "expected_repository_remote": "https://github.com/acme/orbit",
+      "expected_project": "orbit",
+      "expected_component": "worker",
+      "expected_first_action": "inspect_procedure_prerequisites",
+      "expected_outcome": "abstain",
+      "condition_evidence_target": "runbooks/deploy-worker.md",
+      "condition_evidence_output_contains": "ORBIT_ONLY_CANARY",
+      "project_evidence_target": "runbooks/deploy-worker.md",
+      "project_evidence_output_contains": "Orbit",
+      "component_evidence_target": "services/worker/README.md",
+      "component_evidence_output_contains": "Component: worker",
+      "procedure": {
+        "context_key": "procedure-atlas-context-probe-v1",
+        "task": "run the Atlas context probe",
+        "failed_commands": [
+          "./bin/context-probe --channel amber"
+        ],
+        "command": "./bin/context-probe --channel cobalt",
+        "expected_exit_code": 0,
+        "expected_output_contains": "ATLAS_CONTEXT_PROBE_OK",
+        "conditions": {}
+      }
+    }
+  ],
+  "arms": [
+    {
+      "id": "codex_native_memory",
+      "host": "codex",
+      "memory_layer": "native"
+    },
+    {
+      "id": "codex_lean_engram",
+      "host": "codex",
+      "memory_layer": "engram"
+    },
+    {
+      "id": "codex_engram_plus_native",
+      "host": "codex",
+      "memory_layer": "both"
+    },
+    {
+      "id": "claude_native_memory",
+      "host": "claude_code",
+      "memory_layer": "native"
+    },
+    {
+      "id": "claude_lean_engram",
+      "host": "claude_code",
+      "memory_layer": "engram"
+    },
+    {
+      "id": "claude_engram_plus_native",
+      "host": "claude_code",
+      "memory_layer": "both"
+    }
+  ],
+  "repetitions": 1,
+  "run_order": [
+    {
+      "case_id": "learned_procedure_wrong_repository_scope",
+      "arm": "claude_engram_plus_native",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_wrong_repository_scope",
+      "arm": "codex_native_memory",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_wrong_repository_scope",
+      "arm": "claude_lean_engram",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_wrong_repository_scope",
+      "arm": "codex_engram_plus_native",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_wrong_repository_scope",
+      "arm": "claude_native_memory",
+      "repetition": 1
+    },
+    {
+      "case_id": "learned_procedure_wrong_repository_scope",
+      "arm": "codex_lean_engram",
+      "repetition": 1
+    }
+  ],
+  "codex_min_idle_hours": 1,
+  "codex_authentication_mode": "chatgpt_browser_keyring",
+  "claude_budget_cents": 50,
+  "claude_prior_spend_microusd": 3252912,
+  "claude_authorized_ceiling_cents": 400,
+  "claude_model": "claude-haiku-4-5",
+  "claude_max_turns": 12,
+  "requires_explicit_execution_approval": true
+}

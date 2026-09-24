@@ -1,0 +1,50 @@
+{
+  "schema_version": 4,
+  "probe_id": "engram-retrieval-probe-v4-structured-candidates",
+  "source_protocol": {
+    "path": "../retrieval_probe_v3/protocol.json",
+    "sha256": "0ad8cb22c5ce16ee8f0985db66bd7622d472753a5c2c7488f1a3ef9441e2c27c"
+  },
+  "source_results": {
+    "path": "../retrieval_probe_v3/RESULTS_2026-08-08.md",
+    "sha256": "46239e16ac90a8c15869946a50d8f90004770fd178310a331a61155682d772fc"
+  },
+  "source_report_sha256": "dc49b56f777ed5bd62362dd799bcdbbf3db15dfae5b3c724944afd034e44afda",
+  "evaluation_mode": "known_v3_failure_corpus_diagnostic_ablation",
+  "arms": [
+    "current_lexical",
+    "dense_candidate_top5",
+    "structured_kind_candidates",
+    "exact_tag_candidates",
+    "lifecycle_successor_candidates",
+    "candidate_bundle_max10"
+  ],
+  "structured": {
+    "procedure_cues": ["command", "procedure", "runbook", "verified"],
+    "handoff_cues": ["continue", "handoff", "next", "remains", "resume", "resuming", "unfinished"],
+    "rule_cues": ["allowed", "may", "must", "policy", "when", "window"],
+    "structured_kind_limit": 2,
+    "exact_tag_limit": 2,
+    "lifecycle_limit": 2,
+    "bundle_max_candidates": 10,
+    "source_priority": [
+      "lifecycle_successor_candidates",
+      "structured_kind_candidates",
+      "exact_tag_candidates",
+      "current_lexical",
+      "dense_candidate_top5"
+    ],
+    "procedure_policy": "active_scoped_receipt_verified_unexpired",
+    "tag_policy": "exact_normalized_tag_phrase",
+    "lifecycle_policy": "all_query_terms_match_inactive_then_follow_explicit_successor"
+  },
+  "quality_gates": {
+    "bundle_min_recall": 1.0,
+    "bundle_max_candidates": 10,
+    "structured_min_baseline_miss_recoveries": 1,
+    "max_scope_leakage": 0,
+    "max_stale_results": 0,
+    "max_forbidden_results": 0,
+    "semantic_query_p95_ms": 100
+  }
+}

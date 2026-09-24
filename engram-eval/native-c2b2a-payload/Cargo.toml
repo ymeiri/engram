@@ -1,0 +1,66 @@
+[package]
+name = "engram-native-c2b2a-payload"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.93"
+publish = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+
+[workspace]
+
+[features]
+default = []
+supervisor = []
+collector = ["dep:surrealdb-core", "dep:tokio"]
+
+[dependencies]
+getrandom = { version = "=0.3.4", default-features = false }
+libc = { version = "=0.2.180", default-features = false }
+sha2 = { version = "=0.10.9", default-features = false }
+
+[dependencies.surrealdb-core]
+version = "=2.6.0"
+default-features = false
+features = ["kv-rocksdb"]
+optional = true
+
+[dependencies.tokio]
+version = "=1.49.0"
+default-features = false
+features = ["rt", "sync", "time"]
+optional = true
+
+[lib]
+name = "engram_native_c2b2a_payload"
+path = "src/lib.rs"
+
+[[bin]]
+name = "supervisor"
+path = "src/bin/supervisor.rs"
+required-features = ["supervisor"]
+
+[[bin]]
+name = "collector"
+path = "src/bin/collector.rs"
+required-features = ["collector"]
+
+[[test]]
+name = "contract"
+path = "tests/contract.rs"
+
+[[test]]
+name = "protocol"
+path = "tests/protocol.rs"
+
+[[test]]
+name = "rocks"
+path = "tests/rocks.rs"
+required-features = ["collector"]
+
+[[test]]
+name = "seccomp"
+path = "tests/seccomp.rs"

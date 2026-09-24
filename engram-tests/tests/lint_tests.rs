@@ -6,10 +6,11 @@ use engram_core::memory::{
 };
 use engram_core::telemetry::AgentFeedback;
 use engram_core::Id;
-use engram_index::{LintService, MemoryService};
-use engram_mcp::tools::{self, LintRequest, ToolState};
+use engram_index::{LintService, MemoryService, SearchService, WorkService};
+use engram_mcp::tools::{self, LintRequest, RetrievalScopeRequest, ToolState};
 use engram_store::{connect_and_init, StoreConfig, TelemetryRepo};
 use serde_json::Value;
+use tempfile::tempdir;
 
 async fn setup_tool_state() -> (ToolState, MemoryService, TelemetryRepo) {
     let config = StoreConfig::memory();
@@ -26,10 +27,14 @@ async fn setup_tool_state() -> (ToolState, MemoryService, TelemetryRepo) {
         .init_schema()
         .await
         .expect("Failed to initialize lint schema");
-    let telemetry_repo = TelemetryRepo::new(db);
+    let telemetry_repo = TelemetryRepo::new(db.clone());
+    let work = WorkService::new(db.clone());
+    work.init().await.expect("Failed to initialize work schema");
 
     let state = ToolState::new();
     state.init_lint(lint_service).await;
+    state.init_search(SearchService::new(db)).await;
+    state.init_work(work).await;
     (state, memory_service, telemetry_repo)
 }
 
@@ -37,10 +42,31 @@ fn lint_request(action: &str) -> LintRequest {
     LintRequest {
         action: action.to_string(),
         project: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
         vault_path: None,
         limit: None,
         write: None,
     }
+}
+
+fn related_scope(project: &str) -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some(project.to_string()),
+        ..RetrievalScopeRequest::default()
+    })
+}
+
+fn related_task_scope(project: &str, task: &str) -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some(project.to_string()),
+        task: Some(task.to_string()),
+        ..RetrievalScopeRequest::default()
+    })
 }
 
 fn writer() -> WriterProvenance {
@@ -50,6 +76,192 @@ fn writer() -> WriterProvenance {
 
 fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+#[tokio::test]
+async fn mcp_lint_reads_abstain_locally_before_service_access() {
+    let state = ToolState::new();
+
+    for (action, write) in [("run", None), ("list", None), ("apply_safe", Some(true))] {
+        let mut request = lint_request(action);
+        request.scope = None;
+        request.write = write;
+        let response = tools::lint_new(&state, request)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("{action} should abstain before service access: {error}")
+            });
+        let json = parse_json(&response);
+        assert_eq!(json["executed"], false, "unexpected response for {action}");
+        assert_eq!(json["relevance_mode"], "local");
+        assert_eq!(json["authorization_scope_enforced"], true);
+        assert_eq!(json["omitted_layers"], serde_json::json!(["lint"]));
+    }
+}
+
+#[tokio::test]
+async fn mcp_lint_related_scope_filters_findings_and_mutates_only_project_owned_items() {
+    let (state, memory_service, _) = setup_tool_state().await;
+    {
+        let guard = state.work_service.read().await;
+        let work = guard.as_ref().expect("work service");
+        work.create_project("alpha", None).await.unwrap();
+        work.create_project("beta", None).await.unwrap();
+        work.create_task("alpha", "alpha-one", None, Some("ALPHA-1"))
+            .await
+            .unwrap();
+    }
+
+    let mut missing_ids = Vec::new();
+    for (scope, title) in [
+        (MemoryScope::Global, "Global missing evidence"),
+        (MemoryScope::project("alpha"), "Alpha missing evidence"),
+        (MemoryScope::project("beta"), "Beta missing evidence"),
+        (
+            MemoryScope::entity("unowned-entity"),
+            "Entity missing evidence",
+        ),
+    ] {
+        let item = MemoryItem::new(
+            MemoryKind::Decision,
+            title,
+            format!("{title} content"),
+            scope,
+            ClaimOrigin::AgentObserved,
+            writer(),
+        );
+        missing_ids.push((title, item.id));
+        memory_service.capture_memory(item).await.unwrap();
+    }
+
+    let global_old = MemoryItem::new(
+        MemoryKind::Decision,
+        "Global superseded item",
+        "Globally visible item that related lint must not mutate.",
+        MemoryScope::Global,
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+    let alpha_old = MemoryItem::new(
+        MemoryKind::Decision,
+        "Alpha superseded item",
+        "Alpha item that related lint may safely archive.",
+        MemoryScope::project("alpha"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"));
+    let alpha_replacement = MemoryItem::new(
+        MemoryKind::Decision,
+        "Alpha replacement",
+        "Replacement that supersedes both test items.",
+        MemoryScope::project("alpha"),
+        ClaimOrigin::AgentObserved,
+        writer(),
+    )
+    .with_evidence(EvidenceRef::new(EvidenceKind::ManualReview, "lint_tests"))
+    .with_superseded_item(global_old.id)
+    .with_superseded_item(alpha_old.id);
+    let global_old_id = global_old.id;
+    let alpha_old_id = alpha_old.id;
+    memory_service.capture_memory(global_old).await.unwrap();
+    memory_service.capture_memory(alpha_old).await.unwrap();
+    memory_service
+        .capture_memory(alpha_replacement)
+        .await
+        .unwrap();
+
+    let mut run = lint_request("run");
+    run.scope = related_scope("alpha");
+    let run = parse_json(&tools::lint_new(&state, run).await.unwrap());
+    let findings = run["findings"].as_array().unwrap();
+    let finding_ids = findings
+        .iter()
+        .filter_map(|finding| finding["item_id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(finding_ids.contains(&missing_ids[0].1.to_string().as_str()));
+    assert!(finding_ids.contains(&missing_ids[1].1.to_string().as_str()));
+    assert!(!finding_ids.contains(&missing_ids[2].1.to_string().as_str()));
+    assert!(!finding_ids.contains(&missing_ids[3].1.to_string().as_str()));
+    assert_eq!(run["resolved_project"], "alpha");
+
+    let mut apply = lint_request("apply_safe");
+    apply.scope = related_scope("alpha");
+    apply.write = Some(true);
+    let apply = parse_json(&tools::lint_new(&state, apply).await.unwrap());
+    assert_eq!(apply["applied_safe_actions"], 1);
+    assert_eq!(
+        memory_service
+            .get_memory(&alpha_old_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status
+            .to_string(),
+        "archived"
+    );
+    assert_eq!(
+        memory_service
+            .get_memory(&global_old_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status
+            .to_string(),
+        "active"
+    );
+
+    let mut global_apply = lint_request("apply_safe");
+    global_apply.project = Some("alpha".to_string());
+    global_apply.write = Some(true);
+    let global_apply = parse_json(&tools::lint_new(&state, global_apply).await.unwrap());
+    assert_eq!(global_apply["applied_safe_actions"], 1);
+    assert_eq!(
+        memory_service
+            .get_memory(&global_old_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status
+            .to_string(),
+        "archived"
+    );
+
+    let mut exact_task = lint_request("run");
+    exact_task.scope = related_task_scope("alpha", "ALPHA-1");
+    let exact_task = parse_json(&tools::lint_new(&state, exact_task).await.unwrap());
+    assert_eq!(exact_task["executed"], false);
+    assert_eq!(exact_task["resolved_task"], "alpha-one");
+    assert_eq!(exact_task["omitted_layers"], serde_json::json!(["lint"]));
+
+    let mut conflicting_project = lint_request("run");
+    conflicting_project.scope = related_scope("alpha");
+    conflicting_project.project = Some("beta".to_string());
+    let error = tools::lint_new(&state, conflicting_project)
+        .await
+        .expect_err("conflicting project target should fail");
+    assert!(error.contains("does not match resolved authorization project 'alpha'"));
+
+    let vault = tempdir().unwrap();
+    let mut vault_lint = lint_request("run");
+    vault_lint.scope = related_scope("alpha");
+    vault_lint.vault_path = Some(vault.path().display().to_string());
+    let error = tools::lint_new(&state, vault_lint)
+        .await
+        .expect_err("related vault lint should require global authorization");
+    assert!(error.contains("vault_path requires scope.relevance_mode=global"));
+
+    let global = parse_json(&tools::lint_new(&state, lint_request("run")).await.unwrap());
+    let global_ids = global["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|finding| finding["item_id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(global_ids.contains(&missing_ids[2].1.to_string().as_str()));
+    assert!(global_ids.contains(&missing_ids[3].1.to_string().as_str()));
+    assert_eq!(global["relevance_mode"], "global");
 }
 
 #[tokio::test]

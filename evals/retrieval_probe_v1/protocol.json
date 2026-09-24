@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "probe_id": "engram-retrieval-probe-v1",
+  "top_k": 5,
+  "current_min_score": 0.3,
+  "quality_gates": {
+    "current_min_recall_at_k": 0.5,
+    "current_min_mrr": 0.4,
+    "max_scope_leakage": 0,
+    "max_stale_results": 0,
+    "max_forbidden_results": 0,
+    "max_abstention_false_positives": 0
+  },
+  "corpus_expansions": [
+    {
+      "key": "decision-atlas-worker-retries",
+      "kind": "decision",
+      "title": "Atlas queue worker retry policy",
+      "content": "Queue worker retries use exponential backoff with full jitter capped at 30 seconds.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["queue-worker", "retry-policy"]
+    },
+    {
+      "key": "concept-atlas-debug-with-bits",
+      "kind": "project_fact",
+      "title": "Debug with bits context map",
+      "content": "The phrase debug with bits connects TRACE-142, the trace-mask runbook, and the bitfield decoder dashboard.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["debug-with-bits", "TRACE-142"]
+    },
+    {
+      "key": "decision-atlas-database",
+      "kind": "decision",
+      "title": "Atlas primary database",
+      "content": "Use PostgreSQL for transactional queue metadata and consumer leases.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["database", "postgresql"]
+    },
+    {
+      "key": "decision-atlas-observability",
+      "kind": "decision",
+      "title": "Atlas worker observability",
+      "content": "Emit OpenTelemetry spans and RED metrics for each queue consumer.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["worker", "telemetry"]
+    },
+    {
+      "key": "decision-atlas-test-partitioning",
+      "kind": "decision",
+      "title": "Atlas integration test partitioning",
+      "content": "Partition integration tests by service and keep queue worker fixtures deterministic.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["integration-test", "fixtures"]
+    },
+    {
+      "key": "decision-atlas-cache",
+      "kind": "decision",
+      "title": "Atlas response cache",
+      "content": "Use an in-process bounded cache only for immutable lookup responses.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["cache"]
+    },
+    {
+      "key": "rule-atlas-deploy-window",
+      "kind": "rule",
+      "title": "Atlas deploy window",
+      "content": "Production worker deploys require the weekday change window.",
+      "scope": {"type": "project", "project_name": "atlas"},
+      "tags": ["deploy", "worker"]
+    },
+    {
+      "key": "decision-orbit-worker-retries",
+      "kind": "decision",
+      "title": "Orbit queue worker retry policy",
+      "content": "Orbit queue worker retries are fixed interval. ORBIT_RETRY_CANARY",
+      "scope": {"type": "project", "project_name": "orbit"},
+      "tags": ["queue-worker", "retry-policy"]
+    },
+    {
+      "key": "concept-orbit-debug-with-bits",
+      "kind": "project_fact",
+      "title": "Orbit debug with bits context map",
+      "content": "Orbit uses a different bit debugger. ORBIT_BITS_CANARY",
+      "scope": {"type": "project", "project_name": "orbit"},
+      "tags": ["debug-with-bits"]
+    },
+    {
+      "key": "decision-orbit-http-client",
+      "kind": "decision",
+      "title": "Orbit HTTP client",
+      "content": "Use hyper directly with Orbit-specific timeout behavior. ORBIT_HTTP_CANARY",
+      "scope": {"type": "repository", "remote_url": "git@github.com:acme/orbit.git"},
+      "tags": ["http-client"]
+    },
+    {
+      "key": "decision-orbit-database",
+      "kind": "decision",
+      "title": "Orbit primary database",
+      "content": "Use SQLite for local worker state. ORBIT_DATABASE_CANARY",
+      "scope": {"type": "project", "project_name": "orbit"},
+      "tags": ["database"]
+    },
+    {
+      "key": "decision-orbit-observability",
+      "kind": "decision",
+      "title": "Orbit worker observability",
+      "content": "Use Orbit counters for worker telemetry. ORBIT_TELEMETRY_CANARY",
+      "scope": {"type": "project", "project_name": "orbit"},
+      "tags": ["worker", "telemetry"]
+    },
+    {
+      "key": "decision-nova-queue",
+      "kind": "decision",
+      "title": "Nova queue architecture",
+      "content": "Use RabbitMQ quorum queues for durable consumers. NOVA_QUEUE_CANARY",
+      "scope": {"type": "project", "project_name": "nova"},
+      "tags": ["queue", "durable-consumers"]
+    },
+    {
+      "key": "decision-nova-http-client",
+      "kind": "decision",
+      "title": "Nova HTTP client",
+      "content": "Use reqwest without shared timeout middleware. NOVA_HTTP_CANARY",
+      "scope": {"type": "project", "project_name": "nova"},
+      "tags": ["http-client", "reqwest"]
+    },
+    {
+      "key": "procedure-nova-worker-deploy",
+      "kind": "project_fact",
+      "title": "Nova worker deploy procedure",
+      "content": "Deploy the queue worker using the Nova release controller. NOVA_DEPLOY_CANARY",
+      "scope": {"type": "project", "project_name": "nova"},
+      "tags": ["deploy", "queue-worker"]
+    },
+    {
+      "key": "decision-nova-worker-retries",
+      "kind": "decision",
+      "title": "Nova queue worker retry policy",
+      "content": "Nova retries use linear delay without jitter. NOVA_RETRY_CANARY",
+      "scope": {"type": "project", "project_name": "nova"},
+      "tags": ["queue-worker", "retry-policy"]
+    },
+    {
+      "key": "concept-nova-debug-with-bits",
+      "kind": "project_fact",
+      "title": "Nova debug with bits context map",
+      "content": "Nova maps the phrase to another dashboard. NOVA_BITS_CANARY",
+      "scope": {"type": "project", "project_name": "nova"},
+      "tags": ["debug-with-bits"]
+    },
+    {
+      "key": "decision-nova-test-partitioning",
+      "kind": "decision",
+      "title": "Nova integration test partitioning",
+      "content": "Partition integration tests by tenant and worker region. NOVA_TEST_CANARY",
+      "scope": {"type": "project", "project_name": "nova"},
+      "tags": ["integration-test", "worker"]
+    }
+  ],
+  "queries": [
+    {
+      "id": "queue-decision-direct",
+      "category": "direct_lexical",
+      "query": "queue durable consumers bounded redelivery",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-queue-v2"],
+      "forbidden_keys": ["decision-atlas-queue-v1", "decision-nova-queue"]
+    },
+    {
+      "id": "queue-decision-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "message broker selection",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-queue-v2"],
+      "forbidden_keys": ["decision-atlas-queue-v1", "decision-nova-queue"]
+    },
+    {
+      "id": "http-client-direct",
+      "category": "repository_scope",
+      "query": "shared timeout HTTP client",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1", "decision-orbit-http-client", "decision-nova-http-client"]
+    },
+    {
+      "id": "http-client-stable-key",
+      "category": "stable_identifier",
+      "query": "decision-atlas-http-client-v2",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1", "decision-orbit-http-client"]
+    },
+    {
+      "id": "worker-deploy-procedure",
+      "category": "repository_scope",
+      "query": "deploy queue worker",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["procedure-atlas-worker-deploy"],
+      "forbidden_keys": ["procedure-orbit-worker-deploy", "procedure-nova-worker-deploy"]
+    },
+    {
+      "id": "worker-integration-procedure",
+      "category": "repository_scope",
+      "query": "queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["procedure-atlas-integration-v3"],
+      "forbidden_keys": ["procedure-atlas-integration-v2", "decision-nova-test-partitioning"]
+    },
+    {
+      "id": "resume-current-plan",
+      "category": "current_handoff",
+      "query": "next action JetStream integration",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["plan-atlas-worker-current"],
+      "forbidden_keys": ["plan-atlas-worker-previous", "plan-orbit-current"]
+    },
+    {
+      "id": "worker-retry-policy",
+      "category": "distractor_stress",
+      "query": "queue worker retry full jitter",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-worker-retries"],
+      "forbidden_keys": ["decision-orbit-worker-retries", "decision-nova-worker-retries"]
+    },
+    {
+      "id": "debug-with-bits",
+      "category": "ecosystem_cue",
+      "query": "debug with bits",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["concept-atlas-debug-with-bits"],
+      "forbidden_keys": ["concept-orbit-debug-with-bits", "concept-nova-debug-with-bits"]
+    },
+    {
+      "id": "superseded-queue-choice",
+      "category": "lifecycle_correction",
+      "query": "Redis Streams",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-queue-v2"],
+      "forbidden_keys": ["decision-atlas-queue-v1"]
+    },
+    {
+      "id": "wrong-project-canary",
+      "category": "wrong_scope",
+      "query": "deploy worker fast ORBIT_ONLY_CANARY",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["procedure-orbit-worker-deploy"],
+      "abstain": true
+    },
+    {
+      "id": "no-result-cassandra",
+      "category": "no_result",
+      "query": "Cassandra tombstone quorum compaction",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": [],
+      "abstain": true
+    }
+  ]
+}

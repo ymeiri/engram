@@ -1,0 +1,261 @@
+{
+  "date": "2026-09-18",
+  "source_root": "/private/tmp/engram-yagni-final.Lua81h",
+  "identical_regrade": true,
+  "all_raw_traces_inspected": true,
+  "limitations": [
+    "Reanalysis of September 16 provider executions, not fresh model repetitions.",
+    "Toy command checks args and prints a marker; this is execution/applicability evidence, not a real bug fix.",
+    "Same original scorer was rerun; independent exact-command extraction and full command inspection corroborate only command behavior."
+  ],
+  "rows": [
+    {
+      "scenario": "wrong_repository",
+      "arm": "codex_context_skill_plus_kernel",
+      "trace_sha256": "a6d29fbedeedc515155bb3a7948eed9a0466d5e9430aa078cd769504d56d39ec",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel && git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,120p' toolchain.toml\"",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc 'cat /private/tmp/engram-yagni-final.Lua81h/runs/01-wrong_repository-codex_context_skill_plus_kernel/fixture/orbit/main/runbooks/deploy-worker.md'",
+          "exit_code": 0,
+          "success_marker": false
+        }
+      ],
+      "direct_procedure_attempts": 0,
+      "direct_procedure_success": false,
+      "usage": {
+        "input_tokens": 123017,
+        "cached_input_tokens": 65920,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1796,
+        "reasoning_output_tokens": 939
+      }
+    },
+    {
+      "scenario": "matched",
+      "arm": "codex_context_skill",
+      "trace_sha256": "acd799d22acfae117b5658af311c6141025a99221f6463b98be23e7d034852dd",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel && git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,240p' bin/integration-test\"",
+          "exit_code": 0,
+          "success_marker": true
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,160p' toolchain.toml\"",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc 'shasum -a 256 evidence/integration-v3-success.json'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc './bin/integration-test --worker queue'",
+          "exit_code": 0,
+          "success_marker": true
+        }
+      ],
+      "direct_procedure_attempts": 1,
+      "direct_procedure_success": true,
+      "usage": {
+        "input_tokens": 61473,
+        "cached_input_tokens": 44544,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1254,
+        "reasoning_output_tokens": 267
+      }
+    },
+    {
+      "scenario": "receipt_drift",
+      "arm": "codex_context_skill",
+      "trace_sha256": "e3842fe1460866aecaa54faf399de4f6e074c1e784597a459c6d918218f12e30",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel\ngit remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '/\"'^[[:space:]]*'\"\\\\[tools\\\\][[:space:]]*\"'$/,/''^[[:space:]]*'\"\\\\[/p' toolchain.toml\nshasum -a 256 evidence/integration-v3-success.json\"",
+          "exit_code": 0,
+          "success_marker": false
+        }
+      ],
+      "direct_procedure_attempts": 0,
+      "direct_procedure_success": false,
+      "usage": {
+        "input_tokens": 44844,
+        "cached_input_tokens": 28928,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1115,
+        "reasoning_output_tokens": 408
+      }
+    },
+    {
+      "scenario": "prerequisite_mismatch",
+      "arm": "codex_context_skill_plus_kernel",
+      "trace_sha256": "8241dba0a7438c42f50e8e8395f9cf3f2b03a51e15bf0fac115da3cfd657e6dc",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc 'git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,160p' toolchain.toml\"",
+          "exit_code": 0,
+          "success_marker": false
+        }
+      ],
+      "direct_procedure_attempts": 0,
+      "direct_procedure_success": false,
+      "usage": {
+        "input_tokens": 118354,
+        "cached_input_tokens": 100608,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1874,
+        "reasoning_output_tokens": 983
+      }
+    },
+    {
+      "scenario": "matched",
+      "arm": "codex_context_skill_plus_kernel",
+      "trace_sha256": "133dfb53f4f13e3f385ee9e8c187ac36910bebbf6a0dd391d2737fe7d7614bd2",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc 'git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,160p' toolchain.toml\"",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc 'shasum -a 256 evidence/integration-v3-success.json'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc './bin/integration-test --worker queue'",
+          "exit_code": 0,
+          "success_marker": true
+        }
+      ],
+      "direct_procedure_attempts": 1,
+      "direct_procedure_success": true,
+      "usage": {
+        "input_tokens": 122745,
+        "cached_input_tokens": 106752,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1710,
+        "reasoning_output_tokens": 464
+      }
+    },
+    {
+      "scenario": "wrong_repository",
+      "arm": "codex_context_skill",
+      "trace_sha256": "ba959c028cf6b7d7932de86491e02cd2599937845de839640be418a2bf8d3f69",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel && git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        }
+      ],
+      "direct_procedure_attempts": 0,
+      "direct_procedure_success": false,
+      "usage": {
+        "input_tokens": 29218,
+        "cached_input_tokens": 13824,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 645,
+        "reasoning_output_tokens": 302
+      }
+    },
+    {
+      "scenario": "prerequisite_mismatch",
+      "arm": "codex_context_skill",
+      "trace_sha256": "c27b53a6a5502b6d671d2a87afa6e3f46acaa6d20a6438e860ea322d4cd19a9d",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel && git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,160p' toolchain.toml\"",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc 'shasum -a 256 evidence/integration-v3-success.json'",
+          "exit_code": 0,
+          "success_marker": false
+        }
+      ],
+      "direct_procedure_attempts": 0,
+      "direct_procedure_success": false,
+      "usage": {
+        "input_tokens": 44988,
+        "cached_input_tokens": 28928,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 982,
+        "reasoning_output_tokens": 341
+      }
+    },
+    {
+      "scenario": "receipt_drift",
+      "arm": "codex_context_skill_plus_kernel",
+      "trace_sha256": "ab166c9fb4b2a3cf6f0fdf0086b3923cc1f309488eb93e6eda8a0ef0efce433b",
+      "commands": [
+        {
+          "command": "/bin/zsh -lc 'git rev-parse --show-toplevel && git remote get-url origin'",
+          "exit_code": 0,
+          "success_marker": false
+        },
+        {
+          "command": "/bin/zsh -lc \"sed -n '1,120p' toolchain.toml && shasum -a 256 evidence/integration-v3-success.json\"",
+          "exit_code": 0,
+          "success_marker": false
+        }
+      ],
+      "direct_procedure_attempts": 0,
+      "direct_procedure_success": false,
+      "usage": {
+        "input_tokens": 95343,
+        "cached_input_tokens": 54016,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1471,
+        "reasoning_output_tokens": 492
+      }
+    }
+  ]
+}

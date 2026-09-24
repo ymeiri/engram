@@ -22,7 +22,8 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty')
-WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "durable"')
+WRITE_POLICY=$(printf '%s' "$INPUT" | jq -r '.write_policy // "nudge"')
+ENFORCEMENT_PROFILE="soft"
 
 if [ -z "$CWD" ] || [ "$CWD" = "null" ]; then
   CWD="${CLAUDE_PROJECT_DIR:-}"
@@ -64,7 +65,8 @@ CALL_PAYLOAD=$(jq -nc \
   --arg transcript_path "$TRANSCRIPT_PATH" \
   --arg reason "$REASON" \
   --arg write_policy "$WRITE_POLICY" \
-  '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"harness",arguments:{action:"hook_event",harness:"claude_code",hook_event_name:"SessionEnd",session_id:$session_id,cwd:$cwd,transcript_path:$transcript_path,reason:$reason,write_policy:$write_policy,model_provider:"anthropic",model:"claude-code",surface:"claude-code",actor:"agent"}}}')
+  --arg enforcement "$ENFORCEMENT_PROFILE" \
+  '{jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"harness",arguments:{action:"hook_event",harness:"claude_code",enforcement:$enforcement,hook_event_name:"SessionEnd",session_id:$session_id,cwd:$cwd,transcript_path:$transcript_path,reason:$reason,write_policy:$write_policy,model_provider:"anthropic",model:"claude-code",surface:"claude-code",actor:"agent"}}}')
 
 if ! CALL_RESPONSE=$(curl -sS --max-time 10 -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "mcp-session-id: $MCP_SESSION_ID" -X POST "$MCP_URL" -d "$CALL_PAYLOAD"); then
   fallback "Engram SessionEnd handoff skipped: harness hook_event call failed."

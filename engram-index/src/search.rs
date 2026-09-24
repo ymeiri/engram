@@ -4,15 +4,27 @@
 //! entities, aliases, observations, session events, documents, tool usages, and memory items.
 
 use crate::document_search::merge_document_results;
-use crate::error::IndexResult;
+use crate::error::{IndexError, IndexResult};
 use crate::memory_ranker::{
     memory_scope_label, rank_memory_items, MemoryRankContext, RankedMemoryItem,
 };
+use crate::repository::RepositoryService;
+use crate::service::DocumentStats;
+use crate::tool_intel::ToolUsageInfo;
+use engram_core::entity::{Entity, Observation};
+use engram_core::id::Id;
 use engram_core::memory::MemoryStatus;
 use engram_core::search::{SearchLayer, SearchResultSource, UnifiedSearchResult};
+use engram_core::session::{Event, SessionStats, SessionStatus};
+use engram_core::tool::{ToolOutcome, ToolStats};
+use engram_core::work::{Project, Task};
 use engram_embed::Embedder;
-use engram_store::{Db, DocumentRepo, EntityRepo, MemoryRepo, SessionRepo, ToolRepo};
-use std::collections::HashMap;
+use engram_store::{
+    Db, DocumentRepo, EntityRepo, EntityStats, MemoryRepo, SessionRepo, ToolIntelStats, ToolRepo,
+    WorkRepo,
+};
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use tracing::{debug, info};
 
 /// Truncate a string to at most `max_bytes` bytes at a valid UTF-8 char boundary.
@@ -36,16 +48,56 @@ pub struct SearchService {
     doc_repo: DocumentRepo,
     tool_repo: ToolRepo,
     memory_repo: MemoryRepo,
+    work_repo: WorkRepo,
+    repository_service: RepositoryService,
     embedder: Option<Embedder>,
 }
 
 /// Optional context for scoped search behavior.
 #[derive(Debug, Clone, Default)]
 pub struct SearchOptions {
-    /// Project scope for MemoryItem filtering.
+    /// Project scope for MemoryItem filtering and fail-closed related legacy retrieval.
     pub project: Option<String>,
-    /// Current working directory for repository-scoped MemoryItem filtering.
+    /// Current working directory for repository/project scope resolution.
     pub cwd: Option<String>,
+}
+
+/// Result of a fail-closed related search.
+#[derive(Debug, Clone)]
+pub struct RelatedSearchOutcome {
+    /// Scoped and ranked results.
+    pub results: Vec<UnifiedSearchResult>,
+    /// Canonical project selected for the search.
+    pub project: String,
+    /// Canonical exact task selected for the search, when requested.
+    pub task: Option<String>,
+    /// Requested layers searched with enforceable ownership.
+    pub scoped_layers: Vec<SearchLayer>,
+    /// Requested layers omitted because their ownership cannot be proven.
+    pub omitted_layers: Vec<SearchLayer>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RelatedSearchScope {
+    /// Canonical project that bounds retrieval.
+    pub project: Project,
+    /// Exact task that further narrows retrieval, when requested.
+    pub task: Option<Task>,
+    /// Entity IDs owned by the project or exact task.
+    pub entity_ids: Vec<Id>,
+    /// Project-owned session IDs; empty for exact-task scope because sessions lack task ownership.
+    pub session_ids: Vec<Id>,
+}
+
+/// Tool recommendation derived only from project-owned session usages.
+#[derive(Debug, Clone)]
+pub struct RelatedToolRecommendation {
+    /// Recommended tool name.
+    pub tool_name: String,
+    /// Success rate among matching project-owned usages.
+    pub confidence: f32,
+    /// Scope-aware explanation for the recommendation.
+    pub reason: String,
 }
 
 impl SearchService {
@@ -56,7 +108,9 @@ impl SearchService {
             session_repo: SessionRepo::new(db.clone()),
             doc_repo: DocumentRepo::new(db.clone()),
             tool_repo: ToolRepo::new(db.clone()),
-            memory_repo: MemoryRepo::new(db),
+            memory_repo: MemoryRepo::new(db.clone()),
+            work_repo: WorkRepo::new(db.clone()),
+            repository_service: RepositoryService::new(db),
             embedder: None,
         }
     }
@@ -68,7 +122,9 @@ impl SearchService {
             session_repo: SessionRepo::new(db.clone()),
             doc_repo: DocumentRepo::new(db.clone()),
             tool_repo: ToolRepo::new(db.clone()),
-            memory_repo: MemoryRepo::new(db),
+            memory_repo: MemoryRepo::new(db.clone()),
+            work_repo: WorkRepo::new(db.clone()),
+            repository_service: RepositoryService::new(db),
             embedder: Some(embedder),
         }
     }
@@ -117,6 +173,24 @@ impl SearchService {
         layers: Option<&[SearchLayer]>,
         options: SearchOptions,
     ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        let has_scope_boundary = options
+            .project
+            .as_deref()
+            .is_some_and(|project| !project.trim().is_empty())
+            || options
+                .cwd
+                .as_deref()
+                .is_some_and(|cwd| !cwd.trim().is_empty());
+        let requests_legacy_layer = layers
+            .map(|layers| layers.iter().any(|layer| *layer != SearchLayer::Memory))
+            .unwrap_or(true);
+        if has_scope_boundary && requests_legacy_layer {
+            return Ok(self
+                .search_related(query, limit_per_layer, min_score, layers, &options, None)
+                .await?
+                .results);
+        }
+
         info!(
             "Unified search: query='{}', limit={}, layers={:?}",
             query, limit_per_layer, layers
@@ -146,28 +220,559 @@ impl SearchService {
         results.extend(tool_usages?);
         results.extend(memory_items?);
 
-        // Filter by minimum score
-        let mut results: Vec<_> = results
-            .into_iter()
-            .filter(|r| r.score >= min_score)
-            .collect();
-
-        // Sort by score (highest first)
-        results.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Remove duplicates (same id from same source)
-        let mut seen: HashMap<String, ()> = HashMap::new();
-        results.retain(|r| {
-            let key = format!("{}:{}", r.source, r.id);
-            seen.insert(key, ()).is_none()
-        });
+        let results = finalize_results(results, min_score);
 
         info!("Unified search found {} results", results.len());
         Ok(results)
+    }
+
+    /// Search only MemoryItems that apply to the supplied local scope.
+    ///
+    /// With no project, task, or cwd this deliberately returns only global/user memory.
+    pub async fn search_local_memory(
+        &self,
+        query: &str,
+        limit: usize,
+        min_score: Option<f32>,
+        options: &SearchOptions,
+        task: Option<&str>,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        let results = self
+            .search_scoped_memory(
+                query,
+                limit,
+                options.project.as_deref(),
+                None,
+                task,
+                None,
+                options.cwd.as_deref(),
+            )
+            .await?;
+        Ok(finalize_results(results, min_score.unwrap_or(0.3)))
+    }
+
+    /// Search related records within one deterministically resolved authorization scope.
+    ///
+    /// Every requested layer is either searched with provable project/task ownership or listed
+    /// in `omitted_layers`. The method fails closed when no single project can be resolved.
+    pub async fn search_related(
+        &self,
+        query: &str,
+        limit_per_layer: usize,
+        min_score: Option<f32>,
+        layers: Option<&[SearchLayer]>,
+        options: &SearchOptions,
+        task: Option<&str>,
+    ) -> IndexResult<RelatedSearchOutcome> {
+        let scope = self.resolve_related_scope(options, task).await?;
+        let requested_layers = layers
+            .map(|value| value.to_vec())
+            .unwrap_or_else(SearchLayer::all);
+        let exact_task = scope.task.is_some();
+        let mut scoped_layers = Vec::new();
+        let mut omitted_layers = Vec::new();
+        for layer in &requested_layers {
+            let ownership_is_provable = match layer {
+                SearchLayer::Document => false,
+                SearchLayer::SessionEvent | SearchLayer::ToolUsage if exact_task => false,
+                _ => true,
+            };
+            if ownership_is_provable {
+                scoped_layers.push(*layer);
+            } else {
+                omitted_layers.push(*layer);
+            }
+        }
+
+        let query_embedding = self
+            .embedder
+            .as_ref()
+            .and_then(|embedder| embedder.embed(query).ok());
+        let mut results = Vec::new();
+        if scoped_layers.contains(&SearchLayer::Entity) {
+            results.extend(
+                self.search_scoped_entities(
+                    &scope.entity_ids,
+                    query,
+                    query_embedding.as_deref(),
+                    limit_per_layer,
+                )
+                .await?,
+            );
+        }
+        if scoped_layers.contains(&SearchLayer::Alias) {
+            results.extend(
+                self.search_scoped_aliases(&scope.entity_ids, query, limit_per_layer)
+                    .await?,
+            );
+        }
+        if scoped_layers.contains(&SearchLayer::Observation) {
+            results.extend(
+                self.search_scoped_observations(
+                    &scope.entity_ids,
+                    query,
+                    query_embedding.as_deref(),
+                    limit_per_layer,
+                )
+                .await?,
+            );
+        }
+        if scoped_layers.contains(&SearchLayer::SessionEvent) {
+            results.extend(
+                self.search_related_session_events(&scope, query, limit_per_layer)
+                    .await?
+                    .into_iter()
+                    .map(event_search_result),
+            );
+        }
+        if scoped_layers.contains(&SearchLayer::ToolUsage) {
+            results.extend(
+                self.search_related_tool_usages(&scope, query, limit_per_layer)
+                    .await?
+                    .into_iter()
+                    .map(tool_usage_search_result),
+            );
+        }
+        if scoped_layers.contains(&SearchLayer::Memory) {
+            results.extend(
+                self.search_scoped_memory(
+                    query,
+                    limit_per_layer,
+                    Some(&scope.project.name),
+                    Some(&scope.project.id),
+                    scope.task.as_ref().map(|task| task.name.as_str()),
+                    scope.task.as_ref().map(|task| &task.id),
+                    options.cwd.as_deref(),
+                )
+                .await?,
+            );
+        }
+
+        let results = finalize_results(results, min_score.unwrap_or(0.3));
+        Ok(RelatedSearchOutcome {
+            results,
+            project: scope.project.name,
+            task: scope.task.map(|task| task.name),
+            scoped_layers,
+            omitted_layers,
+        })
+    }
+
+    /// Resolve one fail-closed project/task authorization boundary for related retrieval.
+    pub async fn resolve_related_scope(
+        &self,
+        options: &SearchOptions,
+        task_ref: Option<&str>,
+    ) -> IndexResult<RelatedSearchScope> {
+        let explicit_project = options
+            .project
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let task_ref = task_ref.map(str::trim).filter(|value| !value.is_empty());
+
+        let mut task = if let Some(task_ref) = task_ref {
+            if let Ok(id) = Id::parse(task_ref) {
+                self.work_repo.get_task(&id).await?
+            } else {
+                self.work_repo.get_task_by_jira(task_ref).await?
+            }
+        } else {
+            None
+        };
+
+        let project = if let Some(project_name) = explicit_project {
+            self.work_repo
+                .get_project_by_name(project_name)
+                .await?
+                .ok_or_else(|| {
+                    IndexError::NotFound(format!(
+                        "related search project not found: {project_name}"
+                    ))
+                })?
+        } else if let Some(task) = &task {
+            self.work_repo
+                .get_project(&task.project_id)
+                .await?
+                .ok_or_else(|| {
+                    IndexError::NotFound(format!(
+                        "project {} for task '{}' was not found",
+                        task.project_id, task.name
+                    ))
+                })?
+        } else if let Some(cwd) = options.cwd.as_deref() {
+            self.resolve_related_project_from_cwd(cwd).await?
+        } else {
+            return Err(IndexError::InvalidState(
+                "related search requires a project, an ID/JIRA task reference, or a cwd that resolves to exactly one linked project"
+                    .to_string(),
+            ));
+        };
+
+        if let Some(task_ref) = task_ref {
+            if task.is_none() {
+                task = self
+                    .work_repo
+                    .get_task_by_name(&project.id, task_ref)
+                    .await?;
+            }
+            let resolved_task = task.as_ref().ok_or_else(|| {
+                IndexError::NotFound(format!(
+                    "related search task '{}' was not found in project '{}'",
+                    task_ref, project.name
+                ))
+            })?;
+            if resolved_task.project_id != project.id {
+                return Err(IndexError::InvalidState(format!(
+                    "task '{}' belongs to project {}, not explicitly selected project '{}' ({})",
+                    resolved_task.name, resolved_task.project_id, project.name, project.id
+                )));
+            }
+        }
+
+        let mut entity_ids = HashSet::new();
+        for (entity_id, _) in self.work_repo.get_project_entities(&project.id).await? {
+            entity_ids.insert(entity_id);
+        }
+        if let Some(task) = &task {
+            for (entity_id, _) in self.work_repo.get_task_entities(&task.id).await? {
+                entity_ids.insert(entity_id);
+            }
+        }
+        let mut entity_ids: Vec<_> = entity_ids.into_iter().collect();
+        entity_ids.sort_by_key(ToString::to_string);
+
+        let session_ids = if task.is_none() {
+            self.session_repo
+                .list_sessions(None, None, Some(&project.name), None)
+                .await?
+                .into_iter()
+                .map(|session| session.id)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        Ok(RelatedSearchScope {
+            project,
+            task,
+            entity_ids,
+            session_ids,
+        })
+    }
+
+    /// Search events owned by the resolved related project.
+    ///
+    /// Exact-task scopes return no events because legacy sessions do not carry task ownership.
+    pub async fn search_related_session_events(
+        &self,
+        scope: &RelatedSearchScope,
+        query: &str,
+        limit: usize,
+    ) -> IndexResult<Vec<Event>> {
+        let query = query.to_lowercase();
+        let mut events = Vec::new();
+        for session_id in &scope.session_ids {
+            events.extend(
+                self.session_repo
+                    .get_events(session_id)
+                    .await?
+                    .into_iter()
+                    .filter(|event| {
+                        contains_query(
+                            &query,
+                            [
+                                Some(event.content.as_str()),
+                                event.context.as_deref(),
+                                event.source.as_deref(),
+                            ],
+                        )
+                    }),
+            );
+        }
+        events.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+        events.truncate(limit);
+        Ok(events)
+    }
+
+    /// Search tool usages owned by sessions in the resolved related project.
+    ///
+    /// Exact-task scopes return no usages because legacy sessions do not carry task ownership.
+    pub async fn search_related_tool_usages(
+        &self,
+        scope: &RelatedSearchScope,
+        query: &str,
+        limit: usize,
+    ) -> IndexResult<Vec<ToolUsageInfo>> {
+        let query = query.to_lowercase();
+        let mut usages = Vec::new();
+        for session_id in &scope.session_ids {
+            usages.extend(
+                self.tool_repo
+                    .get_usages_for_session(session_id)
+                    .await?
+                    .into_iter()
+                    .filter(|usage| usage.context.to_lowercase().contains(&query)),
+            );
+        }
+        usages.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+        usages.truncate(limit);
+
+        let mut results = Vec::new();
+        for usage in usages {
+            let tool_name = self
+                .entity_repo
+                .get_entity(&usage.tool_id)
+                .await?
+                .map(|entity| entity.name)
+                .unwrap_or_else(|| usage.tool_id.to_string());
+            results.push(ToolUsageInfo {
+                id: usage.id,
+                tool_name,
+                context: usage.context,
+                outcome: usage.outcome,
+                timestamp: usage.timestamp,
+            });
+        }
+        Ok(results)
+    }
+
+    /// Recommend tools using only usages owned by the resolved related project.
+    ///
+    /// Global learned preferences are intentionally excluded because legacy preferences do not
+    /// carry project or task ownership.
+    pub async fn recommend_related_tools(
+        &self,
+        scope: &RelatedSearchScope,
+        context: &str,
+        limit: usize,
+    ) -> IndexResult<Vec<RelatedToolRecommendation>> {
+        let usages = self.search_related_tool_usages(scope, context, 20).await?;
+        let mut stats: HashMap<String, (usize, usize)> = HashMap::new();
+        for usage in usages {
+            let counts = stats.entry(usage.tool_name).or_default();
+            counts.0 += 1;
+            if usage.outcome == ToolOutcome::Success {
+                counts.1 += 1;
+            }
+        }
+
+        let mut recommendations: Vec<_> = stats
+            .into_iter()
+            .map(|(tool_name, (total, successes))| {
+                let confidence = successes as f32 / total as f32;
+                RelatedToolRecommendation {
+                    tool_name,
+                    confidence,
+                    reason: format!(
+                        "Based on {total} similar usages owned by project '{}' with {:.0}% success rate",
+                        scope.project.name,
+                        confidence * 100.0
+                    ),
+                }
+            })
+            .collect();
+        recommendations.sort_by(|left, right| {
+            right
+                .confidence
+                .partial_cmp(&left.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.tool_name.cmp(&right.tool_name))
+        });
+        recommendations.truncate(limit);
+        Ok(recommendations)
+    }
+
+    /// Calculate tool statistics using only usages owned by the resolved related project.
+    ///
+    /// `preferences_count` is zero because legacy learned preferences do not carry ownership.
+    pub async fn related_tool_stats(
+        &self,
+        scope: &RelatedSearchScope,
+        tool_name: &str,
+    ) -> IndexResult<ToolStats> {
+        let usages = self
+            .search_related_tool_usages(scope, "", usize::MAX)
+            .await?;
+        let usages: Vec<_> = usages
+            .into_iter()
+            .filter(|usage| usage.tool_name.eq_ignore_ascii_case(tool_name))
+            .collect();
+        let total_usages = usages.len();
+        let success_count = usages
+            .iter()
+            .filter(|usage| usage.outcome == ToolOutcome::Success)
+            .count();
+        let failure_count = usages
+            .iter()
+            .filter(|usage| usage.outcome == ToolOutcome::Failed)
+            .count();
+        let success_rate = if total_usages == 0 {
+            0.0
+        } else {
+            success_count as f32 / total_usages as f32
+        };
+        Ok(ToolStats {
+            total_usages,
+            success_count,
+            failure_count,
+            success_rate,
+            preferences_count: 0,
+        })
+    }
+
+    /// Calculate entity statistics only from entities owned by the related scope.
+    ///
+    /// A relationship counts only when both endpoints are owned by the scope.
+    pub async fn related_entity_stats(
+        &self,
+        scope: &RelatedSearchScope,
+    ) -> IndexResult<EntityStats> {
+        let owned: HashSet<_> = scope.entity_ids.iter().cloned().collect();
+        let mut stats = EntityStats::default();
+        for entity_id in &scope.entity_ids {
+            if self.entity_repo.get_entity(entity_id).await?.is_none() {
+                continue;
+            }
+            stats.entity_count += 1;
+            stats.alias_count += self.entity_repo.get_aliases(entity_id).await?.len() as u64;
+            stats.observation_count +=
+                self.entity_repo.get_observations(entity_id).await?.len() as u64;
+            stats.relationship_count += self
+                .entity_repo
+                .get_relationships_from(entity_id)
+                .await?
+                .into_iter()
+                .filter(|relationship| owned.contains(&relationship.target_id))
+                .count() as u64;
+        }
+        Ok(stats)
+    }
+
+    /// Calculate session statistics only from sessions owned by the related project.
+    ///
+    /// Exact-task scopes have no owned session IDs and therefore return zeroes.
+    pub async fn related_session_stats(
+        &self,
+        scope: &RelatedSearchScope,
+    ) -> IndexResult<SessionStats> {
+        let mut stats = SessionStats::default();
+        for session_id in &scope.session_ids {
+            let Some(session) = self.session_repo.get_session(session_id).await? else {
+                continue;
+            };
+            stats.total_sessions += 1;
+            match session.status {
+                SessionStatus::Active => stats.active_sessions += 1,
+                SessionStatus::Completed => stats.completed_sessions += 1,
+                SessionStatus::Abandoned => stats.abandoned_sessions += 1,
+            }
+            for event in self.session_repo.get_events(session_id).await? {
+                stats.total_events += 1;
+                *stats
+                    .events_by_type
+                    .entry(event.event_type.to_string())
+                    .or_default() += 1;
+            }
+        }
+        Ok(stats)
+    }
+
+    /// Calculate overall tool intelligence statistics from project-owned session usages.
+    ///
+    /// Legacy learned preferences are excluded because they do not carry ownership metadata.
+    pub async fn related_tool_intel_stats(
+        &self,
+        scope: &RelatedSearchScope,
+    ) -> IndexResult<ToolIntelStats> {
+        let usages = self
+            .search_related_tool_usages(scope, "", usize::MAX)
+            .await?;
+        Ok(ToolIntelStats {
+            usage_count: usages.len() as u64,
+            preference_count: 0,
+        })
+    }
+
+    /// Return global document-index statistics for an explicitly global administrative read.
+    pub async fn document_stats(&self) -> IndexResult<DocumentStats> {
+        let stats = self.doc_repo.stats().await?;
+        Ok(DocumentStats {
+            source_count: stats.source_count,
+            chunk_count: stats.chunk_count,
+            searchable_chunk_count: stats.searchable_chunk_count,
+            orphan_chunk_count: stats.orphan_chunk_count,
+            embedding_dimension: self.embedder.as_ref().map_or(0, Embedder::dimension),
+        })
+    }
+
+    async fn resolve_related_project_from_cwd(&self, cwd: &str) -> IndexResult<Project> {
+        let context = self
+            .repository_service
+            .resolve_cwd(Path::new(cwd))
+            .await?
+            .ok_or_else(|| {
+                IndexError::InvalidState(format!(
+                    "related search cwd '{}' did not match a registered checkout",
+                    cwd
+                ))
+            })?;
+        let matching_paths: Vec<_> = context
+            .matching_components
+            .iter()
+            .map(|component| component.path.as_str())
+            .collect();
+        let component_links: Vec<_> = context
+            .linked_projects
+            .iter()
+            .filter(|link| {
+                link.component_path
+                    .as_deref()
+                    .is_some_and(|path| matching_paths.contains(&path))
+            })
+            .collect();
+        let candidate_links = if !component_links.is_empty() {
+            component_links
+        } else {
+            let repository_links: Vec<_> = context
+                .linked_projects
+                .iter()
+                .filter(|link| link.component_path.is_none())
+                .collect();
+            if repository_links.is_empty() {
+                context.linked_projects.iter().collect()
+            } else {
+                repository_links
+            }
+        };
+        let mut candidates: Vec<_> = candidate_links
+            .into_iter()
+            .map(|link| link.project_name.clone())
+            .collect();
+        candidates.sort();
+        candidates.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+
+        match candidates.as_slice() {
+            [project_name] => self
+                .work_repo
+                .get_project_by_name(project_name)
+                .await?
+                .ok_or_else(|| {
+                    IndexError::NotFound(format!(
+                        "cwd resolved linked project '{}' but no work project exists",
+                        project_name
+                    ))
+                }),
+            [] => Err(IndexError::InvalidState(format!(
+                "related search cwd '{}' matched repository '{}' with no linked project",
+                cwd, context.repository.name
+            ))),
+            _ => Err(IndexError::InvalidState(format!(
+                "related search cwd '{}' is ambiguous across projects: {}",
+                cwd,
+                candidates.join(", ")
+            ))),
+        }
     }
 
     // =========================================================================
@@ -522,6 +1127,145 @@ impl SearchService {
         Ok(results)
     }
 
+    async fn search_scoped_entities(
+        &self,
+        entity_ids: &[Id],
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        limit: usize,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        let mut results = Vec::new();
+        for entity_id in entity_ids {
+            let Some(entity) = self.entity_repo.get_entity(entity_id).await? else {
+                continue;
+            };
+            let Some(score) = scoped_entity_score(&entity, query, query_embedding) else {
+                continue;
+            };
+            let content = entity
+                .description
+                .clone()
+                .unwrap_or_else(|| format!("Entity of type {}", entity.entity_type));
+            results.push(UnifiedSearchResult::new(
+                SearchResultSource::Entity,
+                score,
+                entity.name,
+                content,
+                entity.id.to_string(),
+            ));
+        }
+        sort_and_truncate(&mut results, limit);
+        Ok(results)
+    }
+
+    async fn search_scoped_aliases(
+        &self,
+        entity_ids: &[Id],
+        query: &str,
+        limit: usize,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        let query = query.to_lowercase();
+        let mut results = Vec::new();
+        for entity_id in entity_ids {
+            let entity_name = self
+                .entity_repo
+                .get_entity(entity_id)
+                .await?
+                .map(|entity| entity.name)
+                .unwrap_or_else(|| entity_id.to_string());
+            for alias in self.entity_repo.get_aliases(entity_id).await? {
+                let alias_lower = alias.to_lowercase();
+                if !alias_lower.contains(&query) {
+                    continue;
+                }
+                let score = if alias_lower == query { 0.90 } else { 0.80 };
+                results.push(
+                    UnifiedSearchResult::new(
+                        SearchResultSource::Alias,
+                        score,
+                        alias,
+                        format!("Alias pointing to entity {entity_id}"),
+                        entity_id.to_string(),
+                    )
+                    .with_context(format!("alias for entity '{entity_name}'")),
+                );
+            }
+        }
+        sort_and_truncate(&mut results, limit);
+        Ok(results)
+    }
+
+    async fn search_scoped_observations(
+        &self,
+        entity_ids: &[Id],
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        limit: usize,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        let mut results = Vec::new();
+        for entity_id in entity_ids {
+            let entity_name = self
+                .entity_repo
+                .get_entity(entity_id)
+                .await?
+                .map(|entity| entity.name)
+                .unwrap_or_else(|| entity_id.to_string());
+            for observation in self.entity_repo.get_observations(entity_id).await? {
+                let Some(score) = scoped_observation_score(&observation, query, query_embedding)
+                else {
+                    continue;
+                };
+                let key_info = observation
+                    .key
+                    .as_ref()
+                    .map(|key| format!(" [{key}]"))
+                    .unwrap_or_default();
+                results.push(
+                    UnifiedSearchResult::new(
+                        SearchResultSource::Observation,
+                        score,
+                        observation
+                            .key
+                            .clone()
+                            .unwrap_or_else(|| "observation".to_string()),
+                        truncate_snippet(&observation.content, 200),
+                        observation.id.to_string(),
+                    )
+                    .with_context(format!("observation on '{entity_name}'{key_info}")),
+                );
+            }
+        }
+        sort_and_truncate(&mut results, limit);
+        Ok(results)
+    }
+
+    async fn search_scoped_memory(
+        &self,
+        query: &str,
+        limit: usize,
+        project: Option<&str>,
+        project_id: Option<&Id>,
+        task: Option<&str>,
+        task_id: Option<&Id>,
+        cwd: Option<&str>,
+    ) -> IndexResult<Vec<UnifiedSearchResult>> {
+        let (repository_id, repository_remote) = self
+            .resolve_memory_repository_identity(project, project_id, cwd)
+            .await?;
+        let ranked = rank_memory_items(
+            self.memory_repo
+                .list_memory_items(Some(MemoryStatus::Active), None)
+                .await?,
+            MemoryRankContext::scoped_search(project, project_id, task, task_id, cwd, Some(query))
+                .with_repository(repository_id.as_ref(), repository_remote.as_deref()),
+        );
+        Ok(ranked
+            .into_iter()
+            .take(limit)
+            .map(memory_result_for_ranked)
+            .collect())
+    }
+
     async fn search_memory_if_enabled(
         &self,
         layers: &[SearchLayer],
@@ -534,6 +1278,13 @@ impl SearchService {
         }
         debug!("Searching memory items: {}", query);
 
+        let (repository_id, repository_remote) = self
+            .resolve_memory_repository_identity(
+                options.project.as_deref(),
+                None,
+                options.cwd.as_deref(),
+            )
+            .await?;
         let ranked = rank_memory_items(
             self.memory_repo
                 .list_memory_items(Some(MemoryStatus::Active), None)
@@ -542,7 +1293,8 @@ impl SearchService {
                 options.project.as_deref(),
                 options.cwd.as_deref(),
                 Some(query),
-            ),
+            )
+            .with_repository(repository_id.as_ref(), repository_remote.as_deref()),
         );
 
         Ok(ranked
@@ -550,6 +1302,40 @@ impl SearchService {
             .take(limit)
             .map(memory_result_for_ranked)
             .collect())
+    }
+
+    async fn resolve_memory_repository_identity(
+        &self,
+        project: Option<&str>,
+        project_id: Option<&Id>,
+        cwd: Option<&str>,
+    ) -> IndexResult<(Option<Id>, Option<String>)> {
+        let Some(cwd) = cwd else {
+            return Ok((None, None));
+        };
+        let Some(context) = self.repository_service.resolve_cwd(Path::new(cwd)).await? else {
+            return Ok((None, None));
+        };
+
+        let has_project_boundary = project.is_some() || project_id.is_some();
+        let repository_is_owned_by_project = !has_project_boundary
+            || context.linked_projects.iter().any(|link| {
+                match (project_id, link.project_id.as_ref()) {
+                    (Some(expected), Some(actual)) => expected == actual,
+                    (Some(_), None) => project
+                        .is_some_and(|project| link.project_name.eq_ignore_ascii_case(project)),
+                    (None, _) => project
+                        .is_some_and(|project| link.project_name.eq_ignore_ascii_case(project)),
+                }
+            });
+        if !repository_is_owned_by_project {
+            return Ok((None, None));
+        }
+
+        Ok((
+            Some(context.repository.id),
+            context.repository.remote_url.clone(),
+        ))
     }
 
     /// Get statistics about what can be searched.
@@ -574,6 +1360,141 @@ impl SearchService {
             memory_item_count: memory_count,
         })
     }
+}
+
+fn scoped_entity_score(
+    entity: &Entity,
+    query: &str,
+    query_embedding: Option<&[f32]>,
+) -> Option<f32> {
+    let query_lower = query.to_lowercase();
+    let name_lower = entity.name.to_lowercase();
+    let lexical_score = if name_lower == query_lower {
+        Some(0.95)
+    } else if name_lower.contains(&query_lower) {
+        Some(0.85)
+    } else if entity
+        .description
+        .as_deref()
+        .is_some_and(|description| description.to_lowercase().contains(&query_lower))
+    {
+        Some(0.70)
+    } else {
+        None
+    };
+    let vector_score = query_embedding
+        .zip(entity.embedding.as_deref())
+        .map(|(query, embedding)| cosine_similarity(query, embedding))
+        .filter(|score| *score >= 0.3);
+    max_optional_score(lexical_score, vector_score)
+}
+
+fn scoped_observation_score(
+    observation: &Observation,
+    query: &str,
+    query_embedding: Option<&[f32]>,
+) -> Option<f32> {
+    let query_lower = query.to_lowercase();
+    let content_match = observation.content.to_lowercase().contains(&query_lower);
+    let metadata_match = contains_query(
+        &query_lower,
+        [observation.key.as_deref(), observation.source.as_deref()],
+    );
+    let lexical_score = if content_match {
+        Some(0.75)
+    } else if metadata_match {
+        Some(0.70)
+    } else {
+        None
+    };
+    let vector_score = query_embedding
+        .zip(observation.embedding.as_deref())
+        .map(|(query, embedding)| cosine_similarity(query, embedding))
+        .filter(|score| *score >= 0.3);
+    max_optional_score(lexical_score, vector_score)
+}
+
+fn max_optional_score(left: Option<f32>, right: Option<f32>) -> Option<f32> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.max(right)),
+        (Some(score), None) | (None, Some(score)) => Some(score),
+        (None, None) => None,
+    }
+}
+
+fn event_search_result(event: Event) -> UnifiedSearchResult {
+    UnifiedSearchResult::new(
+        SearchResultSource::SessionEvent,
+        0.65,
+        format!("{} event", event.event_type),
+        truncate_snippet(&event.content, 200),
+        event.id.to_string(),
+    )
+    .with_context(format!("session {}", event.session_id))
+}
+
+fn tool_usage_search_result(usage: ToolUsageInfo) -> UnifiedSearchResult {
+    UnifiedSearchResult::new(
+        SearchResultSource::ToolUsage,
+        0.60,
+        format!("{} ({})", usage.tool_name, usage.outcome),
+        truncate_snippet(&usage.context, 200),
+        usage.id.to_string(),
+    )
+    .with_context(format!("outcome: {}", usage.outcome))
+}
+
+fn contains_query<'a>(
+    query_lower: &str,
+    values: impl IntoIterator<Item = Option<&'a str>>,
+) -> bool {
+    values
+        .into_iter()
+        .flatten()
+        .any(|value| value.to_lowercase().contains(query_lower))
+}
+
+fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
+    if left.len() != right.len() || left.is_empty() {
+        return 0.0;
+    }
+    let dot: f32 = left.iter().zip(right).map(|(a, b)| a * b).sum();
+    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if left_norm == 0.0 || right_norm == 0.0 {
+        0.0
+    } else {
+        dot / (left_norm * right_norm)
+    }
+}
+
+fn sort_and_truncate(results: &mut Vec<UnifiedSearchResult>, limit: usize) {
+    results.sort_by(|left, right| {
+        right
+            .score
+            .partial_cmp(&left.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    results.truncate(limit);
+}
+
+fn finalize_results(results: Vec<UnifiedSearchResult>, min_score: f32) -> Vec<UnifiedSearchResult> {
+    let mut results: Vec<_> = results
+        .into_iter()
+        .filter(|result| result.score >= min_score)
+        .collect();
+    results.sort_by(|left, right| {
+        right
+            .score
+            .partial_cmp(&left.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let mut seen: HashMap<String, ()> = HashMap::new();
+    results.retain(|result| {
+        let key = format!("{}:{}", result.source, result.id);
+        seen.insert(key, ()).is_none()
+    });
+    results
 }
 
 /// Statistics about searchable content.

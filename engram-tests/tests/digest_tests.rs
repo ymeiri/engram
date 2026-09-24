@@ -1,12 +1,122 @@
 //! Integration tests for digest source MCP tooling.
 
-use engram_mcp::tools::{self, DigestRequest, ToolState};
+use engram_index::{SearchService, WorkService};
+use engram_mcp::tools::{self, DigestRequest, RetrievalScopeRequest, ToolState};
+use engram_store::{connect_and_init, StoreConfig};
 use serde_json::Value;
 use std::fs;
 use tempfile::tempdir;
 
 fn parse_json(response: &str) -> Value {
     serde_json::from_str(response).expect("response should be valid JSON")
+}
+
+fn global_scope() -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("global".to_string()),
+        ..RetrievalScopeRequest::default()
+    })
+}
+
+fn digest_request(action: &str, scope: Option<RetrievalScopeRequest>) -> DigestRequest {
+    DigestRequest {
+        action: action.to_string(),
+        root_path: None,
+        output_path: None,
+        review_path: None,
+        limit: None,
+        include_operational: None,
+        max_source_bytes: None,
+        max_candidates_per_source: None,
+        max_candidate_chars: None,
+        write: None,
+        scope,
+    }
+}
+
+async fn related_state() -> ToolState {
+    let db = connect_and_init(&StoreConfig::memory())
+        .await
+        .expect("Failed to connect");
+    let work = WorkService::new(db.clone());
+    work.init().await.expect("Failed to initialize work schema");
+    work.create_project("alpha", None).await.unwrap();
+    work.create_task("alpha", "alpha-one", None, Some("ALPHA-1"))
+        .await
+        .unwrap();
+    let state = ToolState::new();
+    state.init_search(SearchService::new(db)).await;
+    state
+}
+
+#[tokio::test]
+async fn mcp_digest_actions_abstain_before_filesystem_or_service_access() {
+    let source = tempdir().expect("source tempdir should be created");
+    let output_parent = tempdir().expect("output tempdir should be created");
+    let output = output_parent.path().join("must-not-be-created");
+    fs::write(source.path().join("private-digest.md"), "filesystem canary").unwrap();
+
+    for action in [
+        "inventory",
+        "review_export",
+        "review_apply",
+        "extraction_plan",
+        "source_index",
+    ] {
+        let mut request = digest_request(action, None);
+        request.root_path = Some(source.path().display().to_string());
+        request.review_path = Some(source.path().display().to_string());
+        request.output_path = Some(output.display().to_string());
+        request.write = Some(true);
+        let response = tools::digest_new(&ToolState::new(), request)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("{action} should abstain before filesystem access: {error}")
+            });
+        let json = parse_json(&response);
+        assert_eq!(json["executed"], false, "unexpected response for {action}");
+        assert_eq!(json["relevance_mode"], "local");
+        assert_eq!(json["authorization_scope_enforced"], true);
+        assert_eq!(json["omitted_layers"], serde_json::json!(["digest"]));
+        assert!(!response.contains("filesystem canary"));
+    }
+    assert!(!output.exists());
+
+    let error = tools::digest_new(&ToolState::new(), digest_request("unknown", None))
+        .await
+        .expect_err("unknown actions should be rejected before scope handling");
+    assert!(error.contains("Unknown action"));
+}
+
+#[tokio::test]
+async fn mcp_digest_related_scope_abstains_when_file_ownership_is_unprovable() {
+    let state = related_state().await;
+    let source = tempdir().expect("source tempdir should be created");
+    fs::write(source.path().join("private-digest.md"), "filesystem canary").unwrap();
+
+    for scope in [
+        RetrievalScopeRequest {
+            relevance_mode: Some("related".to_string()),
+            project: Some("alpha".to_string()),
+            ..RetrievalScopeRequest::default()
+        },
+        RetrievalScopeRequest {
+            relevance_mode: Some("related".to_string()),
+            project: Some("alpha".to_string()),
+            task: Some("ALPHA-1".to_string()),
+            ..RetrievalScopeRequest::default()
+        },
+    ] {
+        let mut request = digest_request("inventory", Some(scope));
+        request.root_path = Some(source.path().display().to_string());
+        let response = tools::digest_new(&state, request).await.unwrap();
+        let json = parse_json(&response);
+        assert_eq!(json["executed"], false);
+        assert_eq!(json["relevance_mode"], "related");
+        assert_eq!(json["resolved_project"], "alpha");
+        assert_eq!(json["omitted_layers"], serde_json::json!(["digest"]));
+        assert!(!response.contains("filesystem canary"));
+    }
 }
 
 #[tokio::test]
@@ -39,6 +149,7 @@ async fn test_mcp_digest_inventory_classifies_candidates_and_exclusions() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -79,6 +190,7 @@ async fn test_mcp_digest_inventory_requires_root_path() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -111,6 +223,7 @@ async fn test_mcp_digest_review_export_writes_batch() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -157,6 +270,7 @@ async fn test_mcp_digest_review_apply_parses_reviewed_batch() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -193,6 +307,7 @@ async fn test_mcp_digest_review_apply_parses_reviewed_batch() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -239,6 +354,7 @@ async fn test_mcp_digest_extraction_plan_reads_only_accepted_sources() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -272,6 +388,7 @@ async fn test_mcp_digest_extraction_plan_reads_only_accepted_sources() {
             max_candidates_per_source: Some(2),
             max_candidate_chars: Some(500),
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -324,6 +441,7 @@ async fn test_mcp_digest_source_index_reads_only_source_only_sources_dry_run() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: None,
+            scope: global_scope(),
         },
     )
     .await
@@ -357,6 +475,7 @@ async fn test_mcp_digest_source_index_reads_only_source_only_sources_dry_run() {
             max_candidates_per_source: None,
             max_candidate_chars: None,
             write: Some(false),
+            scope: global_scope(),
         },
     )
     .await

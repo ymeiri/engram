@@ -1,0 +1,196 @@
+{
+  "schema_version": 5,
+  "probe_id": "engram-retrieval-probe-v5-adversarial-applicability-boundary",
+  "candidate_protocol": {
+    "path": "../retrieval_probe_v4/protocol.json",
+    "sha256": "63937cc744195ae9d76121ec33f4ffd20e78ebfb1d9aaca1040267262dc0aaf4"
+  },
+  "candidate_results": {
+    "path": "../retrieval_probe_v4/RESULTS_2026-08-08.md",
+    "sha256": "a388c56cea7a7e47dec46be63dea199ac6ca521350f3ae7c4463041829bacb85"
+  },
+  "candidate_report_sha256": "c9ccad38c455ed169753bcd3a9532c723ba2f70c0693bca93fbab2cd1f5be78d",
+  "evaluation_mode": "post_algorithm_adversarial_query_holdout",
+  "algorithm_policy": "frozen_v4_no_parameter_tuning",
+  "quality_gates": {
+    "quality_min_recall": 0.9,
+    "quality_min_macro_candidate_precision": 0.5,
+    "min_abstention_accuracy": 1.0,
+    "max_mean_candidates": 4.0,
+    "max_candidates": 6,
+    "max_scope_leakage": 0,
+    "max_stale_results": 0,
+    "max_forbidden_results": 0,
+    "semantic_query_p95_ms": 100
+  },
+  "queries": [
+    {
+      "id": "adversarial-procedure-discrimination",
+      "category": "procedure_discrimination",
+      "query": "release the queue worker with a receipt-backed command",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["procedure-atlas-worker-deploy"],
+      "forbidden_keys": ["procedure-atlas-integration-v3"]
+    },
+    {
+      "id": "adversarial-handoff-discrimination",
+      "category": "handoff_discrimination",
+      "query": "continue the unfinished consumer migration from the last handoff",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["plan-atlas-worker-current"],
+      "forbidden_keys": ["plan-atlas-worker-previous"]
+    },
+    {
+      "id": "adversarial-rule-discrimination",
+      "category": "rule_discrimination",
+      "query": "which mandatory window governs production worker rollout?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["rule-atlas-deploy-window"],
+      "forbidden_keys": []
+    },
+    {
+      "id": "adversarial-lifecycle-typed-edge",
+      "category": "lifecycle_typed_edge",
+      "query": "Redis with Streams",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-queue-v2"],
+      "forbidden_keys": ["decision-atlas-queue-v1", "plan-atlas-worker-current"]
+    },
+    {
+      "id": "adversarial-exact-ticket-tag",
+      "category": "exact_tag",
+      "query": "open TRACE-142 context",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["concept-atlas-debug-with-bits"],
+      "forbidden_keys": ["concept-orbit-debug-with-bits", "concept-nova-debug-with-bits"]
+    },
+    {
+      "id": "adversarial-exact-retry-tag",
+      "category": "exact_tag",
+      "query": "show the retry-policy decision",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-worker-retries"],
+      "forbidden_keys": ["decision-orbit-worker-retries", "decision-nova-worker-retries"]
+    },
+    {
+      "id": "adversarial-http-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "outbound HTTP timeout library",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-http-client-v2"],
+      "forbidden_keys": ["decision-atlas-http-client-v1", "decision-orbit-http-client", "decision-nova-http-client"]
+    },
+    {
+      "id": "adversarial-database-paraphrase",
+      "category": "semantic_paraphrase",
+      "query": "transactional consumer lease database",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": ["decision-atlas-database"],
+      "forbidden_keys": ["decision-orbit-database"]
+    },
+    {
+      "id": "adversarial-no-result-retention-policy",
+      "category": "no_result_rule_confounder",
+      "query": "customer retention policy",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["rule-atlas-deploy-window"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-wrong-scope-opaque-tag",
+      "category": "wrong_scope_tag_confounder",
+      "query": "inspect ORBIT_TELEMETRY_CANARY alert routing",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["decision-atlas-observability", "decision-orbit-observability"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-no-result-verified-command",
+      "category": "no_result_procedure_confounder",
+      "query": "verified command for Android signing release",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3", "procedure-atlas-worker-deploy"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-no-result-resume",
+      "category": "no_result_handoff_confounder",
+      "query": "resume the Snowflake warehouse migration",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["plan-atlas-worker-current"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-no-result-erasure-window",
+      "category": "no_result_rule_confounder",
+      "query": "when may customer data be erased?",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["rule-atlas-deploy-window"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-wrong-scope-nova-broker",
+      "category": "wrong_scope_opaque_cue",
+      "query": "use NOVA_QUEUE_CANARY broker migration guide",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["decision-nova-queue", "decision-atlas-queue-v2", "decision-atlas-worker-retries"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-no-result-gpu-bitmask",
+      "category": "no_result_semantic_confounder",
+      "query": "debug GPU bitmask occupancy",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["concept-atlas-debug-with-bits"],
+      "abstain": true
+    },
+    {
+      "id": "adversarial-no-result-satellite-telemetry",
+      "category": "no_result_tag_confounder",
+      "query": "rotate satellite telemetry encryption keys",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "repository_remote": "git@github.com:acme/atlas.git",
+      "relevant_keys": [],
+      "forbidden_keys": ["decision-atlas-observability"],
+      "abstain": true
+    }
+  ]
+}

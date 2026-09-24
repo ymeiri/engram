@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Add an approval-gated, attestation-checked phase runner for the learned native-memory pilot, with
+  exact Claude budget confirmation, immutable plan digests, no-overwrite/private artifacts, trusted
+  Engram procedure verification, and provider-trace structured-output extraction.
+- Keep structurally valid failed pilot tasks as measurable outcomes instead of protocol failures,
+  and add unweighted matched native-versus-Engram comparison reporting with pairwise Pareto gates.
+
 ### Added
+- Added declarative, Git-tracked TOML sources for verified-procedure prerequisites. Matching now
+  reads bounded scalar values from the resolved current checkout, ignores caller overrides for
+  source-backed keys, and returns value-redacted matched/mismatched/unavailable observations.
+- Added forward-only native-pilot schema 6 prerequisite-mismatch cases with hash-frozen,
+  call/result-correlated condition-source evidence tied to the exact canonical source-path
+  argument, structured applicable-procedure checks, expected abstention, forbidden procedure
+  execution, and schema-4/5 compatibility.
+- Added live component identity from bounded, regular, Git-tracked `component.json` files, with
+  checkout-relative source and SHA-256 evidence in orientation and no persistence of derived values.
+- Added a frozen engineering-context evaluation suite and an approval-gated eight-run native-host
+  pilot compiler for isolated Codex and Claude Code comparisons.
+- Added an approval-gated learned-memory pilot compiler with isolated Codex/Claude native state,
+  a six-arm native-versus-Engram matrix, matched teaching phases, generated-artifact gates, Codex
+  idle activation, and trusted post-teaching procedure verification.
+- Added a provider-free learned-memory pilot auditor that fails closed on phase-order violations,
+  early or missing artifacts, invalid traces, forged visible native-memory writes, wrong Engram
+  verification IDs/hashes, repeated failed commands, identity errors, and acceptance drift.
+- Added `ENGRAM_HOME` as a complete state-root override for isolated daemon metadata, credentials,
+  global data, and project data.
 - Added GA packaging/install support scope for Linux ARM64 Homebrew/direct tarballs and unsigned
   Windows x64 release zip assets.
 - Added Windows-native PowerShell release package, install-smoke, and published-install verifier
@@ -21,6 +46,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning.
 
 ### Changed
+- Completed the frozen six-arm topology-repair native-memory comparison without replay: all four
+  Engram-bearing Codex/Claude lanes passed the source-grounded moved-checkout task, both native-only
+  controls failed identity, and the preregistered portable-incremental-value gate passed.
+- Preserve task-derived project provenance in orientation instead of labeling it as an explicit
+  project, and fail closed before retrieval when a validated task conflicts with the current
+  checkout's linked project candidates. Expose the exact task name or tracker key through the
+  restricted six-tool agent profile so Codex and Claude Code can invoke that boundary.
+- Make deterministic evaluator fixture commits ignore the operator's global Git signing policy,
+  preventing unavailable signing agents or nondeterministic signatures from breaking local probes.
+- Normalize native-pilot matched comparisons to each case's frozen execution-versus-abstention
+  outcome so safe required abstention is not misclassified as a command-success regression.
+- Run agent-profile runtime contract attestation through an isolated in-memory daemon plus the
+  exact stdio proxy, so provider-free verification does not require persistent-store disk headroom.
+- Made verified repository procedure proofs checkout-portable: receipts inside a matching checkout
+  are stored relative to its stable repository identity and revalidated in the active checkout.
+- Changed the default Claude Code harness profile to low-overhead `soft`: setup now registers only
+  session start, compaction, and session-end hooks by default, while prompt/tool/final-response
+  runtime enforcement remains available via `--enforcement graduated` or `--enforcement strict`.
 - Expanded GA package-smoke CI, Homebrew rendering, release-gate artifact expectations, and
   published-release verification to cover the broader macOS/Linux/Windows platform matrix.
 - Reworked Linux package-smoke CI to build release artifacts inside an Ubuntu 22.04 userspace

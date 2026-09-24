@@ -19,11 +19,14 @@
 //!
 //! ## Example
 //!
-//! ```ignore
+//! ```no_run
 //! use engram_index::pipeline::Pipeline;
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let pipeline = Pipeline::with_defaults()?;
 //! let docs = pipeline.index_directory("./docs")?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod chunker;
@@ -77,10 +80,15 @@ pub use knowledge::{
 };
 pub use lint::{LintOptions, LintService};
 pub use memory::{
-    BrainLoop, BrainLoopItem, CurrentPlanCapture, CurrentPlanCaptureInput, MemoryChangeRelevance,
-    MemoryChanges, MemoryChangesSinceOptions, MemoryService, MemoryWriterStat,
-    ObservationPromotionInput, OrientInput, OrientationPacket, OrientationResolution,
-    SessionDistillation,
+    BrainLoop, BrainLoopItem, CorrectionProposalInput, CorrectionProposalInspection,
+    CurrentPlanCapture, CurrentPlanCaptureInput, MemoryChangeRelevance, MemoryChanges,
+    MemoryChangesSinceOptions, MemoryForgetReport, MemoryService, MemoryWriterStat,
+    ObservationPromotionInput, OperationEvidenceCandidate, OrientInput,
+    OrientationComponentEvidence, OrientationIdentity, OrientationPacket,
+    OrientationProjectIdentity, OrientationProjectStatus, OrientationRepositoryIdentity,
+    OrientationResolution, OrientationResolutionSource, ProcedureApplicability,
+    ProcedureConditionObservation, ProcedureConditionObservationStatus, ProcedureMatchInput,
+    ProcedureMatchReport, ProcedureVerificationReceipt, SessionDistillation,
 };
 pub use migration::{
     MigrationCandidate, MigrationDisposition, MigrationInventory, MigrationInventoryOptions,
@@ -102,7 +110,10 @@ pub use repository::{
     RepositoryMigrationReviewExport, RepositoryMigrationReviewStatus,
     RepositoryMigrationSourceKind, RepositoryReferenceKind, RepositoryService,
 };
-pub use search::{SearchOptions, SearchService, SearchStats};
+pub use search::{
+    RelatedSearchOutcome, RelatedSearchScope, RelatedToolRecommendation, SearchOptions,
+    SearchService, SearchStats,
+};
 pub use service::{
     DocumentOrphanCleanupAction, DocumentOrphanCleanupExecutionAction,
     DocumentOrphanCleanupExecutionOptions, DocumentOrphanCleanupExecutionReport,

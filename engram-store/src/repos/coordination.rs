@@ -4,6 +4,7 @@
 //! Provides queries for conflict detection between concurrent sessions.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::redact_serialized_secret_material;
 use crate::Db;
 use engram_core::coordination::{ActiveSession, ConflictInfo};
 use engram_core::id::Id;
@@ -107,7 +108,7 @@ impl CoordinationRepo {
                 DEFINE INDEX IF NOT EXISTS idx_active_heartbeat ON {TABLE_ACTIVE_SESSION} FIELDS last_heartbeat;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         info!("Coordination schema initialized");
         Ok(())
@@ -119,6 +120,7 @@ impl CoordinationRepo {
 
     /// Register an active session.
     pub async fn register(&self, session: &ActiveSession) -> StoreResult<()> {
+        let (session, _) = redact_serialized_secret_material("active session", session)?;
         debug!(
             "Registering active session: {} ({})",
             session.session_id, session.agent
@@ -159,7 +161,8 @@ impl CoordinationRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -171,7 +174,8 @@ impl CoordinationRepo {
         self.db
             .query("DELETE type::thing('active_session', $id)")
             .bind(("id", session_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -193,13 +197,18 @@ impl CoordinationRepo {
             )
             .bind(("id", session_id.to_string()))
             .bind(("last_heartbeat", now))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
 
     /// Update current file for a session.
     pub async fn set_current_file(&self, session_id: &Id, file: Option<&str>) -> StoreResult<()> {
+        let (file, _) = redact_serialized_secret_material(
+            "active session current file",
+            &file.map(std::string::ToString::to_string),
+        )?;
         debug!(
             "Setting current file for session {}: {:?}",
             session_id, file
@@ -218,15 +227,18 @@ impl CoordinationRepo {
             "#,
             )
             .bind(("id", session_id.to_string()))
-            .bind(("current_file", file.map(|s| s.to_string())))
+            .bind(("current_file", file))
             .bind(("last_heartbeat", now))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
 
     /// Update components for a session.
     pub async fn set_components(&self, session_id: &Id, components: &[String]) -> StoreResult<()> {
+        let (components, _) =
+            redact_serialized_secret_material("active session components", &components.to_vec())?;
         debug!(
             "Setting components for session {}: {:?}",
             session_id, components
@@ -245,9 +257,10 @@ impl CoordinationRepo {
             "#,
             )
             .bind(("id", session_id.to_string()))
-            .bind(("components", components.to_vec()))
+            .bind(("components", components))
             .bind(("last_heartbeat", now))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -260,7 +273,8 @@ impl CoordinationRepo {
             .db
             .query("SELECT * FROM type::thing('active_session', $id)")
             .bind(("id", session_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<ActiveSessionRecord> = result.take(0)?;
 
@@ -281,7 +295,8 @@ impl CoordinationRepo {
                 "SELECT * FROM {} ORDER BY last_heartbeat DESC",
                 TABLE_ACTIVE_SESSION
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<ActiveSessionRecord> = result.take(0)?;
 
@@ -300,7 +315,7 @@ impl CoordinationRepo {
         let mut result = self.db
             .query("SELECT * FROM active_session WHERE project = $project ORDER BY last_heartbeat DESC")
             .bind(("project", project.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ActiveSessionRecord> = result.take(0)?;
 
@@ -327,6 +342,10 @@ impl CoordinationRepo {
             return Ok(Vec::new());
         }
 
+        let Some(current_session) = self.get(session_id).await? else {
+            return Ok(Vec::new());
+        };
+
         // Get all other active sessions
         let sessions = self.list_active().await?;
 
@@ -334,6 +353,9 @@ impl CoordinationRepo {
         for other_session in sessions {
             // Skip our own session
             if other_session.session_id == *session_id {
+                continue;
+            }
+            if other_session.project != current_session.project {
                 continue;
             }
 
@@ -363,11 +385,16 @@ impl CoordinationRepo {
             session_id, file
         );
 
+        let Some(current_session) = self.get(session_id).await? else {
+            return Ok(Vec::new());
+        };
+
         let mut result = self.db
-            .query("SELECT * FROM active_session WHERE current_file = $file AND session_id != $session_id")
+            .query("SELECT * FROM active_session WHERE current_file = $file AND session_id != $session_id AND project = $project")
             .bind(("file", file.to_string()))
             .bind(("session_id", session_id.to_string()))
-            .await?;
+            .bind(("project", current_session.project))
+            .await?.check()?;
 
         let records: Vec<ActiveSessionRecord> = result.take(0)?;
 
@@ -402,7 +429,7 @@ impl CoordinationRepo {
         let mut result = self.db
             .query("SELECT count() as count FROM active_session WHERE last_heartbeat < $cutoff GROUP ALL")
             .bind(("cutoff", cutoff_str.clone()))
-            .await?;
+            .await?.check()?;
 
         let count: Option<CountResult> = result.take(0)?;
         let deleted_count = count.map(|c| c.count as usize).unwrap_or(0);
@@ -411,7 +438,8 @@ impl CoordinationRepo {
         self.db
             .query("DELETE FROM active_session WHERE last_heartbeat < $cutoff")
             .bind(("cutoff", cutoff_str))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(deleted_count)
     }
@@ -428,7 +456,8 @@ impl CoordinationRepo {
                 "SELECT count() as count FROM {} GROUP ALL",
                 TABLE_ACTIVE_SESSION
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let session_count: Option<CountResult> = result.take(0)?;
 
@@ -468,6 +497,38 @@ pub struct CoordinationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn setup_repo() -> CoordinationRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = CoordinationRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn coordination_writes_redact_secrets_without_failing() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-coordination-secret";
+        let session = ActiveSession::new(Id::new(), "codex", "engram", canary);
+
+        repo.register(&session).await.unwrap();
+        let stored = repo.get(&session.session_id).await.unwrap().unwrap();
+        assert!(!stored.goal.contains(canary));
+        assert!(stored.goal.contains("redacted"));
+
+        repo.set_current_file(&session.session_id, Some(canary))
+            .await
+            .unwrap();
+        repo.set_components(&session.session_id, &[canary.to_string()])
+            .await
+            .unwrap();
+        let stored = repo.get(&session.session_id).await.unwrap().unwrap();
+        assert!(!stored.current_file.as_deref().unwrap().contains(canary));
+        assert!(stored.current_file.as_deref().unwrap().contains("redacted"));
+        assert!(!stored.components[0].contains(canary));
+        assert!(stored.components[0].contains("redacted"));
+    }
 
     #[test]
     fn test_coordination_stats_default() {

@@ -123,6 +123,20 @@ impl LintService {
     /// Apply safe actions for findings. Currently only archives active items that
     /// are superseded by another memory item.
     pub async fn apply_safe(&self, options: LintOptions) -> IndexResult<LintReport> {
+        self.apply_safe_with_scope(options, true).await
+    }
+
+    /// Apply safe actions while restricting mutations to records owned by the lint project.
+    pub async fn apply_safe_project_scoped(&self, options: LintOptions) -> IndexResult<LintReport> {
+        self.apply_safe_with_scope(options, false).await
+    }
+
+    async fn apply_safe_with_scope(
+        &self,
+        options: LintOptions,
+        allow_unowned_items: bool,
+    ) -> IndexResult<LintReport> {
+        let project = options.project.clone();
         let mut report = self.run(options).await?;
         let mut applied = 0;
         for finding in &report.findings {
@@ -135,6 +149,9 @@ impl LintService {
             let Some(item) = self.memory_repo.get_memory_item(&item_id).await? else {
                 continue;
             };
+            if !allow_unowned_items && !scope_is_owned_by_project(&item.scope, project.as_deref()) {
+                continue;
+            }
             if item.status != MemoryStatus::Active {
                 continue;
             }
@@ -253,6 +270,24 @@ fn scope_matches_project(scope: &MemoryScope, project: Option<&str>) -> bool {
             .as_deref()
             .is_some_and(|project_name| scope_name_matches(project_name, project)),
         MemoryScope::Entity { .. }
+        | MemoryScope::Repository { .. }
+        | MemoryScope::Session { .. }
+        | MemoryScope::Custom { .. } => false,
+    }
+}
+
+fn scope_is_owned_by_project(scope: &MemoryScope, project: Option<&str>) -> bool {
+    let Some(project) = project else {
+        return false;
+    };
+    match scope {
+        MemoryScope::Project { project_name, .. } => scope_name_matches(project_name, project),
+        MemoryScope::Task { project_name, .. } => project_name
+            .as_deref()
+            .is_some_and(|project_name| scope_name_matches(project_name, project)),
+        MemoryScope::Global
+        | MemoryScope::User
+        | MemoryScope::Entity { .. }
         | MemoryScope::Repository { .. }
         | MemoryScope::Session { .. }
         | MemoryScope::Custom { .. } => false,

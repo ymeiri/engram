@@ -4,6 +4,7 @@
 //! Provides vector similarity search using SurrealDB's native vector functions.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::{redact_serialized_secret_material, reject_serialized_secret_material};
 use crate::Db;
 use engram_core::document::{DocChunk, DocSearchResult, DocSource, SourceType};
 use engram_core::id::Id;
@@ -184,6 +185,7 @@ impl DocumentRepo {
     ///
     /// Returns an error if the save operation fails.
     pub async fn save_source(&self, source: &DocSource) -> StoreResult<()> {
+        reject_serialized_secret_material("document source", source)?;
         debug!("Saving doc source: {}", source.path_or_url);
 
         // SurrealDB v2: Use raw query to avoid SDK ID serialization conflicts
@@ -233,7 +235,7 @@ impl DocumentRepo {
             .db
             .query(r#"SELECT meta::id(id) as id, source_type, path_or_url, title, space_key, last_indexed, ttl_days FROM type::thing("doc_source", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let sources: Vec<DocSourceRecord> = result.take(0)?;
         sources
@@ -253,7 +255,7 @@ impl DocumentRepo {
             .db
             .query("SELECT meta::id(id) as id, source_type, path_or_url, title, space_key, last_indexed, ttl_days FROM doc_source WHERE path_or_url = $path LIMIT 1")
             .bind(("path", path.to_string()))
-            .await?;
+            .await?.check()?;
 
         let sources: Vec<DocSourceRecord> = result.take(0)?;
         Ok(sources.into_iter().next().map(|r| r.into_doc_source()))
@@ -300,6 +302,16 @@ impl DocumentRepo {
         source_id: &Id,
         chunks: Vec<(DocChunk, Vec<f32>)>,
     ) -> StoreResult<()> {
+        let mut sanitized_chunks = Vec::with_capacity(chunks.len());
+        for (chunk, mut embedding) in chunks {
+            let (chunk, redacted_fields) =
+                redact_serialized_secret_material("document chunk", &chunk)?;
+            if redacted_fields > 0 {
+                embedding.fill(0.0);
+            }
+            sanitized_chunks.push((chunk, embedding));
+        }
+        let chunks = sanitized_chunks;
         debug!("Saving {} chunks for source {}", chunks.len(), source_id);
 
         // Delete existing chunks for this source
@@ -369,7 +381,8 @@ impl DocumentRepo {
         let mut source_id_result = self
             .db
             .query("SELECT meta::id(id) as id FROM doc_source")
-            .await?;
+            .await?
+            .check()?;
         let source_ids: Vec<String> = source_id_result
             .take::<Vec<SourceIdRecord>>(0)?
             .into_iter()
@@ -404,7 +417,8 @@ impl DocumentRepo {
             .bind(("query", query_embedding.to_vec()))
             .bind(("source_ids", source_ids))
             .bind(("limit", limit))
-            .await?;
+            .await?
+            .check()?;
 
         // Parse the results with explicit fields
         #[derive(Debug, Deserialize)]
@@ -445,7 +459,7 @@ impl DocumentRepo {
                 "#,
             )
             .bind(("source_ids", source_ids))
-            .await?;
+            .await?.check()?;
 
         let source_records: Vec<DocSourceRecord> = source_result.take(0)?;
 
@@ -516,7 +530,7 @@ impl DocumentRepo {
                 FROM doc_source
                 "#,
             )
-            .await?;
+            .await?.check()?;
 
         let mut matched_sources: Vec<(DocSource, f32)> = source_result
             .take::<Vec<DocSourceRecord>>(0)?
@@ -597,7 +611,7 @@ impl DocumentRepo {
             .db
             .query("SELECT meta::id(id) as id, source_id, heading_path, heading_level, content, start_line, end_line, parent_id FROM doc_chunk WHERE source_id = $source_id ORDER BY start_line")
             .bind(("source_id", source_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<DocChunkRecord> = result.take(0)?;
         Ok(records.into_iter().map(|r| r.into_doc_chunk()).collect())
@@ -622,7 +636,7 @@ impl DocumentRepo {
                 "#,
             )
             .bind(("source_ids", source_ids.to_vec()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<DocChunkRecord> = result.take(0)?;
         let mut chunks = HashMap::new();
@@ -668,7 +682,8 @@ impl DocumentRepo {
         let mut source_result = self
             .db
             .query("SELECT meta::id(id) as id FROM doc_source")
-            .await?;
+            .await?
+            .check()?;
         let current_source_ids: Vec<String> = source_result
             .take::<Vec<SourceIdRecord>>(0)?
             .into_iter()
@@ -702,7 +717,8 @@ impl DocumentRepo {
             )
             .bind(("target_source_ids", unique_missing_ids.clone()))
             .bind(("current_source_ids", current_source_ids.clone()))
-            .await?;
+            .await?
+            .check()?;
         let records: Vec<DocChunkRecord> = count_result.take(0)?;
 
         let mut counts_by_source: BTreeMap<String, u64> = BTreeMap::new();
@@ -759,7 +775,8 @@ impl DocumentRepo {
         let mut source_id_result = self
             .db
             .query("SELECT meta::id(id) as id FROM doc_source")
-            .await?;
+            .await?
+            .check()?;
         let source_ids: Vec<String> = source_id_result
             .take::<Vec<SourceIdRecord>>(0)?
             .into_iter()
@@ -777,7 +794,8 @@ impl DocumentRepo {
                 "#,
             )
             .bind(("source_ids", source_ids))
-            .await?;
+            .await?
+            .check()?;
 
         #[derive(Debug, Deserialize)]
         struct CountResult {
@@ -826,7 +844,8 @@ impl DocumentRepo {
         let mut source_result = self
             .db
             .query("SELECT meta::id(id) as id, path_or_url FROM doc_source")
-            .await?;
+            .await?
+            .check()?;
         let sources: Vec<SourceRecord> = source_result.take(0)?;
         let source_ids: Vec<String> = sources.iter().map(|source| source.id.clone()).collect();
         let source_by_path: HashMap<String, String> = sources
@@ -853,7 +872,8 @@ impl DocumentRepo {
                 "#,
             )
             .bind(("source_ids", source_ids))
-            .await?;
+            .await?
+            .check()?;
         let orphan_records: Vec<DocChunkRecord> = chunk_result.take(0)?;
 
         let orphan_chunk_count = orphan_records.len() as u64;
@@ -1413,6 +1433,56 @@ pub struct DocumentOrphanChunkSample {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn setup_repo() -> DocumentRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = DocumentRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn document_metadata_rejects_secrets_and_chunks_redact_them() {
+        let repo = setup_repo().await;
+        let credential_url = "https://agent:synthetic-password@example.test/secret.md";
+        let secret_source = DocSource::confluence(credential_url, "ENGRAM");
+
+        let error = repo.save_source(&secret_source).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("secret material was not persisted"));
+        assert!(repo.get_source(&secret_source.id).await.is_err());
+
+        let source = DocSource::local_file("/tmp/safe.md");
+        repo.save_source(&source).await.unwrap();
+        let canary = "Authorization: Bearer synthetic-document-secret";
+        let chunk = DocChunk::new(source.id, "# Secret", 1, canary);
+        repo.save_chunks(&source.id, vec![(chunk, vec![0.1, 0.2])])
+            .await
+            .unwrap();
+
+        let chunks = repo.get_chunks_for_source(&source.id).await.unwrap();
+        assert_eq!(chunks.len(), 1);
+        assert!(!chunks[0].content.contains(canary));
+        assert!(chunks[0].content.contains("redacted"));
+
+        #[derive(Deserialize)]
+        struct StoredEmbedding {
+            embedding: Vec<f32>,
+        }
+        let mut result = repo
+            .db
+            .query("SELECT embedding FROM doc_chunk WHERE source_id = $source_id")
+            .bind(("source_id", source.id.to_string()))
+            .await
+            .unwrap()
+            .check()
+            .unwrap();
+        let embeddings: Vec<StoredEmbedding> = result.take(0).unwrap();
+        assert_eq!(embeddings.len(), 1);
+        assert!(embeddings[0].embedding.iter().all(|value| *value == 0.0));
+    }
 
     #[test]
     fn test_doc_chunk_creation() {

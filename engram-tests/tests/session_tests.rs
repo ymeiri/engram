@@ -42,6 +42,28 @@ async fn test_start_session() {
 }
 
 #[tokio::test]
+async fn test_session_service_redacts_secret_material_without_failing() {
+    let service = setup_service().await;
+    let canary = "Authorization: Bearer synthetic-session-service-secret";
+
+    let session = service
+        .start_session(Some("codex"), Some("engram"), Some(canary))
+        .await
+        .expect("session start should remain fail-open");
+    service
+        .log_event(&session.id, EventType::Error, canary, Some(canary), None)
+        .await
+        .expect("event logging should remain fail-open");
+
+    let stored = service.get_session(&session.id).await.unwrap().unwrap();
+    let events = service.get_events(&session.id).await.unwrap();
+    let persisted = serde_json::to_string(&(stored, events)).unwrap();
+
+    assert!(!persisted.contains(canary));
+    assert!(persisted.contains("redacted"));
+}
+
+#[tokio::test]
 async fn test_start_minimal_session() {
     let service = setup_service().await;
 

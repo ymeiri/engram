@@ -4,6 +4,7 @@
 //! Provides entity connections via junction tables.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::reject_serialized_secret_material;
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::work::{
@@ -284,7 +285,7 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_work_project_status ON {TABLE_PROJECT} FIELDS status;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         // Task table
         self.db
@@ -296,7 +297,8 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_work_task_jira ON {TABLE_TASK} FIELDS jira_key;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // PR table
         self.db
@@ -309,7 +311,8 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_work_pr_url ON {TABLE_PR} FIELDS url UNIQUE;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // Project-Entity junction table
         self.db
@@ -321,7 +324,7 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_wpe_project_entity ON {TABLE_PROJECT_ENTITY} FIELDS project_id, entity_id UNIQUE;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         // Task-Entity junction table
         self.db
@@ -333,7 +336,7 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_wte_task_entity ON {TABLE_TASK_ENTITY} FIELDS task_id, entity_id UNIQUE;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         // Project Observation table
         self.db
@@ -345,7 +348,7 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_wpo_project_key ON {TABLE_PROJECT_OBSERVATION} FIELDS project_id, key;
                 "#
             ))
-            .await?;
+            .await?.check()?;
 
         // Task Observation table
         self.db
@@ -356,7 +359,8 @@ impl WorkRepo {
                 DEFINE INDEX IF NOT EXISTS idx_wto_key ON {TABLE_TASK_OBSERVATION} FIELDS key;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         // Session Work Context table
         self.db
@@ -365,7 +369,8 @@ impl WorkRepo {
                 DEFINE TABLE IF NOT EXISTS {TABLE_SESSION_CONTEXT} SCHEMALESS;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         info!("Work schema initialized");
         Ok(())
@@ -377,6 +382,7 @@ impl WorkRepo {
 
     /// Create a project.
     pub async fn create_project(&self, project: &Project) -> StoreResult<()> {
+        reject_serialized_secret_material("work project", project)?;
         debug!("Creating project: {}", project.name);
 
         self.db
@@ -408,7 +414,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -421,7 +428,8 @@ impl WorkRepo {
             .db
             .query(r#"SELECT * FROM type::thing("work_project", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<ProjectRecord> = result.take(0)?;
 
@@ -440,7 +448,8 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_project WHERE name = $name LIMIT 1")
             .bind(("name", name.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<ProjectRecordWithId> = result.take(0)?;
 
@@ -467,7 +476,7 @@ impl WorkRepo {
             ),
         };
 
-        let mut result = self.db.query(query).await?;
+        let mut result = self.db.query(query).await?.check()?;
         let records: Vec<ProjectRecordWithId> = result.take(0)?;
 
         let mut projects = Vec::new();
@@ -481,6 +490,7 @@ impl WorkRepo {
 
     /// Update a project.
     pub async fn update_project(&self, project: &Project) -> StoreResult<()> {
+        reject_serialized_secret_material("work project", project)?;
         debug!("Updating project: {}", project.name);
 
         self.db
@@ -504,7 +514,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -523,25 +534,29 @@ impl WorkRepo {
         self.db
             .query("DELETE FROM work_pr WHERE project_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete entity connections
         self.db
             .query("DELETE FROM work_project_entity WHERE project_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete project observations
         self.db
             .query("DELETE FROM work_project_observation WHERE project_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete the project
         self.db
             .query(r#"DELETE type::thing("work_project", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -552,6 +567,7 @@ impl WorkRepo {
 
     /// Create a task.
     pub async fn create_task(&self, task: &Task) -> StoreResult<()> {
+        reject_serialized_secret_material("work task", task)?;
         debug!(
             "Creating task: {} (project: {})",
             task.name, task.project_id
@@ -594,7 +610,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -607,7 +624,8 @@ impl WorkRepo {
             .db
             .query(r#"SELECT * FROM type::thing("work_task", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<TaskRecord> = result.take(0)?;
 
@@ -626,7 +644,8 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_task WHERE jira_key = $jira_key LIMIT 1")
             .bind(("jira_key", jira_key.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<TaskRecordWithId> = result.take(0)?;
 
@@ -647,7 +666,7 @@ impl WorkRepo {
             .query("SELECT meta::id(id) as id, * FROM work_task WHERE project_id = $project_id AND name = $name LIMIT 1")
             .bind(("project_id", project_id.to_string()))
             .bind(("name", name.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<TaskRecordWithId> = result.take(0)?;
 
@@ -685,7 +704,8 @@ impl WorkRepo {
             .db
             .query(query)
             .bind(("project_id", project_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<TaskRecordWithId> = result.take(0)?;
 
@@ -700,6 +720,7 @@ impl WorkRepo {
 
     /// Update a task.
     pub async fn update_task(&self, task: &Task) -> StoreResult<()> {
+        reject_serialized_secret_material("work task", task)?;
         debug!("Updating task: {}", task.name);
 
         let blocked_by: Vec<String> = task.blocked_by.iter().map(|id| id.to_string()).collect();
@@ -730,7 +751,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -743,25 +765,29 @@ impl WorkRepo {
         self.db
             .query("DELETE FROM work_task_observation WHERE task_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete entity connections
         self.db
             .query("DELETE FROM work_task_entity WHERE task_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Update PRs to remove task reference (keep PRs on project)
         self.db
             .query("UPDATE work_pr SET task_id = NONE WHERE task_id = $id")
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         // Delete the task
         self.db
             .query(r#"DELETE type::thing("work_task", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -772,6 +798,7 @@ impl WorkRepo {
 
     /// Create a PR.
     pub async fn create_pr(&self, pr: &Pr) -> StoreResult<()> {
+        reject_serialized_secret_material("work pull request", pr)?;
         debug!("Creating PR: {} (project: {})", pr.url, pr.project_id);
 
         let blocked_by: Vec<String> = pr.blocked_by.iter().map(|id| id.to_string()).collect();
@@ -813,7 +840,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -826,7 +854,8 @@ impl WorkRepo {
             .db
             .query(r#"SELECT * FROM type::thing("work_pr", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<PrRecord> = result.take(0)?;
 
@@ -845,7 +874,8 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_pr WHERE url = $url LIMIT 1")
             .bind(("url", url.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<PrRecordWithId> = result.take(0)?;
 
@@ -907,7 +937,7 @@ impl WorkRepo {
             q = q.bind((key, value));
         }
 
-        let mut result = q.await?;
+        let mut result = q.await?.check()?;
         let records: Vec<PrRecordWithId> = result.take(0)?;
 
         let mut prs = Vec::new();
@@ -921,6 +951,7 @@ impl WorkRepo {
 
     /// Update a PR.
     pub async fn update_pr(&self, pr: &Pr) -> StoreResult<()> {
+        reject_serialized_secret_material("work pull request", pr)?;
         debug!("Updating PR: {}", pr.url);
 
         let blocked_by: Vec<String> = pr.blocked_by.iter().map(|id| id.to_string()).collect();
@@ -947,7 +978,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -959,7 +991,8 @@ impl WorkRepo {
         self.db
             .query(r#"DELETE type::thing("work_pr", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -975,6 +1008,7 @@ impl WorkRepo {
         entity_id: &Id,
         relation: &ProjectEntityRelation,
     ) -> StoreResult<()> {
+        reject_serialized_secret_material("project entity relation", relation)?;
         debug!(
             "Connecting project {} to entity {} ({})",
             project_id, entity_id, relation
@@ -986,13 +1020,13 @@ impl WorkRepo {
             r#"DELETE FROM work_project_entity WHERE project_id = "{}" AND entity_id = "{}" RETURN NONE"#,
             project_id, entity_id
         );
-        self.db.query(&delete_query).await?;
+        self.db.query(&delete_query).await?.check()?;
 
         let create_query = format!(
             r#"CREATE work_project_entity SET project_id = "{}", entity_id = "{}", relation = "{}" RETURN NONE"#,
             project_id, entity_id, relation
         );
-        self.db.query(&create_query).await?;
+        self.db.query(&create_query).await?.check()?;
 
         Ok(())
     }
@@ -1012,7 +1046,7 @@ impl WorkRepo {
             r#"DELETE FROM work_project_entity WHERE project_id = "{}" AND entity_id = "{}""#,
             project_id, entity_id
         );
-        self.db.query(&query).await?;
+        self.db.query(&query).await?.check()?;
 
         Ok(())
     }
@@ -1028,7 +1062,7 @@ impl WorkRepo {
             r#"SELECT entity_id, relation FROM work_project_entity WHERE project_id = "{}""#,
             project_id
         );
-        let mut result = self.db.query(&query).await?;
+        let mut result = self.db.query(&query).await?.check()?;
 
         let records: Vec<EntityConnectionRecord> = result.take(0)?;
 
@@ -1056,7 +1090,7 @@ impl WorkRepo {
             r#"SELECT project_id FROM work_project_entity WHERE entity_id = "{}""#,
             entity_id
         );
-        let mut result = self.db.query(&query).await?;
+        let mut result = self.db.query(&query).await?.check()?;
 
         let records: Vec<ProjectIdRecord> = result.take(0)?;
 
@@ -1077,6 +1111,7 @@ impl WorkRepo {
         entity_id: &Id,
         relation: &TaskEntityRelation,
     ) -> StoreResult<()> {
+        reject_serialized_secret_material("task entity relation", relation)?;
         debug!(
             "Connecting task {} to entity {} ({})",
             task_id, entity_id, relation
@@ -1088,13 +1123,13 @@ impl WorkRepo {
             r#"DELETE FROM work_task_entity WHERE task_id = "{}" AND entity_id = "{}" RETURN NONE"#,
             task_id, entity_id
         );
-        self.db.query(&delete_query).await?;
+        self.db.query(&delete_query).await?.check()?;
 
         let create_query = format!(
             r#"CREATE work_task_entity SET task_id = "{}", entity_id = "{}", relation = "{}" RETURN NONE"#,
             task_id, entity_id, relation
         );
-        self.db.query(&create_query).await?;
+        self.db.query(&create_query).await?.check()?;
 
         Ok(())
     }
@@ -1107,7 +1142,7 @@ impl WorkRepo {
             r#"DELETE FROM work_task_entity WHERE task_id = "{}" AND entity_id = "{}""#,
             task_id, entity_id
         );
-        self.db.query(&query).await?;
+        self.db.query(&query).await?.check()?;
 
         Ok(())
     }
@@ -1125,7 +1160,8 @@ impl WorkRepo {
                 r#"SELECT entity_id, relation FROM work_task_entity WHERE task_id = "{}""#,
                 task_id
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<EntityConnectionRecord> = result.take(0)?;
 
@@ -1149,6 +1185,7 @@ impl WorkRepo {
         &self,
         obs: &ProjectObservation,
     ) -> StoreResult<Option<ProjectObservation>> {
+        reject_serialized_secret_material("work project observation", obs)?;
         debug!(
             "Adding/updating project observation for {} (key: {:?})",
             obs.project_id, obs.key
@@ -1184,7 +1221,8 @@ impl WorkRepo {
                             .format(&time::format_description::well_known::Rfc3339)
                             .unwrap(),
                     ))
-                    .await?;
+                    .await?
+                    .check()?;
 
                 return Ok(previous);
             }
@@ -1222,7 +1260,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(previous)
     }
@@ -1243,7 +1282,7 @@ impl WorkRepo {
             .query("SELECT meta::id(id) as id, * FROM work_project_observation WHERE project_id = $project_id AND key = $key LIMIT 1")
             .bind(("project_id", project_id.to_string()))
             .bind(("key", key.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ProjectObservationRecordWithId> = result.take(0)?;
 
@@ -1265,7 +1304,7 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_project_observation WHERE project_id = $project_id ORDER BY key, updated_at DESC")
             .bind(("project_id", project_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ProjectObservationRecordWithId> = result.take(0)?;
 
@@ -1293,7 +1332,7 @@ impl WorkRepo {
             .query("SELECT meta::id(id) as id, * FROM work_project_observation WHERE project_id = $project_id AND content IS NOT NONE AND string::lowercase(content) CONTAINS $query ORDER BY updated_at DESC")
             .bind(("project_id", project_id.to_string()))
             .bind(("query", query.to_lowercase()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ProjectObservationRecordWithId> = result.take(0)?;
 
@@ -1322,7 +1361,7 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_project_observation WHERE project_id = $project_id AND embedding IS NOT NONE")
             .bind(("project_id", project_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<ProjectObservationRecordWithId> = result.take(0)?;
 
@@ -1354,7 +1393,8 @@ impl WorkRepo {
         self.db
             .query(r#"DELETE type::thing("work_project_observation", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -1368,6 +1408,7 @@ impl WorkRepo {
         &self,
         obs: &TaskObservation,
     ) -> StoreResult<Option<TaskObservation>> {
+        reject_serialized_secret_material("work task observation", obs)?;
         debug!(
             "Adding/updating task observation for {} (key: {:?})",
             obs.task_id, obs.key
@@ -1400,7 +1441,8 @@ impl WorkRepo {
                             .format(&time::format_description::well_known::Rfc3339)
                             .unwrap(),
                     ))
-                    .await?;
+                    .await?
+                    .check()?;
 
                 return Ok(previous);
             }
@@ -1438,7 +1480,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(previous)
     }
@@ -1459,7 +1502,7 @@ impl WorkRepo {
             .query("SELECT meta::id(id) as id, * FROM work_task_observation WHERE task_id = $task_id AND key = $key LIMIT 1")
             .bind(("task_id", task_id.to_string()))
             .bind(("key", key.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<TaskObservationRecordWithId> = result.take(0)?;
 
@@ -1478,7 +1521,7 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_task_observation WHERE task_id = $task_id ORDER BY key, updated_at DESC")
             .bind(("task_id", task_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<TaskObservationRecordWithId> = result.take(0)?;
 
@@ -1507,7 +1550,7 @@ impl WorkRepo {
             .db
             .query("SELECT meta::id(id) as id, * FROM work_task_observation WHERE task_id = $task_id AND embedding IS NOT NONE")
             .bind(("task_id", task_id.to_string()))
-            .await?;
+            .await?.check()?;
 
         let records: Vec<TaskObservationRecordWithId> = result.take(0)?;
 
@@ -1539,7 +1582,8 @@ impl WorkRepo {
         self.db
             .query(r#"DELETE type::thing("work_task_observation", $id)"#)
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -1577,7 +1621,8 @@ impl WorkRepo {
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap(),
             ))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -1590,7 +1635,8 @@ impl WorkRepo {
             .db
             .query(r#"SELECT * FROM type::thing("work_session_context", $session_id)"#)
             .bind(("session_id", session_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<WorkContextRecord> = result.take(0)?;
 
@@ -1608,7 +1654,8 @@ impl WorkRepo {
         self.db
             .query(r#"DELETE type::thing("work_session_context", $session_id)"#)
             .bind(("session_id", session_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -1630,7 +1677,8 @@ impl WorkRepo {
                 SELECT count() as count FROM {TABLE_TASK_OBSERVATION} GROUP ALL;
                 "#
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let project_count: Option<CountResult> = result.take(0)?;
         let task_count: Option<CountResult> = result.take(1)?;
@@ -1846,6 +1894,112 @@ impl From<PrRecordWithId> for PrRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn setup_repo() -> WorkRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = WorkRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn explicit_work_writes_reject_secrets_before_create_or_update() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-work-secret";
+        let secret_project = Project::new("secret").with_description(canary);
+
+        let error = repo.create_project(&secret_project).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("secret material was not persisted"));
+        assert!(repo
+            .get_project(&secret_project.id)
+            .await
+            .unwrap()
+            .is_none());
+
+        let project = Project::new("engram");
+        repo.create_project(&project).await.unwrap();
+        let mut project_update = project.clone();
+        project_update.description = Some(canary.to_string());
+        assert!(repo.update_project(&project_update).await.is_err());
+        assert!(repo
+            .get_project(&project.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .description
+            .is_none());
+
+        let task = Task::new(project.id, "safe task");
+        repo.create_task(&task).await.unwrap();
+        let mut task_update = task.clone();
+        task_update.description = Some(canary.to_string());
+        assert!(repo.update_task(&task_update).await.is_err());
+        assert!(repo
+            .get_task(&task.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .description
+            .is_none());
+
+        let pr = Pr::new(
+            project.id,
+            "https://github.com/example/engram/pull/1",
+            "engram",
+            1,
+        );
+        repo.create_pr(&pr).await.unwrap();
+        let mut pr_update = pr.clone();
+        pr_update.title = Some(canary.to_string());
+        assert!(repo.update_pr(&pr_update).await.is_err());
+        assert!(repo.get_pr(&pr.id).await.unwrap().unwrap().title.is_none());
+
+        let project_observation = ProjectObservation::new(project.id, canary);
+        assert!(repo
+            .add_project_observation(&project_observation)
+            .await
+            .is_err());
+        assert!(repo
+            .get_project_observations(&project.id)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let task_observation = TaskObservation::new(task.id, canary);
+        assert!(repo.add_task_observation(&task_observation).await.is_err());
+        assert!(repo
+            .get_task_observations(&task.id)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let entity_id = Id::new();
+        assert!(repo
+            .connect_project_entity(
+                &project.id,
+                &entity_id,
+                &ProjectEntityRelation::Custom(canary.to_string()),
+            )
+            .await
+            .is_err());
+        assert!(repo
+            .get_project_entities(&project.id)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(repo
+            .connect_task_entity(
+                &task.id,
+                &entity_id,
+                &TaskEntityRelation::Custom(canary.to_string()),
+            )
+            .await
+            .is_err());
+        assert!(repo.get_task_entities(&task.id).await.unwrap().is_empty());
+    }
 
     #[test]
     fn test_work_stats_default() {

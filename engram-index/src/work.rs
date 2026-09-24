@@ -263,6 +263,34 @@ impl WorkService {
         }
     }
 
+    async fn resolve_task_for_project(
+        &self,
+        project: &Project,
+        task_ref: &str,
+    ) -> IndexResult<Task> {
+        let task = if let Ok(id) = Id::parse(task_ref) {
+            self.repo.get_task(&id).await?
+        } else if let Some(task) = self.repo.get_task_by_jira(task_ref).await? {
+            Some(task)
+        } else {
+            self.repo.get_task_by_name(&project.id, task_ref).await?
+        }
+        .ok_or_else(|| {
+            IndexError::NotFound(format!(
+                "Task '{}' not found in project '{}'",
+                task_ref, project.name
+            ))
+        })?;
+
+        if task.project_id != project.id {
+            return Err(IndexError::InvalidState(format!(
+                "Task '{}' belongs to project {}, not selected project '{}' ({})",
+                task.name, task.project_id, project.name, project.id
+            )));
+        }
+        Ok(task)
+    }
+
     /// Get a task by ID.
     pub async fn get_task_by_id(&self, id: &Id) -> IndexResult<Option<Task>> {
         Ok(self.repo.get_task(id).await?)
@@ -398,10 +426,7 @@ impl WorkService {
 
         // Link to task if specified
         if let Some(task_ref) = task_name {
-            let task = self
-                .get_task(task_ref)
-                .await?
-                .ok_or_else(|| IndexError::NotFound(format!("Task not found: {}", task_ref)))?;
+            let task = self.resolve_task_for_project(&project, task_ref).await?;
             pr = pr.with_task(task.id);
         }
 
@@ -429,12 +454,7 @@ impl WorkService {
             .ok_or_else(|| IndexError::NotFound(format!("Project not found: {}", project_name)))?;
 
         let task_id = if let Some(task_ref) = task_name {
-            Some(
-                self.get_task(task_ref)
-                    .await?
-                    .ok_or_else(|| IndexError::NotFound(format!("Task not found: {}", task_ref)))?
-                    .id,
-            )
+            Some(self.resolve_task_for_project(&project, task_ref).await?.id)
         } else {
             None
         };
@@ -891,12 +911,7 @@ impl WorkService {
             .ok_or_else(|| IndexError::NotFound(format!("Project not found: {}", project_name)))?;
 
         let task_id = if let Some(task_ref) = task_name {
-            Some(
-                self.get_task(task_ref)
-                    .await?
-                    .ok_or_else(|| IndexError::NotFound(format!("Task not found: {}", task_ref)))?
-                    .id,
-            )
+            Some(self.resolve_task_for_project(&project, task_ref).await?.id)
         } else {
             None
         };
@@ -944,11 +959,7 @@ impl WorkService {
             .ok_or_else(|| IndexError::NotFound(format!("Project not found: {}", project_name)))?;
 
         let task = if let Some(task_ref) = task_name {
-            Some(
-                self.get_task(task_ref)
-                    .await?
-                    .ok_or_else(|| IndexError::NotFound(format!("Task not found: {}", task_ref)))?,
-            )
+            Some(self.resolve_task_for_project(&project, task_ref).await?)
         } else {
             None
         };

@@ -6,8 +6,10 @@ use engram_core::id::Id;
 use engram_core::knowledge::{
     DocAlias, DocEvent, DocEventType, DocStatus, DocType, FileSync, KnowledgeDoc, SyncStatus,
 };
-use engram_index::{KnowledgeConfig, KnowledgeService};
-use engram_mcp::tools::{self, KnowledgeRequestNew, ToolState};
+use engram_index::{KnowledgeConfig, KnowledgeService, SearchService, WorkService};
+use engram_mcp::tools::{
+    self, KnowledgeRequestNew, KnowledgeStatsRequest, RetrievalScopeRequest, ToolState,
+};
 use engram_store::repos::KnowledgeRepo;
 use engram_store::{connect_and_init, StoreConfig};
 use tempfile::TempDir;
@@ -670,11 +672,26 @@ async fn setup_tool_state() -> (ToolState, TempDir) {
         recursive: true,
     };
 
-    let knowledge_service = KnowledgeService::new(db, knowledge_config);
+    let knowledge_service = KnowledgeService::new(db.clone(), knowledge_config);
+    let work_service = WorkService::new(db.clone());
+    work_service.init().await.unwrap();
+    work_service
+        .create_project("knowledge-scope", None)
+        .await
+        .unwrap();
 
     let state = ToolState::new();
     *state.knowledge_service.write().await = Some(knowledge_service);
+    state.init_work(work_service).await;
+    state.init_search(SearchService::new(db)).await;
     (state, temp_dir)
+}
+
+fn global_scope() -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("global".to_string()),
+        ..RetrievalScopeRequest::default()
+    })
 }
 
 #[tokio::test]
@@ -687,12 +704,75 @@ async fn test_mcp_knowledge_init() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
     let response = result.unwrap();
     assert!(response.contains("success"));
     assert!(response.contains("true"));
+}
+
+#[tokio::test]
+async fn mcp_knowledge_stats_requires_explicit_global_for_unowned_registry_counts() {
+    let (state, temp_dir) = setup_tool_state().await;
+    tools::knowledge_new(
+        &state,
+        KnowledgeRequestNew {
+            action: "init".to_string(),
+            path: None,
+            repo_name: None,
+            name: None,
+            doc_type: None,
+            scope: global_scope(),
+        },
+    )
+    .await
+    .unwrap();
+    let test_file = temp_dir.path().join("stats.md");
+    std::fs::write(&test_file, "# Stats canary").unwrap();
+    tools::knowledge_new(
+        &state,
+        KnowledgeRequestNew {
+            action: "register".to_string(),
+            path: Some(test_file.to_string_lossy().to_string()),
+            repo_name: None,
+            name: Some("Stats canary".to_string()),
+            doc_type: Some("readme".to_string()),
+            scope: global_scope(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let local: serde_json::Value = serde_json::from_str(
+        &tools::knowledge_stats(&state, KnowledgeStatsRequest { scope: None })
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(local["doc_count"], 0);
+    assert_eq!(
+        local["omitted_layers"],
+        serde_json::json!(["knowledge_stats"])
+    );
+
+    let global: serde_json::Value = serde_json::from_str(
+        &tools::knowledge_stats(
+            &state,
+            KnowledgeStatsRequest {
+                scope: Some(RetrievalScopeRequest {
+                    relevance_mode: Some("global".to_string()),
+                    ..RetrievalScopeRequest::default()
+                }),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(global["doc_count"], 1);
+    assert_eq!(global["authorization_scope_enforced"], false);
 }
 
 #[tokio::test]
@@ -706,6 +786,7 @@ async fn test_mcp_knowledge_list_empty() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -716,11 +797,103 @@ async fn test_mcp_knowledge_list_empty() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
     let response = result.unwrap();
     assert!(response.contains("\"count\": 0"));
+}
+
+#[tokio::test]
+async fn mcp_knowledge_admin_reads_abstain_until_explicit_global_scope() {
+    let (state, temp_dir) = setup_tool_state().await;
+    let test_file = temp_dir.path().join("admin-scope.md");
+    std::fs::write(&test_file, "# Administrative scope canary").unwrap();
+    tools::knowledge_new(
+        &state,
+        KnowledgeRequestNew {
+            action: "register".to_string(),
+            path: Some(test_file.to_string_lossy().to_string()),
+            repo_name: None,
+            name: Some("Administrative scope canary".to_string()),
+            doc_type: Some("readme".to_string()),
+            scope: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    for action in ["list", "duplicates", "versions"] {
+        let local: serde_json::Value = serde_json::from_str(
+            &tools::knowledge_new(
+                &state,
+                KnowledgeRequestNew {
+                    action: action.to_string(),
+                    path: None,
+                    repo_name: None,
+                    name: None,
+                    doc_type: None,
+                    scope: None,
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(local["count"], 0);
+        assert_eq!(
+            local["omitted_layers"],
+            serde_json::json!(["knowledge_admin"])
+        );
+
+        let related: serde_json::Value = serde_json::from_str(
+            &tools::knowledge_new(
+                &state,
+                KnowledgeRequestNew {
+                    action: action.to_string(),
+                    path: None,
+                    repo_name: None,
+                    name: None,
+                    doc_type: None,
+                    scope: Some(RetrievalScopeRequest {
+                        relevance_mode: Some("related".to_string()),
+                        project: Some("knowledge-scope".to_string()),
+                        ..RetrievalScopeRequest::default()
+                    }),
+                },
+            )
+            .await
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(related["count"], 0);
+        assert_eq!(related["resolved_project"], "knowledge-scope");
+        assert_eq!(
+            related["omitted_layers"],
+            serde_json::json!(["knowledge_admin"])
+        );
+    }
+
+    let global: serde_json::Value = serde_json::from_str(
+        &tools::knowledge_new(
+            &state,
+            KnowledgeRequestNew {
+                action: "list".to_string(),
+                path: None,
+                repo_name: None,
+                name: None,
+                doc_type: None,
+                scope: global_scope(),
+            },
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(global["count"], 1);
+    assert!(global.to_string().contains("Administrative scope canary"));
+    assert_eq!(global["authorization_scope_enforced"], false);
 }
 
 #[tokio::test]
@@ -734,6 +907,7 @@ async fn test_mcp_knowledge_scan() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -748,6 +922,7 @@ async fn test_mcp_knowledge_scan() {
         repo_name: Some("test-repo".to_string()),
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
@@ -766,6 +941,7 @@ async fn test_mcp_knowledge_register() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -780,6 +956,7 @@ async fn test_mcp_knowledge_register() {
         repo_name: None,
         name: Some("API Guide".to_string()),
         doc_type: Some("howto".to_string()),
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
@@ -799,6 +976,7 @@ async fn test_mcp_knowledge_import() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -814,6 +992,7 @@ async fn test_mcp_knowledge_import() {
         repo_name: None,
         name: Some("Imported Doc".to_string()),
         doc_type: Some("readme".to_string()),
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
@@ -833,6 +1012,7 @@ async fn test_mcp_knowledge_duplicates() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -843,6 +1023,7 @@ async fn test_mcp_knowledge_duplicates() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
@@ -862,6 +1043,7 @@ async fn test_mcp_knowledge_versions() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -872,6 +1054,7 @@ async fn test_mcp_knowledge_versions() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_ok());
@@ -890,6 +1073,7 @@ async fn test_mcp_knowledge_invalid_action() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_err());
@@ -907,6 +1091,7 @@ async fn test_mcp_knowledge_invalid_doc_type() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -921,6 +1106,7 @@ async fn test_mcp_knowledge_invalid_doc_type() {
         repo_name: None,
         name: Some("Test Doc".to_string()),
         doc_type: Some("invalid_type".to_string()),
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_err());
@@ -938,6 +1124,7 @@ async fn test_mcp_knowledge_register_missing_params() {
         repo_name: None,
         name: None,
         doc_type: None,
+        scope: global_scope(),
     };
     tools::knowledge_new(&state, req).await.unwrap();
 
@@ -948,6 +1135,7 @@ async fn test_mcp_knowledge_register_missing_params() {
         repo_name: None,
         name: Some("Test".to_string()),
         doc_type: Some("readme".to_string()),
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_err());
@@ -960,6 +1148,7 @@ async fn test_mcp_knowledge_register_missing_params() {
         repo_name: None,
         name: None,
         doc_type: Some("readme".to_string()),
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_err());
@@ -972,6 +1161,7 @@ async fn test_mcp_knowledge_register_missing_params() {
         repo_name: None,
         name: Some("Test".to_string()),
         doc_type: None,
+        scope: global_scope(),
     };
     let result = tools::knowledge_new(&state, req).await;
     assert!(result.is_err());

@@ -11,7 +11,8 @@
       "mcp__engram__vault",
       "mcp__engram__digest",
       "mcp__engram__repo",
-      "mcp__engram__telemetry"
+      "mcp__engram__telemetry",
+      "mcp__engram__search"
     ]
   },
   "hooks": {
@@ -20,151 +21,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-start.sh\"",
+            "command": "start_dir=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; project_root=\"$(git -C \"$start_dir\" rev-parse --show-toplevel 2>/dev/null || true)\"; if [ -z \"$project_root\" ]; then project_root=\"$start_dir\"; fi; project_hook=\"${project_root:+$project_root/.claude/hooks/engram-session-start.sh}\"; home_hook=\"${HOME:-}/.claude/hooks/engram-session-start.sh\"; if [ -n \"$project_hook\" ] && [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; if [ -n \"${HOME:-}\" ] && [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; printf '%s\\n' 'Engram SessionStart hook skipped: generated hook script was not found at the repository root or under HOME.' >&2; exit 0",
             "timeout": 10
           }
         ],
         "matcher": "startup|resume|compact"
       }
     ],
-    "UserPromptSubmit": [
+    "SessionEnd": [
       {
         "hooks": [
           {
-            "type": "mcp_tool",
-            "server": "engram",
-            "tool": "harness",
-            "timeout": 10,
-            "input": {
-              "action": "hook_event",
-              "harness": "claude_code",
-              "hook_event_name": "UserPromptSubmit",
-              "session_id": "${session_id}",
-              "cwd": "${cwd}",
-              "transcript_path": "${transcript_path}",
-              "prompt": "${prompt}",
-              "tool_name": "${tool_name}",
-              "tool_error": "${error}",
-              "tool_input_command": "${tool_input.command}",
-              "file_path": "${tool_input.file_path}",
-              "last_assistant_message": "${last_assistant_message}",
-              "compact_summary": "${compact_summary}",
-              "trigger": "${trigger}",
-              "reason": "${reason}",
-              "stop_hook_active": "${stop_hook_active}",
-              "write_policy": "durable",
-              "model_provider": "anthropic",
-              "model": "claude-code",
-              "surface": "claude-code",
-              "actor": "agent"
-            }
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "mcp_tool",
-            "server": "engram",
-            "tool": "harness",
-            "timeout": 10,
-            "input": {
-              "action": "hook_event",
-              "harness": "claude_code",
-              "hook_event_name": "PostToolUse",
-              "session_id": "${session_id}",
-              "cwd": "${cwd}",
-              "transcript_path": "${transcript_path}",
-              "prompt": "${prompt}",
-              "tool_name": "${tool_name}",
-              "tool_error": "${error}",
-              "tool_input_command": "${tool_input.command}",
-              "file_path": "${tool_input.file_path}",
-              "last_assistant_message": "${last_assistant_message}",
-              "compact_summary": "${compact_summary}",
-              "trigger": "${trigger}",
-              "reason": "${reason}",
-              "stop_hook_active": "${stop_hook_active}",
-              "write_policy": "durable",
-              "model_provider": "anthropic",
-              "model": "claude-code",
-              "surface": "claude-code",
-              "actor": "agent"
-            }
-          }
-        ],
-        "matcher": "Write|Edit|MultiEdit"
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "type": "mcp_tool",
-            "server": "engram",
-            "tool": "harness",
-            "timeout": 10,
-            "input": {
-              "action": "hook_event",
-              "harness": "claude_code",
-              "hook_event_name": "PostToolUseFailure",
-              "session_id": "${session_id}",
-              "cwd": "${cwd}",
-              "transcript_path": "${transcript_path}",
-              "prompt": "${prompt}",
-              "tool_name": "${tool_name}",
-              "tool_error": "${error}",
-              "tool_input_command": "${tool_input.command}",
-              "file_path": "${tool_input.file_path}",
-              "last_assistant_message": "${last_assistant_message}",
-              "compact_summary": "${compact_summary}",
-              "trigger": "${trigger}",
-              "reason": "${reason}",
-              "stop_hook_active": "${stop_hook_active}",
-              "write_policy": "durable",
-              "model_provider": "anthropic",
-              "model": "claude-code",
-              "surface": "claude-code",
-              "actor": "agent"
-            }
-          }
-        ],
-        "matcher": "*"
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "mcp_tool",
-            "server": "engram",
-            "tool": "harness",
-            "timeout": 10,
-            "input": {
-              "action": "hook_event",
-              "harness": "claude_code",
-              "hook_event_name": "Stop",
-              "session_id": "${session_id}",
-              "cwd": "${cwd}",
-              "transcript_path": "${transcript_path}",
-              "prompt": "${prompt}",
-              "tool_name": "${tool_name}",
-              "tool_error": "${error}",
-              "tool_input_command": "${tool_input.command}",
-              "file_path": "${tool_input.file_path}",
-              "last_assistant_message": "${last_assistant_message}",
-              "compact_summary": "${compact_summary}",
-              "trigger": "${trigger}",
-              "reason": "${reason}",
-              "stop_hook_active": "${stop_hook_active}",
-              "write_policy": "durable",
-              "model_provider": "anthropic",
-              "model": "claude-code",
-              "surface": "claude-code",
-              "actor": "agent"
-            }
+            "type": "command",
+            "command": "start_dir=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; project_root=\"$(git -C \"$start_dir\" rev-parse --show-toplevel 2>/dev/null || true)\"; if [ -z \"$project_root\" ]; then project_root=\"$start_dir\"; fi; project_hook=\"${project_root:+$project_root/.claude/hooks/engram-session-end.sh}\"; home_hook=\"${HOME:-}/.claude/hooks/engram-session-end.sh\"; if [ -n \"$project_hook\" ] && [ -f \"$project_hook\" ]; then exec /usr/bin/env bash \"$project_hook\"; fi; if [ -n \"${HOME:-}\" ] && [ -f \"$home_hook\" ]; then exec /usr/bin/env bash \"$home_hook\"; fi; printf '%s\\n' 'Engram SessionEnd hook skipped: generated hook script was not found at the repository root or under HOME.' >&2; exit 0",
+            "timeout": 15
           }
         ]
       }
@@ -180,6 +50,7 @@
             "input": {
               "action": "hook_event",
               "harness": "claude_code",
+              "enforcement": "soft",
               "hook_event_name": "PreCompact",
               "session_id": "${session_id}",
               "cwd": "${cwd}",
@@ -188,6 +59,7 @@
               "tool_name": "${tool_name}",
               "tool_error": "${error}",
               "tool_input_command": "${tool_input.command}",
+              "tool_input_action": "${tool_input.action}",
               "file_path": "${tool_input.file_path}",
               "last_assistant_message": "${last_assistant_message}",
               "compact_summary": "${compact_summary}",
@@ -216,6 +88,7 @@
             "input": {
               "action": "hook_event",
               "harness": "claude_code",
+              "enforcement": "soft",
               "hook_event_name": "PostCompact",
               "session_id": "${session_id}",
               "cwd": "${cwd}",
@@ -224,6 +97,7 @@
               "tool_name": "${tool_name}",
               "tool_error": "${error}",
               "tool_input_command": "${tool_input.command}",
+              "tool_input_action": "${tool_input.action}",
               "file_path": "${tool_input.file_path}",
               "last_assistant_message": "${last_assistant_message}",
               "compact_summary": "${compact_summary}",
@@ -239,17 +113,6 @@
           }
         ],
         "matcher": "manual|auto"
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/engram-session-end.sh\"",
-            "timeout": 15
-          }
-        ]
       }
     ]
   }

@@ -2,10 +2,8 @@
 # End Engram Session
 
 Before ending:
-- Call `memory(action=changes_since)` from the latest cursor.
-- Call `obligations(action=detect)` and `obligations(action=doctor)`.
-- Resolve open obligations or state explicit skip reasons in the handoff.
-- Update or compile `handoff` with completed work, open decisions, next actions, and risks.
-- If durable memory changed, prepare a `memory(action=commit)` candidate.
-- Use this same flow before context compaction or any context transition.
-- Leave migration and digest promotions review-gated; do not auto-promote orphan data.
+- Store a project- or repository-scoped `kind=handoff` memory only if another session needs a
+  concrete next action, unresolved decision, or material risk.
+- Store source-grounded decisions and discoveries separately with writer provenance and evidence.
+- Do not copy the transcript, routine progress, command output, or secrets into memory.
+- Archive obsolete memory; permanently forget only an exact item after explicit confirmation.

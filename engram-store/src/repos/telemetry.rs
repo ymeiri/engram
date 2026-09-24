@@ -1,11 +1,13 @@
 //! Brain harness telemetry repository.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::redact_serialized_secret_material;
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::telemetry::{AgentFeedback, BrainHarnessTrace};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use tracing::{debug, info};
 
 const TABLE_TRACE: &str = "brain_harness_trace";
@@ -30,6 +32,15 @@ impl TraceRecord {
 struct FeedbackRecord {
     record_id: String,
     feedback: serde_json::Value,
+}
+
+/// Telemetry records removed because they referenced a permanently forgotten memory item.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TelemetryMemoryPurge {
+    /// Retrieval traces deleted.
+    pub traces_deleted: usize,
+    /// Feedback records deleted.
+    pub feedback_deleted: usize,
 }
 
 impl FeedbackRecord {
@@ -75,7 +86,7 @@ impl TelemetryRepo {
                 DEFINE INDEX IF NOT EXISTS idx_feedback_created ON agent_feedback FIELDS created_at;
                 "#,
             )
-            .await?;
+            .await?.check()?;
 
         info!("Brain harness telemetry schema initialized");
         Ok(())
@@ -83,6 +94,13 @@ impl TelemetryRepo {
 
     /// Save a trace.
     pub async fn save_trace(&self, trace: &BrainHarnessTrace) -> StoreResult<()> {
+        let (mut trace, redacted_fields) =
+            redact_serialized_secret_material("brain harness trace", trace)?;
+        if redacted_fields > 0 {
+            trace.warnings.push(format!(
+                "Redacted {redacted_fields} secret-bearing telemetry field(s) before durable persistence."
+            ));
+        }
         debug!("Saving brain harness trace: {}", trace.id);
 
         self.db
@@ -99,7 +117,7 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("id", trace.id.to_string()))
-            .bind(("trace", to_json(trace)?))
+            .bind(("trace", to_json(&trace)?))
             .bind(("operation_key", trace.operation.to_string()))
             .bind((
                 "intent_key",
@@ -109,7 +127,8 @@ impl TelemetryRepo {
             .bind(("external_session_id", trace.external_session_id.clone()))
             .bind(("project", trace.project.clone()))
             .bind(("created_at", format_rfc3339(trace.created_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -127,7 +146,8 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<TraceRecord> = result.take(0)?;
         records
@@ -152,7 +172,8 @@ impl TelemetryRepo {
                 "#,
                 limit.unwrap_or(100)
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<TraceRecord> = result.take(0)?;
         records.into_iter().map(TraceRecord::into_trace).collect()
@@ -211,13 +232,14 @@ impl TelemetryRepo {
             query = query.bind(("intent_key", intent_key.to_string()));
         }
 
-        let mut result = query.await?;
+        let mut result = query.await?.check()?;
         let records: Vec<TraceRecord> = result.take(0)?;
         records.into_iter().map(TraceRecord::into_trace).collect()
     }
 
     /// Save agent feedback.
     pub async fn save_feedback(&self, feedback: &AgentFeedback) -> StoreResult<()> {
+        let (feedback, _) = redact_serialized_secret_material("agent feedback", feedback)?;
         debug!("Saving agent feedback: {}", feedback.id);
 
         self.db
@@ -232,12 +254,13 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("id", feedback.id.to_string()))
-            .bind(("feedback", to_json(feedback)?))
+            .bind(("feedback", to_json(&feedback)?))
             .bind(("trace_id", feedback.trace_id.to_string()))
             .bind(("session_id", feedback.session_id.map(|id| id.to_string())))
             .bind(("external_session_id", feedback.external_session_id.clone()))
             .bind(("created_at", format_rfc3339(feedback.created_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -255,7 +278,8 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<FeedbackRecord> = result.take(0)?;
         records
@@ -280,7 +304,8 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("trace_id", trace_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<FeedbackRecord> = result.take(0)?;
         records
@@ -315,7 +340,8 @@ impl TelemetryRepo {
                 "#,
             )
             .bind(("trace_ids", trace_ids))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<FeedbackRecord> = result.take(0)?;
         records
@@ -339,13 +365,93 @@ impl TelemetryRepo {
                 "#,
                 limit.unwrap_or(100)
             ))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<FeedbackRecord> = result.take(0)?;
         records
             .into_iter()
             .map(FeedbackRecord::into_feedback)
             .collect()
+    }
+
+    /// Delete traces and feedback that reference a permanently forgotten memory item.
+    pub async fn purge_memory_references(
+        &self,
+        memory_id: &Id,
+    ) -> StoreResult<TelemetryMemoryPurge> {
+        let memory_id_text = memory_id.to_string();
+        let mut trace_result = self
+            .db
+            .query(format!(
+                "SELECT meta::id(id) AS record_id, trace FROM {TABLE_TRACE}"
+            ))
+            .await?
+            .check()?;
+        let traces: Vec<TraceRecord> = trace_result.take(0)?;
+        let traces = traces
+            .into_iter()
+            .map(TraceRecord::into_trace)
+            .collect::<StoreResult<Vec<_>>>()?;
+        let trace_ids = traces
+            .into_iter()
+            .filter(|trace| {
+                trace.returned_memory_ids.contains(memory_id)
+                    || trace
+                        .returned_result_ids
+                        .iter()
+                        .any(|result_id| result_id == &memory_id_text)
+            })
+            .map(|trace| trace.id)
+            .collect::<HashSet<_>>();
+
+        let mut feedback_result = self
+            .db
+            .query(format!(
+                "SELECT meta::id(id) AS record_id, feedback FROM {TABLE_FEEDBACK}"
+            ))
+            .await?
+            .check()?;
+        let feedback: Vec<FeedbackRecord> = feedback_result.take(0)?;
+        let feedback_ids = feedback
+            .into_iter()
+            .map(FeedbackRecord::into_feedback)
+            .collect::<StoreResult<Vec<_>>>()?
+            .into_iter()
+            .filter(|feedback| {
+                trace_ids.contains(&feedback.trace_id)
+                    || feedback.used_memory_ids.contains(memory_id)
+                    || feedback.rejected_memory_ids.contains(memory_id)
+                    || feedback.stale_memory_ids.contains(memory_id)
+                    || feedback.wrong_scope_memory_ids.contains(memory_id)
+                    || feedback
+                        .used_result_ids
+                        .iter()
+                        .chain(&feedback.rejected_result_ids)
+                        .any(|result_id| result_id == &memory_id_text)
+            })
+            .map(|feedback| feedback.id)
+            .collect::<HashSet<_>>();
+
+        for feedback_id in &feedback_ids {
+            self.db
+                .query(r#"DELETE type::thing("agent_feedback", $id)"#)
+                .bind(("id", feedback_id.to_string()))
+                .await?
+                .check()?;
+        }
+        for trace_id in &trace_ids {
+            self.db
+                .query(r#"DELETE type::thing("brain_harness_trace", $id)"#)
+                .bind(("id", trace_id.to_string()))
+                .await?
+                .check()?;
+        }
+
+        Ok(TelemetryMemoryPurge {
+            traces_deleted: trace_ids.len(),
+            feedback_deleted: feedback_ids.len(),
+        })
     }
 }
 
@@ -361,4 +467,50 @@ fn format_rfc3339(value: time::OffsetDateTime) -> StoreResult<String> {
     value
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|e| StoreError::Deserialization(format!("Invalid timestamp: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use engram_core::telemetry::BrainHarnessOperation;
+
+    async fn setup_repo() -> TelemetryRepo {
+        let config = crate::StoreConfig::memory();
+        let db = crate::connect_and_init(&config).await.unwrap();
+        let repo = TelemetryRepo::new(db);
+        repo.init_schema().await.unwrap();
+        repo
+    }
+
+    #[tokio::test]
+    async fn save_trace_redacts_secret_material_without_failing_operation() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-trace-secret";
+        let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient)
+            .with_query(Some(canary.to_string()));
+
+        repo.save_trace(&trace).await.unwrap();
+
+        let stored = repo.get_trace(&trace.id).await.unwrap().unwrap();
+        let stored_json = serde_json::to_string(&stored).unwrap();
+        assert!(!stored_json.contains(canary));
+        assert!(stored_json.contains("redacted"));
+    }
+
+    #[tokio::test]
+    async fn save_feedback_redacts_secret_material_without_dropping_feedback() {
+        let repo = setup_repo().await;
+        let trace = BrainHarnessTrace::new(BrainHarnessOperation::Orient);
+        repo.save_trace(&trace).await.unwrap();
+        let canary = "API_TOKEN=synthetic-feedback-secret";
+        let mut feedback = AgentFeedback::new(trace.id);
+        feedback.note = Some(canary.to_string());
+
+        repo.save_feedback(&feedback).await.unwrap();
+
+        let stored = repo.get_feedback(&feedback.id).await.unwrap().unwrap();
+        let stored_json = serde_json::to_string(&stored).unwrap();
+        assert!(!stored_json.contains(canary));
+        assert!(stored_json.contains("redacted"));
+    }
 }

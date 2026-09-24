@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "probe_id": "engram-procedure-match-probe-v1",
+  "trigger_results": {
+    "path": "../retrieval_probe_v5/RESULTS_2026-08-08.md",
+    "sha256": "8be7955af3f3898084d56176e24b3f2a5c2aad673f91e62b185ddb428f6e9973"
+  },
+  "source_files": [
+    {
+      "path": "../../engram-index/src/memory.rs",
+      "sha256": "37d8a6c353a3bd900c0a873965de986e15b770634a014aa447fe9a659c522aa2"
+    },
+    {
+      "path": "../../engram-index/src/memory_ranker.rs",
+      "sha256": "cfd889305b441d22a0b763e55010dee5e5dfeff21a4995d474cae8deaf531015"
+    },
+    {
+      "path": "../../engram-core/src/memory.rs",
+      "sha256": "281af5c9cecd3df61ccf71f46a39357c9125bb5703fc123d2bd6328361c3c09d"
+    },
+    {
+      "path": "../../engram-eval/src/fixture.rs",
+      "sha256": "b3cdef343f6b568645e0bdd190af7d81faa78881fedfa45ee4e1e4981db0afcb"
+    },
+    {
+      "path": "../../engram-eval/src/seed.rs",
+      "sha256": "f9273c3f4475216bd6ebd986cc645af50e1cf2d2a3a6df1676e3a031e910a024"
+    }
+  ],
+  "limit": 5,
+  "additional_procedure": {
+    "key": "procedure-atlas-context-probe",
+    "title": "Atlas context probe recovery",
+    "content": "Use the verified Atlas context probe after its rejection signature.",
+    "task": "run Atlas context probe",
+    "commands": ["./bin/context-probe debug bits"],
+    "prerequisites": {
+      "probe.version": "1"
+    },
+    "failure_signatures": ["ATLAS_CONTEXT_PROBE_REJECTED"],
+    "verification_command": "./bin/context-probe debug bits",
+    "verification_exit_code": 0,
+    "verification_output": "ATLAS_CONTEXT_PROBE_OK",
+    "receipt_conditions": {
+      "probe.version": "1"
+    },
+    "project": "atlas",
+    "expires_in_days": 3650
+  },
+  "quality_gates": {
+    "min_exact_outcome_accuracy": 1.0,
+    "min_success_accuracy": 1.0,
+    "min_abstention_accuracy": 1.0,
+    "min_diagnostic_accuracy": 1.0,
+    "min_evidence_accuracy": 1.0,
+    "max_returned_per_scenario": 1,
+    "max_forbidden_results": 0,
+    "query_p95_ms": 50
+  },
+  "scenarios": [
+    {
+      "id": "integration-main-exact-conditions",
+      "category": "verified_success",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "none",
+      "expected_keys": ["procedure-atlas-integration-v3"],
+      "forbidden_keys": ["procedure-atlas-integration-v2", "procedure-orbit-worker-deploy"],
+      "expect_abstain": false,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "integration-moved-worktree",
+      "category": "portable_repository_identity",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://moved/arbitrary-name/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "none",
+      "expected_keys": ["procedure-atlas-integration-v3"],
+      "forbidden_keys": ["procedure-atlas-integration-v2", "procedure-orbit-worker-deploy"],
+      "expect_abstain": false,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "deploy-no-prerequisites",
+      "category": "verified_success",
+      "query": "deploy queue worker",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {},
+      "setup": "none",
+      "expected_keys": ["procedure-atlas-worker-deploy"],
+      "forbidden_keys": ["procedure-atlas-integration-v3", "procedure-orbit-worker-deploy"],
+      "expect_abstain": false,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "deploy-task-discrimination-with-unrelated-matching-prerequisite",
+      "category": "task_discrimination",
+      "query": "deploy queue worker",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "none",
+      "expected_keys": ["procedure-atlas-worker-deploy"],
+      "forbidden_keys": ["procedure-atlas-integration-v3"],
+      "expect_abstain": false,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "condition-normalization",
+      "category": "verified_success",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": " 3 "},
+      "setup": "none",
+      "expected_keys": ["procedure-atlas-integration-v3"],
+      "forbidden_keys": [],
+      "expect_abstain": false,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "failure-signature-match",
+      "category": "failure_signature",
+      "query": "ATLAS_CONTEXT_PROBE_REJECTED",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"probe.version": "1"},
+      "setup": "none",
+      "expected_keys": ["procedure-atlas-context-probe"],
+      "forbidden_keys": [],
+      "expect_abstain": false,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "integration-missing-prerequisite",
+      "category": "prerequisite_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["was not supplied"]
+    },
+    {
+      "id": "integration-mismatched-prerequisite",
+      "category": "prerequisite_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "2"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v2", "procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["does not match"]
+    },
+    {
+      "id": "superseded-version-request",
+      "category": "superseded_abstention",
+      "query": "run queue worker integration test tool version 2",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "2"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v2", "procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["does not match"]
+    },
+    {
+      "id": "unrelated-verified-command",
+      "category": "no_result",
+      "query": "verified command for Android signing release",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3", "probe.version": "1"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-worker-deploy", "procedure-atlas-integration-v3", "procedure-atlas-context-probe"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "unscoped-procedure-request",
+      "category": "unresolved_scope",
+      "query": "run queue worker integration test",
+      "project": null,
+      "cwd": null,
+      "conditions": {"tool.version": "3"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3", "procedure-orbit-worker-deploy"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "explicit-atlas-project-conflicts-with-orbit-cwd",
+      "category": "cross_project_conflict",
+      "query": "deploy worker fast",
+      "project": "atlas",
+      "cwd": "fixture://orbit/main/services/worker",
+      "conditions": {"orbitctl.version": "9"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-orbit-worker-deploy"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "explicit-orbit-project-conflicts-with-atlas-cwd",
+      "category": "cross_project_conflict",
+      "query": "deploy queue worker",
+      "project": "orbit",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-worker-deploy", "procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "verification-receipt-unavailable",
+      "category": "proof_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "remove_integration_receipt",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["unavailable"]
+    },
+    {
+      "id": "verification-receipt-tampered",
+      "category": "proof_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "tamper_integration_receipt",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["hash changed"]
+    },
+    {
+      "id": "verification-expired",
+      "category": "freshness_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "expire_integration_verification",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["expired"]
+    },
+    {
+      "id": "verification-metadata-incomplete",
+      "category": "proof_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "clear_integration_verification_hash",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["complete verification metadata", "path or hash is missing"]
+    },
+    {
+      "id": "active-version-marked-superseded",
+      "category": "lifecycle_abstention",
+      "query": "run queue worker integration test",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"tool.version": "3"},
+      "setup": "supersede_integration_procedure",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-integration-v2", "procedure-atlas-integration-v3"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": []
+    },
+    {
+      "id": "failure-signature-condition-mismatch",
+      "category": "failure_signature_abstention",
+      "query": "ATLAS_CONTEXT_PROBE_REJECTED",
+      "project": "atlas",
+      "cwd": "fixture://atlas/main/services/worker",
+      "conditions": {"probe.version": "2"},
+      "setup": "none",
+      "expected_keys": [],
+      "forbidden_keys": ["procedure-atlas-context-probe"],
+      "expect_abstain": true,
+      "expected_diagnostic_substrings": ["does not match"]
+    }
+  ]
+}

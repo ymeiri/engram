@@ -1,8 +1,15 @@
 //! Integration tests for agent obligation MCP tooling.
 
-use engram_index::{MemoryService, ObligationService};
-use engram_mcp::tools::{self, MemoryEvidenceRequest, ObligationRequest, OrientRequest, ToolState};
-use engram_store::{connect_and_init, StoreConfig};
+use engram_core::memory::{Harness, MemoryScope, ModelIdentity, WriterProvenance};
+use engram_core::obligation::{AgentObligation, AgentObligationKind, AgentObligationTrigger};
+use engram_core::repository::{
+    GitRepository, LocalCheckout, ProjectRepositoryLink, ProjectRepositoryRole,
+};
+use engram_index::{MemoryService, ObligationService, SearchService, SessionService, WorkService};
+use engram_mcp::tools::{
+    self, MemoryEvidenceRequest, ObligationRequest, OrientRequest, RetrievalScopeRequest, ToolState,
+};
+use engram_store::{connect_and_init, RepositoryRepo, StoreConfig};
 use serde_json::Value;
 use std::fs;
 use std::process::Command;
@@ -28,12 +35,136 @@ async fn setup_tool_state() -> ToolState {
     state
 }
 
+fn test_obligation(title: &str, scope: MemoryScope) -> AgentObligation {
+    AgentObligation::new(
+        AgentObligationKind::SourceReading,
+        title,
+        format!("Complete {title}."),
+        scope,
+        AgentObligationTrigger::new("test", format!("{title} triggered")),
+        WriterProvenance::agent(Harness::Codex, ModelIdentity::new("openai", "gpt-5.5")),
+    )
+}
+
+async fn setup_related_tool_state(root: &std::path::Path) -> (ToolState, String) {
+    let db = connect_and_init(&StoreConfig::memory())
+        .await
+        .expect("Failed to connect");
+    let memory = MemoryService::new(db.clone());
+    memory
+        .init_schema()
+        .await
+        .expect("Failed to initialize memory schema");
+    let obligations = ObligationService::new(db.clone());
+    obligations
+        .init_schema()
+        .await
+        .expect("Failed to initialize obligation schema");
+    let work = WorkService::new(db.clone());
+    work.init().await.expect("Failed to initialize work schema");
+    let alpha = work.create_project("alpha", None).await.unwrap();
+    let beta = work.create_project("beta", None).await.unwrap();
+    let alpha_one = work
+        .create_task("alpha", "alpha-one", None, Some("ALPHA-1"))
+        .await
+        .unwrap();
+    let alpha_two = work
+        .create_task("alpha", "alpha-two", None, Some("ALPHA-2"))
+        .await
+        .unwrap();
+    let sessions = SessionService::new(db.clone());
+    sessions
+        .init()
+        .await
+        .expect("Failed to initialize session schema");
+    let repositories = RepositoryRepo::new(db.clone());
+    repositories
+        .init_schema()
+        .await
+        .expect("Failed to initialize repository schema");
+    let repository = GitRepository::new("alpha-repository");
+    repositories.save_repository(&repository).await.unwrap();
+    repositories
+        .save_checkout(
+            &LocalCheckout::new(root.display().to_string()).with_repository(repository.id),
+        )
+        .await
+        .unwrap();
+    repositories
+        .save_project_link(
+            &ProjectRepositoryLink::new("alpha", repository.id, ProjectRepositoryRole::Primary)
+                .with_project_id(alpha.id),
+        )
+        .await
+        .unwrap();
+
+    obligations
+        .add(test_obligation("global obligation", MemoryScope::Global))
+        .await
+        .unwrap();
+    obligations
+        .add(test_obligation(
+            "alpha project obligation",
+            MemoryScope::Project {
+                project_id: Some(alpha.id),
+                project_name: alpha.name.clone(),
+            },
+        ))
+        .await
+        .unwrap();
+    let beta_obligation = obligations
+        .add(test_obligation(
+            "beta project obligation",
+            MemoryScope::Project {
+                project_id: Some(beta.id),
+                project_name: beta.name.clone(),
+            },
+        ))
+        .await
+        .unwrap();
+    obligations
+        .add(test_obligation(
+            "alpha-one obligation",
+            MemoryScope::Task {
+                project_id: Some(alpha.id),
+                project_name: Some(alpha.name.clone()),
+                task_id: Some(alpha_one.id),
+                task_name: alpha_one.name,
+            },
+        ))
+        .await
+        .unwrap();
+    obligations
+        .add(test_obligation(
+            "alpha-two obligation",
+            MemoryScope::Task {
+                project_id: Some(alpha.id),
+                project_name: Some(alpha.name),
+                task_id: Some(alpha_two.id),
+                task_name: alpha_two.name,
+            },
+        ))
+        .await
+        .unwrap();
+
+    let state = ToolState::new();
+    state.init_memory(memory).await;
+    state.init_obligation(obligations).await;
+    state.init_search(SearchService::new(db)).await;
+    state.init_work(work).await;
+    (state, beta_obligation.id.to_string())
+}
+
 fn request(action: &str) -> ObligationRequest {
     ObligationRequest {
         action: action.to_string(),
         cwd: None,
         prompt: None,
         project: None,
+        scope: Some(RetrievalScopeRequest {
+            relevance_mode: Some("global".to_string()),
+            ..RetrievalScopeRequest::default()
+        }),
         limit: None,
         write: None,
         id: None,
@@ -64,6 +195,23 @@ fn with_writer(mut req: ObligationRequest) -> ObligationRequest {
     req.model = Some("gpt-5.5".to_string());
     req.surface = Some("desktop".to_string());
     req
+}
+
+fn related_scope(project: &str) -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some(project.to_string()),
+        ..RetrievalScopeRequest::default()
+    })
+}
+
+fn related_task_scope(project: &str, task: &str) -> Option<RetrievalScopeRequest> {
+    Some(RetrievalScopeRequest {
+        relevance_mode: Some("related".to_string()),
+        project: Some(project.to_string()),
+        task: Some(task.to_string()),
+        ..RetrievalScopeRequest::default()
+    })
 }
 
 fn parse_json(response: &str) -> Value {
@@ -106,6 +254,165 @@ async fn add_document_obligation(
         .expect("add should work");
 }
 
+#[tokio::test]
+async fn mcp_obligation_reads_abstain_locally_before_service_access() {
+    for action in ["get", "list", "open", "doctor"] {
+        let mut request = request(action);
+        request.scope = None;
+        let response = tools::obligations_new(&ToolState::new(), request)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("{action} should abstain before obligation-service access: {error}")
+            });
+        let json = parse_json(&response);
+        assert_eq!(json["executed"], false, "unexpected response for {action}");
+        assert_eq!(json["relevance_mode"], "local");
+        assert_eq!(json["authorization_scope_enforced"], true);
+        assert_eq!(json["omitted_layers"], serde_json::json!(["obligations"]));
+        assert!(json.get("obligation").is_none());
+        assert!(json.get("obligations").is_none());
+        assert!(json.get("open").is_none());
+    }
+
+    let error = tools::obligations_new(&ToolState::new(), request("unknown"))
+        .await
+        .expect_err("unknown actions should be rejected before scope handling");
+    assert!(error.contains("Unknown action"));
+}
+
+#[tokio::test]
+async fn mcp_obligation_related_scope_filters_project_task_ids_and_checkout_probes() {
+    let root = tempdir().expect("registered checkout should be created");
+    let unregistered = tempdir().expect("unregistered directory should be created");
+    fs::write(
+        unregistered.path().join("private-canary"),
+        "private obligation canary",
+    )
+    .unwrap();
+    let (state, beta_id) = setup_related_tool_state(root.path()).await;
+
+    let mut project_list = request("list");
+    project_list.scope = related_scope("alpha");
+    let project_list = parse_json(&tools::obligations_new(&state, project_list).await.unwrap());
+    let project_titles = project_list["obligations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|obligation| obligation["title"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(project_list["resolved_project"], "alpha");
+    assert_eq!(project_list["authorization_scope_enforced"], true);
+    assert_eq!(project_titles.len(), 4);
+    assert!(project_titles.contains(&"global obligation"));
+    assert!(project_titles.contains(&"alpha project obligation"));
+    assert!(project_titles.contains(&"alpha-one obligation"));
+    assert!(project_titles.contains(&"alpha-two obligation"));
+    assert!(!project_titles.contains(&"beta project obligation"));
+
+    let mut exact_task = request("list");
+    exact_task.scope = related_task_scope("alpha", "ALPHA-1");
+    let exact_task = parse_json(&tools::obligations_new(&state, exact_task).await.unwrap());
+    let task_titles = exact_task["obligations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|obligation| obligation["title"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(exact_task["resolved_task"], "alpha-one");
+    assert_eq!(task_titles.len(), 3);
+    assert!(task_titles.contains(&"global obligation"));
+    assert!(task_titles.contains(&"alpha project obligation"));
+    assert!(task_titles.contains(&"alpha-one obligation"));
+    assert!(!task_titles.contains(&"alpha-two obligation"));
+    assert!(!task_titles.contains(&"beta project obligation"));
+
+    let mut hidden_get = request("get");
+    hidden_get.id = Some(beta_id);
+    hidden_get.scope = related_scope("alpha");
+    let hidden_get = parse_json(&tools::obligations_new(&state, hidden_get).await.unwrap());
+    assert_eq!(hidden_get["found"], false);
+    assert!(hidden_get["obligation"].is_null());
+
+    let mut doctor = request("doctor");
+    doctor.scope = related_task_scope("alpha", "ALPHA-1");
+    let doctor = parse_json(&tools::obligations_new(&state, doctor).await.unwrap());
+    assert_eq!(doctor["open"].as_array().unwrap().len(), 3);
+    assert!(!doctor.to_string().contains("beta project obligation"));
+    assert!(!doctor.to_string().contains("alpha-two obligation"));
+
+    let mut registered_cwd = request("list");
+    registered_cwd.scope = related_scope("alpha");
+    registered_cwd.cwd = Some(root.path().display().to_string());
+    let registered_cwd = parse_json(
+        &tools::obligations_new(&state, registered_cwd)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(registered_cwd["resolved_project"], "alpha");
+    assert_eq!(registered_cwd["omitted_layers"], serde_json::json!([]));
+
+    let mut private_cwd = request("doctor");
+    private_cwd.scope = related_scope("alpha");
+    private_cwd.cwd = Some(unregistered.path().display().to_string());
+    let private_response = tools::obligations_new(&state, private_cwd).await.unwrap();
+    let private_cwd = parse_json(&private_response);
+    assert_eq!(private_cwd["executed"], false);
+    assert_eq!(
+        private_cwd["omitted_layers"],
+        serde_json::json!(["obligations"])
+    );
+    assert!(private_cwd.get("open").is_none());
+    assert!(!private_response.contains("private obligation canary"));
+
+    let mut conflicting_project = request("list");
+    conflicting_project.project = Some("beta".to_string());
+    conflicting_project.scope = related_scope("alpha");
+    let error = tools::obligations_new(&state, conflicting_project)
+        .await
+        .expect_err("conflicting project filter should fail");
+    assert!(error.contains("does not match resolved authorization project 'alpha'"));
+}
+
+#[tokio::test]
+async fn mcp_orient_exact_task_excludes_sibling_task_obligations() {
+    let root = tempdir().expect("registered checkout should be created");
+    let (state, _) = setup_related_tool_state(root.path()).await;
+
+    let response = tools::orient(
+        &state,
+        OrientRequest {
+            cwd: Some(root.path().display().to_string()),
+            prompt: Some("continue alpha one".to_string()),
+            project: Some("alpha".to_string()),
+            task: Some("ALPHA-1".to_string()),
+            agent: Some("codex".to_string()),
+            external_session_id: None,
+            intent: Some("plan_work".to_string()),
+            scenario_id: None,
+            arm: None,
+            include_recent_commits: Some(false),
+            limit: Some(5),
+            response_shape: None,
+        },
+    )
+    .await
+    .expect("exact-task orientation should work");
+    let orient = parse_json(&response);
+    let titles = orient["open_obligations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|obligation| obligation["title"].as_str().unwrap())
+        .collect::<Vec<_>>();
+
+    assert_eq!(orient["task_context"]["name"], "alpha-one");
+    assert!(titles.contains(&"global obligation"));
+    assert!(titles.contains(&"alpha project obligation"));
+    assert!(titles.contains(&"alpha-one obligation"));
+    assert!(!titles.contains(&"alpha-two obligation"));
+    assert!(!titles.contains(&"beta project obligation"));
+}
+
 async fn orient_for_project(state: &ToolState, cwd: &str) -> Value {
     let response = tools::orient(
         state,
@@ -113,6 +420,7 @@ async fn orient_for_project(state: &ToolState, cwd: &str) -> Value {
             cwd: Some(cwd.to_string()),
             prompt: Some("continue the Engram brain harness work".to_string()),
             project: Some("engram".to_string()),
+            task: None,
             agent: Some("codex".to_string()),
             external_session_id: None,
             intent: Some("plan_work".to_string()),
@@ -165,6 +473,9 @@ async fn test_mcp_obligations_detect_write_and_doctor() {
         .as_array()
         .unwrap()
         .iter()
+        .filter(|warning| warning
+            .as_str()
+            .is_some_and(|warning| warning.starts_with("Open obligation")))
         .all(|warning| warning
             .as_str()
             .unwrap()
@@ -212,6 +523,9 @@ async fn test_mcp_obligations_doctor_scopes_to_project_and_cwd() {
         .as_array()
         .unwrap()
         .iter()
+        .filter(|warning| warning
+            .as_str()
+            .is_some_and(|warning| warning.starts_with("Open obligation")))
         .all(|warning| warning
             .as_str()
             .unwrap()
@@ -246,7 +560,7 @@ async fn test_mcp_obligations_list_scopes_to_project_before_limit() {
         .await
         .expect("scoped list should work");
     let list = parse_json(&list_response);
-    let obligations = list.as_array().unwrap();
+    let obligations = list["obligations"].as_array().unwrap();
 
     assert_eq!(obligations.len(), 1);
     assert_eq!(obligations[0]["title"], "Review Engram note");
@@ -262,7 +576,7 @@ async fn test_mcp_obligations_list_scopes_to_project_before_limit() {
         .await
         .expect("scoped open list should work");
     let open = parse_json(&open_response);
-    let open_obligations = open.as_array().unwrap();
+    let open_obligations = open["obligations"].as_array().unwrap();
 
     assert_eq!(open_obligations.len(), 1);
     assert_eq!(open_obligations[0]["title"], "Review Engram note");
@@ -526,6 +840,7 @@ async fn test_mcp_orient_surfaces_open_obligations() {
             cwd: Some("/Users/yuval.meiri/projects/engram".to_string()),
             prompt: Some("continue the Engram brain harness work".to_string()),
             project: Some("engram".to_string()),
+            task: None,
             agent: Some("codex".to_string()),
             external_session_id: None,
             intent: Some("plan_work".to_string()),

@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "suite_id": "engineering-context-v1",
+  "scenario_file": "scenarios.jsonl",
+  "repetitions": 3,
+  "arms": [
+    {
+      "id": "codex_instructions_only",
+      "description": "Codex with checked-in repository instructions; native memory and Engram disabled",
+      "host": "codex",
+      "uses_engram": false
+    },
+    {
+      "id": "claude_instructions_only",
+      "description": "Claude Code with checked-in repository instructions; native memory and Engram disabled",
+      "host": "claude_code",
+      "uses_engram": false
+    },
+    {
+      "id": "codex_native_memory",
+      "description": "Codex native memory enabled; Engram disabled",
+      "host": "codex",
+      "uses_engram": false
+    },
+    {
+      "id": "claude_native_memory",
+      "description": "Claude Code auto memory enabled; Engram disabled",
+      "host": "claude_code",
+      "uses_engram": false
+    },
+    {
+      "id": "codex_native_memory_skills",
+      "description": "Codex native memory plus repository skills; Engram disabled",
+      "host": "codex",
+      "uses_engram": false
+    },
+    {
+      "id": "claude_native_memory_skills",
+      "description": "Claude Code auto memory plus repository skills; Engram disabled",
+      "host": "claude_code",
+      "uses_engram": false
+    },
+    {
+      "id": "codex_current_engram",
+      "description": "Current Engram behavior with Codex native memory disabled",
+      "host": "codex",
+      "uses_engram": true
+    },
+    {
+      "id": "claude_current_engram",
+      "description": "Current Engram behavior with Claude native memory disabled",
+      "host": "claude_code",
+      "uses_engram": true
+    },
+    {
+      "id": "codex_engram_plus_native",
+      "description": "Current Engram plus Codex native memory",
+      "host": "codex",
+      "uses_engram": true
+    },
+    {
+      "id": "claude_engram_plus_native",
+      "description": "Current Engram plus Claude Code auto memory",
+      "host": "claude_code",
+      "uses_engram": true
+    },
+    {
+      "id": "codex_lean_engram",
+      "description": "Proposed lean, scoped, evidence-revalidated Engram flow with Codex native memory disabled",
+      "host": "codex",
+      "uses_engram": true
+    },
+    {
+      "id": "claude_lean_engram",
+      "description": "Proposed lean, scoped, evidence-revalidated Engram flow with Claude native memory disabled",
+      "host": "claude_code",
+      "uses_engram": true
+    }
+  ]
+}

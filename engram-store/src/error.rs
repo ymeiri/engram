@@ -7,6 +7,10 @@ use thiserror::Error;
 /// Store error type.
 #[derive(Debug, Error)]
 pub enum StoreError {
+    /// Local filesystem error.
+    #[error("filesystem error: {0}")]
+    Io(#[from] std::io::Error),
+
     /// Database error.
     #[error("database error: {0}")]
     Database(#[source] Box<surrealdb::Error>),
@@ -21,6 +25,16 @@ pub enum StoreError {
         source: Box<surrealdb::Error>,
     },
 
+    /// The persistent store is too close to exhausting its filesystem.
+    #[error(
+        "insufficient free disk space at {path}: {available_bytes} bytes available; Engram requires at least {required_bytes} bytes"
+    )]
+    InsufficientDiskSpace {
+        path: String,
+        available_bytes: u64,
+        required_bytes: u64,
+    },
+
     /// Entity not found.
     #[error("not found: {0}")]
     NotFound(String),
@@ -32,6 +46,10 @@ pub enum StoreError {
     /// Deserialization error (for custom parsing).
     #[error("deserialization error: {0}")]
     Deserialization(String),
+
+    /// Persistence policy rejected unsafe content before it reached the database.
+    #[error("persistence policy rejected content: {0}")]
+    Policy(String),
 
     /// Core domain error.
     #[error("domain error: {0}")]

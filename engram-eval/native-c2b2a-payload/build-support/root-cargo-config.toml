@@ -1,0 +1,8 @@
+[source.crates-io]
+replace-with = "c2b2a-archive-source"
+
+[source.c2b2a-archive-source]
+directory = "cargo-source"
+
+[net]
+offline = true

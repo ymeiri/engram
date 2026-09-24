@@ -1,6 +1,7 @@
 //! Repository topology persistence.
 
 use crate::error::{StoreError, StoreResult};
+use crate::secret::reject_serialized_secret_material;
 use crate::Db;
 use engram_core::id::Id;
 use engram_core::repository::{
@@ -107,7 +108,7 @@ impl RepositoryRepo {
                 DEFINE INDEX IF NOT EXISTS idx_project_repository_link_component ON project_repository_link FIELDS component_path_key;
                 "#,
             )
-            .await?;
+            .await?.check()?;
 
         info!("Repository topology schema initialized");
         Ok(())
@@ -115,6 +116,7 @@ impl RepositoryRepo {
 
     /// Save a Git repository.
     pub async fn save_repository(&self, repository: &GitRepository) -> StoreResult<()> {
+        reject_serialized_secret_material("repository", repository)?;
         debug!("Saving git repository: {}", repository.id);
 
         self.db
@@ -136,7 +138,8 @@ impl RepositoryRepo {
             .bind(("provider_key", repository.provider.to_string()))
             .bind(("created_at", format_rfc3339(repository.created_at)?))
             .bind(("updated_at", format_rfc3339(repository.updated_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -152,7 +155,8 @@ impl RepositoryRepo {
                 "#,
             )
             .bind(("id", id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<RepositoryRecord> = result.take(0)?;
         records
@@ -175,7 +179,8 @@ impl RepositoryRepo {
                 "#,
             )
             .bind(("name", name.to_lowercase()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<RepositoryRecord> = result.take(0)?;
         records
@@ -201,7 +206,8 @@ impl RepositoryRepo {
                 "#,
             )
             .bind(("remote_url", remote_url.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<RepositoryRecord> = result.take(0)?;
         records
@@ -223,12 +229,13 @@ impl RepositoryRepo {
             query.push_str(&format!(" LIMIT {limit}"));
         }
 
-        let mut result = self.db.query(query).await?;
+        let mut result = self.db.query(query).await?.check()?;
         decode_repositories(result.take(0)?)
     }
 
     /// Save a local checkout.
     pub async fn save_checkout(&self, checkout: &LocalCheckout) -> StoreResult<()> {
+        reject_serialized_secret_material("repository checkout", checkout)?;
         debug!("Saving local checkout: {}", checkout.id);
 
         self.db
@@ -259,7 +266,8 @@ impl RepositoryRepo {
             .bind(("created_at", format_rfc3339(checkout.created_at)?))
             .bind(("updated_at", format_rfc3339(checkout.updated_at)?))
             .bind(("last_seen_at", format_rfc3339(checkout.last_seen_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -280,7 +288,8 @@ impl RepositoryRepo {
                 "#,
             )
             .bind(("local_path", local_path.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<CheckoutRecord> = result.take(0)?;
         records
@@ -301,13 +310,15 @@ impl RepositoryRepo {
                 ORDER BY last_seen_at DESC
                 "#,
             )
-            .await?;
+            .await?
+            .check()?;
 
         decode_checkouts(result.take(0)?)
     }
 
     /// Save a monorepo component.
     pub async fn save_component(&self, component: &MonorepoComponent) -> StoreResult<()> {
+        reject_serialized_secret_material("repository component", component)?;
         debug!("Saving monorepo component: {}", component.id);
 
         self.db
@@ -331,7 +342,8 @@ impl RepositoryRepo {
             .bind(("kind", component.kind.clone()))
             .bind(("created_at", format_rfc3339(component.created_at)?))
             .bind(("updated_at", format_rfc3339(component.updated_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -354,7 +366,8 @@ impl RepositoryRepo {
             )
             .bind(("repository_id", repository_id.to_string()))
             .bind(("path", path.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         let records: Vec<ComponentRecord> = result.take(0)?;
         records
@@ -377,13 +390,15 @@ impl RepositoryRepo {
                 "#,
             )
             .bind(("repository_id", repository_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         decode_components(result.take(0)?)
     }
 
     /// Save a project-repository link.
     pub async fn save_project_link(&self, link: &ProjectRepositoryLink) -> StoreResult<()> {
+        reject_serialized_secret_material("project repository link", link)?;
         debug!("Saving project repository link: {}", link.id);
 
         self.db
@@ -411,7 +426,8 @@ impl RepositoryRepo {
             .bind(("role", link.role.to_string()))
             .bind(("created_at", format_rfc3339(link.created_at)?))
             .bind(("updated_at", format_rfc3339(link.updated_at)?))
-            .await?;
+            .await?
+            .check()?;
 
         Ok(())
     }
@@ -445,7 +461,8 @@ impl RepositoryRepo {
                 "#,
             )
             .bind(("repository_id", repository_id.to_string()))
-            .await?;
+            .await?
+            .check()?;
 
         decode_project_links(result.take(0)?)
     }
@@ -534,6 +551,49 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(by_remote.id, repository.id);
+    }
+
+    #[tokio::test]
+    async fn topology_writes_reject_secret_material_before_persistence() {
+        let repo = setup_repo().await;
+        let canary = "Authorization: Bearer synthetic-topology-secret";
+        let credential_url = "https://agent:synthetic-password@example.test/engram.git";
+        let secret_repository = GitRepository::new("secret").with_remote_url(credential_url);
+
+        let error = repo.save_repository(&secret_repository).await.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("secret material was not persisted"));
+        assert!(repo
+            .get_repository(&secret_repository.id)
+            .await
+            .unwrap()
+            .is_none());
+
+        let repository = GitRepository::new("safe");
+        repo.save_repository(&repository).await.unwrap();
+
+        let checkout = LocalCheckout::new(canary).with_repository(repository.id);
+        assert!(repo.save_checkout(&checkout).await.is_err());
+        assert!(repo.get_checkout_by_path(canary).await.unwrap().is_none());
+
+        let component =
+            MonorepoComponent::new(repository.id, "api", "services/api").with_description(canary);
+        assert!(repo.save_component(&component).await.is_err());
+        assert!(repo
+            .list_components(&repository.id)
+            .await
+            .unwrap()
+            .is_empty());
+
+        let link =
+            ProjectRepositoryLink::new(canary, repository.id, ProjectRepositoryRole::Primary);
+        assert!(repo.save_project_link(&link).await.is_err());
+        assert!(repo
+            .list_project_links(&repository.id)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]

@@ -147,97 +147,25 @@ impl TelemetryService {
         let traces = self.repo.list_traces(Some(10_000)).await?;
         let feedback = self.repo.list_feedback(Some(10_000)).await?;
 
-        let trace_intents = traces
-            .iter()
-            .map(|trace| (trace.id, intent_key(trace)))
-            .collect::<HashMap<_, _>>();
+        Ok(build_intent_stats(&traces, &feedback))
+    }
 
-        let mut groups = HashMap::<String, IntentAggregate>::new();
-        for trace in &traces {
-            let key = intent_key(trace);
-            let group = groups
-                .entry(key.clone())
-                .or_insert_with(|| IntentAggregate {
-                    stats: IntentTelemetryStats {
-                        intent: key,
-                        ..Default::default()
-                    },
-                    latency_sum: 0,
-                    latency_count: 0,
-                    usefulness_sum: 0,
-                    usefulness_count: 0,
-                    correctness_sum: 0,
-                    correctness_count: 0,
-                    noise_sum: 0,
-                    noise_count: 0,
-                });
-            group.stats.trace_count += 1;
-            if let Some(latency) = trace.latency_ms {
-                group.latency_sum += latency;
-                group.latency_count += 1;
-            }
-        }
+    /// Aggregate traces and linked feedback by intent within an optional project boundary.
+    pub async fn stats_by_intent_scoped(
+        &self,
+        project: Option<&str>,
+    ) -> IndexResult<Vec<IntentTelemetryStats>> {
+        let Some(project) = normalized_label(project) else {
+            return self.stats_by_intent().await;
+        };
+        let traces = self
+            .repo
+            .list_traces_scoped(Some(10_000), Some(&project), None, None, None)
+            .await?;
+        let trace_ids = traces.iter().map(|trace| trace.id).collect::<Vec<_>>();
+        let feedback = self.repo.list_feedback_for_traces(&trace_ids).await?;
 
-        for item in &feedback {
-            let key = trace_intents
-                .get(&item.trace_id)
-                .cloned()
-                .unwrap_or_else(|| "unknown".to_string());
-            let group = groups
-                .entry(key.clone())
-                .or_insert_with(|| IntentAggregate {
-                    stats: IntentTelemetryStats {
-                        intent: key,
-                        ..Default::default()
-                    },
-                    latency_sum: 0,
-                    latency_count: 0,
-                    usefulness_sum: 0,
-                    usefulness_count: 0,
-                    correctness_sum: 0,
-                    correctness_count: 0,
-                    noise_sum: 0,
-                    noise_count: 0,
-                });
-
-            group.stats.feedback_count += 1;
-            group.stats.used_memory_count += item.used_memory_ids.len();
-            group.stats.rejected_memory_count += item.rejected_memory_ids.len();
-            if item
-                .missing_context
-                .as_deref()
-                .is_some_and(|value| !value.trim().is_empty())
-            {
-                group.stats.missing_context_count += 1;
-            }
-            add_score(
-                item.usefulness_score,
-                &mut group.usefulness_sum,
-                &mut group.usefulness_count,
-            );
-            add_score(
-                item.correctness_score,
-                &mut group.correctness_sum,
-                &mut group.correctness_count,
-            );
-            add_score(
-                item.noise_score,
-                &mut group.noise_sum,
-                &mut group.noise_count,
-            );
-        }
-
-        let mut stats = groups
-            .into_values()
-            .map(IntentAggregate::into_stats)
-            .collect::<Vec<_>>();
-        stats.sort_by(|left, right| {
-            right
-                .trace_count
-                .cmp(&left.trace_count)
-                .then_with(|| left.intent.cmp(&right.intent))
-        });
-        Ok(stats)
+        Ok(build_intent_stats(&traces, &feedback))
     }
 
     /// Build a read-only report over persisted real-session traces and feedback.
@@ -292,6 +220,103 @@ impl TelemetryService {
             applied_filters,
         ))
     }
+}
+
+fn build_intent_stats(
+    traces: &[BrainHarnessTrace],
+    feedback: &[AgentFeedback],
+) -> Vec<IntentTelemetryStats> {
+    let trace_intents = traces
+        .iter()
+        .map(|trace| (trace.id, intent_key(trace)))
+        .collect::<HashMap<_, _>>();
+
+    let mut groups = HashMap::<String, IntentAggregate>::new();
+    for trace in traces {
+        let key = intent_key(trace);
+        let group = groups
+            .entry(key.clone())
+            .or_insert_with(|| IntentAggregate {
+                stats: IntentTelemetryStats {
+                    intent: key,
+                    ..Default::default()
+                },
+                latency_sum: 0,
+                latency_count: 0,
+                usefulness_sum: 0,
+                usefulness_count: 0,
+                correctness_sum: 0,
+                correctness_count: 0,
+                noise_sum: 0,
+                noise_count: 0,
+            });
+        group.stats.trace_count += 1;
+        if let Some(latency) = trace.latency_ms {
+            group.latency_sum += latency;
+            group.latency_count += 1;
+        }
+    }
+
+    for item in feedback {
+        let key = trace_intents
+            .get(&item.trace_id)
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+        let group = groups
+            .entry(key.clone())
+            .or_insert_with(|| IntentAggregate {
+                stats: IntentTelemetryStats {
+                    intent: key,
+                    ..Default::default()
+                },
+                latency_sum: 0,
+                latency_count: 0,
+                usefulness_sum: 0,
+                usefulness_count: 0,
+                correctness_sum: 0,
+                correctness_count: 0,
+                noise_sum: 0,
+                noise_count: 0,
+            });
+
+        group.stats.feedback_count += 1;
+        group.stats.used_memory_count += item.used_memory_ids.len();
+        group.stats.rejected_memory_count += item.rejected_memory_ids.len();
+        if item
+            .missing_context
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            group.stats.missing_context_count += 1;
+        }
+        add_score(
+            item.usefulness_score,
+            &mut group.usefulness_sum,
+            &mut group.usefulness_count,
+        );
+        add_score(
+            item.correctness_score,
+            &mut group.correctness_sum,
+            &mut group.correctness_count,
+        );
+        add_score(
+            item.noise_score,
+            &mut group.noise_sum,
+            &mut group.noise_count,
+        );
+    }
+
+    let mut stats = groups
+        .into_values()
+        .map(IntentAggregate::into_stats)
+        .collect::<Vec<_>>();
+    stats.sort_by(|left, right| {
+        right
+            .trace_count
+            .cmp(&left.trace_count)
+            .then_with(|| left.intent.cmp(&right.intent))
+    });
+    stats
 }
 
 #[derive(Debug)]
