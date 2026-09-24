@@ -9624,10 +9624,10 @@ impl CodexAuthCacheLifecycle {
         for lane in &plan.lanes {
             ordered.push((lane.order, NativePilotRunPhase::Teaching, lane));
         }
-        let mut activation_ordinal = 13_u32;
-        for lane in plan.lanes.iter().filter(|lane| lane.host == "codex") {
+        for (activation_ordinal, lane) in
+            (13_u32..).zip(plan.lanes.iter().filter(|lane| lane.host == "codex"))
+        {
             ordered.push((activation_ordinal, NativePilotRunPhase::Activation, lane));
-            activation_ordinal += 1;
         }
         for lane in &plan.lanes {
             ordered.push((18 + lane.order, NativePilotRunPhase::Evaluation, lane));

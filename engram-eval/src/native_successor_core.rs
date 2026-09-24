@@ -1150,7 +1150,7 @@ impl NativeDerivedLaunch {
         hasher.update([0]);
         for (key, value) in &self.environment {
             hasher.update(key.as_encoded_bytes());
-            hasher.update([b'=']);
+            hasher.update(b"=");
             hasher.update(value.as_encoded_bytes());
             hasher.update([0]);
         }

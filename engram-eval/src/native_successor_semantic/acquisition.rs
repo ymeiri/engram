@@ -3905,7 +3905,7 @@ mod tests {
     const REMOTE: &str = "https://github.com/ymeiri/engram.git";
     const CHECKOUT_PATH: &str = "/workspace/engram";
     const CHILD_NORMALIZED_SHA256: &str =
-        "fb64d5951e23a19f55d91172a5bccfec8f071b7a417950da58eee8e59747e205";
+        "d96cb9e3e283c7f8195e63c81ee12726411f1dcfbb926e2373ab35d56dff81a9";
 
     thread_local! {
         static C2A_INVOCATIONS: Cell<usize> = const { Cell::new(0) };
@@ -4746,7 +4746,7 @@ mod tests {
         );
         assert_eq!(
             source_sha256(LIB),
-            "ed8ca744b383ab1d3697c8ab95ce08408023f37467ab01293340cd83f3e2cee6"
+            "40183ec638c2baaa39629b461aa7b525d0614d7c14d539759c23bffa01584163"
         );
         assert_eq!(
             source_sha256(EVALUATOR_MANIFEST),

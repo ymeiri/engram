@@ -18707,6 +18707,7 @@ fn verify_native_correction_auth_destination_bytes(
 }
 
 #[cfg(unix)]
+#[allow(clippy::unnecessary_cast)] // libc::dev_t is target-dependent across Unix platforms.
 fn rollback_native_correction_auth_destinations(
     parents: &[NativeCorrectionHeldDirectory],
     names: &[std::ffi::CString],
@@ -19655,10 +19656,9 @@ mod tests {
             "hot_context_items":[],
             "used_memory_candidate_ids":[],
             "brain_loop":{
-                "compiled_context":format!(
+                "compiled_context":
                     "Brain Loop v1 orientation for atlas. Using project-scoped memory for atlas \
-                     (explicit project). No scoped memory signals were selected."
-                ),
+                     (explicit project). No scoped memory signals were selected.",
                 "top_items":[],
                 "degraded":false
             },
@@ -25040,6 +25040,7 @@ mod tests {
             "--project".to_string(),
             "corr-correct".to_string(),
         ];
+        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
         let mut environment = vec![
             "ENGRAM_HOME=/private/correct".to_string(),
             "DISABLE_TELEMETRY=1".to_string(),

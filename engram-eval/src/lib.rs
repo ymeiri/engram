@@ -13,8 +13,10 @@ pub mod native_report;
 pub mod native_runner;
 pub mod native_stale;
 pub mod native_successor;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod native_successor_artifact;
 mod native_successor_core;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod native_successor_policy;
 mod native_successor_relay;
 mod native_successor_semantic;

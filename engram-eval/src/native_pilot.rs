@@ -41,11 +41,16 @@ pub(crate) const CODEX_CHATGPT_LOGIN_STATUS: &str = "Logged in using ChatGPT";
 pub(crate) const NATIVE_PILOT_ONNXRUNTIME_LIBRARY_KEY: &str = "onnxruntime";
 pub(crate) const NATIVE_PILOT_ENGRAM_RUNTIME_CONSUMER_KEY: &str = "engram";
 pub(crate) const NATIVE_PILOT_EVALUATOR_RUNTIME_CONSUMER_KEY: &str = "engram_eval";
+#[cfg(target_os = "macos")]
 const NATIVE_PILOT_ONNXRUNTIME_DYLIB: &str = "libonnxruntime.1.20.0.dylib";
 const NATIVE_PILOT_ONNXRUNTIME_INSTALL_NAME: &str = "@rpath/libonnxruntime.1.20.0.dylib";
+#[cfg(target_os = "macos")]
 const NATIVE_PILOT_ONNXRUNTIME_LOADER_RPATH: &str = "@loader_path/../lib";
+#[cfg(target_os = "macos")]
 const NATIVE_PILOT_RUNTIME_LIBRARY_MAX_BYTES: u64 = 256 * 1024 * 1024;
+#[cfg(target_os = "macos")]
 const NATIVE_PILOT_RUNTIME_EXECUTABLE_MAX_BYTES: u64 = 512 * 1024 * 1024;
+#[cfg(target_os = "macos")]
 const NATIVE_PILOT_OTOOL_MAX_BYTES: usize = 2 * 1024 * 1024;
 pub(crate) const CLAUDE_ALLOWED_TOOLS: &str = concat!(
     "Read,mcp__engram__harness,mcp__engram__memory,",

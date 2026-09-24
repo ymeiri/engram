@@ -1412,6 +1412,7 @@ fn exact_directory_identity_from_stat(stat: &nix::libc::stat) -> Result<ExactDir
 }
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::unnecessary_cast)] // libc stat field aliases vary across Linux targets.
 fn exact_file_identity_from_stat(stat: &nix::libc::stat) -> Result<ExactFileIdentity> {
     Ok(ExactFileIdentity {
         device: stat.st_dev as u64,
@@ -1428,6 +1429,7 @@ fn exact_file_identity_from_stat(stat: &nix::libc::stat) -> Result<ExactFileIden
 }
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::unnecessary_cast)] // libc stat field aliases vary across Linux targets.
 fn exact_directory_identity_from_stat(stat: &nix::libc::stat) -> Result<ExactDirectoryIdentity> {
     Ok(ExactDirectoryIdentity {
         device: stat.st_dev as u64,
