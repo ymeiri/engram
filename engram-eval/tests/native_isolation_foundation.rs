@@ -2,6 +2,7 @@
 
 pub use engram_eval::{EvalError, EvalResult};
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[path = "../src/native_isolation.rs"]
 mod native_isolation;
 
@@ -2115,7 +2116,9 @@ fn executes_runner_owned_fake_upstream_through_the_exact_claude_seatbelt() {
 #[cfg(unix)]
 #[test]
 fn runner_generates_stdio_fstats_and_detects_an_ambient_inheritable_fd() {
-    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::fd::AsRawFd;
+    #[cfg(target_os = "macos")]
+    use std::os::fd::{FromRawFd, OwnedFd};
     let fixture = launch_fixture();
     let prepared = prepare_isolation_stdio(
         &fixture.evaluation,

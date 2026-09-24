@@ -7689,6 +7689,8 @@ impl IsolationInheritedFd {
 }
 
 #[cfg(unix)]
+// Linux libc exposes these fields as the normalized output types; macOS uses narrower aliases.
+#[cfg_attr(target_os = "linux", allow(clippy::useless_conversion))]
 fn fstat_descriptor(fd: i32, purpose: &str, target: &str) -> EvalResult<IsolationInheritedFd> {
     let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
     // SAFETY: `stat` is valid writable storage and `fd` was proven live by the caller/open.
@@ -8586,6 +8588,8 @@ fn is_api_key_environment(key: &str) -> bool {
 }
 
 #[cfg(unix)]
+// Linux libc exposes `f_bavail` as u64; the conversion is required on other Unix targets.
+#[cfg_attr(target_os = "linux", allow(clippy::useless_conversion))]
 fn available_space(path: &Path) -> EvalResult<u64> {
     use std::os::unix::ffi::OsStrExt;
     let path = CString::new(path.as_os_str().as_bytes())
