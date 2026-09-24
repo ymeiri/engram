@@ -1025,6 +1025,7 @@ fn claude_launch_spec(
     )
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn claude_launch(
     fixture: &LaunchFixture,
     native: bool,
@@ -1051,17 +1052,20 @@ fn typed_launches_bind_exact_host_argv_native_and_engram_surfaces() {
                     .any(|tool| tool.starts_with("mcp__engram__")),
                 uses_engram
             );
-            let fixture = launch_fixture();
-            let (claude, claude_boundary) = claude_launch(&fixture, native, uses_engram);
-            validate_isolation_launch(&claude, &claude_boundary).unwrap();
-            assert_eq!(
-                claude
-                    .argv
-                    .iter()
-                    .any(|arg| arg == "--append-system-prompt-file"),
-                uses_engram
-            );
-            assert!(!claude.expected_tools.iter().any(|tool| tool == "Bash"));
+            #[cfg(target_os = "macos")]
+            {
+                let fixture = launch_fixture();
+                let (claude, claude_boundary) = claude_launch(&fixture, native, uses_engram);
+                validate_isolation_launch(&claude, &claude_boundary).unwrap();
+                assert_eq!(
+                    claude
+                        .argv
+                        .iter()
+                        .any(|arg| arg == "--append-system-prompt-file"),
+                    uses_engram
+                );
+                assert!(!claude.expected_tools.iter().any(|tool| tool == "Bash"));
+            }
         }
     }
 }
@@ -1092,24 +1096,28 @@ fn exact_argv_rejects_equals_forms_duplicates_extras_and_invalid_approval_placem
     bad.prompt = "--help".to_string();
     *bad.argv.last_mut().unwrap() = "--help".to_string();
     assert!(validate_isolation_launch(&bad, &boundary).is_err());
-    let fixture = launch_fixture();
-    let (launch, boundary) = claude_launch(&fixture, false, false);
-    for mutation in 0..3 {
-        let mut bad = launch.clone();
-        match mutation {
-            0 => {
-                let index = bad.argv.iter().position(|arg| arg == "--settings").unwrap();
-                bad.argv[index] = format!("--settings={}", fixture.settings.display());
+    #[cfg(target_os = "macos")]
+    {
+        let fixture = launch_fixture();
+        let (launch, boundary) = claude_launch(&fixture, false, false);
+        for mutation in 0..3 {
+            let mut bad = launch.clone();
+            match mutation {
+                0 => {
+                    let index = bad.argv.iter().position(|arg| arg == "--settings").unwrap();
+                    bad.argv[index] = format!("--settings={}", fixture.settings.display());
+                }
+                1 => bad.argv.insert(8, "--restricted".to_string()),
+                _ => bad
+                    .argv
+                    .insert(bad.argv.len() - 1, "--plugin-dir".to_string()),
             }
-            1 => bad.argv.insert(8, "--restricted".to_string()),
-            _ => bad
-                .argv
-                .insert(bad.argv.len() - 1, "--plugin-dir".to_string()),
+            assert!(validate_isolation_launch(&bad, &boundary).is_err());
         }
-        assert!(validate_isolation_launch(&bad, &boundary).is_err());
     }
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn claude_exact_contract_requires_verbose_and_separates_builtin_from_mcp_tools() {
     let fixture = launch_fixture();
@@ -1237,6 +1245,7 @@ fn claude_exact_contract_requires_verbose_and_separates_builtin_from_mcp_tools()
     assert!(validate_isolation_launch(&bad, &native_boundary).is_err());
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn claude_trace_attestation_binds_init_terminal_turn_and_cost_evidence() {
     let fixture = launch_fixture();
@@ -1352,34 +1361,37 @@ fn rejects_arm_config_tool_skill_profile_hash_and_boundary_drift() {
         0o600,
     );
     assert!(validate_isolation_launch(&launch, &boundary).is_err());
-    let fixture = launch_fixture();
-    let (launch, boundary) = claude_launch(&fixture, true, true);
-    let mut bad = launch.clone();
-    if let IsolationLaunchSemantics::ClaudeCode { seatbelt_probe, .. } = &mut bad.semantics {
-        seatbelt_probe.profile_sha256 = "0".repeat(64);
-    }
-    assert!(validate_isolation_launch(&bad, &boundary).is_err());
-    let mut bad = launch.clone();
-    if let IsolationLaunchSemantics::ClaudeCode {
-        managed_settings_outside_exact_environment_claim,
-        ..
-    } = &mut bad.semantics
+    #[cfg(target_os = "macos")]
     {
-        *managed_settings_outside_exact_environment_claim = false;
+        let fixture = launch_fixture();
+        let (launch, boundary) = claude_launch(&fixture, true, true);
+        let mut bad = launch.clone();
+        if let IsolationLaunchSemantics::ClaudeCode { seatbelt_probe, .. } = &mut bad.semantics {
+            seatbelt_probe.profile_sha256 = "0".repeat(64);
+        }
+        assert!(validate_isolation_launch(&bad, &boundary).is_err());
+        let mut bad = launch.clone();
+        if let IsolationLaunchSemantics::ClaudeCode {
+            managed_settings_outside_exact_environment_claim,
+            ..
+        } = &mut bad.semantics
+        {
+            *managed_settings_outside_exact_environment_claim = false;
+        }
+        assert!(validate_isolation_launch(&bad, &boundary).is_err());
+        let mut bad = launch.clone();
+        if let IsolationLaunchSemantics::ClaudeCode { engram_daemon, .. } = &mut bad.semantics {
+            engram_daemon.as_mut().unwrap().healthy = false;
+        }
+        assert!(validate_isolation_launch(&bad, &boundary).is_err());
+        let mut bad = launch.clone();
+        if let IsolationLaunchSemantics::ClaudeCode { seatbelt_spec, .. } = &mut bad.semantics {
+            seatbelt_spec.transport.max_connect_requests = 0;
+        }
+        assert!(validate_isolation_launch(&bad, &boundary).is_err());
+        write_mode(&fixture.settings, b"{\"autoMemoryEnabled\":false}\n", 0o600);
+        assert!(validate_isolation_launch(&launch, &boundary).is_err());
     }
-    assert!(validate_isolation_launch(&bad, &boundary).is_err());
-    let mut bad = launch.clone();
-    if let IsolationLaunchSemantics::ClaudeCode { engram_daemon, .. } = &mut bad.semantics {
-        engram_daemon.as_mut().unwrap().healthy = false;
-    }
-    assert!(validate_isolation_launch(&bad, &boundary).is_err());
-    let mut bad = launch.clone();
-    if let IsolationLaunchSemantics::ClaudeCode { seatbelt_spec, .. } = &mut bad.semantics {
-        seatbelt_spec.transport.max_connect_requests = 0;
-    }
-    assert!(validate_isolation_launch(&bad, &boundary).is_err());
-    write_mode(&fixture.settings, b"{\"autoMemoryEnabled\":false}\n", 0o600);
-    assert!(validate_isolation_launch(&launch, &boundary).is_err());
 }
 
 #[test]
@@ -1417,106 +1429,112 @@ fn rejects_hollow_credential_engram_and_disabled_native_state_boundaries() {
     mkdir_private(&fixture.evaluation.join("codex-home/memories"));
     assert!(validate_isolation_launch(&launch, &boundary).is_err());
 
-    let fixture = launch_fixture();
-    let (launch, boundary) = claude_launch(&fixture, false, false);
-    mkdir_private(&fixture.evaluation.join("codex-home"));
-    assert!(validate_isolation_launch(&launch, &boundary).is_err());
+    #[cfg(target_os = "macos")]
+    {
+        let fixture = launch_fixture();
+        let (launch, boundary) = claude_launch(&fixture, false, false);
+        mkdir_private(&fixture.evaluation.join("codex-home"));
+        assert!(validate_isolation_launch(&launch, &boundary).is_err());
+    }
 }
 
 #[test]
 fn rejects_every_claude_credential_alias_before_content_access() {
-    type LaunchPathMutator = fn(&mut ClaudeIsolationLaunchSpec, String);
-
-    let simple_mutators: [(&str, LaunchPathMutator); 5] = [
-        ("provider executable", |spec, path| spec.executable = path),
-        ("output schema", |spec, path| spec.output_schema = path),
-        ("settings", |spec, path| spec.settings = path),
-        ("MCP config", |spec, path| spec.mcp_config = path),
-        ("Seatbelt profile", |spec, path| {
-            spec.seatbelt_profile = path
-        }),
-    ];
-    for (label, mutate) in simple_mutators {
-        let fixture = launch_fixture();
-        let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
-        let credential = fixture
-            .evaluation
-            .join("claude-config/.credentials.json")
-            .display()
-            .to_string();
-        mutate(&mut spec, credential);
-        let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
-        assert!(
-            error.to_string().contains("before content access"),
-            "{label} reached a later validator: {error}"
-        );
-    }
-
-    let engram_mutators: [(&str, LaunchPathMutator); 3] = [
-        ("Engram executable", |spec, path| {
-            spec.engram.as_mut().unwrap().executable = path;
-        }),
-        ("Engram skill", |spec, path| {
-            spec.engram.as_mut().unwrap().skill_path = path;
-        }),
-        ("daemon receipt", |spec, path| {
-            spec.engram_daemon.as_mut().unwrap().daemon_port_file.path = path;
-        }),
-    ];
-    for (label, mutate) in engram_mutators {
-        let fixture = launch_fixture();
-        let (mut spec, boundary) = claude_launch_spec(&fixture, false, true);
-        let credential = fixture
-            .evaluation
-            .join("claude-config/.credentials.json")
-            .display()
-            .to_string();
-        mutate(&mut spec, credential);
-        let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
-        assert!(
-            error.to_string().contains("before content access"),
-            "{label} reached a later validator: {error}"
-        );
-    }
-
-    let fixture = launch_fixture();
-    let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
-    let credential = fixture.evaluation.join("claude-config/.credentials.json");
-    spec.output_schema = credential.parent().unwrap().display().to_string();
-    let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
-    assert!(error.to_string().contains("before content access"));
-
-    let fixture = launch_fixture();
-    let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
-    let credential = fixture.evaluation.join("claude-config/.credentials.json");
-    spec.output_schema = credential.join("descendant").display().to_string();
-    let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
-    assert!(error.to_string().contains("before content access"));
-
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     {
-        use std::os::unix::fs::symlink;
+        type LaunchPathMutator = fn(&mut ClaudeIsolationLaunchSpec, String);
+
+        let simple_mutators: [(&str, LaunchPathMutator); 5] = [
+            ("provider executable", |spec, path| spec.executable = path),
+            ("output schema", |spec, path| spec.output_schema = path),
+            ("settings", |spec, path| spec.settings = path),
+            ("MCP config", |spec, path| spec.mcp_config = path),
+            ("Seatbelt profile", |spec, path| {
+                spec.seatbelt_profile = path
+            }),
+        ];
+        for (label, mutate) in simple_mutators {
+            let fixture = launch_fixture();
+            let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
+            let credential = fixture
+                .evaluation
+                .join("claude-config/.credentials.json")
+                .display()
+                .to_string();
+            mutate(&mut spec, credential);
+            let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
+            assert!(
+                error.to_string().contains("before content access"),
+                "{label} reached a later validator: {error}"
+            );
+        }
+
+        let engram_mutators: [(&str, LaunchPathMutator); 3] = [
+            ("Engram executable", |spec, path| {
+                spec.engram.as_mut().unwrap().executable = path;
+            }),
+            ("Engram skill", |spec, path| {
+                spec.engram.as_mut().unwrap().skill_path = path;
+            }),
+            ("daemon receipt", |spec, path| {
+                spec.engram_daemon.as_mut().unwrap().daemon_port_file.path = path;
+            }),
+        ];
+        for (label, mutate) in engram_mutators {
+            let fixture = launch_fixture();
+            let (mut spec, boundary) = claude_launch_spec(&fixture, false, true);
+            let credential = fixture
+                .evaluation
+                .join("claude-config/.credentials.json")
+                .display()
+                .to_string();
+            mutate(&mut spec, credential);
+            let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
+            assert!(
+                error.to_string().contains("before content access"),
+                "{label} reached a later validator: {error}"
+            );
+        }
 
         let fixture = launch_fixture();
         let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
         let credential = fixture.evaluation.join("claude-config/.credentials.json");
-        let alias = fixture.evaluation.join("config/credential-alias");
-        symlink(&credential, &alias).unwrap();
-        spec.output_schema = alias.display().to_string();
+        spec.output_schema = credential.parent().unwrap().display().to_string();
         let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
         assert!(error.to_string().contains("before content access"));
-    }
 
-    let fixture = launch_fixture();
-    let (mut launch, boundary) = claude_launch(&fixture, false, false);
-    let credential = fixture
-        .evaluation
-        .join("claude-config/.credentials.json")
-        .display()
-        .to_string();
-    launch.config_files[0].path = credential;
-    let error = validate_isolation_launch(&launch, &boundary).unwrap_err();
-    assert!(error.to_string().contains("before content access"));
+        let fixture = launch_fixture();
+        let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
+        let credential = fixture.evaluation.join("claude-config/.credentials.json");
+        spec.output_schema = credential.join("descendant").display().to_string();
+        let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
+        assert!(error.to_string().contains("before content access"));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let fixture = launch_fixture();
+            let (mut spec, boundary) = claude_launch_spec(&fixture, false, false);
+            let credential = fixture.evaluation.join("claude-config/.credentials.json");
+            let alias = fixture.evaluation.join("config/credential-alias");
+            symlink(&credential, &alias).unwrap();
+            spec.output_schema = alias.display().to_string();
+            let error = build_claude_isolation_launch(&spec, &boundary).unwrap_err();
+            assert!(error.to_string().contains("before content access"));
+        }
+
+        let fixture = launch_fixture();
+        let (mut launch, boundary) = claude_launch(&fixture, false, false);
+        let credential = fixture
+            .evaluation
+            .join("claude-config/.credentials.json")
+            .display()
+            .to_string();
+        launch.config_files[0].path = credential;
+        let error = validate_isolation_launch(&launch, &boundary).unwrap_err();
+        assert!(error.to_string().contains("before content access"));
+    }
 
     let fixture = launch_fixture();
     let (mut launch, boundary) = codex_launch(&fixture, false, false);
@@ -1573,28 +1591,32 @@ fn rejects_incomplete_forged_or_internally_inconsistent_probe_receipts() {
         probe.profile.network_sandbox_denial_observed = false;
     });
 
-    let fixture = launch_fixture();
-    let (launch, boundary) = claude_launch(&fixture, true, true);
-    let mutate_claude = |mutation: fn(&mut ClaudeSeatbeltProbeAudit)| {
-        let mut bad = launch.clone();
-        let IsolationLaunchSemantics::ClaudeCode { seatbelt_probe, .. } = &mut bad.semantics else {
-            unreachable!();
+    #[cfg(target_os = "macos")]
+    {
+        let fixture = launch_fixture();
+        let (launch, boundary) = claude_launch(&fixture, true, true);
+        let mutate_claude = |mutation: fn(&mut ClaudeSeatbeltProbeAudit)| {
+            let mut bad = launch.clone();
+            let IsolationLaunchSemantics::ClaudeCode { seatbelt_probe, .. } = &mut bad.semantics
+            else {
+                unreachable!();
+            };
+            mutation(seatbelt_probe);
+            assert!(validate_isolation_launch(&bad, &boundary).is_err());
         };
-        mutation(seatbelt_probe);
-        assert!(validate_isolation_launch(&bad, &boundary).is_err());
-    };
-    mutate_claude(|probe| {
-        probe.commands.pop();
-    });
-    mutate_claude(|probe| {
-        probe.commands[2].argv_sha256 = probe.commands[1].argv_sha256.clone();
-    });
-    mutate_claude(|probe| {
-        probe.commands.last_mut().unwrap().exit_code = 0;
-    });
-    mutate_claude(|probe| {
-        probe.profile.forbidden_writes.clear();
-    });
+        mutate_claude(|probe| {
+            probe.commands.pop();
+        });
+        mutate_claude(|probe| {
+            probe.commands[2].argv_sha256 = probe.commands[1].argv_sha256.clone();
+        });
+        mutate_claude(|probe| {
+            probe.commands.last_mut().unwrap().exit_code = 0;
+        });
+        mutate_claude(|probe| {
+            probe.profile.forbidden_writes.clear();
+        });
+    }
 }
 
 #[test]
@@ -1623,6 +1645,7 @@ fn rejects_ambient_environment_source_marker_and_public_private_paths() {
     }
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn claude_seatbelt_protects_state_but_allows_trusted_client_auth_access() {
     let fixture = launch_fixture();
@@ -2113,7 +2136,7 @@ fn executes_runner_owned_fake_upstream_through_the_exact_claude_seatbelt() {
     .is_err());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 #[test]
 fn runner_generates_stdio_fstats_and_detects_an_ambient_inheritable_fd() {
     use std::os::fd::AsRawFd;
