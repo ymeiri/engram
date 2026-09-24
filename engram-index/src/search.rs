@@ -490,7 +490,7 @@ impl SearchService {
                     }),
             );
         }
-        events.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+        events.sort_by_key(|event| std::cmp::Reverse(event.timestamp));
         events.truncate(limit);
         Ok(events)
     }
@@ -515,7 +515,7 @@ impl SearchService {
                     .filter(|usage| usage.context.to_lowercase().contains(&query)),
             );
         }
-        usages.sort_by(|left, right| right.timestamp.cmp(&left.timestamp));
+        usages.sort_by_key(|usage| std::cmp::Reverse(usage.timestamp));
         usages.truncate(limit);
 
         let mut results = Vec::new();
