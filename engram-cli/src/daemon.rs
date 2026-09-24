@@ -1445,12 +1445,12 @@ fn exact_directory_identity_from_stat(stat: &nix::libc::stat) -> Result<ExactDir
     })
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
 fn exact_file_identity_from_stat(_stat: &nix::libc::stat) -> Result<ExactFileIdentity> {
     bail!("Exact descriptor identity is supported only on macOS and Linux")
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
 fn exact_directory_identity_from_stat(_stat: &nix::libc::stat) -> Result<ExactDirectoryIdentity> {
     bail!("Exact descriptor identity is supported only on macOS and Linux")
 }
